@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Knock-Knock.net | Live Intruder Map</title>
+    <link rel="icon" type="image/png" href="static/robot1.png">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0">
+    <script src="https://cdn.jsdelivr.net/npm/@twemoji/api@latest/dist/twemoji.min.js" crossorigin="anonymous"></script>
+
+    <style>
+        /* --- 1. GLOBAL & SHARED STYLES --- */
+        :root { 
+            --neon-green: #00ff41; 
+            --warning-yellow: #ffcc00; 
+            --hazard-red: #ff3333; 
+            --data-blue: #00fbff; 
+            --user-magenta: #ff00ff; 
+            --bg-dark: #0a0a0a;
+            --ui-grey: #b0b0b0;      
+            --ui-grey-dim: #707070;
+        }
+        
+        html, body { 
+            background: var(--bg-dark); 
+            color: var(--neon-green); 
+            font-family: 'Courier New', monospace; 
+            margin: 0; padding: 0; 
+            width: 100vw; 
+            height: 100vh;      /* HARD LOCK: Kill the ghost at the bottom */
+            overflow: hidden;   /* Forbidden to scroll the window itself */
+            font-size: 16px;
+        }
+        
+        img.emoji { height: 1.4em; width: 1.4em; margin: 0 .1em; vertical-align: -0.2em; }
+
+        h2 { 
+            color: var(--neon-green); border-bottom: 2px solid #333; font-size: 1.4em; 
+            margin: 0 0 15px 0; padding-bottom: 12px; text-transform: uppercase; letter-spacing: 2px;
+        }
+
+        .stat-value { color: var(--warning-yellow); font-weight: bold; }
+        .stat-label { color: var(--ui-grey); font-size: 0.9em; text-transform: uppercase; }
+
+        .knock { margin-bottom: 15px; padding-bottom: 10px; border-bottom: 1px solid #1a1a1a; font-size: 1.1em; line-height: 1.5; }
+        .knock-meta { font-size: 0.9em; }
+        .knock-pass { color: var(--hazard-red); font-weight: bold; }
+
+        .bar-row { margin-bottom: 12px; padding: 8px 12px; border-radius: 4px; border: 1px solid transparent; }
+        .bar-label { display: flex; justify-content: space-between; font-size: 1.1em; margin-bottom: 6px; }
+        .bar-bg { background: #1a1a1a; height: 10px; border-radius: 5px; overflow: hidden; }
+        .bar-fill { background: var(--neon-green); height: 100%; transition: width 1s; opacity: 0.7; }
+        
+        .shame-fill { background: var(--warning-yellow); }
+        .password-fill { background: var(--hazard-red); }
+        .provider-fill { background: var(--data-blue); }
+        .user-fill { background: var(--user-magenta); }
+
+        @keyframes pulse-green { 0% { background: rgba(0, 255, 65, 0.4); } 100% { background: transparent; } }
+        .bar-row.highlight-general, .new-knock-flash { animation: pulse-green 3s forwards; }
+
+        .status-dot { height: 14px; width: 14px; border-radius: 50%; background: var(--hazard-red); display: inline-block; vertical-align: middle; margin-left: 10px; }
+        .status-online { background: var(--neon-green); box-shadow: 0 0 10px var(--neon-green); }
+
+        /* --- 2. DESKTOP VIEW (> 800px) --- */
+        @media (min-width: 801px) {
+            #mobile-layout { display: none !important; }
+
+            #desktop-layout { 
+                display: flex; 
+                flex-direction: column;
+                height: 100vh;
+                padding: 30px; 
+                box-sizing: border-box; 
+                overflow: hidden;
+            }
+
+            .d-header { flex: 0 0 auto; margin-bottom: 20px; }
+            .d-header h1 { font-size: 2.2em; margin: 0 0 15px 0; }
+            
+            .d-nav { 
+                display: flex; gap: 40px; margin-bottom: 25px; 
+                border-bottom: 1px solid #222; padding-bottom: 15px; 
+            }
+            .d-nav-item { 
+                color: var(--ui-grey-dim); font-size: 1.6em; cursor: pointer; 
+                display: flex; align-items: center; gap: 10px; transition: 0.3s;
+            }
+            .d-nav-item span { font-size: 0.5em; font-weight: bold; letter-spacing: 1px; }
+            .d-nav-item.active { color: var(--neon-green); text-shadow: 0 0 10px var(--neon-green); }
+
+            .d-stats { display: flex; gap: 60px; background: #111; padding: 25px; border-left: 6px solid var(--neon-green); }
+            .d-stat-val { font-size: 3em; }
+
+            .d-grid { 
+                flex: 1;
+                display: flex; gap: 15px; width: 100%; 
+                overflow: hidden; margin-top: 25px;
+                min-height: 0; /* Flexbox scroll fix */
+            }
+            
+            .d-box { 
+                flex: 0 0 14%; /* Fixed width for standard panes */
+                height: 100%;
+                border: 1px solid #333;
+                background: #0f0f0f;
+                padding: 20px;
+                display: flex;
+                flex-direction: column;
+                cursor: pointer;
+                box-sizing: border-box;
+                /* SLOW-IN-SLOW-OUT TRANSITION */
+                transition: all 1.0s cubic-bezier(0.65, 0, 0.35, 1);
+            }
+            
+            #d-box-feed { 
+                flex: 0 0 35%; /* Feed stays wide regardless of position */
+            }
+            
+            .d-box.is-active { 
+                border-color: var(--neon-green); 
+                box-shadow: inset 0 0 20px rgba(0, 255, 65, 0.05), 0 0 10px rgba(0, 255, 65, 0.1); 
+            }
+
+            .d-content { flex: 1; overflow-y: auto; }
+            .d-content::-webkit-scrollbar { width: 6px; background: transparent; }
+            .d-content::-webkit-scrollbar-thumb { background: transparent !important; border-radius: 10px; transition: background 0.15s ease; }
+            .d-box:hover .d-content::-webkit-scrollbar-thumb { background: #2a2a2a !important; border: 1px solid #3a3a3a; }
+            .d-box:hover .d-content::-webkit-scrollbar-thumb:hover { background: var(--neon-green) !important; }
+        }
+
+        /* --- 3. MOBILE VIEW (<= 800px) --- */
+        @media (max-width: 800px) {
+            #desktop-layout { display: none !important; }
+            
+            #mobile-layout { 
+                display: flex; height: 100dvh; width: 100vw; 
+                flex-direction: column; overflow: hidden; 
+            }
+            
+            .m-header { flex: 0 0 auto; padding: 15px; background: #0a0a0a; border-bottom: 1px solid #222; }
+            .m-header h1 { font-size: 1.6em; margin: 0; }
+            .m-stat-row { display: flex; justify-content: space-between; margin-top: 10px; }
+            .m-stat-val { font-size: 1.8em; }
+
+            .m-progress-container { height: 4px; background: #000; width: 100%; }
+            #m-progress-bar { height: 100%; width: 0%; background: var(--neon-green); box-shadow: 0 0 12px var(--neon-green); }
+
+            .m-viewport { flex: 1; display: flex; overflow-x: auto; scroll-snap-type: x mandatory; scroll-behavior: smooth; -webkit-overflow-scrolling: touch; }
+            .m-pane { width: 100vw; height: 100%; flex-shrink: 0; scroll-snap-align: start; display: flex; flex-direction: column; padding: 20px 10px 20px 20px; box-sizing: border-box; background: #0f0f0f; border-right: 1px solid #1a1a1a; }
+            
+            .m-content { 
+                flex: 1; overflow-y: scroll !important; -webkit-overflow-scrolling: touch !important;
+                scrollbar-gutter: stable; padding-right: 5px;
+            }
+
+            .m-content::-webkit-scrollbar { display: block !important; width: 8px !important; }
+            .m-content::-webkit-scrollbar-track { background: #111 !important; border-radius: 10px; }
+            .m-content::-webkit-scrollbar-thumb { background: var(--neon-green) !important; border-radius: 10px; min-height: 40px; }
+            #m-viewport::-webkit-scrollbar { display: none !important; }
+
+            .m-footer { flex: 0 0 auto; background: #0a0a0a; border-top: 1px solid #222; padding-bottom: env(safe-area-inset-bottom); }
+            .m-dots { display: flex; justify-content: center; gap: 15px; padding: 12px 0; }
+            .dot { width: 10px; height: 10px; border-radius: 50%; background: #222; transition: 0.3s; cursor: pointer; }
+            .dot.active { background: var(--neon-green); transform: scale(1.4); box-shadow: 0 0 8px var(--neon-green); }
+
+            .m-nav { display: flex; justify-content: space-around; padding: 15px 0; border-top: 2px solid var(--neon-green); background: #000; }
+            .nav-item { color: var(--ui-grey-dim); font-size: 1.8em; display: flex; flex-direction: column; align-items: center; cursor: pointer; transition: 0.2s; }
+            .nav-item span { font-size: 0.45em; margin-top: 4px; font-weight: bold; }
+            .nav-item.active { color: var(--neon-green); text-shadow: 0 0 12px var(--neon-green); transform: translateY(-3px); }
+        }
+    </style>
+</head>
+<body>
+
+<div id="desktop-layout">
+    <div class="d-header">
+        <h1>KNOCK-KNOCK.NET <span class="status-dot"></span></h1>
+        
+        <nav class="d-nav">
+            <div class="d-nav-item active" onclick="dJump(0)">📢<span>FEED</span></div>
+            <div class="d-nav-item" onclick="dJump(1)">🌐<span>SHAME</span></div>
+            <div class="d-nav-item" onclick="dJump(2)">👤<span>USER</span></div>
+            <div class="d-nav-item" onclick="dJump(3)">🔑<span>PASS</span></div>
+            <div class="d-nav-item" onclick="dJump(4)">🔌<span>PROV</span></div>
+        </nav>
+
+        <div class="d-stats">
+            <div class="stat-item">
+                <span class="stat-label">Total Knocks</span>
+                <span id="d-total" class="stat-value d-stat-val">0</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label">Knocks Per Minute</span>
+                <span id="d-kpm" class="stat-value d-stat-val">0.00</span>
+            </div>
+            <div id="d-cache" style="margin-left:auto; align-self:flex-end; font-size:0.8em; color:var(--ui-grey);">Cache: --:--</div>
+        </div>
+    </div>
+    
+    <div class="d-grid" id="d-slider-container">
+        <div class="d-box" id="d-box-feed" onclick="dJump(0)"><h2>Live Feed</h2><div id="d-feed" class="d-content"></div></div>
+        <div class="d-box" onclick="dJump(1)"><h2>Wall of Shame</h2><div id="d-shame" class="d-content"></div></div>
+        <div class="d-box" onclick="dJump(2)"><h2>Ubiquitous Users</h2><div id="d-user" class="d-content"></div></div>
+        <div class="d-box" onclick="dJump(3)"><h2>Top Passwords</h2><div id="d-pass" class="d-content"></div></div>
+        <div class="d-box" onclick="dJump(4)"><h2>Guilty Providers</h2><div id="d-prov" class="d-content"></div></div>
+    </div>
+</div>
+
+<div id="mobile-layout">
+    <div class="m-header">
+        <h1>KNOCK-KNOCK.NET <span class="status-dot"></span></h1>
+        <div class="m-stat-row">
+            <div class="stat-item"><span class="stat-label">TOTAL</span><span id="m-total" class="stat-value m-stat-val">0</span></div>
+            <div class="stat-item" style="text-align:right;"><span class="stat-label">KPM</span><span id="m-kpm" class="stat-value m-stat-val">0.00</span></div>
+        </div>
+    </div>
+    <div class="m-progress-container"><div id="m-progress-bar"></div></div>
+    <div class="m-viewport" id="m-viewport">
+        <div class="m-pane" id="m-pane-feed"><h2>Live Feed</h2><div id="m-feed" class="m-content"></div></div>
+        <div class="m-pane" id="m-pane-shame"><h2>Wall of Shame</h2><div id="m-shame" class="m-content"></div></div>
+        <div class="m-pane" id="m-pane-user"><h2>Usernames</h2><div id="m-user" class="m-content"></div></div>
+        <div class="m-pane" id="m-pane-pass"><h2>Passwords</h2><div id="m-pass" class="m-content"></div></div>
+        <div class="m-pane" id="m-pane-prov"><h2>Providers</h2><div id="m-prov" class="m-content"></div></div>
+    </div>
+    <div class="m-footer">
+        <div class="m-dots">
+            <div class="dot active" onclick="jump(0)"></div><div class="dot" onclick="jump(1)"></div><div class="dot" onclick="jump(2)"></div><div class="dot" onclick="jump(3)"></div><div class="dot" onclick="jump(4)"></div>
+        </div>
+        <nav class="m-nav">
+            <div class="nav-item active" onclick="jump(0)">📢<span>FEED</span></div>
+            <div class="nav-item" onclick="jump(1)">🌐<span>SHAME</span></div>
+            <div class="nav-item" onclick="jump(2)">👤<span>USER</span></div>
+            <div class="nav-item" onclick="jump(3)">🔑<span>PASS</span></div>
+            <div class="nav-item" onclick="jump(4)">🔌<span>PROV</span></div>
+        </nav>
+    </div>
+</div>
+
+<script>
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsUrl = `${protocol}//${window.location.host}/ws`;
+    let ws;
+
+    // MOBILE NAVIGATION
+    function jump(idx) {
+        const vp = document.getElementById('m-viewport');
+        vp.scrollTo({ left: idx * vp.clientWidth, behavior: 'smooth' });
+    }
+
+    // DESKTOP ROTATION LOGIC
+    function dJump(idx) {
+        const container = document.getElementById('d-slider-container');
+        const boxes = Array.from(container.children);
+        const navItems = document.querySelectorAll('.d-nav-item');
+
+        navItems.forEach((item, i) => item.classList.toggle('active', i === idx));
+
+        boxes.forEach((box, i) => {
+            let newOrder = (i - idx + boxes.length) % boxes.length;
+            box.style.order = newOrder + 1;
+            box.classList.toggle('is-active', i === idx);
+        });
+    }
+
+    const getFlag = (iso) => {
+        if (iso === 'XX' || !iso) return '🏴‍☠️';
+        return iso.toUpperCase().replace(/./g, char => String.fromCodePoint(char.charCodeAt(0) + 127397));
+    };
+
+    function renderBars(prefix, data, colorClass = '', useFlags = false) {
+        ['d-', 'm-'].forEach(layout => {
+            const container = document.getElementById(layout + prefix);
+            if (!container) return;
+            container.innerHTML = '';
+            if (!data || data.length === 0) return;
+            const max = data[0].count;
+            data.forEach(item => {
+                const pct = (item.count / max) * 100;
+                const label = useFlags ? `${getFlag(item.iso)} ${item.country}` : (item.label || item.country);
+                const rawId = useFlags ? item.iso : (item.label || item.country || item.isp);
+                const div = document.createElement('div');
+                div.className = 'bar-row';
+                div.setAttribute('data-id', `${prefix}-${rawId}`);
+                div.setAttribute('data-count', item.count);
+                div.innerHTML = `<div class="bar-label"><span>${label}</span><span style="color:#ffcc00">${item.count}</span></div><div class="bar-bg"><div class="bar-fill ${colorClass}" style="width: ${pct}%"></div></div>`;
+                container.appendChild(div);
+                if (useFlags) twemoji.parse(div);
+            });
+        });
+    }
+
+    function incrementAndSort(prefix, id) {
+        ['d-', 'm-'].forEach(layout => {
+            const container = document.getElementById(layout + prefix);
+            if (!container) return;
+            const uniqueId = `${prefix}-${id}`;
+            const row = container.querySelector(`.bar-row[data-id="${CSS.escape(uniqueId)}"]`);
+            if (!row) return;
+
+            const countSpan = row.querySelector('span:last-child');
+            let newCount = (parseInt(countSpan.innerText) || 0) + 1;
+            countSpan.innerText = newCount;
+            row.setAttribute('data-count', newCount);
+
+            row.classList.remove('highlight-general');
+            void row.offsetWidth; 
+            row.classList.add('highlight-general');
+
+            const rows = Array.from(container.children);
+            rows.sort((a, b) => (parseInt(b.getAttribute('data-count')) || 0) - (parseInt(a.getAttribute('data-count')) || 0));
+            const max = parseInt(rows[0].getAttribute('data-count')) || 1;
+            rows.forEach(el => {
+                container.appendChild(el); 
+                el.querySelector('.bar-fill').style.width = ((parseInt(el.getAttribute('data-count')) || 0) / max * 100) + '%';
+            });
+        });
+    }
+
+    function renderKnock(d, isNew = true) {
+        const loc = (d.city === 'Unknown' || !d.city) ? `Somewhere in ${d.country}` : `${d.city}, ${d.country}`;
+        
+        const html = `
+            <strong>${getFlag(d.iso)} ${loc}</strong><br>
+            <span style="color:var(--ui-grey)">user:</span><span>${d.user}</span> 
+            <span style="color:var(--ui-grey); margin-left:10px;">passwd:</span><span class="knock-pass">${d.pass}</span><br>
+            <span class="knock-meta" style="color:var(--data-blue)">ISP: ${d.isp}</span>
+        `;
+        
+        ['d-feed', 'm-feed'].forEach(id => {
+            const el = document.getElementById(id);
+            const div = document.createElement('div');
+            div.className = 'knock' + (isNew ? ' new-knock-flash' : '');
+            div.innerHTML = html;
+            if (isNew) el.prepend(div); else el.appendChild(div);
+            twemoji.parse(div);
+            if (el.children.length > 500) el.lastChild.remove();
+        });
+    }
+
+    function connect() {
+        if (ws) ws.close();
+        ws = new WebSocket(wsUrl);
+        ws.onopen = () => document.querySelectorAll('.status-dot').forEach(d => d.classList.add('status-online'));
+        ws.onclose = () => { document.querySelectorAll('.status-dot').forEach(d => d.classList.remove('status-online')); setTimeout(connect, 3000); };
+        ws.onmessage = (event) => {
+            const msg = JSON.parse(event.data);
+            const d = msg.data;
+            if (msg.type === 'new_knock') {
+                renderKnock(d, true);
+                ['d-total', 'm-total'].forEach(id => document.getElementById(id).innerText = d.total_global);
+                ['d-kpm', 'm-kpm'].forEach(id => document.getElementById(id).innerText = d.kpm);
+                incrementAndSort('shame', d.iso);
+                incrementAndSort('pass', d.pass);
+                incrementAndSort('prov', d.isp);
+                incrementAndSort('user', d.user);
+            } 
+            else if (msg.type === 'init_stats') {
+                ['d-total', 'm-total', 'd-kpm', 'm-kpm'].forEach(id => { if(document.getElementById(id)) document.getElementById(id).innerText = d[id.split('-')[1]] || d.total; });
+                document.getElementById('d-cache').innerText = `Cache: ${d.cache_ts || '--:--'}`;
+                renderBars('shame', d.shame, 'shame-fill', true);
+                renderBars('pass', d.top_passwords, 'password-fill');
+                renderBars('prov', d.top_providers, 'provider-fill');
+                renderBars('user', d.top_users, 'user-fill');
+                if (d.history) { ['d-feed', 'm-feed'].forEach(id => document.getElementById(id).innerHTML = ''); d.history.forEach(k => renderKnock(k, false)); }
+            }
+        };
+    }
+
+    const vp = document.getElementById('m-viewport');
+    vp.addEventListener('scroll', () => {
+        const scrolled = (vp.scrollLeft / (vp.scrollWidth - vp.clientWidth)) * 100;
+        document.getElementById('m-progress-bar').style.width = scrolled + '%';
+    });
+
+    const observer = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+            if (entry.isIntersecting) {
+                const idx = Array.from(entry.target.parentNode.children).indexOf(entry.target);
+                document.querySelectorAll('.dot').forEach((d, i) => d.classList.toggle('active', i === idx));
+                document.querySelectorAll('.nav-item').forEach((n, i) => n.classList.toggle('active', i === idx));
+            }
+        });
+    }, { root: vp, threshold: 0.6 });
+    document.querySelectorAll('.m-pane').forEach(p => observer.observe(p));
+
+    window.addEventListener('load', () => dJump(0));
+    connect();
+</script>
+</body>
+</html>

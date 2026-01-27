@@ -33,8 +33,8 @@ class GlobalStatsCache:
             except Exception as e:
                 print(f"❌ Cache Update Error: {e}")
             
-            # Refresh every 10 minutes
-            await asyncio.sleep(600)
+            # Refresh every 60 seconds
+            await asyncio.sleep(60)
 
     def _get_top_stats(self, stat_type):
         """Synchronous helper for the executor - uses indexed intel tables."""

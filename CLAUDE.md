@@ -90,13 +90,17 @@ SSH Attacker → honeypot.py (port 22) → journalctl logs
 -- Main attack log
 knocks(id, timestamp, ip_address, iso_code, city, country, isp, username, password)
 
--- Intelligence aggregation
-user_intel(username, hits, last_seen)
-pass_intel(password, hits, last_seen)
+-- Intelligence tables (aggregated counts with indexed hits for fast top-N queries)
+user_intel(username PRIMARY KEY, hits, last_seen)     -- INDEX on hits DESC
+pass_intel(password PRIMARY KEY, hits, last_seen)     -- INDEX on hits DESC
+country_intel(iso_code PRIMARY KEY, country, hits, last_seen)  -- INDEX on hits DESC
+isp_intel(isp PRIMARY KEY, hits, last_seen)           -- INDEX on hits DESC
 
 -- Uptime tracking for KPM calculation
 monitor_heartbeats(id, timestamp)
 ```
+
+Intel tables are updated on each knock via `INSERT ... ON CONFLICT DO UPDATE`. Top-N queries use the hits index (~100 rows) instead of GROUP BY on knocks (all rows).
 
 ## External Dependencies
 
@@ -108,5 +112,4 @@ monitor_heartbeats(id, timestamp)
 ## Redis Keys
 
 - `knock:total_global` - Total attack count
-- `knock:wall_of_shame` - Sorted set of country attack counts
 - `radiation_stream` - Pub/sub channel for real-time events

@@ -55,7 +55,7 @@
         .user-fill { background: var(--user-magenta); }
 
         @keyframes pulse-green { 0% { background: rgba(0, 255, 65, 0.4); } 100% { background: transparent; } }
-        .bar-row.highlight-general, .new-knock-flash { animation: pulse-green 3s forwards; }
+        .new-knock-flash { animation: pulse-green 3s forwards; }
 
         .status-dot { height: 14px; width: 14px; border-radius: 50%; background: var(--hazard-red); display: inline-block; vertical-align: middle; margin-left: 10px; }
         .status-online { background: var(--neon-green); box-shadow: 0 0 10px var(--neon-green); }
@@ -301,9 +301,11 @@
             countSpan.innerText = newCount;
             row.setAttribute('data-count', newCount);
 
-            row.classList.remove('highlight-general');
-            void row.offsetWidth; 
-            row.classList.add('highlight-general');
+            if (row.highlightAnimation) row.highlightAnimation.cancel();
+            row.highlightAnimation = row.animate([
+                { background: 'rgba(0, 255, 65, 0.4)' },
+                { background: 'transparent' }
+            ], { duration: 3000, easing: 'ease' });
 
             const rows = Array.from(container.children);
             rows.sort((a, b) => (parseInt(b.getAttribute('data-count')) || 0) - (parseInt(a.getAttribute('data-count')) || 0));

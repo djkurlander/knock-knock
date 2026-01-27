@@ -36,21 +36,17 @@ class GlobalStatsCache:
             # Refresh every 10 minutes
             await asyncio.sleep(600)
 
-    def _get_top_stats(self, column):
-        """Synchronous helper for the executor."""
+    def _get_top_stats(self, stat_type):
+        """Synchronous helper for the executor - uses indexed intel tables."""
         conn = sqlite3.connect(DB_PATH)
         conn.row_factory = sqlite3.Row
         cur = conn.cursor()
-        # Filter out nulls/empties and group
-        query = f"""
-            SELECT {column} as label, COUNT(*) as count 
-            FROM knocks 
-            WHERE {column} IS NOT NULL AND {column} != ''
-            GROUP BY {column} 
-            ORDER BY count DESC 
-            LIMIT 100
-        """
-        cur.execute(query)
+        queries = {
+            "password": "SELECT password as label, hits as count FROM pass_intel ORDER BY hits DESC LIMIT 100",
+            "username": "SELECT username as label, hits as count FROM user_intel ORDER BY hits DESC LIMIT 100",
+            "isp": "SELECT isp as label, hits as count FROM isp_intel ORDER BY hits DESC LIMIT 100",
+        }
+        cur.execute(queries[stat_type])
         rows = cur.fetchall()
         conn.close()
         return [dict(row) for row in rows]
@@ -62,23 +58,18 @@ class ConnectionManager:
     def __init__(self):
         self.active_connections: list[WebSocket] = []
 
-    def get_kpm(self):
+    async def get_kpm(self):
         try:
+            total_val = await r.get("knock:total_global")
+            total_knocks = int(total_val) if total_val else 0
             conn = sqlite3.connect(DB_PATH)
             cur = conn.cursor()
-            cur.execute("""
-                SELECT 
-                    CASE WHEN count_minutes = 0 THEN 0.0
-                    ELSE CAST(count_knocks AS REAL) / count_minutes END
-                FROM (
-                    SELECT 
-                        (SELECT COUNT(*) FROM knocks) as count_knocks,
-                        (SELECT COUNT(*) FROM monitor_heartbeats) as count_minutes
-                )
-            """)
-            result = cur.fetchone()
+            cur.execute("SELECT COUNT(*) FROM monitor_heartbeats")
+            count_minutes = cur.fetchone()[0]
             conn.close()
-            return round(result[0], 2) if result else 0.0
+            if count_minutes == 0:
+                return 0.0
+            return round(total_knocks / count_minutes, 2)
         except Exception:
             return 0.0
 
@@ -100,16 +91,16 @@ class ConnectionManager:
             return []
 
     async def get_initial_data(self):
-        shame_data = await r.zrevrange("knock:wall_of_shame", 0, 99, withscores=True)
         total_val = await r.get("knock:total_global")
-        current_kpm = self.get_kpm()
+        current_kpm = await self.get_kpm()
+        # Get country stats from SQLite intel table
+        conn = sqlite3.connect(DB_PATH)
+        conn.row_factory = sqlite3.Row
+        cur = conn.cursor()
+        cur.execute("SELECT iso_code as iso, country, hits as count FROM country_intel ORDER BY hits DESC LIMIT 100")
+        shame_list = [dict(row) for row in cur.fetchall()]
+        conn.close()
         
-        shame_list = []
-        for entry, score in shame_data:
-            if ":" in entry:
-                iso, name = entry.split(":", 1)
-                shame_list.append({"iso": iso, "country": name, "count": int(score)})
-
         return {
             "shame": shame_list,
             "total": int(total_val) if total_val else 0,
@@ -167,7 +158,7 @@ async def redis_listener():
     async for message in pubsub.listen():
         if message["type"] == "message":
             data = json.loads(message["data"])
-            data["kpm"] = manager.get_kpm()
+            data["kpm"] = await manager.get_kpm()
             total_val = await r.get("knock:total_global")
             data["total_global"] = int(total_val) if total_val else 0
             payload = json.dumps({"type": "new_knock", "data": data})

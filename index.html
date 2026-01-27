@@ -69,21 +69,21 @@
         @media (min-width: 801px) {
             #mobile-layout { display: none !important; }
 
-            #desktop-layout { 
-                display: flex; 
+            #desktop-layout {
+                display: flex;
                 flex-direction: column;
                 height: 100vh;
-                padding: 30px; 
-                box-sizing: border-box; 
+                padding: 15px 30px 30px 30px;
+                box-sizing: border-box;
                 overflow: hidden;
             }
 
-            .d-header { flex: 0 0 auto; margin-bottom: 20px; }
-            .d-header h1 { font-size: 2.2em; margin: 0 0 15px 0; }
-            
-            .d-nav { 
-                display: flex; gap: 40px; margin-bottom: 25px; 
-                border-bottom: 1px solid #222; padding-bottom: 15px; 
+            .d-header { flex: 0 0 auto; margin-bottom: 0; }
+            .d-header h1 { font-size: 2.2em; margin: 0 0 5px 0; }
+
+            .d-nav {
+                display: flex; gap: 40px; margin-bottom: 20px;
+                border-bottom: 1px solid #222; padding-bottom: 10px;
             }
             .d-nav-item { 
                 color: var(--ui-grey-dim); font-size: 1.6em; cursor: pointer; 
@@ -92,7 +92,7 @@
             .d-nav-item span { font-size: 0.5em; font-weight: bold; letter-spacing: 1px; }
             .d-nav-item.active { color: var(--neon-green); text-shadow: 0 0 10px var(--neon-green); }
 
-            .d-stats { display: flex; gap: 30px; background: #111; padding: 12px 20px; border-left: 4px solid var(--neon-green); }
+            .d-stats { display: flex; gap: 30px; }
             .d-stat-val { font-size: 1.5em; }
 
             .d-grid { 
@@ -186,8 +186,6 @@
 
 <div id="desktop-layout">
     <div class="d-header">
-        <h1>KNOCK-KNOCK.NET <span class="status-dot"></span></h1>
-        
         <nav class="d-nav">
             <div class="d-nav-item active" onclick="dJump(0)">📢<span>FEED</span></div>
             <div class="d-nav-item" onclick="dJump(1)">🌐<span>GEO</span></div>
@@ -197,13 +195,15 @@
             <div class="d-nav-item" onclick="dJump(5)">📋<span>INFO</span></div>
         </nav>
 
+        <h1>KNOCK-KNOCK.NET <span class="status-dot"></span></h1>
+
         <div class="d-stats">
             <div class="stat-item">
-                <span class="stat-label">Total Knocks</span>
+                <span class="stat-label">Total Knocks:</span>&nbsp;
                 <span id="d-total" class="stat-value d-stat-val">0</span>
             </div>
             <div class="stat-item">
-                <span class="stat-label">Knocks Per Minute</span>
+                <span class="stat-label">Knocks Per Minute:</span>&nbsp;
                 <span id="d-kpm" class="stat-value d-stat-val">0.00</span>
             </div>
         </div>

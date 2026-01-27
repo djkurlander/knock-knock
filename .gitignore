@@ -1,0 +1,13 @@
+# Sensitive files
+certs/
+server.key
+server.key.pub
+
+# Data and logs
+knock_knock.db
+*.log
+
+# Python
+__pycache__/
+.venv/
+*.pyc

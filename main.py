@@ -92,6 +92,7 @@ class ConnectionManager:
 
     async def get_initial_data(self):
         total_val = await r.get("knock:total_global")
+        last_knock_val = await r.get("knock:last_time")
         current_kpm = await self.get_kpm()
         # Get country stats from SQLite intel table
         conn = sqlite3.connect(DB_PATH)
@@ -100,14 +101,15 @@ class ConnectionManager:
         cur.execute("SELECT iso_code as iso, country, hits as count FROM country_intel ORDER BY hits DESC LIMIT 100")
         shame_list = [dict(row) for row in cur.fetchall()]
         conn.close()
-        
+
         return {
             "shame": shame_list,
             "total": int(total_val) if total_val else 0,
             "kpm": current_kpm,
+            "last_knock_time": int(last_knock_val) if last_knock_val else None,
             "top_passwords": stats_cache.top_passwords,
             "top_providers": stats_cache.top_providers,
-            "top_users": stats_cache.top_users, # NEW
+            "top_users": stats_cache.top_users,
             "cache_ts": stats_cache.last_updated
         }
 
@@ -126,6 +128,7 @@ class ConnectionManager:
                 "data": {
                     "total": stats.get("total", 0),
                     "kpm": stats.get("kpm", 0.0),
+                    "last_knock_time": stats.get("last_knock_time"),
                     "shame": stats.get("shame", []),
                     "history": history if history else [],
                     "top_passwords": stats.get("top_passwords", []),

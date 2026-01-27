@@ -92,8 +92,10 @@
             .d-nav-item span { font-size: 0.5em; font-weight: bold; letter-spacing: 1px; }
             .d-nav-item.active { color: var(--neon-green); text-shadow: 0 0 10px var(--neon-green); }
 
-            .d-stats { display: flex; gap: 30px; }
-            .d-stat-val { font-size: 1.5em; }
+            .d-stats { font-size: 1em; }
+            .d-stats:first-of-type { margin-top: 5px; }
+            .d-stats .stat-label { font-size: 1em; }
+            .d-stats .stat-value { font-size: 1em; }
 
             .d-grid { 
                 flex: 1;
@@ -146,9 +148,11 @@
             }
             
             .m-header { flex: 0 0 auto; padding: 15px; background: #0a0a0a; border-bottom: 1px solid #222; }
-            .m-header h1 { font-size: 1.6em; margin: 0; }
-            .m-stat-row { display: flex; justify-content: space-between; margin-top: 10px; }
-            .m-stat-val { font-size: 1.275em; }
+            .m-header h1 { font-size: 1.36em; margin: 0; }
+            .m-stat-row { display: flex; font-size: 0.85em; }
+            .m-stat-row:first-of-type { margin-top: 10px; }
+            .m-stat-row .stat-label { font-size: 1em; }
+            .m-stat-row .stat-value { font-size: 1em; }
             .m-pane h2 { font-size: 1.02em; }
 
             .m-progress-container { height: 4px; background: #000; width: 100%; }
@@ -198,14 +202,10 @@
         <h1>KNOCK-KNOCK.NET <span class="status-dot"></span></h1>
 
         <div class="d-stats">
-            <div class="stat-item">
-                <span class="stat-label">Total Knocks:</span>&nbsp;
-                <span id="d-total" class="stat-value d-stat-val">0</span>
-            </div>
-            <div class="stat-item">
-                <span class="stat-label">Knocks Per Minute:</span>&nbsp;
-                <span id="d-kpm" class="stat-value d-stat-val">0.00</span>
-            </div>
+            <span class="stat-label">Knocks:</span>&nbsp;<span id="d-total" class="stat-value">0</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="stat-label">Per Min:</span>&nbsp;<span id="d-kpm" class="stat-value">0.00</span>
+        </div>
+        <div class="d-stats">
+            <span class="stat-label">SINCE LAST KNOCK:</span>&nbsp;<span id="d-since" class="stat-value">-</span>
         </div>
     </div>
     
@@ -223,8 +223,10 @@
     <div class="m-header">
         <h1>KNOCK-KNOCK.NET <span class="status-dot"></span></h1>
         <div class="m-stat-row">
-            <div class="stat-item"><span class="stat-label">Knocks:</span> <span id="m-total" class="stat-value m-stat-val">0</span></div>
-            <div class="stat-item" style="text-align:right;"><span class="stat-label">Per Minute:</span> <span id="m-kpm" class="stat-value m-stat-val">0.00</span></div>
+            <span class="stat-label">Knocks:</span>&nbsp;<span id="m-total" class="stat-value">0</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="stat-label">Per Min:</span>&nbsp;<span id="m-kpm" class="stat-value">0.00</span>
+        </div>
+        <div class="m-stat-row">
+            <span class="stat-label">SINCE LAST KNOCK:</span>&nbsp;<span id="m-since" class="stat-value">-</span>
         </div>
     </div>
     <div class="m-progress-container"><div id="m-progress-bar"></div></div>
@@ -255,6 +257,15 @@
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsUrl = `${protocol}//${window.location.host}/ws`;
     let ws;
+    let lastKnockTime = null;
+
+    setInterval(() => {
+        if (lastKnockTime) {
+            const secs = Math.floor(Date.now() / 1000 - lastKnockTime) + 's';
+            document.getElementById('m-since').innerText = secs;
+            document.getElementById('d-since').innerText = secs;
+        }
+    }, 1000);
 
     // MOBILE NAVIGATION
     function jump(idx) {
@@ -363,6 +374,9 @@
             const msg = JSON.parse(event.data);
             const d = msg.data;
             if (msg.type === 'new_knock') {
+                lastKnockTime = Math.floor(Date.now() / 1000);
+                document.getElementById('m-since').innerText = '0s';
+                document.getElementById('d-since').innerText = '0s';
                 renderKnock(d, true);
                 ['d-total', 'm-total'].forEach(id => document.getElementById(id).innerText = d.total_global.toLocaleString());
                 ['d-kpm', 'm-kpm'].forEach(id => document.getElementById(id).innerText = d.kpm);
@@ -374,6 +388,12 @@
             else if (msg.type === 'init_stats') {
                 ['d-total', 'm-total'].forEach(id => document.getElementById(id).innerText = (d.total || 0).toLocaleString());
                 ['d-kpm', 'm-kpm'].forEach(id => document.getElementById(id).innerText = d.kpm || '0.00');
+                if (d.last_knock_time) {
+                    lastKnockTime = d.last_knock_time;
+                    const secs = Math.floor(Date.now() / 1000 - lastKnockTime) + 's';
+                    document.getElementById('m-since').innerText = secs;
+                    document.getElementById('d-since').innerText = secs;
+                }
                 renderBars('shame', d.shame, 'shame-fill', true);
                 renderBars('pass', d.top_passwords, 'password-fill');
                 renderBars('prov', d.top_providers, 'provider-fill');

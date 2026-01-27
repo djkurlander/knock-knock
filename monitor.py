@@ -127,6 +127,7 @@ def monitor():
             shame_key = f"{geo['iso']}:{geo['country']}"
             r.zincrby("knock:wall_of_shame", 1, shame_key)
             r.incr("knock:total_global")
+            r.set("knock:last_time", int(time.time()))
             r.publish("radiation_stream", json.dumps(package))
             print(f"📡 {geo['iso']} | {user}:{pw} via {geo['isp']}")
 

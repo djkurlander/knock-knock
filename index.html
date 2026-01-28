@@ -98,6 +98,12 @@
             .d-stats .stat-label { font-size: 1em; }
             .d-stats .stat-value { font-size: 1em; }
 
+            .d-header-content { display: flex; justify-content: space-between; align-items: flex-start; }
+            .d-header-left { flex: 1; }
+            .d-header-right { flex: 0 0 120px; display: flex; align-items: center; justify-content: center; }
+            #d-globe-container { width: 100px; height: 100px; }
+            #d-globe-container canvas { width: 100% !important; height: 100% !important; }
+
             .d-grid { 
                 flex: 1;
                 display: flex; gap: 15px; width: 100%; 
@@ -205,13 +211,19 @@
             <div class="d-nav-item" onclick="dJump(5)">📋<span>INFO</span></div>
         </nav>
 
-        <h1>KNOCK-KNOCK.NET <span class="status-dot"></span></h1>
-
-        <div class="d-stats">
-            <span class="stat-label">Knocks:</span>&nbsp;<span id="d-total" class="stat-value">0</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="stat-label">Per Min:</span>&nbsp;<span id="d-kpm" class="stat-value">0.00</span>
-        </div>
-        <div class="d-stats">
-            <span class="stat-label">SINCE LAST KNOCK:</span>&nbsp;<span id="d-since" class="stat-value">-</span>
+        <div class="d-header-content">
+            <div class="d-header-left">
+                <h1>KNOCK-KNOCK.NET <span class="status-dot"></span></h1>
+                <div class="d-stats">
+                    <span class="stat-label">Knocks:</span>&nbsp;<span id="d-total" class="stat-value">0</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="stat-label">Per Min:</span>&nbsp;<span id="d-kpm" class="stat-value">0.00</span>
+                </div>
+                <div class="d-stats">
+                    <span class="stat-label">SINCE LAST KNOCK:</span>&nbsp;<span id="d-since" class="stat-value">-</span>
+                </div>
+            </div>
+            <div class="d-header-right">
+                <div id="d-globe-container"></div>
+            </div>
         </div>
     </div>
     
@@ -271,36 +283,81 @@
     const wsUrl = `${protocol}//${window.location.host}/ws`;
     let ws;
     let lastKnockTime = null;
-    let globe = null;
+    let mobileGlobe = null;
+    let desktopGlobe = null;
+    let lastLat = null;
+    let lastLng = null;
 
-    // Globe initialization (mobile only for now)
-    function initGlobe() {
-        const container = document.getElementById('globe-container');
-        if (!container || window.innerWidth > 800) return;
-
-        globe = Globe()
+    function createGlobe(container, size) {
+        const g = Globe()
             .globeImageUrl('//unpkg.com/three-globe/example/img/earth-day.jpg')
             .backgroundColor('rgba(0,0,0,0)')
             .showAtmosphere(false)
-            .width(70)
-            .height(70)
+            .width(size)
+            .height(size)
             .pointsData([])
             .pointAltitude(0.01)
-            .pointColor(() => '#00ff41')
-            .pointRadius(0.5)
+            .pointColor(() => '#ff0000')
+            .pointRadius(1.5)
             (container);
 
-        globe.controls().enableZoom = false;
-        globe.controls().enablePan = false;
-        globe.controls().autoRotate = false;
-        globe.pointOfView({ lat: 0, lng: 0, altitude: 1.5 });
+        g.controls().enableZoom = false;
+        g.controls().enablePan = false;
+        g.controls().autoRotate = false;
+        g.pointOfView({ lat: 0, lng: 0, altitude: 1.4 });
+        return g;
+    }
+
+    function initGlobes() {
+        const mobileContainer = document.getElementById('globe-container');
+        const desktopContainer = document.getElementById('d-globe-container');
+
+        if (mobileContainer && window.innerWidth <= 800) {
+            mobileGlobe = createGlobe(mobileContainer, 70);
+        }
+        if (desktopContainer && window.innerWidth > 800) {
+            desktopGlobe = createGlobe(desktopContainer, 100);
+        }
     }
 
     function rotateGlobeToLocation(lat, lng) {
-        if (!globe || lat === null || lng === null) return;
-        globe.pointsData([{ lat: lat, lng: lng }]);
-        globe.pointOfView({ lat: lat, lng: lng, altitude: 1.5 }, 1000);
+        if (lat === null || lng === null) return;
+        lastLat = lat;
+        lastLng = lng;
+        const point = [{ lat: lat, lng: lng }];
+        if (mobileGlobe) {
+            mobileGlobe.pointsData(point);
+            mobileGlobe.pointOfView({ lat: lat, lng: lng, altitude: 1.4 }, 1000);
+        }
+        if (desktopGlobe) {
+            desktopGlobe.pointsData(point);
+            desktopGlobe.pointOfView({ lat: lat, lng: lng, altitude: 1.4 }, 1000);
+        }
     }
+
+    // Handle resize across breakpoint
+    let lastWidth = window.innerWidth;
+    window.addEventListener('resize', () => {
+        const isMobile = window.innerWidth <= 800;
+        const wasMobile = lastWidth <= 800;
+
+        if (isMobile !== wasMobile) {
+            // Crossed the breakpoint
+            const mobileContainer = document.getElementById('globe-container');
+            const desktopContainer = document.getElementById('d-globe-container');
+
+            if (isMobile && !mobileGlobe && mobileContainer) {
+                mobileContainer.innerHTML = '';
+                mobileGlobe = createGlobe(mobileContainer, 70);
+                if (lastLat !== null) rotateGlobeToLocation(lastLat, lastLng);
+            } else if (!isMobile && !desktopGlobe && desktopContainer) {
+                desktopContainer.innerHTML = '';
+                desktopGlobe = createGlobe(desktopContainer, 100);
+                if (lastLat !== null) rotateGlobeToLocation(lastLat, lastLng);
+            }
+        }
+        lastWidth = window.innerWidth;
+    });
 
     setInterval(() => {
         if (lastKnockTime) {
@@ -469,7 +526,7 @@
 
     window.addEventListener('load', () => {
         dJump(0);
-        initGlobe();
+        initGlobes();
     });
     connect();
 </script>

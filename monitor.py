@@ -47,12 +47,6 @@ def init_db():
     cur.execute("CREATE TABLE IF NOT EXISTS isp_intel (isp TEXT PRIMARY KEY, hits INTEGER, last_seen DATETIME)")
     cur.execute("CREATE TABLE IF NOT EXISTS ip_intel (ip TEXT PRIMARY KEY, hits INTEGER, last_seen DATETIME, lat REAL, lng REAL)")
     cur.execute("CREATE TABLE IF NOT EXISTS monitor_heartbeats (id INTEGER PRIMARY KEY, timestamp DATETIME DEFAULT CURRENT_TIMESTAMP)")
-    # Add lat/lng columns to existing ip_intel table if missing
-    try:
-        cur.execute("ALTER TABLE ip_intel ADD COLUMN lat REAL")
-        cur.execute("ALTER TABLE ip_intel ADD COLUMN lng REAL")
-    except:
-        pass  # Columns already exist
     # Indexes for fast top-N queries
     cur.execute("CREATE INDEX IF NOT EXISTS idx_user_intel_hits ON user_intel(hits DESC)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_pass_intel_hits ON pass_intel(hits DESC)")

@@ -59,6 +59,7 @@
         .password-fill { background: var(--hazard-red); }
         .provider-fill { background: var(--data-blue); }
         .user-fill { background: var(--user-magenta); }
+        .ip-fill { background: var(--data-blue); }
 
         @keyframes pulse-green { 0% { background: rgba(0, 255, 65, 0.4); } 100% { background: transparent; } }
         .new-knock-flash { animation: pulse-green 3s forwards; }
@@ -126,7 +127,7 @@
             }
             
             .d-box {
-                flex: 0 0 14%; /* Fixed width for standard panes */
+                flex: 0 0 250px;
                 height: 100%;
                 border: 1px solid #333;
                 background: #0f0f0f;
@@ -138,9 +139,9 @@
                 /* SLOW-IN-SLOW-OUT TRANSITION */
                 transition: all 1.0s cubic-bezier(0.65, 0, 0.35, 1);
             }
-            
-            #d-box-feed { 
-                flex: 0 0 35%; /* Feed stays wide regardless of position */
+
+            #d-box-feed {
+                flex: 0 0 425px;
             }
             
             .d-box.is-active { 
@@ -206,8 +207,13 @@
             .dot { width: 10px; height: 10px; border-radius: 50%; background: #222; transition: 0.3s; cursor: pointer; }
             .dot.active { background: var(--neon-green); transform: scale(1.4); box-shadow: 0 0 8px var(--neon-green); }
 
-            .m-nav { display: flex; justify-content: space-around; padding: 15px 0; border-top: 2px solid var(--neon-green); background: #000; }
-            .nav-item { color: var(--ui-grey-dim); font-size: 1.8em; display: flex; flex-direction: column; align-items: center; cursor: pointer; transition: 0.2s; }
+            .m-nav-container { position: relative; border-top: 2px solid var(--neon-green); background: #000; }
+            .m-nav-container::before, .m-nav-container::after { content: ''; position: absolute; top: 0; bottom: 0; width: 30px; z-index: 10; pointer-events: none; }
+            .m-nav-container::before { left: 0; background: linear-gradient(to right, #000 0%, transparent 100%); }
+            .m-nav-container::after { right: 0; background: linear-gradient(to left, #000 0%, transparent 100%); }
+            .m-nav { display: flex; gap: 40px; padding: 15px 30px; overflow-x: auto; scrollbar-width: none; -ms-overflow-style: none; }
+            .m-nav::-webkit-scrollbar { display: none; }
+            .nav-item { color: var(--ui-grey-dim); font-size: 1.8em; display: flex; flex-direction: column; align-items: center; cursor: pointer; transition: 0.2s; flex-shrink: 0; }
             .nav-item span { font-size: 0.45em; margin-top: 4px; font-weight: bold; }
             .nav-item.active { color: var(--neon-green); text-shadow: 0 0 12px var(--neon-green); transform: translateY(-3px); }
         }
@@ -223,7 +229,8 @@
             <div class="d-nav-item" onclick="dJump(2)">👤<span>USER</span></div>
             <div class="d-nav-item" onclick="dJump(3)">🔑<span>PASS</span></div>
             <div class="d-nav-item" onclick="dJump(4)">🔌<span>ISP</span></div>
-            <div class="d-nav-item" onclick="dJump(5)">📋<span>INFO</span></div>
+            <div class="d-nav-item" onclick="dJump(5)">🔢<span>IP</span></div>
+            <div class="d-nav-item" onclick="dJump(6)">📋<span>INFO</span></div>
         </nav>
 
         <div class="d-header-content">
@@ -245,11 +252,12 @@
     
     <div class="d-grid" id="d-slider-container">
         <div class="d-box" id="d-box-feed" onclick="dJump(0)"><h2>LIVE FEED: LOGIN ATTEMPTS</h2><div id="d-feed" class="d-content"></div></div>
-        <div class="d-box" onclick="dJump(1)"><h2>COUNTRIES</h2><div id="d-shame" class="d-content"></div></div>
-        <div class="d-box" onclick="dJump(2)"><h2>USERNAMES</h2><div id="d-user" class="d-content"></div></div>
-        <div class="d-box" onclick="dJump(3)"><h2>PASSWORDS</h2><div id="d-pass" class="d-content"></div></div>
-        <div class="d-box" onclick="dJump(4)"><h2>ISP's</h2><div id="d-prov" class="d-content"></div></div>
-        <div class="d-box" onclick="dJump(5)"><h2>INFO</h2><div id="d-details" class="d-content"></div></div>
+        <div class="d-box" onclick="dJump(1)"><h2>COUNTRY</h2><div id="d-shame" class="d-content"></div></div>
+        <div class="d-box" onclick="dJump(2)"><h2>USERNAME</h2><div id="d-user" class="d-content"></div></div>
+        <div class="d-box" onclick="dJump(3)"><h2>PASSWORD</h2><div id="d-pass" class="d-content"></div></div>
+        <div class="d-box" onclick="dJump(4)"><h2>ISP</h2><div id="d-prov" class="d-content"></div></div>
+        <div class="d-box" onclick="dJump(5)"><h2>IP ADDRESS</h2><div id="d-ip" class="d-content"></div></div>
+        <div class="d-box" onclick="dJump(6)"><h2>INFO</h2><div id="d-details" class="d-content"></div></div>
     </div>
 </div>
 
@@ -274,24 +282,28 @@
     <div class="m-progress-container"><div id="m-progress-bar"></div></div>
     <div class="m-viewport" id="m-viewport">
         <div class="m-pane" id="m-pane-feed"><h2>LIVE FEED: LOGIN ATTEMPTS</h2><div id="m-feed" class="m-content"></div></div>
-        <div class="m-pane" id="m-pane-shame"><h2>COUNTRIES</h2><div id="m-shame" class="m-content"></div></div>
-        <div class="m-pane" id="m-pane-user"><h2>USERNAMES</h2><div id="m-user" class="m-content"></div></div>
-        <div class="m-pane" id="m-pane-pass"><h2>PASSWORDS</h2><div id="m-pass" class="m-content"></div></div>
-        <div class="m-pane" id="m-pane-prov"><h2>ISP's</h2><div id="m-prov" class="m-content"></div></div>
+        <div class="m-pane" id="m-pane-shame"><h2>COUNTRY</h2><div id="m-shame" class="m-content"></div></div>
+        <div class="m-pane" id="m-pane-user"><h2>USERNAME</h2><div id="m-user" class="m-content"></div></div>
+        <div class="m-pane" id="m-pane-pass"><h2>PASSWORD</h2><div id="m-pass" class="m-content"></div></div>
+        <div class="m-pane" id="m-pane-prov"><h2>ISP</h2><div id="m-prov" class="m-content"></div></div>
+        <div class="m-pane" id="m-pane-ip"><h2>IP ADDRESS</h2><div id="m-ip" class="m-content"></div></div>
         <div class="m-pane" id="m-pane-details"><h2>INFO</h2><div id="m-details" class="m-content"></div></div>
     </div>
     <div class="m-footer">
         <div class="m-dots">
-            <div class="dot active" onclick="jump(0)"></div><div class="dot" onclick="jump(1)"></div><div class="dot" onclick="jump(2)"></div><div class="dot" onclick="jump(3)"></div><div class="dot" onclick="jump(4)"></div><div class="dot" onclick="jump(5)"></div>
+            <div class="dot active" onclick="jump(0)"></div><div class="dot" onclick="jump(1)"></div><div class="dot" onclick="jump(2)"></div><div class="dot" onclick="jump(3)"></div><div class="dot" onclick="jump(4)"></div><div class="dot" onclick="jump(5)"></div><div class="dot" onclick="jump(6)"></div>
         </div>
+        <div class="m-nav-container">
         <nav class="m-nav">
             <div class="nav-item active" onclick="jump(0)">📢<span>FEED</span></div>
             <div class="nav-item" onclick="jump(1)">🌐<span>GEO</span></div>
             <div class="nav-item" onclick="jump(2)">👤<span>USER</span></div>
             <div class="nav-item" onclick="jump(3)">🔑<span>PASS</span></div>
             <div class="nav-item" onclick="jump(4)">🔌<span>ISP</span></div>
-            <div class="nav-item" onclick="jump(5)">📋<span>INFO</span></div>
+            <div class="nav-item" onclick="jump(5)">🔢<span>IP</span></div>
+            <div class="nav-item" onclick="jump(6)">📋<span>INFO</span></div>
         </nav>
+        </div>
     </div>
 </div>
 
@@ -577,6 +589,7 @@
                 incrementAndSort('pass', d.pass);
                 incrementAndSort('prov', d.isp);
                 incrementAndSort('user', d.user);
+                incrementAndSort('ip', d.ip);
                 rotateGlobeToLocation(d.lat, d.lng);
             } 
             else if (msg.type === 'init_stats') {
@@ -595,6 +608,7 @@
                 renderBars('pass', d.top_passwords, 'password-fill');
                 renderBars('prov', d.top_providers, 'provider-fill');
                 renderBars('user', d.top_users, 'user-fill');
+                renderBars('ip', d.top_ips, 'ip-fill');
                 if (d.history) { ['d-feed', 'm-feed'].forEach(id => document.getElementById(id).innerHTML = ''); d.history.forEach(k => renderKnock(k, false)); }
             }
         };
@@ -611,7 +625,10 @@
             if (entry.isIntersecting) {
                 const idx = Array.from(entry.target.parentNode.children).indexOf(entry.target);
                 document.querySelectorAll('.dot').forEach((d, i) => d.classList.toggle('active', i === idx));
-                document.querySelectorAll('.nav-item').forEach((n, i) => n.classList.toggle('active', i === idx));
+                document.querySelectorAll('.nav-item').forEach((n, i) => {
+                    n.classList.toggle('active', i === idx);
+                    if (i === idx) n.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+                });
             }
         });
     }, { root: vp, threshold: 0.6 });

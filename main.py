@@ -17,7 +17,8 @@ class GlobalStatsCache:
     def __init__(self):
         self.top_passwords = []
         self.top_providers = []
-        self.top_users = [] # NEW
+        self.top_users = []
+        self.top_ips = []
         self.last_updated = None
 
     async def update(self):
@@ -26,7 +27,8 @@ class GlobalStatsCache:
                 loop = asyncio.get_event_loop()
                 self.top_passwords = await loop.run_in_executor(None, self._get_top_stats, "password")
                 self.top_providers = await loop.run_in_executor(None, self._get_top_stats, "isp")
-                self.top_users = await loop.run_in_executor(None, self._get_top_stats, "username") # NEW
+                self.top_users = await loop.run_in_executor(None, self._get_top_stats, "username")
+                self.top_ips = await loop.run_in_executor(None, self._get_top_stats, "ip")
                 
                 self.last_updated = datetime.now().strftime("%H:%M:%S")
                 print(f"📊 Stats Cache Updated: {self.last_updated}")
@@ -45,6 +47,7 @@ class GlobalStatsCache:
             "password": "SELECT password as label, hits as count FROM pass_intel ORDER BY hits DESC LIMIT 100",
             "username": "SELECT username as label, hits as count FROM user_intel ORDER BY hits DESC LIMIT 100",
             "isp": "SELECT isp as label, hits as count FROM isp_intel ORDER BY hits DESC LIMIT 100",
+            "ip": "SELECT ip as label, hits as count FROM ip_intel ORDER BY hits DESC LIMIT 100",
         }
         cur.execute(queries[stat_type])
         rows = cur.fetchall()
@@ -114,6 +117,7 @@ class ConnectionManager:
             "top_passwords": stats_cache.top_passwords,
             "top_providers": stats_cache.top_providers,
             "top_users": stats_cache.top_users,
+            "top_ips": stats_cache.top_ips,
             "cache_ts": stats_cache.last_updated
         }
 
@@ -140,6 +144,7 @@ class ConnectionManager:
                     "top_passwords": stats.get("top_passwords", []),
                     "top_providers": stats.get("top_providers", []),
                     "top_users": stats.get("top_users", []),
+                    "top_ips": stats.get("top_ips", []),
                     "cache_ts": stats.get("cache_ts")
                 }
             }

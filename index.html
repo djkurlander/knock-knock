@@ -321,10 +321,7 @@
     // Load countries GeoJSON on startup for fullscreen mode
     fetch('/static/countries.geojson')
         .then(res => res.json())
-        .then(data => {
-            countriesData = data.features;
-            console.log('Countries data loaded:', countriesData.length, 'features');
-        });
+        .then(data => { countriesData = data.features; });
 
     function createGlobe(container, size) {
         const g = Globe()

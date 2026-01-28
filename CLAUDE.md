@@ -95,6 +95,7 @@ user_intel(username PRIMARY KEY, hits, last_seen)     -- INDEX on hits DESC
 pass_intel(password PRIMARY KEY, hits, last_seen)     -- INDEX on hits DESC
 country_intel(iso_code PRIMARY KEY, country, hits, last_seen)  -- INDEX on hits DESC
 isp_intel(isp PRIMARY KEY, hits, last_seen)           -- INDEX on hits DESC
+ip_intel(ip PRIMARY KEY, hits, last_seen, lat, lng)   -- INDEX on hits DESC, stores coordinates
 
 -- Uptime tracking for KPM calculation
 monitor_heartbeats(id, timestamp)
@@ -112,4 +113,15 @@ Intel tables are updated on each knock via `INSERT ... ON CONFLICT DO UPDATE`. T
 ## Redis Keys
 
 - `knock:total_global` - Total attack count
+- `knock:last_time` - Unix timestamp of last knock
+- `knock:last_lat` - Latitude of last knock location
+- `knock:last_lng` - Longitude of last knock location
 - `radiation_stream` - Pub/sub channel for real-time events
+
+## Frontend Features
+
+- **3D Globe** (globe.gl): Displays attack location, rotates on new knocks
+- **Live Feed**: Real-time attack log with username/password/location
+- **Leaderboards**: Top countries, usernames, passwords, ISPs
+- **Responsive**: Mobile carousel with swipe navigation, desktop grid layout
+- **WebSocket**: Auto-reconnect, live updates without polling

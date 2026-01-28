@@ -86,6 +86,35 @@ def log_to_maximalist_db(data):
     finally:
         conn.close()
 
+def get_intel_stats_before_update(data):
+    """Get hit counts and last_seen BEFORE updating - so we get the previous values."""
+    conn = sqlite3.connect(DB_PATH)
+    cur = conn.cursor()
+    stats = {}
+    try:
+        cur.execute("SELECT hits, last_seen FROM country_intel WHERE iso_code=?", (data['iso'],))
+        row = cur.fetchone()
+        stats['country_hits'], stats['country_last'] = (row[0] + 1, row[1]) if row else (1, None)
+
+        cur.execute("SELECT hits, last_seen FROM user_intel WHERE username=?", (data['user'],))
+        row = cur.fetchone()
+        stats['user_hits'], stats['user_last'] = (row[0] + 1, row[1]) if row else (1, None)
+
+        cur.execute("SELECT hits, last_seen FROM pass_intel WHERE password=?", (data['pass'],))
+        row = cur.fetchone()
+        stats['pass_hits'], stats['pass_last'] = (row[0] + 1, row[1]) if row else (1, None)
+
+        cur.execute("SELECT hits, last_seen FROM isp_intel WHERE isp=?", (data['isp'],))
+        row = cur.fetchone()
+        stats['isp_hits'], stats['isp_last'] = (row[0] + 1, row[1]) if row else (1, None)
+
+        cur.execute("SELECT hits, last_seen FROM ip_intel WHERE ip=?", (data['ip'],))
+        row = cur.fetchone()
+        stats['ip_hits'], stats['ip_last'] = (row[0] + 1, row[1]) if row else (1, None)
+    finally:
+        conn.close()
+    return stats
+
 def get_geo_maximal(ip, city_reader, asn_reader):
     geo = {"iso": "XX", "country": "Unknown", "city": "Unknown", "isp": "Unknown", "lat": None, "lng": None}
     try:
@@ -128,6 +157,7 @@ def monitor():
                 "iso": geo['iso'], "isp": geo['isp'],
                 "lat": geo['lat'], "lng": geo['lng']
             }
+            package.update(get_intel_stats_before_update(package))
             log_to_maximalist_db(package)
             shame_key = f"{geo['iso']}:{geo['country']}"
             r.zincrby("knock:wall_of_shame", 1, shame_key)

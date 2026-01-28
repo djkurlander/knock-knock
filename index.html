@@ -140,7 +140,7 @@
                 transition: all 1.0s cubic-bezier(0.65, 0, 0.35, 1);
             }
 
-            #d-box-feed {
+            #d-box-feed, #d-box-info {
                 flex: 0 0 425px;
             }
             
@@ -257,7 +257,7 @@
         <div class="d-box" onclick="dJump(3)"><h2>PASSWORD</h2><div id="d-pass" class="d-content"></div></div>
         <div class="d-box" onclick="dJump(4)"><h2>ISP</h2><div id="d-prov" class="d-content"></div></div>
         <div class="d-box" onclick="dJump(5)"><h2>IP ADDRESS</h2><div id="d-ip" class="d-content"></div></div>
-        <div class="d-box" onclick="dJump(6)"><h2>INFO</h2><div id="d-details" class="d-content"></div></div>
+        <div class="d-box" id="d-box-info" onclick="dJump(6)"><h2>INFO</h2><div id="d-details" class="d-content"></div></div>
     </div>
 </div>
 
@@ -570,6 +570,67 @@
         });
     }
 
+    function formatTimeSince(lastSeen) {
+        if (!lastSeen) return 'never';
+        const now = new Date();
+        // Handle SQLite datetime format (space instead of T), add Z for UTC
+        const then = new Date(lastSeen.replace(' ', 'T') + 'Z');
+        let secs = Math.floor((now - then) / 1000);
+        if (secs < 0 || isNaN(secs)) secs = 0;
+        if (secs < 60) return `${secs}s ago`;
+        const mins = Math.floor(secs / 60);
+        const remSecs = secs % 60;
+        if (mins < 60) return `${mins}m ${remSecs}s ago`;
+        const hours = Math.floor(mins / 60);
+        const remMins = mins % 60;
+        if (hours < 24) return `${hours}h ${remMins}m ago`;
+        const days = Math.floor(hours / 24);
+        const remHours = hours % 24;
+        return `${days}d ${remHours}h ago`;
+    }
+
+    function renderInfo(d) {
+        const loc = (d.city === 'Unknown' || !d.city) ? `Somewhere in ${d.country}` : `${d.city}, ${d.country}`;
+        const html = `
+            <div class="info-section" style="font-size:1.1em; margin-bottom:15px; padding-bottom:10px; border-bottom:1px solid #333;">
+                <div class="knock-location"><strong>${getFlag(d.iso)}</strong> <strong>${loc}</strong></div>
+                <span style="color:var(--ui-label)">user:</span> <span>${d.user}</span>
+                <span style="color:var(--ui-label); margin-left:10px;">password:</span> <span class="knock-pass">${d.pass}</span><br>
+                <span class="knock-meta"><span style="color:var(--ui-label)">ISP:</span> <span style="color:var(--data-blue)">${d.isp}</span> <span style="color:var(--ui-label); margin-left:10px;">IP:</span> <span style="color:var(--data-blue)">${d.ip}</span></span>
+            </div>
+            <div class="info-item" style="margin-bottom:12px;">
+                <div><span style="color:var(--ui-label)">Country:</span> <span style="color:var(--neon-green)">${d.country}</span></div>
+                <div><span style="color:var(--ui-label)">Knock count:</span> <span style="color:var(--neon-green)">${d.country_hits || 0}</span></div>
+                <div><span style="color:var(--ui-label)">Previous knock:</span> <span style="color:var(--neon-green)">${formatTimeSince(d.country_last)}</span></div>
+            </div>
+            <div class="info-item" style="margin-bottom:12px;">
+                <div><span style="color:var(--ui-label)">User:</span> <span style="color:var(--user-magenta)">${d.user}</span></div>
+                <div><span style="color:var(--ui-label)">Knock count:</span> <span style="color:var(--user-magenta)">${d.user_hits || 0}</span></div>
+                <div><span style="color:var(--ui-label)">Previous knock:</span> <span style="color:var(--user-magenta)">${formatTimeSince(d.user_last)}</span></div>
+            </div>
+            <div class="info-item" style="margin-bottom:12px;">
+                <div><span style="color:var(--ui-label)">Password:</span> <span style="color:var(--hazard-red)">${d.pass}</span></div>
+                <div><span style="color:var(--ui-label)">Knock count:</span> <span style="color:var(--hazard-red)">${d.pass_hits || 0}</span></div>
+                <div><span style="color:var(--ui-label)">Previous knock:</span> <span style="color:var(--hazard-red)">${formatTimeSince(d.pass_last)}</span></div>
+            </div>
+            <div class="info-item" style="margin-bottom:12px;">
+                <div><span style="color:var(--ui-label)">ISP:</span> <span style="color:var(--data-blue)">${d.isp}</span></div>
+                <div><span style="color:var(--ui-label)">Knock count:</span> <span style="color:var(--data-blue)">${d.isp_hits || 0}</span></div>
+                <div><span style="color:var(--ui-label)">Previous knock:</span> <span style="color:var(--data-blue)">${formatTimeSince(d.isp_last)}</span></div>
+            </div>
+            <div class="info-item" style="margin-bottom:12px;">
+                <div><span style="color:var(--ui-label)">IP:</span> <span style="color:var(--data-blue)">${d.ip}</span></div>
+                <div><span style="color:var(--ui-label)">Knock count:</span> <span style="color:var(--data-blue)">${d.ip_hits || 0}</span></div>
+                <div><span style="color:var(--ui-label)">Previous knock:</span> <span style="color:var(--data-blue)">${formatTimeSince(d.ip_last)}</span></div>
+            </div>
+        `;
+        ['d-details', 'm-details'].forEach(id => {
+            const el = document.getElementById(id);
+            el.innerHTML = html;
+            twemoji.parse(el);
+        });
+    }
+
     function connect() {
         if (ws) ws.close();
         ws = new WebSocket(wsUrl);
@@ -590,6 +651,7 @@
                 incrementAndSort('prov', d.isp);
                 incrementAndSort('user', d.user);
                 incrementAndSort('ip', d.ip);
+                renderInfo(d);
                 rotateGlobeToLocation(d.lat, d.lng);
             } 
             else if (msg.type === 'init_stats') {

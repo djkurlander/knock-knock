@@ -5,6 +5,7 @@
     <link rel="icon" type="image/png" href="static/robot1.png">
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0">
     <script src="https://cdn.jsdelivr.net/npm/@twemoji/api@latest/dist/twemoji.min.js" crossorigin="anonymous"></script>
+    <script src="https://unpkg.com/globe.gl"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
@@ -148,6 +149,11 @@
             }
             
             .m-header { flex: 0 0 auto; padding: 15px; background: #0a0a0a; border-bottom: 1px solid #222; }
+            .m-header-content { display: flex; justify-content: space-between; align-items: flex-start; }
+            .m-header-left { flex: 1; }
+            .m-header-right { flex: 0 0 80px; display: flex; align-items: center; justify-content: center; }
+            #globe-container { width: 70px; height: 70px; }
+            #globe-container canvas { width: 100% !important; height: 100% !important; }
             .m-header h1 { font-size: 1.36em; margin: 0; }
             .m-stat-row { display: flex; font-size: 0.85em; }
             .m-stat-row:first-of-type { margin-top: 10px; }
@@ -221,12 +227,19 @@
 
 <div id="mobile-layout">
     <div class="m-header">
-        <h1>KNOCK-KNOCK.NET <span class="status-dot"></span></h1>
-        <div class="m-stat-row">
-            <span class="stat-label">Knocks:</span>&nbsp;<span id="m-total" class="stat-value">0</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="stat-label">Per Min:</span>&nbsp;<span id="m-kpm" class="stat-value">0.00</span>
-        </div>
-        <div class="m-stat-row">
-            <span class="stat-label">SINCE LAST KNOCK:</span>&nbsp;<span id="m-since" class="stat-value">-</span>
+        <div class="m-header-content">
+            <div class="m-header-left">
+                <h1>KNOCK-KNOCK.NET <span class="status-dot"></span></h1>
+                <div class="m-stat-row">
+                    <span class="stat-label">Knocks:</span>&nbsp;<span id="m-total" class="stat-value">0</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="stat-label">Per Min:</span>&nbsp;<span id="m-kpm" class="stat-value">0.00</span>
+                </div>
+                <div class="m-stat-row">
+                    <span class="stat-label">SINCE LAST KNOCK:</span>&nbsp;<span id="m-since" class="stat-value">-</span>
+                </div>
+            </div>
+            <div class="m-header-right">
+                <div id="globe-container"></div>
+            </div>
         </div>
     </div>
     <div class="m-progress-container"><div id="m-progress-bar"></div></div>
@@ -258,6 +271,36 @@
     const wsUrl = `${protocol}//${window.location.host}/ws`;
     let ws;
     let lastKnockTime = null;
+    let globe = null;
+
+    // Globe initialization (mobile only for now)
+    function initGlobe() {
+        const container = document.getElementById('globe-container');
+        if (!container || window.innerWidth > 800) return;
+
+        globe = Globe()
+            .globeImageUrl('//unpkg.com/three-globe/example/img/earth-day.jpg')
+            .backgroundColor('rgba(0,0,0,0)')
+            .showAtmosphere(false)
+            .width(70)
+            .height(70)
+            .pointsData([])
+            .pointAltitude(0.01)
+            .pointColor(() => '#00ff41')
+            .pointRadius(0.5)
+            (container);
+
+        globe.controls().enableZoom = false;
+        globe.controls().enablePan = false;
+        globe.controls().autoRotate = false;
+        globe.pointOfView({ lat: 0, lng: 0, altitude: 1.5 });
+    }
+
+    function rotateGlobeToLocation(lat, lng) {
+        if (!globe || lat === null || lng === null) return;
+        globe.pointsData([{ lat: lat, lng: lng }]);
+        globe.pointOfView({ lat: lat, lng: lng, altitude: 1.5 }, 1000);
+    }
 
     setInterval(() => {
         if (lastKnockTime) {
@@ -384,6 +427,7 @@
                 incrementAndSort('pass', d.pass);
                 incrementAndSort('prov', d.isp);
                 incrementAndSort('user', d.user);
+                rotateGlobeToLocation(d.lat, d.lng);
             } 
             else if (msg.type === 'init_stats') {
                 ['d-total', 'm-total'].forEach(id => document.getElementById(id).innerText = (d.total || 0).toLocaleString());
@@ -393,6 +437,9 @@
                     const secs = Math.floor(Date.now() / 1000 - lastKnockTime) + 's';
                     document.getElementById('m-since').innerText = secs;
                     document.getElementById('d-since').innerText = secs;
+                }
+                if (d.last_lat !== null && d.last_lng !== null) {
+                    rotateGlobeToLocation(d.last_lat, d.last_lng);
                 }
                 renderBars('shame', d.shame, 'shame-fill', true);
                 renderBars('pass', d.top_passwords, 'password-fill');
@@ -420,7 +467,10 @@
     }, { root: vp, threshold: 0.6 });
     document.querySelectorAll('.m-pane').forEach(p => observer.observe(p));
 
-    window.addEventListener('load', () => dJump(0));
+    window.addEventListener('load', () => {
+        dJump(0);
+        initGlobe();
+    });
     connect();
 </script>
 </body>

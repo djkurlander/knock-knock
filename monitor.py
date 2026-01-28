@@ -45,8 +45,14 @@ def init_db():
     cur.execute("CREATE TABLE IF NOT EXISTS pass_intel (password TEXT PRIMARY KEY, hits INTEGER, last_seen DATETIME)")
     cur.execute("CREATE TABLE IF NOT EXISTS country_intel (iso_code TEXT PRIMARY KEY, country TEXT, hits INTEGER, last_seen DATETIME)")
     cur.execute("CREATE TABLE IF NOT EXISTS isp_intel (isp TEXT PRIMARY KEY, hits INTEGER, last_seen DATETIME)")
-    cur.execute("CREATE TABLE IF NOT EXISTS ip_intel (ip TEXT PRIMARY KEY, hits INTEGER, last_seen DATETIME)")
+    cur.execute("CREATE TABLE IF NOT EXISTS ip_intel (ip TEXT PRIMARY KEY, hits INTEGER, last_seen DATETIME, lat REAL, lng REAL)")
     cur.execute("CREATE TABLE IF NOT EXISTS monitor_heartbeats (id INTEGER PRIMARY KEY, timestamp DATETIME DEFAULT CURRENT_TIMESTAMP)")
+    # Add lat/lng columns to existing ip_intel table if missing
+    try:
+        cur.execute("ALTER TABLE ip_intel ADD COLUMN lat REAL")
+        cur.execute("ALTER TABLE ip_intel ADD COLUMN lng REAL")
+    except:
+        pass  # Columns already exist
     # Indexes for fast top-N queries
     cur.execute("CREATE INDEX IF NOT EXISTS idx_user_intel_hits ON user_intel(hits DESC)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_pass_intel_hits ON pass_intel(hits DESC)")
@@ -80,19 +86,23 @@ def log_to_maximalist_db(data):
         cur.execute("INSERT INTO pass_intel VALUES (?, 1, ?) ON CONFLICT(password) DO UPDATE SET hits=hits+1, last_seen=?", (data['pass'], now, now))
         cur.execute("INSERT INTO country_intel VALUES (?, ?, 1, ?) ON CONFLICT(iso_code) DO UPDATE SET hits=hits+1, last_seen=?", (data['iso'], data['country'], now, now))
         cur.execute("INSERT INTO isp_intel VALUES (?, 1, ?) ON CONFLICT(isp) DO UPDATE SET hits=hits+1, last_seen=?", (data['isp'], now, now))
-        cur.execute("INSERT INTO ip_intel VALUES (?, 1, ?) ON CONFLICT(ip) DO UPDATE SET hits=hits+1, last_seen=?", (data['ip'], now, now))
+        cur.execute("INSERT INTO ip_intel VALUES (?, 1, ?, ?, ?) ON CONFLICT(ip) DO UPDATE SET hits=hits+1, last_seen=?, lat=?, lng=?",
+                    (data['ip'], now, data.get('lat'), data.get('lng'), now, data.get('lat'), data.get('lng')))
         conn.commit()
     finally:
         conn.close()
 
 def get_geo_maximal(ip, city_reader, asn_reader):
-    geo = {"iso": "XX", "country": "Unknown", "city": "Unknown", "isp": "Unknown"}
+    geo = {"iso": "XX", "country": "Unknown", "city": "Unknown", "isp": "Unknown", "lat": None, "lng": None}
     try:
         if city_reader:
             c_res = city_reader.city(ip)
             geo["iso"] = c_res.country.iso_code
             geo["country"] = c_res.country.name
             geo["city"] = c_res.city.name or "Unknown"
+            if c_res.location:
+                geo["lat"] = c_res.location.latitude
+                geo["lng"] = c_res.location.longitude
         if asn_reader:
             a_res = asn_reader.asn(ip)
             geo["isp"] = a_res.autonomous_system_organization or "Unknown"
@@ -120,14 +130,18 @@ def monitor():
             geo = get_geo_maximal(ip, c_reader, a_reader)
             package = {
                 "ip": ip, "user": user, "pass": pw,
-                "city": geo['city'], "country": geo['country'], 
-                "iso": geo['iso'], "isp": geo['isp']
+                "city": geo['city'], "country": geo['country'],
+                "iso": geo['iso'], "isp": geo['isp'],
+                "lat": geo['lat'], "lng": geo['lng']
             }
             log_to_maximalist_db(package)
             shame_key = f"{geo['iso']}:{geo['country']}"
             r.zincrby("knock:wall_of_shame", 1, shame_key)
             r.incr("knock:total_global")
             r.set("knock:last_time", int(time.time()))
+            if geo['lat'] is not None:
+                r.set("knock:last_lat", geo['lat'])
+                r.set("knock:last_lng", geo['lng'])
             r.publish("radiation_stream", json.dumps(package))
             print(f"📡 {geo['iso']} | {user}:{pw} via {geo['isp']}")
 

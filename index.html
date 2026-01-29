@@ -15,9 +15,10 @@
         :root { 
             --neon-green: #00ff41; 
             --warning-yellow: #ffcc00; 
-            --hazard-red: #ff3333; 
+            --hazard-red: #ff1a1a; 
             --data-blue: #00fbff; 
-            --user-magenta: #ff00ff; 
+            --user-magenta: #ff00ff;
+            --ip-purple: #9d00ff;
             --bg-dark: #0a0a0a;
             --ui-label: #ffcc00;
             --ui-grey-dim: #707070;
@@ -46,7 +47,7 @@
 
         .knock { margin-bottom: 10px; padding: 5px 0 10px 0; border-bottom: 1px solid #1a1a1a; font-size: 1.1em; line-height: 1.5; }
         .knock-meta { font-size: 0.9em; }
-        .knock-pass { color: var(--hazard-red); font-weight: bold; }
+        .knock-pass { color: var(--neon-green); font-weight: bold; }
 
         .bar-row { margin-bottom: 12px; padding: 8px 12px; border-radius: 4px; border: 1px solid transparent; }
         .bar-label { display: flex; justify-content: space-between; align-items: center; font-size: 1.1em; margin-bottom: 6px; gap: 10px; }
@@ -59,7 +60,7 @@
         .password-fill { background: var(--hazard-red); }
         .provider-fill { background: var(--data-blue); }
         .user-fill { background: var(--user-magenta); }
-        .ip-fill { background: var(--data-blue); }
+        .ip-fill { background: var(--ip-purple); }
 
         @keyframes pulse-green { 0% { background: rgba(0, 255, 65, 0.4); } 100% { background: transparent; } }
         .new-knock-flash { animation: pulse-green 3s forwards; }

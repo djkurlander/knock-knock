@@ -146,6 +146,9 @@
             #d-box-globe {
                 flex: 0 0 350px;
             }
+            #d-box-jokes {
+                flex: 0 0 275px;
+            }
             #d-globe-pane {
                 display: flex;
                 justify-content: center;
@@ -241,7 +244,8 @@
             <div class="d-nav-item" onclick="dJump(5)">🔌<span>ISP</span></div>
             <div class="d-nav-item" onclick="dJump(6)">🔢<span>IP</span></div>
             <div class="d-nav-item" onclick="dJump(7)">📋<span>STATS</span></div>
-            <div class="d-nav-item" onclick="dJump(8)">ℹ️<span>ABOUT</span></div>
+            <div class="d-nav-item" onclick="dJump(8)">😂<span>JOKES</span></div>
+            <div class="d-nav-item" onclick="dJump(9)">ℹ️<span>ABOUT</span></div>
         </nav>
 
         <div class="d-header-content">
@@ -270,7 +274,8 @@
         <div class="d-box" onclick="dJump(5)"><h2>ISP</h2><div id="d-prov" class="d-content"></div></div>
         <div class="d-box" onclick="dJump(6)"><h2>IP ADDRESS</h2><div id="d-ip" class="d-content"></div></div>
         <div class="d-box" id="d-box-info" onclick="dJump(7)"><h2>STATS</h2><div id="d-details" class="d-content"></div></div>
-        <div class="d-box" onclick="dJump(8)"><h2>ABOUT</h2><div class="d-content" style="color:var(--neon-green); line-height:1.6;">
+        <div class="d-box" id="d-box-jokes" onclick="dJump(8)"><h2>KNOCK-KNOCK JOKES</h2><div id="d-jokes" class="d-content" style="color:var(--neon-green); line-height:1.6;"></div></div>
+        <div class="d-box" onclick="dJump(9)"><h2>ABOUT</h2><div class="d-content" style="color:var(--neon-green); line-height:1.6;">
             <div style="font-size:1.4em; font-weight:bold; margin-bottom:20px;">KNOCK-KNOCK.NET</div>
             <p>This site shows attempted logins of bots to an ordinary internet server.</p>
             <p>When setting up my first internet server, I was amazed by the constant chatter of bots, trying to infiltrate the server.</p>
@@ -308,6 +313,7 @@
         <div class="m-pane" id="m-pane-prov"><h2>ISP</h2><div id="m-prov" class="m-content"></div></div>
         <div class="m-pane" id="m-pane-ip"><h2>IP ADDRESS</h2><div id="m-ip" class="m-content"></div></div>
         <div class="m-pane" id="m-pane-details"><h2>STATS</h2><div id="m-details" class="m-content"></div></div>
+        <div class="m-pane" id="m-pane-jokes"><h2>KNOCK-KNOCK JOKES</h2><div id="m-jokes" class="m-content" style="color:var(--neon-green); line-height:1.6;"></div></div>
         <div class="m-pane" id="m-pane-about"><h2>ABOUT</h2><div class="m-content" style="color:var(--neon-green); line-height:1.6;">
             <div style="font-size:1.4em; font-weight:bold; margin-bottom:20px;">KNOCK-KNOCK.NET</div>
             <p>This site shows attempted logins of bots to an ordinary internet server.</p>
@@ -318,7 +324,7 @@
     </div>
     <div class="m-footer">
         <div class="m-dots">
-            <div class="dot active" onclick="jump(0)"></div><div class="dot" onclick="jump(1)"></div><div class="dot" onclick="jump(2)"></div><div class="dot" onclick="jump(3)"></div><div class="dot" onclick="jump(4)"></div><div class="dot" onclick="jump(5)"></div><div class="dot" onclick="jump(6)"></div><div class="dot" onclick="jump(7)"></div><div class="dot" onclick="jump(8)"></div>
+            <div class="dot active" onclick="jump(0)"></div><div class="dot" onclick="jump(1)"></div><div class="dot" onclick="jump(2)"></div><div class="dot" onclick="jump(3)"></div><div class="dot" onclick="jump(4)"></div><div class="dot" onclick="jump(5)"></div><div class="dot" onclick="jump(6)"></div><div class="dot" onclick="jump(7)"></div><div class="dot" onclick="jump(8)"></div><div class="dot" onclick="jump(9)"></div>
         </div>
         <div class="m-nav-container">
         <nav class="m-nav">
@@ -330,7 +336,8 @@
             <div class="nav-item" onclick="jump(5)">🔌<span>ISP</span></div>
             <div class="nav-item" onclick="jump(6)">🔢<span>IP</span></div>
             <div class="nav-item" onclick="jump(7)">📋<span>STATS</span></div>
-            <div class="nav-item" onclick="jump(8)">ℹ️<span>ABOUT</span></div>
+            <div class="nav-item" onclick="jump(8)">😂<span>JOKES</span></div>
+            <div class="nav-item" onclick="jump(9)">ℹ️<span>ABOUT</span></div>
         </nav>
         </div>
     </div>
@@ -396,7 +403,7 @@
     function formatRank(rank) {
         if (!rank) return '';
         const suffix = (rank === 1) ? 'st' : (rank === 2) ? 'nd' : (rank === 3) ? 'rd' : 'th';
-        return ` (${rank}${suffix})`;
+        return ` <span style="color:var(--data-blue)">(${rank}${suffix})</span>`;
     }
 
     // Load countries GeoJSON on startup for fullscreen mode and globe panes
@@ -838,24 +845,24 @@
                 <div><span style="color:var(--ui-label)">last seen:</span> <span style="color:var(--neon-green)">${formatTimeSince(d.country_last)}</span></div>
             </div>
             <div class="info-item" style="margin-bottom:12px;">
-                <div><span style="color:var(--ui-label)">user:</span> <span style="color:var(--user-magenta)">${d.user}${userRank}</span></div>
-                <div><span style="color:var(--ui-label)">count:</span> <span style="color:var(--user-magenta)">${d.user_hits || 0}</span></div>
-                <div><span style="color:var(--ui-label)">last seen:</span> <span style="color:var(--user-magenta)">${formatTimeSince(d.user_last)}</span></div>
+                <div><span style="color:var(--ui-label)">user:</span> <span style="color:var(--neon-green)">${d.user}${userRank}</span></div>
+                <div><span style="color:var(--ui-label)">count:</span> <span style="color:var(--neon-green)">${d.user_hits || 0}</span></div>
+                <div><span style="color:var(--ui-label)">last seen:</span> <span style="color:var(--neon-green)">${formatTimeSince(d.user_last)}</span></div>
             </div>
             <div class="info-item" style="margin-bottom:12px;">
-                <div><span style="color:var(--ui-label)">password:</span> <span style="color:var(--hazard-red)">${d.pass}${passRank}</span></div>
-                <div><span style="color:var(--ui-label)">count:</span> <span style="color:var(--hazard-red)">${d.pass_hits || 0}</span></div>
-                <div><span style="color:var(--ui-label)">last seen:</span> <span style="color:var(--hazard-red)">${formatTimeSince(d.pass_last)}</span></div>
+                <div><span style="color:var(--ui-label)">password:</span> <span style="color:var(--neon-green)">${d.pass}${passRank}</span></div>
+                <div><span style="color:var(--ui-label)">count:</span> <span style="color:var(--neon-green)">${d.pass_hits || 0}</span></div>
+                <div><span style="color:var(--ui-label)">last seen:</span> <span style="color:var(--neon-green)">${formatTimeSince(d.pass_last)}</span></div>
             </div>
             <div class="info-item" style="margin-bottom:12px;">
-                <div><span style="color:var(--ui-label)">ISP:</span> <span style="color:var(--data-blue)">${d.isp}${ispRank}</span></div>
-                <div><span style="color:var(--ui-label)">count:</span> <span style="color:var(--data-blue)">${d.isp_hits || 0}</span></div>
-                <div><span style="color:var(--ui-label)">last seen:</span> <span style="color:var(--data-blue)">${formatTimeSince(d.isp_last)}</span></div>
+                <div><span style="color:var(--ui-label)">ISP:</span> <span style="color:var(--neon-green)">${d.isp}${ispRank}</span></div>
+                <div><span style="color:var(--ui-label)">count:</span> <span style="color:var(--neon-green)">${d.isp_hits || 0}</span></div>
+                <div><span style="color:var(--ui-label)">last seen:</span> <span style="color:var(--neon-green)">${formatTimeSince(d.isp_last)}</span></div>
             </div>
             <div class="info-item" style="margin-bottom:12px;">
-                <div><span style="color:var(--ui-label)">IP:</span> <span style="color:var(--data-blue)">${d.ip}${ipRank}</span></div>
-                <div><span style="color:var(--ui-label)">count:</span> <span style="color:var(--data-blue)">${d.ip_hits || 0}</span></div>
-                <div><span style="color:var(--ui-label)">last seen:</span> <span style="color:var(--data-blue)">${formatTimeSince(d.ip_last)}</span></div>
+                <div><span style="color:var(--ui-label)">IP:</span> <span style="color:var(--neon-green)">${d.ip}${ipRank}</span></div>
+                <div><span style="color:var(--ui-label)">count:</span> <span style="color:var(--neon-green)">${d.ip_hits || 0}</span></div>
+                <div><span style="color:var(--ui-label)">last seen:</span> <span style="color:var(--neon-green)">${formatTimeSince(d.ip_last)}</span></div>
             </div>
         `;
         ['d-details', 'm-details'].forEach(id => {
@@ -948,10 +955,120 @@
     }, { root: vp, threshold: 0.6 });
     document.querySelectorAll('.m-pane').forEach(p => observer.observe(p));
 
+    // --- JOKES PANE LOGIC ---
+    let jokesData = null;
+    let jokeIndex = 0;
+    let jokeTimeouts = [];
+    let jokesVisible = false;
+
+    function shuffleArray(arr) {
+        for (let i = arr.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [arr[i], arr[j]] = [arr[j], arr[i]];
+        }
+        return arr;
+    }
+
+    function clearJokeTimeouts() {
+        jokeTimeouts.forEach(t => clearTimeout(t));
+        jokeTimeouts = [];
+    }
+
+    function displayJoke() {
+        if (!jokesData || !jokesVisible) return;
+        clearJokeTimeouts();
+
+        const joke = jokesData[jokeIndex];
+        const intro = `<p style="margin-bottom:15px;">Here are some knock knock jokes, courtesy of ChatGPT. You may not find them funny, but to an LLM they are hilarious.</p>`;
+
+        ['d-jokes', 'm-jokes'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.innerHTML = intro + `<div id="${id}-content" style="font-size:1.2em;"></div>`;
+        });
+
+        const updateContent = (html) => {
+            ['d-jokes-content', 'm-jokes-content'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.innerHTML = html;
+            });
+        };
+
+        let lines = '';
+        // Line 1: "Knock Knock"
+        lines = `<div style="color:var(--warning-yellow);">Knock Knock</div>`;
+        updateContent(lines);
+
+        // Line 2: "Who's there?" after 2 seconds
+        jokeTimeouts.push(setTimeout(() => {
+            if (!jokesVisible) return;
+            lines += `<div style="color:var(--neon-green);">Who's there?</div>`;
+            updateContent(lines);
+        }, 2000));
+
+        // Line 3: The "who" after 2 more seconds (4 total)
+        jokeTimeouts.push(setTimeout(() => {
+            if (!jokesVisible) return;
+            lines += `<div style="color:var(--warning-yellow);">${joke.who}</div>`;
+            updateContent(lines);
+        }, 4000));
+
+        // Line 4: "{who}, who?" after 2 more seconds (6 total)
+        jokeTimeouts.push(setTimeout(() => {
+            if (!jokesVisible) return;
+            lines += `<div style="color:var(--neon-green);">${joke.who}, who?</div>`;
+            updateContent(lines);
+        }, 6000));
+
+        // Line 5: The punchline after 3 more seconds (9 total)
+        jokeTimeouts.push(setTimeout(() => {
+            if (!jokesVisible) return;
+            lines += `<div style="color:var(--warning-yellow); margin-top:10px; font-style:italic;">${joke.joke}</div>`;
+            updateContent(lines);
+        }, 9000));
+
+        // Next joke after 5 more seconds (14 total)
+        jokeTimeouts.push(setTimeout(() => {
+            if (!jokesVisible) return;
+            jokeIndex = (jokeIndex + 1) % jokesData.length;
+            displayJoke();
+        }, 14000));
+    }
+
+    function initJokes() {
+        if (jokesData) {
+            displayJoke();
+            return;
+        }
+        fetch('/static/chatgpt-knock-knock.json')
+            .then(res => res.json())
+            .then(data => {
+                jokesData = shuffleArray(data);
+                jokeIndex = 0;
+                displayJoke();
+            })
+            .catch(err => console.error('Failed to load jokes:', err));
+    }
+
+    function setupJokesObserver() {
+        const targets = [document.getElementById('d-jokes'), document.getElementById('m-jokes')].filter(el => el);
+        const observer = new IntersectionObserver((entries) => {
+            const isVisible = entries.some(e => e.isIntersecting);
+            if (isVisible && !jokesVisible) {
+                jokesVisible = true;
+                initJokes();
+            } else if (!isVisible && jokesVisible) {
+                jokesVisible = false;
+                clearJokeTimeouts();
+            }
+        }, { threshold: 0.3 });
+        targets.forEach(t => observer.observe(t));
+    }
+
     window.addEventListener('load', () => {
         dJump(0);
         initGlobes();
         initPaneGlobes();
+        setupJokesObserver();
 
         // Add drag-aware click handler for desktop GLOBE pane
         const globeBox = document.getElementById('d-box-globe');

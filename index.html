@@ -402,7 +402,14 @@
 
     function formatRank(rank) {
         if (!rank) return '';
-        const suffix = (rank === 1) ? 'st' : (rank === 2) ? 'nd' : (rank === 3) ? 'rd' : 'th';
+        const lastTwo = rank % 100;
+        const lastOne = rank % 10;
+        let suffix = 'th';
+        if (lastTwo !== 11 && lastTwo !== 12 && lastTwo !== 13) {
+            if (lastOne === 1) suffix = 'st';
+            else if (lastOne === 2) suffix = 'nd';
+            else if (lastOne === 3) suffix = 'rd';
+        }
         return ` <span style="color:var(--data-blue)">(${rank}${suffix})</span>`;
     }
 

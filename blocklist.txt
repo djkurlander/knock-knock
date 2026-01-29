@@ -1,0 +1,5 @@
+# Blocked IPs - one per line
+# Lines starting with # are comments
+# Edit this file at runtime - changes take effect immediately
+
+103.99.50.5

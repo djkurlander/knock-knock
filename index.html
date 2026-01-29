@@ -143,6 +143,15 @@
             #d-box-feed, #d-box-info {
                 flex: 0 0 425px;
             }
+            #d-box-globe {
+                flex: 0 0 350px;
+            }
+            #d-globe-pane {
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                overflow: hidden;
+            }
             
             .d-box.is-active { 
                 border-color: var(--neon-green); 
@@ -225,12 +234,14 @@
     <div class="d-header">
         <nav class="d-nav">
             <div class="d-nav-item active" onclick="dJump(0)">📢<span>FEED</span></div>
-            <div class="d-nav-item" onclick="dJump(1)">🌐<span>GEO</span></div>
-            <div class="d-nav-item" onclick="dJump(2)">👤<span>USER</span></div>
-            <div class="d-nav-item" onclick="dJump(3)">🔑<span>PASS</span></div>
-            <div class="d-nav-item" onclick="dJump(4)">🔌<span>ISP</span></div>
-            <div class="d-nav-item" onclick="dJump(5)">🔢<span>IP</span></div>
-            <div class="d-nav-item" onclick="dJump(6)">📋<span>INFO</span></div>
+            <div class="d-nav-item" onclick="dJump(1)">🌍<span>GLOBE</span></div>
+            <div class="d-nav-item" onclick="dJump(2)">🏳️<span>GEO</span></div>
+            <div class="d-nav-item" onclick="dJump(3)">👤<span>USER</span></div>
+            <div class="d-nav-item" onclick="dJump(4)">🔑<span>PASS</span></div>
+            <div class="d-nav-item" onclick="dJump(5)">🔌<span>ISP</span></div>
+            <div class="d-nav-item" onclick="dJump(6)">🔢<span>IP</span></div>
+            <div class="d-nav-item" onclick="dJump(7)">📋<span>STATS</span></div>
+            <div class="d-nav-item" onclick="dJump(8)">ℹ️<span>ABOUT</span></div>
         </nav>
 
         <div class="d-header-content">
@@ -252,12 +263,20 @@
     
     <div class="d-grid" id="d-slider-container">
         <div class="d-box" id="d-box-feed" onclick="dJump(0)"><h2>LIVE FEED: LOGIN ATTEMPTS</h2><div id="d-feed" class="d-content"></div></div>
-        <div class="d-box" onclick="dJump(1)"><h2>COUNTRY</h2><div id="d-shame" class="d-content"></div></div>
-        <div class="d-box" onclick="dJump(2)"><h2>USERNAME</h2><div id="d-user" class="d-content"></div></div>
-        <div class="d-box" onclick="dJump(3)"><h2>PASSWORD</h2><div id="d-pass" class="d-content"></div></div>
-        <div class="d-box" onclick="dJump(4)"><h2>ISP</h2><div id="d-prov" class="d-content"></div></div>
-        <div class="d-box" onclick="dJump(5)"><h2>IP ADDRESS</h2><div id="d-ip" class="d-content"></div></div>
-        <div class="d-box" id="d-box-info" onclick="dJump(6)"><h2>INFO</h2><div id="d-details" class="d-content"></div></div>
+        <div class="d-box" id="d-box-globe"><h2>GLOBE</h2><div id="d-globe-location" style="text-align:center; margin-bottom:10px;"><div id="d-globe-loc-text" style="color:var(--neon-green);"></div><div id="d-globe-loc-isp" style="color:var(--data-blue); font-size:0.85em;"></div></div><div id="d-globe-pane" class="d-content"></div></div>
+        <div class="d-box" onclick="dJump(2)"><h2>COUNTRY</h2><div id="d-shame" class="d-content"></div></div>
+        <div class="d-box" onclick="dJump(3)"><h2>USERNAME</h2><div id="d-user" class="d-content"></div></div>
+        <div class="d-box" onclick="dJump(4)"><h2>PASSWORD</h2><div id="d-pass" class="d-content"></div></div>
+        <div class="d-box" onclick="dJump(5)"><h2>ISP</h2><div id="d-prov" class="d-content"></div></div>
+        <div class="d-box" onclick="dJump(6)"><h2>IP ADDRESS</h2><div id="d-ip" class="d-content"></div></div>
+        <div class="d-box" id="d-box-info" onclick="dJump(7)"><h2>STATS</h2><div id="d-details" class="d-content"></div></div>
+        <div class="d-box" onclick="dJump(8)"><h2>ABOUT</h2><div class="d-content" style="color:var(--neon-green); line-height:1.6;">
+            <div style="font-size:1.4em; font-weight:bold; margin-bottom:20px;">KNOCK-KNOCK.NET</div>
+            <p>This site shows attempted logins of bots to an ordinary internet server.</p>
+            <p>When setting up my first internet server, I was amazed by the constant chatter of bots, trying to infiltrate the server.</p>
+            <p>This constant chatter of bots knocking on the doors of machines on the net has been referred to as <em style="color:var(--warning-yellow); font-style:italic;">"the background radiation of the Internet"</em>.</p>
+            <p>Knock-knock.net is a visualization of this Internet Background Radiation - bots doing their best to break into just one machine.</p>
+        </div></div>
     </div>
 </div>
 
@@ -282,26 +301,36 @@
     <div class="m-progress-container"><div id="m-progress-bar"></div></div>
     <div class="m-viewport" id="m-viewport">
         <div class="m-pane" id="m-pane-feed"><h2>LIVE FEED: LOGIN ATTEMPTS</h2><div id="m-feed" class="m-content"></div></div>
+        <div class="m-pane" id="m-pane-globe"><h2>GLOBE</h2><div id="m-globe-location" style="text-align:center; margin-bottom:10px;"><div id="m-globe-loc-text" style="color:var(--neon-green);"></div><div id="m-globe-loc-isp" style="color:var(--data-blue); font-size:0.85em;"></div></div><div id="m-globe-pane" class="m-content" style="display:flex; justify-content:center; align-items:center;"></div></div>
         <div class="m-pane" id="m-pane-shame"><h2>COUNTRY</h2><div id="m-shame" class="m-content"></div></div>
         <div class="m-pane" id="m-pane-user"><h2>USERNAME</h2><div id="m-user" class="m-content"></div></div>
         <div class="m-pane" id="m-pane-pass"><h2>PASSWORD</h2><div id="m-pass" class="m-content"></div></div>
         <div class="m-pane" id="m-pane-prov"><h2>ISP</h2><div id="m-prov" class="m-content"></div></div>
         <div class="m-pane" id="m-pane-ip"><h2>IP ADDRESS</h2><div id="m-ip" class="m-content"></div></div>
-        <div class="m-pane" id="m-pane-details"><h2>INFO</h2><div id="m-details" class="m-content"></div></div>
+        <div class="m-pane" id="m-pane-details"><h2>STATS</h2><div id="m-details" class="m-content"></div></div>
+        <div class="m-pane" id="m-pane-about"><h2>ABOUT</h2><div class="m-content" style="color:var(--neon-green); line-height:1.6;">
+            <div style="font-size:1.4em; font-weight:bold; margin-bottom:20px;">KNOCK-KNOCK.NET</div>
+            <p>This site shows attempted logins of bots to an ordinary internet server.</p>
+            <p>When setting up my first internet server, I was amazed by the constant chatter of bots, trying to infiltrate the server.</p>
+            <p>This constant chatter of bots knocking on the doors of machines on the net has been referred to as <em style="color:var(--warning-yellow); font-style:italic;">"the background radiation of the Internet"</em>.</p>
+            <p>Knock-knock.net is a visualization of this Internet Background Radiation - bots doing their best to break into just one machine.</p>
+        </div></div>
     </div>
     <div class="m-footer">
         <div class="m-dots">
-            <div class="dot active" onclick="jump(0)"></div><div class="dot" onclick="jump(1)"></div><div class="dot" onclick="jump(2)"></div><div class="dot" onclick="jump(3)"></div><div class="dot" onclick="jump(4)"></div><div class="dot" onclick="jump(5)"></div><div class="dot" onclick="jump(6)"></div>
+            <div class="dot active" onclick="jump(0)"></div><div class="dot" onclick="jump(1)"></div><div class="dot" onclick="jump(2)"></div><div class="dot" onclick="jump(3)"></div><div class="dot" onclick="jump(4)"></div><div class="dot" onclick="jump(5)"></div><div class="dot" onclick="jump(6)"></div><div class="dot" onclick="jump(7)"></div><div class="dot" onclick="jump(8)"></div>
         </div>
         <div class="m-nav-container">
         <nav class="m-nav">
             <div class="nav-item active" onclick="jump(0)">📢<span>FEED</span></div>
-            <div class="nav-item" onclick="jump(1)">🌐<span>GEO</span></div>
-            <div class="nav-item" onclick="jump(2)">👤<span>USER</span></div>
-            <div class="nav-item" onclick="jump(3)">🔑<span>PASS</span></div>
-            <div class="nav-item" onclick="jump(4)">🔌<span>ISP</span></div>
-            <div class="nav-item" onclick="jump(5)">🔢<span>IP</span></div>
-            <div class="nav-item" onclick="jump(6)">📋<span>INFO</span></div>
+            <div class="nav-item" onclick="jump(1)">🌍<span>GLOBE</span></div>
+            <div class="nav-item" onclick="jump(2)">🏳️<span>GEO</span></div>
+            <div class="nav-item" onclick="jump(3)">👤<span>USER</span></div>
+            <div class="nav-item" onclick="jump(4)">🔑<span>PASS</span></div>
+            <div class="nav-item" onclick="jump(5)">🔌<span>ISP</span></div>
+            <div class="nav-item" onclick="jump(6)">🔢<span>IP</span></div>
+            <div class="nav-item" onclick="jump(7)">📋<span>STATS</span></div>
+            <div class="nav-item" onclick="jump(8)">ℹ️<span>ABOUT</span></div>
         </nav>
         </div>
     </div>
@@ -311,17 +340,95 @@
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsUrl = `${protocol}//${window.location.host}/ws`;
     let ws;
+    let audioCtx = null;
+
+    function initAudio() {
+        if (!audioCtx) {
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        if (audioCtx.state === 'suspended') {
+            audioCtx.resume();
+        }
+    }
+
+    // Unlock audio on first user interaction
+    document.addEventListener('click', initAudio, { once: true });
+    document.addEventListener('touchstart', initAudio, { once: true });
+
+    function playClick() {
+        if (!audioCtx) initAudio();
+        if (!audioCtx || audioCtx.state === 'suspended') return;
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.frequency.value = 800;
+        osc.type = 'sine';
+        gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.05);
+        osc.start(audioCtx.currentTime);
+        osc.stop(audioCtx.currentTime + 0.05);
+    }
     let lastKnockTime = null;
     let mobileGlobe = null;
     let desktopGlobe = null;
     let lastLat = null;
     let lastLng = null;
     let countriesData = null;
+    let paneGlobeDesktop = null;
+    let paneGlobeMobile = null;
 
-    // Load countries GeoJSON on startup for fullscreen mode
+    // Store leaderboard data globally for ranking lookups
+    let leaderboards = {
+        shame: [],      // country data {iso, country, count}
+        users: [],      // {label, count}
+        passwords: [],  // {label, count}
+        providers: [],  // {label, count}
+        ips: []         // {label, count}
+    };
+
+    function getRank(list, value, key = 'label') {
+        if (!list || !value) return null;
+        const idx = list.findIndex(item => item[key] === value);
+        return idx >= 0 ? idx + 1 : null;
+    }
+
+    function formatRank(rank) {
+        if (!rank) return '';
+        const suffix = (rank === 1) ? 'st' : (rank === 2) ? 'nd' : (rank === 3) ? 'rd' : 'th';
+        return ` (${rank}${suffix})`;
+    }
+
+    // Load countries GeoJSON on startup for fullscreen mode and globe panes
     fetch('/static/countries.geojson')
         .then(res => res.json())
-        .then(data => { countriesData = data.features; });
+        .then(data => {
+            countriesData = data.features;
+            // Add hex polygons and neon outlines to pane globes if they exist
+            const hexColor = () => `hsl(${140 + Math.random() * 40}, 100%, 50%)`;
+            if (paneGlobeDesktop) {
+                paneGlobeDesktop.hexPolygonsData(countriesData);
+                paneGlobeDesktop.hexPolygonResolution(3);
+                paneGlobeDesktop.hexPolygonMargin(0.4);
+                paneGlobeDesktop.hexPolygonColor(hexColor);
+                paneGlobeDesktop.polygonsData(countriesData);
+                paneGlobeDesktop.polygonCapColor(() => 'rgba(0,0,0,0)');
+                paneGlobeDesktop.polygonSideColor(() => 'rgba(0,0,0,0)');
+                paneGlobeDesktop.polygonStrokeColor(() => '#000080');
+                paneGlobeDesktop.polygonAltitude(0.01);
+            }
+            if (paneGlobeMobile) {
+                paneGlobeMobile.hexPolygonsData(countriesData);
+                paneGlobeMobile.hexPolygonResolution(3);
+                paneGlobeMobile.hexPolygonMargin(0.4);
+                paneGlobeMobile.hexPolygonColor(hexColor);
+                paneGlobeMobile.polygonsData(countriesData);
+                paneGlobeMobile.polygonCapColor(() => 'rgba(0,0,0,0)');
+                paneGlobeMobile.polygonSideColor(() => 'rgba(0,0,0,0)');
+                paneGlobeMobile.polygonStrokeColor(() => '#000080');
+                paneGlobeMobile.polygonAltitude(0.01);
+            }
+        });
 
     function createGlobe(container, size) {
         const g = Globe()
@@ -387,7 +494,7 @@
                 globe.polygonsData(countriesData);
                 globe.polygonCapColor(() => 'rgba(0, 0, 0, 0)');
                 globe.polygonSideColor(() => 'rgba(0, 0, 0, 0)');
-                globe.polygonStrokeColor(() => '#00ff41');
+                globe.polygonStrokeColor(() => '#000080');
                 globe.polygonAltitude(0.002);
             }
             // Reduce marker size on desktop when zoomed
@@ -422,6 +529,114 @@
         }
     }
 
+    function initPaneGlobes() {
+        // Initialize asynchronously to not block page load
+        setTimeout(() => {
+            const desktopPane = document.getElementById('d-globe-pane');
+            const mobilePane = document.getElementById('m-globe-pane');
+
+            if (desktopPane && window.innerWidth > 800) {
+                const size = Math.min(desktopPane.clientWidth, desktopPane.clientHeight) || 300;
+                paneGlobeDesktop = Globe()
+                    .globeImageUrl('//unpkg.com/three-globe/example/img/earth-night.jpg')
+                    .backgroundColor('rgba(0,0,0,0)')
+                    .showAtmosphere(true)
+                    .atmosphereColor('#00ff41')
+                    .atmosphereAltitude(0.15)
+                    .width(size)
+                    .height(size)
+                    .pointsData([])
+                    .pointAltitude(0.01)
+                    .pointColor(() => '#ff0000')
+                    .pointRadius(1.5)
+                    (desktopPane);
+                paneGlobeDesktop.controls().enableZoom = false;
+                paneGlobeDesktop.controls().autoRotate = false;
+                if (countriesData) {
+                    paneGlobeDesktop.hexPolygonsData(countriesData);
+                    paneGlobeDesktop.hexPolygonResolution(3);
+                    paneGlobeDesktop.hexPolygonMargin(0.4);
+                    paneGlobeDesktop.hexPolygonColor(() => `hsl(${140 + Math.random() * 40}, 100%, 50%)`);
+                    // Layer neon outlines on top
+                    paneGlobeDesktop.polygonsData(countriesData);
+                    paneGlobeDesktop.polygonCapColor(() => 'rgba(0,0,0,0)');
+                    paneGlobeDesktop.polygonSideColor(() => 'rgba(0,0,0,0)');
+                    paneGlobeDesktop.polygonStrokeColor(() => '#000080');
+                    paneGlobeDesktop.polygonAltitude(0.01);
+                }
+                if (lastLat !== null) paneGlobeDesktop.pointOfView({ lat: lastLat, lng: lastLng, altitude: 1.8 });
+            }
+
+            if (mobilePane && window.innerWidth <= 800) {
+                const size = Math.min(mobilePane.clientWidth, mobilePane.clientHeight) || 250;
+                paneGlobeMobile = Globe()
+                    .globeImageUrl('//unpkg.com/three-globe/example/img/earth-night.jpg')
+                    .backgroundColor('rgba(0,0,0,0)')
+                    .showAtmosphere(true)
+                    .atmosphereColor('#00ff41')
+                    .atmosphereAltitude(0.15)
+                    .width(size)
+                    .height(size)
+                    .pointsData([])
+                    .pointAltitude(0.01)
+                    .pointColor(() => '#ff0000')
+                    .pointRadius(1.5)
+                    (mobilePane);
+                paneGlobeMobile.controls().enableZoom = false;
+                paneGlobeMobile.controls().autoRotate = false;
+                if (countriesData) {
+                    paneGlobeMobile.hexPolygonsData(countriesData);
+                    paneGlobeMobile.hexPolygonResolution(3);
+                    paneGlobeMobile.hexPolygonMargin(0.4);
+                    paneGlobeMobile.hexPolygonColor(() => `hsl(${140 + Math.random() * 40}, 100%, 50%)`);
+                    // Layer neon outlines on top
+                    paneGlobeMobile.polygonsData(countriesData);
+                    paneGlobeMobile.polygonCapColor(() => 'rgba(0,0,0,0)');
+                    paneGlobeMobile.polygonSideColor(() => 'rgba(0,0,0,0)');
+                    paneGlobeMobile.polygonStrokeColor(() => '#000080');
+                    paneGlobeMobile.polygonAltitude(0.01);
+                }
+                if (lastLat !== null) paneGlobeMobile.pointOfView({ lat: lastLat, lng: lastLng, altitude: 1.8 });
+            }
+        }, 100);
+    }
+
+    let atmospherePulseStart = null;
+    function pulseGlobeAtmosphere() {
+        const globes = [paneGlobeDesktop, paneGlobeMobile].filter(g => g);
+        if (globes.length === 0) return;
+
+        const duration = 3000;
+        const startAlt = 0.3;
+        const endAlt = 0.15;
+        atmospherePulseStart = performance.now();
+
+        function animate(now) {
+            const elapsed = now - atmospherePulseStart;
+            const progress = Math.min(elapsed / duration, 1);
+            // Ease-out curve matching CSS default
+            const eased = 1 - Math.pow(1 - progress, 2);
+            const alt = startAlt - (startAlt - endAlt) * eased;
+            globes.forEach(g => g.atmosphereAltitude(alt));
+            if (progress < 1) requestAnimationFrame(animate);
+        }
+        requestAnimationFrame(animate);
+    }
+
+    function updateGlobeLocation(d) {
+        if (!d) return;
+        const loc = formatLocation(d);
+        const locHtml = `${getFlag(d.iso)} ${loc}`;
+        ['d-globe-loc-text', 'm-globe-loc-text'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) { el.innerHTML = locHtml; twemoji.parse(el); }
+        });
+        ['d-globe-loc-isp', 'm-globe-loc-isp'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.innerText = d.isp || '';
+        });
+    }
+
     function rotateGlobeToLocation(lat, lng) {
         if (lat === null || lng === null) return;
         lastLat = lat;
@@ -434,6 +649,14 @@
         if (desktopGlobe) {
             desktopGlobe.pointsData(point);
             desktopGlobe.pointOfView({ lat: lat, lng: lng, altitude: 1.4 }, 1000);
+        }
+        if (paneGlobeDesktop) {
+            paneGlobeDesktop.pointsData(point);
+            paneGlobeDesktop.pointOfView({ lat: lat, lng: lng, altitude: 1.8 }, 1000);
+        }
+        if (paneGlobeMobile) {
+            paneGlobeMobile.pointsData(point);
+            paneGlobeMobile.pointOfView({ lat: lat, lng: lng, altitude: 1.8 }, 1000);
         }
     }
 
@@ -546,8 +769,14 @@
         });
     }
 
+    function formatLocation(d) {
+        if (d.city === 'Unknown' || !d.city) return `Somewhere in ${d.country}`;
+        if (d.region) return `${d.city}, ${d.region}, ${d.country}`;
+        return `${d.city}, ${d.country}`;
+    }
+
     function renderKnock(d, isNew = true) {
-        const loc = (d.city === 'Unknown' || !d.city) ? `Somewhere in ${d.country}` : `${d.city}, ${d.country}`;
+        const loc = formatLocation(d);
         
         const html = `
             <div class="knock-location"><strong>${getFlag(d.iso)}</strong> <strong>${loc}</strong></div>
@@ -587,7 +816,15 @@
     }
 
     function renderInfo(d) {
-        const loc = (d.city === 'Unknown' || !d.city) ? `Somewhere in ${d.country}` : `${d.city}, ${d.country}`;
+        const loc = formatLocation(d);
+
+        // Get rankings from leaderboards
+        const countryRank = formatRank(getRank(leaderboards.shame, d.iso, 'iso'));
+        const userRank = formatRank(getRank(leaderboards.users, d.user));
+        const passRank = formatRank(getRank(leaderboards.passwords, d.pass));
+        const ispRank = formatRank(getRank(leaderboards.providers, d.isp));
+        const ipRank = formatRank(getRank(leaderboards.ips, d.ip));
+
         const html = `
             <div class="info-section" style="font-size:1.1em; margin-bottom:15px; padding-bottom:10px; border-bottom:1px solid #333;">
                 <div class="knock-location"><strong>${getFlag(d.iso)}</strong> <strong>${loc}</strong></div>
@@ -596,29 +833,29 @@
                 <span class="knock-meta"><span style="color:var(--ui-label)">ISP:</span> <span style="color:var(--data-blue)">${d.isp}</span> <span style="color:var(--ui-label); margin-left:10px;">IP:</span> <span style="color:var(--data-blue)">${d.ip}</span></span>
             </div>
             <div class="info-item" style="margin-bottom:12px;">
-                <div><span style="color:var(--ui-label)">Country:</span> <span style="color:var(--neon-green)">${d.country}</span></div>
-                <div><span style="color:var(--ui-label)">Knock count:</span> <span style="color:var(--neon-green)">${d.country_hits || 0}</span></div>
-                <div><span style="color:var(--ui-label)">Previous knock:</span> <span style="color:var(--neon-green)">${formatTimeSince(d.country_last)}</span></div>
+                <div><span style="color:var(--ui-label)">country:</span> <span style="color:var(--neon-green)">${d.country}${countryRank}</span></div>
+                <div><span style="color:var(--ui-label)">count:</span> <span style="color:var(--neon-green)">${d.country_hits || 0}</span></div>
+                <div><span style="color:var(--ui-label)">last seen:</span> <span style="color:var(--neon-green)">${formatTimeSince(d.country_last)}</span></div>
             </div>
             <div class="info-item" style="margin-bottom:12px;">
-                <div><span style="color:var(--ui-label)">User:</span> <span style="color:var(--user-magenta)">${d.user}</span></div>
-                <div><span style="color:var(--ui-label)">Knock count:</span> <span style="color:var(--user-magenta)">${d.user_hits || 0}</span></div>
-                <div><span style="color:var(--ui-label)">Previous knock:</span> <span style="color:var(--user-magenta)">${formatTimeSince(d.user_last)}</span></div>
+                <div><span style="color:var(--ui-label)">user:</span> <span style="color:var(--user-magenta)">${d.user}${userRank}</span></div>
+                <div><span style="color:var(--ui-label)">count:</span> <span style="color:var(--user-magenta)">${d.user_hits || 0}</span></div>
+                <div><span style="color:var(--ui-label)">last seen:</span> <span style="color:var(--user-magenta)">${formatTimeSince(d.user_last)}</span></div>
             </div>
             <div class="info-item" style="margin-bottom:12px;">
-                <div><span style="color:var(--ui-label)">Password:</span> <span style="color:var(--hazard-red)">${d.pass}</span></div>
-                <div><span style="color:var(--ui-label)">Knock count:</span> <span style="color:var(--hazard-red)">${d.pass_hits || 0}</span></div>
-                <div><span style="color:var(--ui-label)">Previous knock:</span> <span style="color:var(--hazard-red)">${formatTimeSince(d.pass_last)}</span></div>
+                <div><span style="color:var(--ui-label)">password:</span> <span style="color:var(--hazard-red)">${d.pass}${passRank}</span></div>
+                <div><span style="color:var(--ui-label)">count:</span> <span style="color:var(--hazard-red)">${d.pass_hits || 0}</span></div>
+                <div><span style="color:var(--ui-label)">last seen:</span> <span style="color:var(--hazard-red)">${formatTimeSince(d.pass_last)}</span></div>
             </div>
             <div class="info-item" style="margin-bottom:12px;">
-                <div><span style="color:var(--ui-label)">ISP:</span> <span style="color:var(--data-blue)">${d.isp}</span></div>
-                <div><span style="color:var(--ui-label)">Knock count:</span> <span style="color:var(--data-blue)">${d.isp_hits || 0}</span></div>
-                <div><span style="color:var(--ui-label)">Previous knock:</span> <span style="color:var(--data-blue)">${formatTimeSince(d.isp_last)}</span></div>
+                <div><span style="color:var(--ui-label)">ISP:</span> <span style="color:var(--data-blue)">${d.isp}${ispRank}</span></div>
+                <div><span style="color:var(--ui-label)">count:</span> <span style="color:var(--data-blue)">${d.isp_hits || 0}</span></div>
+                <div><span style="color:var(--ui-label)">last seen:</span> <span style="color:var(--data-blue)">${formatTimeSince(d.isp_last)}</span></div>
             </div>
             <div class="info-item" style="margin-bottom:12px;">
-                <div><span style="color:var(--ui-label)">IP:</span> <span style="color:var(--data-blue)">${d.ip}</span></div>
-                <div><span style="color:var(--ui-label)">Knock count:</span> <span style="color:var(--data-blue)">${d.ip_hits || 0}</span></div>
-                <div><span style="color:var(--ui-label)">Previous knock:</span> <span style="color:var(--data-blue)">${formatTimeSince(d.ip_last)}</span></div>
+                <div><span style="color:var(--ui-label)">IP:</span> <span style="color:var(--data-blue)">${d.ip}${ipRank}</span></div>
+                <div><span style="color:var(--ui-label)">count:</span> <span style="color:var(--data-blue)">${d.ip_hits || 0}</span></div>
+                <div><span style="color:var(--ui-label)">last seen:</span> <span style="color:var(--data-blue)">${formatTimeSince(d.ip_last)}</span></div>
             </div>
         `;
         ['d-details', 'm-details'].forEach(id => {
@@ -637,6 +874,8 @@
             const msg = JSON.parse(event.data);
             const d = msg.data;
             if (msg.type === 'new_knock') {
+                playClick();
+                pulseGlobeAtmosphere();
                 lastKnockTime = Math.floor(Date.now() / 1000);
                 document.getElementById('m-since').innerText = '0s';
                 document.getElementById('d-since').innerText = '0s';
@@ -649,6 +888,7 @@
                 incrementAndSort('user', d.user);
                 incrementAndSort('ip', d.ip);
                 renderInfo(d);
+                updateGlobeLocation(d);
                 rotateGlobeToLocation(d.lat, d.lng);
             } 
             else if (msg.type === 'init_stats') {
@@ -663,12 +903,27 @@
                 if (d.last_lat !== null && d.last_lng !== null) {
                     rotateGlobeToLocation(d.last_lat, d.last_lng);
                 }
+                // Store leaderboards globally for ranking lookups
+                leaderboards.shame = d.shame || [];
+                leaderboards.passwords = d.top_passwords || [];
+                leaderboards.providers = d.top_providers || [];
+                leaderboards.users = d.top_users || [];
+                leaderboards.ips = d.top_ips || [];
+
                 renderBars('shame', d.shame, 'shame-fill', true);
                 renderBars('pass', d.top_passwords, 'password-fill');
                 renderBars('prov', d.top_providers, 'provider-fill');
                 renderBars('user', d.top_users, 'user-fill');
                 renderBars('ip', d.top_ips, 'ip-fill');
-                if (d.history) { ['d-feed', 'm-feed'].forEach(id => document.getElementById(id).innerHTML = ''); d.history.forEach(k => renderKnock(k, false)); }
+                if (d.history) {
+                    ['d-feed', 'm-feed'].forEach(id => document.getElementById(id).innerHTML = '');
+                    d.history.forEach(k => renderKnock(k, false));
+                    if (d.history.length > 0) updateGlobeLocation(d.history[0]);
+                }
+                // Render Stats pane with enriched last knock data
+                if (d.last_knock_stats) {
+                    renderInfo(d.last_knock_stats);
+                }
             }
         };
     }
@@ -696,6 +951,13 @@
     window.addEventListener('load', () => {
         dJump(0);
         initGlobes();
+        initPaneGlobes();
+
+        // Add drag-aware click handler for desktop GLOBE pane
+        const globeBox = document.getElementById('d-box-globe');
+        if (globeBox) {
+            addGlobeClickHandler(globeBox, () => dJump(1));
+        }
     });
     connect();
 </script>

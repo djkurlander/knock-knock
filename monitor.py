@@ -38,9 +38,14 @@ def init_db():
     cur.execute("""CREATE TABLE IF NOT EXISTS knocks (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-        ip_address TEXT, iso_code TEXT, city TEXT, country TEXT, isp TEXT,
+        ip_address TEXT, iso_code TEXT, city TEXT, region TEXT, country TEXT, isp TEXT,
         username TEXT, password TEXT
     )""")
+    # Add region column if it doesn't exist (migration for existing DBs)
+    try:
+        cur.execute("ALTER TABLE knocks ADD COLUMN region TEXT")
+    except:
+        pass  # Column already exists
     cur.execute("CREATE TABLE IF NOT EXISTS user_intel (username TEXT PRIMARY KEY, hits INTEGER, last_seen DATETIME)")
     cur.execute("CREATE TABLE IF NOT EXISTS pass_intel (password TEXT PRIMARY KEY, hits INTEGER, last_seen DATETIME)")
     cur.execute("CREATE TABLE IF NOT EXISTS country_intel (iso_code TEXT PRIMARY KEY, country TEXT, hits INTEGER, last_seen DATETIME)")
@@ -72,9 +77,9 @@ def log_to_maximalist_db(data):
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
     try:
-        cur.execute("""INSERT INTO knocks (ip_address, iso_code, city, country, isp, username, password)
-                       VALUES (?, ?, ?, ?, ?, ?, ?)""",
-                    (data['ip'], data['iso'], data['city'], data['country'], data['isp'], data['user'], data['pass']))
+        cur.execute("""INSERT INTO knocks (ip_address, iso_code, city, region, country, isp, username, password)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (data['ip'], data['iso'], data['city'], data.get('region'), data['country'], data['isp'], data['user'], data['pass']))
         now = datetime.now()
         cur.execute("INSERT INTO user_intel VALUES (?, 1, ?) ON CONFLICT(username) DO UPDATE SET hits=hits+1, last_seen=?", (data['user'], now, now))
         cur.execute("INSERT INTO pass_intel VALUES (?, 1, ?) ON CONFLICT(password) DO UPDATE SET hits=hits+1, last_seen=?", (data['pass'], now, now))
@@ -116,13 +121,15 @@ def get_intel_stats_before_update(data):
     return stats
 
 def get_geo_maximal(ip, city_reader, asn_reader):
-    geo = {"iso": "XX", "country": "Unknown", "city": "Unknown", "isp": "Unknown", "lat": None, "lng": None}
+    geo = {"iso": "XX", "country": "Unknown", "city": "Unknown", "region": None, "isp": "Unknown", "lat": None, "lng": None}
     try:
         if city_reader:
             c_res = city_reader.city(ip)
             geo["iso"] = c_res.country.iso_code
             geo["country"] = c_res.country.name
             geo["city"] = c_res.city.name or "Unknown"
+            if c_res.subdivisions.most_specific.name:
+                geo["region"] = c_res.subdivisions.most_specific.name
             if c_res.location:
                 geo["lat"] = c_res.location.latitude
                 geo["lng"] = c_res.location.longitude
@@ -153,7 +160,7 @@ def monitor():
             geo = get_geo_maximal(ip, c_reader, a_reader)
             package = {
                 "ip": ip, "user": user, "pass": pw,
-                "city": geo['city'], "country": geo['country'],
+                "city": geo['city'], "region": geo['region'], "country": geo['country'],
                 "iso": geo['iso'], "isp": geo['isp'],
                 "lat": geo['lat'], "lng": geo['lng']
             }

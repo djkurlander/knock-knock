@@ -3,6 +3,28 @@ import paramiko
 import socket
 import threading
 import logging
+import os
+import time
+
+BLOCKLIST_FILE = '/root/knock-knock/blocklist.txt'
+BLOCKLIST_RELOAD_INTERVAL = 60  # seconds
+
+_blocklist_cache = set()
+_blocklist_last_load = 0
+
+def get_blocklist():
+    """Return cached blocklist, reloading from file every 30 seconds."""
+    global _blocklist_cache, _blocklist_last_load
+    now = time.time()
+    if now - _blocklist_last_load > BLOCKLIST_RELOAD_INTERVAL:
+        _blocklist_last_load = now
+        if os.path.exists(BLOCKLIST_FILE):
+            try:
+                with open(BLOCKLIST_FILE, 'r') as f:
+                    _blocklist_cache = set(line.strip() for line in f if line.strip() and not line.startswith('#'))
+            except:
+                pass
+    return _blocklist_cache
 # Log to a file we can tail in real-time
 # paramiko.util.log_to_file("honeypot_debug.log") 
 
@@ -70,6 +92,10 @@ def start_honeypot():
 
     while True:
         client, addr = sock.accept()
+        # Check blocklist - reject immediately if blocked
+        if addr[0] in get_blocklist():
+            client.close()
+            continue
         # 2. Now 'host_key' exists and can be passed to the thread
         threading.Thread(target=handle_connection, args=(client, addr, host_key)).start()
 

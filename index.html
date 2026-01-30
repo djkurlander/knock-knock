@@ -239,7 +239,7 @@
         <nav class="d-nav">
             <div class="d-nav-item active" onclick="dJump(0)">📢<span>FEED</span></div>
             <div class="d-nav-item" onclick="dJump(1)">🌍<span>GLOBE</span></div>
-            <div class="d-nav-item" onclick="dJump(2)">🏳️<span>GEO</span></div>
+            <div class="d-nav-item" onclick="dJump(2)">🏳️<span>LOC</span></div>
             <div class="d-nav-item" onclick="dJump(3)">👤<span>USER</span></div>
             <div class="d-nav-item" onclick="dJump(4)">🔑<span>PASS</span></div>
             <div class="d-nav-item" onclick="dJump(5)">🔌<span>ISP</span></div>
@@ -247,6 +247,7 @@
             <div class="d-nav-item" onclick="dJump(7)">📋<span>STATS</span></div>
             <div class="d-nav-item" onclick="dJump(8)">😂<span>JOKES</span></div>
             <div class="d-nav-item" onclick="dJump(9)">ℹ️<span>ABOUT</span></div>
+            <div class="d-nav-item" id="d-sound-toggle" onclick="toggleSound()">🔈</div>
         </nav>
 
         <div class="d-header-content">
@@ -269,7 +270,7 @@
     <div class="d-grid" id="d-slider-container">
         <div class="d-box" id="d-box-feed" onclick="dJump(0)"><h2>LIVE FEED: LOGIN ATTEMPTS</h2><div id="d-feed" class="d-content"></div></div>
         <div class="d-box" id="d-box-globe"><h2>GLOBE</h2><div id="d-globe-location" style="text-align:center; margin-bottom:10px;"><div id="d-globe-loc-text" style="color:var(--neon-green);"></div><div id="d-globe-loc-isp" style="color:var(--data-blue); font-size:0.85em;"></div></div><div id="d-globe-pane" class="d-content"></div></div>
-        <div class="d-box" onclick="dJump(2)"><h2>COUNTRY</h2><div id="d-shame" class="d-content"></div></div>
+        <div class="d-box" onclick="dJump(2)"><h2>LOCATION</h2><div id="d-shame" class="d-content"></div></div>
         <div class="d-box" onclick="dJump(3)"><h2>USERNAME</h2><div id="d-user" class="d-content"></div></div>
         <div class="d-box" onclick="dJump(4)"><h2>PASSWORD</h2><div id="d-pass" class="d-content"></div></div>
         <div class="d-box" onclick="dJump(5)"><h2>ISP</h2><div id="d-prov" class="d-content"></div></div>
@@ -309,7 +310,7 @@
     <div class="m-viewport" id="m-viewport">
         <div class="m-pane" id="m-pane-feed"><h2>LIVE FEED: LOGIN ATTEMPTS</h2><div id="m-feed" class="m-content"></div></div>
         <div class="m-pane" id="m-pane-globe"><h2>GLOBE</h2><div id="m-globe-location" style="text-align:center; margin-bottom:10px;"><div id="m-globe-loc-text" style="color:var(--neon-green);"></div><div id="m-globe-loc-isp" style="color:var(--data-blue); font-size:0.85em;"></div></div><div id="m-globe-pane" class="m-content" style="display:flex; justify-content:center; align-items:center;"></div></div>
-        <div class="m-pane" id="m-pane-shame"><h2>COUNTRY</h2><div id="m-shame" class="m-content"></div></div>
+        <div class="m-pane" id="m-pane-shame"><h2>LOCATION</h2><div id="m-shame" class="m-content"></div></div>
         <div class="m-pane" id="m-pane-user"><h2>USERNAME</h2><div id="m-user" class="m-content"></div></div>
         <div class="m-pane" id="m-pane-pass"><h2>PASSWORD</h2><div id="m-pass" class="m-content"></div></div>
         <div class="m-pane" id="m-pane-prov"><h2>ISP</h2><div id="m-prov" class="m-content"></div></div>
@@ -333,7 +334,7 @@
         <nav class="m-nav">
             <div class="nav-item active" onclick="jump(0)">📢<span>FEED</span></div>
             <div class="nav-item" onclick="jump(1)">🌍<span>GLOBE</span></div>
-            <div class="nav-item" onclick="jump(2)">🏳️<span>GEO</span></div>
+            <div class="nav-item" onclick="jump(2)">🏳️<span>LOC</span></div>
             <div class="nav-item" onclick="jump(3)">👤<span>USER</span></div>
             <div class="nav-item" onclick="jump(4)">🔑<span>PASS</span></div>
             <div class="nav-item" onclick="jump(5)">🔌<span>ISP</span></div>
@@ -341,6 +342,7 @@
             <div class="nav-item" onclick="jump(7)">📋<span>STATS</span></div>
             <div class="nav-item" onclick="jump(8)">😂<span>JOKES</span></div>
             <div class="nav-item" onclick="jump(9)">ℹ️<span>ABOUT</span></div>
+            <div class="nav-item" id="m-sound-toggle" onclick="toggleSound()">🔈</div>
         </nav>
         </div>
     </div>
@@ -351,6 +353,21 @@
     const wsUrl = `${protocol}//${window.location.host}/ws`;
     let ws;
     let audioCtx = null;
+    let soundEnabled = false;
+
+    function updateSoundIcon() {
+        const icon = soundEnabled ? '🔊' : '🔈';
+        const dToggle = document.getElementById('d-sound-toggle');
+        const mToggle = document.getElementById('m-sound-toggle');
+        if (dToggle) dToggle.innerHTML = icon;
+        if (mToggle) mToggle.innerHTML = icon;
+    }
+
+    function toggleSound() {
+        soundEnabled = !soundEnabled;
+        updateSoundIcon();
+        if (soundEnabled) initAudio();
+    }
 
     function initAudio() {
         if (!audioCtx) {
@@ -366,6 +383,7 @@
     document.addEventListener('touchstart', initAudio, { once: true });
 
     function playClick() {
+        if (!soundEnabled) return;
         if (!audioCtx) initAudio();
         if (!audioCtx || audioCtx.state === 'suspended') return;
         const osc = audioCtx.createOscillator();
@@ -1079,6 +1097,7 @@
         initGlobes();
         initPaneGlobes();
         setupJokesObserver();
+        updateSoundIcon();
 
         // Add drag-aware click handler for desktop GLOBE pane
         const globeBox = document.getElementById('d-box-globe');

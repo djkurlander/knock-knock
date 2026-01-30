@@ -1,11 +1,71 @@
-import asyncio, json, sqlite3
+import asyncio, json, sqlite3, os
 import redis.asyncio as redis
+import geoip2.database
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
 from datetime import datetime
 from fastapi.staticfiles import StaticFiles
 
 app = FastAPI()
+
+# --- Visitor Tracking ---
+VISITORS_DB_PATH = 'visitors.db'
+GEOIP_CITY_PATH = '/usr/share/GeoIP/GeoLite2-City.mmdb'
+GEOIP_ASN_PATH = '/usr/share/GeoIP/GeoLite2-ASN.mmdb'
+
+# Initialize GeoIP readers for visitor tracking
+visitor_city_reader = geoip2.database.Reader(GEOIP_CITY_PATH) if os.path.exists(GEOIP_CITY_PATH) else None
+visitor_asn_reader = geoip2.database.Reader(GEOIP_ASN_PATH) if os.path.exists(GEOIP_ASN_PATH) else None
+
+def init_visitors_db():
+    conn = sqlite3.connect(VISITORS_DB_PATH)
+    cur = conn.cursor()
+    cur.execute("""CREATE TABLE IF NOT EXISTS visitors (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+        ip TEXT,
+        city TEXT,
+        region TEXT,
+        country TEXT,
+        iso_code TEXT,
+        isp TEXT
+    )""")
+    conn.commit()
+    conn.close()
+
+def get_visitor_geo(ip):
+    geo = {"city": None, "region": None, "country": None, "iso": None, "isp": None}
+    try:
+        if visitor_city_reader:
+            c_res = visitor_city_reader.city(ip)
+            geo["iso"] = c_res.country.iso_code
+            geo["country"] = c_res.country.name
+            geo["city"] = c_res.city.name
+            if c_res.subdivisions.most_specific.name:
+                geo["region"] = c_res.subdivisions.most_specific.name
+        if visitor_asn_reader:
+            a_res = visitor_asn_reader.asn(ip)
+            geo["isp"] = a_res.autonomous_system_organization
+    except:
+        pass
+    return geo
+
+def log_visitor(ip):
+    """Log a visitor to the separate visitors database."""
+    try:
+        geo = get_visitor_geo(ip)
+        conn = sqlite3.connect(VISITORS_DB_PATH)
+        cur = conn.cursor()
+        cur.execute("""INSERT INTO visitors (ip, city, region, country, iso_code, isp)
+                       VALUES (?, ?, ?, ?, ?, ?)""",
+                    (ip, geo['city'], geo['region'], geo['country'], geo['iso'], geo['isp']))
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"Visitor log error: {e}")
+
+# Initialize visitors DB on module load
+init_visitors_db()
 
 # This ensures /static/robot1.png is available immediately
 app.mount("/static", StaticFiles(directory="static"), name="static")
@@ -232,6 +292,11 @@ async def startup_event():
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
+    # Log visitor in background (non-blocking)
+    client_ip = websocket.client.host if websocket.client else None
+    if client_ip:
+        asyncio.get_event_loop().run_in_executor(None, log_visitor, client_ip)
+
     await manager.connect(websocket)
     try:
         while True:

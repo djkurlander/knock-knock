@@ -11,3 +11,5 @@ knock_knock.db
 __pycache__/
 .venv/
 *.pyc
+.env
+visitors.db

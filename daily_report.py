@@ -3,13 +3,25 @@
 Daily visitor report script.
 Run via cron: 0 0 * * * /root/knock-knock/.venv/bin/python /root/knock-knock/daily_report.py
 
-Configure email settings below or via environment variables.
+Configure email settings in .env file or via environment variables.
 """
 import sqlite3
 import smtplib
+import socket
 from email.mime.text import MIMEText
 from datetime import datetime, timedelta
 import os
+from pathlib import Path
+
+# --- Load .env file if it exists ---
+env_path = Path(__file__).parent / '.env'
+if env_path.exists():
+    with open(env_path) as f:
+        for line in f:
+            line = line.strip()
+            if line and not line.startswith('#') and '=' in line:
+                key, value = line.split('=', 1)
+                os.environ.setdefault(key.strip(), value.strip())
 
 # --- Configuration ---
 VISITORS_DB = '/root/knock-knock/visitors.db'
@@ -20,57 +32,71 @@ SMTP_PORT = int(os.environ.get('SMTP_PORT', 25))
 SMTP_USER = os.environ.get('SMTP_USER', '')
 SMTP_PASS = os.environ.get('SMTP_PASS', '')
 
+# --- IPs to exclude from reports (e.g., your own IPs or domains) ---
+def resolve_exclusions(exclusion_str):
+    """Resolve a comma-separated list of IPs and/or domain names to a set of IPs."""
+    excluded = set()
+    for entry in filter(None, exclusion_str.split(',')):
+        entry = entry.strip()
+        if not entry:
+            continue
+        # Check if it looks like a domain (has letters) vs an IP (only digits, dots, colons)
+        if any(c.isalpha() for c in entry):
+            try:
+                # Resolve domain to IP(s)
+                ips = socket.gethostbyname_ex(entry)[2]
+                excluded.update(ips)
+            except socket.gaierror:
+                print(f"Warning: Could not resolve {entry}")
+        else:
+            excluded.add(entry)
+    return excluded
+
+EXCLUDE_IPS = resolve_exclusions(os.environ.get('EXCLUDE_IPS', ''))
+
 def get_daily_visitors():
-    """Get visitors from the last 24 hours."""
+    """Get visitors from the last 24 hours, excluding specified IPs."""
     conn = sqlite3.connect(VISITORS_DB)
     conn.row_factory = sqlite3.Row
     cur = conn.cursor()
-    
+
     yesterday = (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d %H:%M:%S')
-    
+
     cur.execute("""
         SELECT timestamp, ip, city, region, country, iso_code, isp
         FROM visitors
         WHERE timestamp >= ?
         ORDER BY timestamp DESC
     """, (yesterday,))
-    
-    visitors = [dict(row) for row in cur.fetchall()]
+
+    visitors = [dict(row) for row in cur.fetchall() if row['ip'] not in EXCLUDE_IPS]
     conn.close()
     return visitors
 
 def get_visitor_summary():
-    """Get summary stats for the last 24 hours."""
-    conn = sqlite3.connect(VISITORS_DB)
-    cur = conn.cursor()
-    
-    yesterday = (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d %H:%M:%S')
-    
+    """Get summary stats for the last 24 hours, excluding specified IPs."""
+    visitors = get_daily_visitors()  # Already filtered
+
     # Total visitors
-    cur.execute("SELECT COUNT(*) FROM visitors WHERE timestamp >= ?", (yesterday,))
-    total = cur.fetchone()[0]
-    
+    total = len(visitors)
+
     # Unique IPs
-    cur.execute("SELECT COUNT(DISTINCT ip) FROM visitors WHERE timestamp >= ?", (yesterday,))
-    unique_ips = cur.fetchone()[0]
-    
+    unique_ips = len(set(v['ip'] for v in visitors))
+
     # Top countries
-    cur.execute("""
-        SELECT country, COUNT(*) as cnt FROM visitors
-        WHERE timestamp >= ? AND country IS NOT NULL
-        GROUP BY country ORDER BY cnt DESC LIMIT 10
-    """, (yesterday,))
-    top_countries = cur.fetchall()
-    
+    country_counts = {}
+    for v in visitors:
+        if v['country']:
+            country_counts[v['country']] = country_counts.get(v['country'], 0) + 1
+    top_countries = sorted(country_counts.items(), key=lambda x: -x[1])[:10]
+
     # Top ISPs
-    cur.execute("""
-        SELECT isp, COUNT(*) as cnt FROM visitors
-        WHERE timestamp >= ? AND isp IS NOT NULL
-        GROUP BY isp ORDER BY cnt DESC LIMIT 10
-    """, (yesterday,))
-    top_isps = cur.fetchall()
-    
-    conn.close()
+    isp_counts = {}
+    for v in visitors:
+        if v['isp']:
+            isp_counts[v['isp']] = isp_counts.get(v['isp'], 0) + 1
+    top_isps = sorted(isp_counts.items(), key=lambda x: -x[1])[:10]
+
     return {
         'total': total,
         'unique_ips': unique_ips,
@@ -121,15 +147,21 @@ def send_email(report):
     msg['Subject'] = f"Knock-Knock.net Visitor Report - {datetime.now().strftime('%Y-%m-%d')}"
     msg['From'] = EMAIL_FROM
     msg['To'] = EMAIL_TO
-    
+
     try:
-        if SMTP_USER and SMTP_PASS:
-            server = smtplib.SMTP(SMTP_HOST, SMTP_PORT)
-            server.starttls()
-            server.login(SMTP_USER, SMTP_PASS)
+        # Use SSL for port 465, STARTTLS for port 587
+        if SMTP_PORT == 465:
+            server = smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT)
         else:
             server = smtplib.SMTP(SMTP_HOST, SMTP_PORT)
-        
+            server.ehlo()
+            if SMTP_PORT == 587:
+                server.starttls()
+                server.ehlo()
+
+        if SMTP_USER and SMTP_PASS:
+            server.login(SMTP_USER, SMTP_PASS)
+
         server.sendmail(EMAIL_FROM, [EMAIL_TO], msg.as_string())
         server.quit()
         print(f"Report sent to {EMAIL_TO}")

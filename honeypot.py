@@ -78,26 +78,35 @@ def handle_connection(client_sock, addr, host_key):
     finally:
         transport.close()
 
+def normalize_ip(ip):
+    """Normalize IPv4-mapped IPv6 addresses to plain IPv4."""
+    if ip.startswith('::ffff:'):
+        return ip[7:]  # Strip ::ffff: prefix
+    return ip
+
 def start_honeypot():
     # 1. Load the key from the file you generated earlier
     # Make sure 'server.key' is in the same folder as this script
     host_key = paramiko.RSAKey(filename='server.key')
 
-    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    # Dual-stack socket: accepts both IPv4 and IPv6
+    sock = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    sock.bind(('0.0.0.0', 22))
+    sock.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 0)
+    sock.bind(('::', 22))
     sock.listen(100)
-    
-    print("🚀 Honeypot Active on Port 22. Collecting radiation...")
+
+    print("🚀 Honeypot Active on Port 22 (IPv4+IPv6). Collecting radiation...")
 
     while True:
         client, addr = sock.accept()
+        client_ip = normalize_ip(addr[0])
         # Check blocklist - reject immediately if blocked
-        if addr[0] in get_blocklist():
+        if client_ip in get_blocklist():
             client.close()
             continue
         # 2. Now 'host_key' exists and can be passed to the thread
-        threading.Thread(target=handle_connection, args=(client, addr, host_key)).start()
+        threading.Thread(target=handle_connection, args=(client, (client_ip, addr[1]), host_key)).start()
 
 if __name__ == "__main__":
     start_honeypot()

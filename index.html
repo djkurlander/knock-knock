@@ -355,6 +355,86 @@
     let audioCtx = null;
     let soundEnabled = false;
 
+    // --- DEBUG OVERLAY (add ?debug to URL to enable) ---
+    const DEBUG = new URLSearchParams(window.location.search).has('debug');
+    let debugDiv = null;
+    let knockCount = 0;
+    const DEBUG_STORAGE_KEY = 'knock_debug_log';
+
+    if (DEBUG) {
+        debugDiv = document.createElement('div');
+        debugDiv.id = 'debug-overlay';
+        debugDiv.style.cssText = 'position:fixed;bottom:10px;left:10px;right:10px;max-height:40vh;overflow-y:auto;background:rgba(0,0,0,0.9);color:#0f0;font:11px monospace;padding:8px;z-index:99999;border:1px solid #0f0;border-radius:4px;';
+        document.body.appendChild(debugDiv);
+
+        // Restore previous logs from localStorage
+        try {
+            const prevLogs = JSON.parse(localStorage.getItem(DEBUG_STORAGE_KEY) || '[]');
+            if (prevLogs.length > 0) {
+                const sep = document.createElement('div');
+                sep.style.cssText = 'color:#ff0;border-top:1px dashed #ff0;margin:4px 0;padding-top:4px;';
+                sep.textContent = '--- PREVIOUS SESSION ---';
+                debugDiv.appendChild(sep);
+                prevLogs.forEach(log => {
+                    const line = document.createElement('div');
+                    line.textContent = log;
+                    line.style.color = '#888';
+                    debugDiv.appendChild(line);
+                });
+            }
+        } catch (e) {}
+    }
+
+    function debugLog(msg) {
+        if (!DEBUG || !debugDiv) return;
+        const ts = new Date().toTimeString().slice(0, 8);
+        const logEntry = `[${ts}] ${msg}`;
+        const line = document.createElement('div');
+        line.textContent = logEntry;
+        debugDiv.insertBefore(line, debugDiv.firstChild);
+
+        // Persist to localStorage
+        try {
+            let logs = JSON.parse(localStorage.getItem(DEBUG_STORAGE_KEY) || '[]');
+            logs.unshift(logEntry);
+            logs = logs.slice(0, 50); // Keep max 50
+            localStorage.setItem(DEBUG_STORAGE_KEY, JSON.stringify(logs));
+        } catch (e) {}
+
+        // Keep max 100 lines in DOM (50 current + 50 previous)
+        while (debugDiv.children.length > 100) debugDiv.lastChild.remove();
+    }
+
+    if (DEBUG) {
+        debugLog('Debug mode enabled');
+        debugLog('Pane globes pause when not visible');
+        debugLog('UA: ' + navigator.userAgent.slice(0, 60));
+
+        window.onerror = (msg, src, line, col, err) => {
+            debugLog(`ERROR: ${msg} @ ${src}:${line}`);
+            return false;
+        };
+        window.onunhandledrejection = (e) => {
+            debugLog(`PROMISE ERR: ${e.reason}`);
+        };
+        document.addEventListener('visibilitychange', () => {
+            debugLog(`Visibility: ${document.visibilityState}`);
+        });
+        window.addEventListener('pagehide', () => debugLog('EVENT: pagehide'));
+        window.addEventListener('beforeunload', () => debugLog('EVENT: beforeunload'));
+        window.addEventListener('unload', () => debugLog('EVENT: unload'));
+
+        // Log memory usage every 30s (if available)
+        setInterval(() => {
+            if (performance.memory) {
+                const mb = (performance.memory.usedJSHeapSize / 1048576).toFixed(1);
+                debugLog(`Memory: ${mb}MB`);
+            }
+            const feedEl = document.getElementById('m-feed');
+            if (feedEl) debugLog(`Feed items: ${feedEl.children.length}`);
+        }, 30000);
+    }
+
     function updateSoundIcon() {
         const icon = soundEnabled ? '🔊' : '🔈';
         const dToggle = document.getElementById('d-sound-toggle');
@@ -431,7 +511,11 @@
             else if (lastOne === 2) suffix = 'nd';
             else if (lastOne === 3) suffix = 'rd';
         }
-        return ` <span style="color:var(--data-blue)">(${rank}${suffix})</span>`;
+        let star = '';
+        if (rank <= 10) star = ' <span style="color:#FFD700">★</span>';       // Gold
+        else if (rank <= 50) star = ' <span style="color:#C0C0C0">★</span>';  // Silver
+        else if (rank <= 100) star = ' <span style="color:#FF4444">★</span>'; // Red
+        return ` <span style="color:var(--data-blue)">(${rank}${suffix}${star})</span>`;
     }
 
     // Load countries GeoJSON on startup for fullscreen mode and globe panes
@@ -452,16 +536,13 @@
                 paneGlobeDesktop.polygonStrokeColor(() => '#000080');
                 paneGlobeDesktop.polygonAltitude(0.01);
             }
+            // Mobile pane globe: country outlines only (no hexagons)
             if (paneGlobeMobile) {
-                paneGlobeMobile.hexPolygonsData(countriesData);
-                paneGlobeMobile.hexPolygonResolution(3);
-                paneGlobeMobile.hexPolygonMargin(0.4);
-                paneGlobeMobile.hexPolygonColor(hexColor);
                 paneGlobeMobile.polygonsData(countriesData);
                 paneGlobeMobile.polygonCapColor(() => 'rgba(0,0,0,0)');
                 paneGlobeMobile.polygonSideColor(() => 'rgba(0,0,0,0)');
-                paneGlobeMobile.polygonStrokeColor(() => '#000080');
-                paneGlobeMobile.polygonAltitude(0.01);
+                paneGlobeMobile.polygonStrokeColor(() => '#00ff41');
+                paneGlobeMobile.polygonAltitude(0.002);
             }
         });
 
@@ -482,7 +563,47 @@
         g.controls().enablePan = false;
         g.controls().autoRotate = false;
         g.pointOfView({ lat: 0, lng: 0, altitude: 1.4 });
+        g.pauseAnimation(); // Start paused, resume on knocks or interaction
+
+        // Resume on user interaction, pause when done
+        g.controls().addEventListener('start', () => {
+            if (headerGlobePauseTimeout) clearTimeout(headerGlobePauseTimeout);
+            g.resumeAnimation();
+        });
+        g.controls().addEventListener('end', () => {
+            headerGlobePauseTimeout = setTimeout(() => {
+                g.pauseAnimation();
+                debugLog('Header globe paused (interaction end)');
+            }, 1100);
+        });
+
         return g;
+    }
+
+    let headerGlobePauseTimeout = null;
+    let paneGlobeVisible = { desktop: false, mobile: false };
+    let paneGlobePauseTimeout = null;
+
+    function animateGlobesOnKnock() {
+        // Resume all globes for animation, then pause
+        if (headerGlobePauseTimeout) clearTimeout(headerGlobePauseTimeout);
+        if (paneGlobePauseTimeout) clearTimeout(paneGlobePauseTimeout);
+
+        // Header globes (always animate)
+        if (mobileGlobe) mobileGlobe.resumeAnimation();
+        if (desktopGlobe) desktopGlobe.resumeAnimation();
+
+        // Pane globes (only if visible)
+        if (paneGlobeDesktop && paneGlobeVisible.desktop) paneGlobeDesktop.resumeAnimation();
+        if (paneGlobeMobile && paneGlobeVisible.mobile) paneGlobeMobile.resumeAnimation();
+
+        headerGlobePauseTimeout = setTimeout(() => {
+            if (mobileGlobe) mobileGlobe.pauseAnimation();
+            if (desktopGlobe) desktopGlobe.pauseAnimation();
+            debugLog('Header globes paused');
+        }, 1100); // 1s rotation + 100ms buffer
+
+        schedulePaneGlobePause();
     }
 
     function addGlobeClickHandler(container, onClick) {
@@ -600,12 +721,14 @@
                     paneGlobeDesktop.polygonAltitude(0.01);
                 }
                 if (lastLat !== null) paneGlobeDesktop.pointOfView({ lat: lastLat, lng: lastLng, altitude: 1.8 });
+                // Delay pause to allow initial render at full size
+                setTimeout(() => paneGlobeDesktop.pauseAnimation(), 500);
             }
 
             if (mobilePane && window.innerWidth <= 800) {
                 const size = Math.min(mobilePane.clientWidth, mobilePane.clientHeight) || 250;
                 paneGlobeMobile = Globe()
-                    .globeImageUrl('//unpkg.com/three-globe/example/img/earth-night.jpg')
+                    .globeImageUrl('//unpkg.com/three-globe/example/img/earth-blue-marble.jpg')
                     .backgroundColor('rgba(0,0,0,0)')
                     .showAtmosphere(true)
                     .atmosphereColor('#00ff41')
@@ -619,21 +742,75 @@
                     (mobilePane);
                 paneGlobeMobile.controls().enableZoom = false;
                 paneGlobeMobile.controls().autoRotate = false;
+                // Country outlines only (no hexagons)
                 if (countriesData) {
-                    paneGlobeMobile.hexPolygonsData(countriesData);
-                    paneGlobeMobile.hexPolygonResolution(3);
-                    paneGlobeMobile.hexPolygonMargin(0.4);
-                    paneGlobeMobile.hexPolygonColor(() => `hsl(${140 + Math.random() * 40}, 100%, 50%)`);
-                    // Layer neon outlines on top
                     paneGlobeMobile.polygonsData(countriesData);
                     paneGlobeMobile.polygonCapColor(() => 'rgba(0,0,0,0)');
                     paneGlobeMobile.polygonSideColor(() => 'rgba(0,0,0,0)');
-                    paneGlobeMobile.polygonStrokeColor(() => '#000080');
-                    paneGlobeMobile.polygonAltitude(0.01);
+                    paneGlobeMobile.polygonStrokeColor(() => '#00ff41');
+                    paneGlobeMobile.polygonAltitude(0.002);
                 }
                 if (lastLat !== null) paneGlobeMobile.pointOfView({ lat: lastLat, lng: lastLng, altitude: 1.8 });
+                // Delay pause to allow initial render at full size
+                setTimeout(() => paneGlobeMobile.pauseAnimation(), 500);
             }
+
+            // Pause/resume pane globes based on visibility
+            setupPaneGlobeVisibility();
         }, 100);
+    }
+
+    function setupPaneGlobeVisibility() {
+        const targets = [
+            { el: document.getElementById('d-globe-pane'), globe: () => paneGlobeDesktop, key: 'desktop' },
+            { el: document.getElementById('m-globe-pane'), globe: () => paneGlobeMobile, key: 'mobile' }
+        ].filter(t => t.el);
+
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                const target = targets.find(t => t.el === entry.target);
+                const globe = target?.globe();
+                if (!globe) return;
+
+                paneGlobeVisible[target.key] = entry.isIntersecting;
+
+                if (entry.isIntersecting) {
+                    // Show current state briefly, then pause
+                    debugLog('Pane globe: visible, rendering');
+                    globe.resumeAnimation();
+                    schedulePaneGlobePause();
+                } else {
+                    debugLog('Pane globe: hidden, pausing');
+                    globe.pauseAnimation();
+                }
+            });
+        }, { threshold: 0.1 });
+
+        targets.forEach(t => {
+            observer.observe(t.el);
+            // Add interaction handlers
+            const globe = t.globe();
+            if (globe) {
+                globe.controls().addEventListener('start', () => {
+                    if (paneGlobePauseTimeout) clearTimeout(paneGlobePauseTimeout);
+                    globe.resumeAnimation();
+                });
+                globe.controls().addEventListener('end', () => schedulePaneGlobePause());
+            }
+        });
+    }
+
+    function schedulePaneGlobePause() {
+        if (paneGlobePauseTimeout) clearTimeout(paneGlobePauseTimeout);
+        paneGlobePauseTimeout = setTimeout(() => {
+            if (paneGlobeDesktop && paneGlobeVisible.desktop) {
+                paneGlobeDesktop.pauseAnimation();
+            }
+            if (paneGlobeMobile && paneGlobeVisible.mobile) {
+                paneGlobeMobile.pauseAnimation();
+            }
+            debugLog('Pane globes paused');
+        }, 3100); // 3s pulse animation + 100ms buffer
     }
 
     let atmospherePulseStart = null;
@@ -677,6 +854,10 @@
         lastLat = lat;
         lastLng = lng;
         const point = [{ lat: lat, lng: lng }];
+
+        // Resume globes for animation, then pause
+        animateGlobesOnKnock();
+
         if (mobileGlobe) {
             mobileGlobe.pointsData(point);
             mobileGlobe.pointOfView({ lat: lat, lng: lng, altitude: 1.4 }, 1000);
@@ -762,7 +943,9 @@
             const max = data[0].count;
             data.forEach(item => {
                 const pct = (item.count / max) * 100;
-                const label = useFlags ? `${getFlag(item.iso)} ${item.country}` : (item.label || item.country);
+                let label = useFlags ? `${getFlag(item.iso)} ${item.country}` : (item.label || item.country);
+                // Format IPv6 addresses in IP leaderboard
+                if (prefix === 'ip' && label) label = formatIP(label);
                 const rawId = useFlags ? item.iso : (item.label || item.country || item.isp);
                 const div = document.createElement('div');
                 div.className = 'bar-row';
@@ -805,9 +988,27 @@
     }
 
     function formatLocation(d) {
-        if (d.city === 'Unknown' || !d.city) return `Somewhere in ${d.country}`;
-        if (d.region) return `${d.city}, ${d.region}, ${d.country}`;
+        const hasCity = d.city && d.city !== 'Unknown';
+        const hasRegion = d.region && d.region !== 'Unknown';
+
+        if (!hasCity && !hasRegion) return `Somewhere in ${d.country}`;
+        if (!hasCity && hasRegion) return `${d.region}, ${d.country}`;
+        if (hasCity && hasRegion) return `${d.city}, ${d.region}, ${d.country}`;
         return `${d.city}, ${d.country}`;
+    }
+
+    function formatIP(ip) {
+        if (!ip) return '';
+        // IPv6 addresses contain colons; IPv4 don't
+        if (ip.includes(':')) {
+            // Truncate IPv6: show first 2 and last 2 segments
+            const parts = ip.split(':');
+            if (parts.length > 4) {
+                const truncated = `${parts[0]}:${parts[1]}:…:${parts[parts.length - 1]}`;
+                return `<span title="${ip}" style="cursor:help">${truncated}</span>`;
+            }
+        }
+        return ip;
     }
 
     function renderKnock(d, isNew = true) {
@@ -817,9 +1018,9 @@
             <div class="knock-location"><strong>${getFlag(d.iso)}</strong> <strong>${loc}</strong></div>
             <span style="color:var(--ui-label)">user:</span> <span>${d.user}</span>
             <span style="color:var(--ui-label); margin-left:10px;">password:</span> <span class="knock-pass">${d.pass}</span><br>
-            <span class="knock-meta"><span style="color:var(--ui-label)">ISP:</span> <span style="color:var(--data-blue)">${d.isp}</span> <span style="color:var(--ui-label); margin-left:10px;">IP:</span> <span style="color:var(--data-blue)">${d.ip}</span></span>
+            <span class="knock-meta"><span style="color:var(--ui-label)">ISP:</span> <span style="color:var(--data-blue)">${d.isp}</span> <span style="color:var(--ui-label); margin-left:10px;">IP:</span> <span style="color:var(--data-blue)">${formatIP(d.ip)}</span></span>
         `;
-        
+
         ['d-feed', 'm-feed'].forEach(id => {
             const el = document.getElementById(id);
             const div = document.createElement('div');
@@ -827,7 +1028,7 @@
             div.innerHTML = html;
             if (isNew) el.prepend(div); else el.appendChild(div);
             twemoji.parse(div);
-            if (el.children.length > 500) el.lastChild.remove();
+            if (el.children.length > 100) el.lastChild.remove();
         });
     }
 
@@ -865,7 +1066,7 @@
                 <div class="knock-location"><strong>${getFlag(d.iso)}</strong> <strong>${loc}</strong></div>
                 <span style="color:var(--ui-label)">user:</span> <span>${d.user}</span>
                 <span style="color:var(--ui-label); margin-left:10px;">password:</span> <span class="knock-pass">${d.pass}</span><br>
-                <span class="knock-meta"><span style="color:var(--ui-label)">ISP:</span> <span style="color:var(--data-blue)">${d.isp}</span> <span style="color:var(--ui-label); margin-left:10px;">IP:</span> <span style="color:var(--data-blue)">${d.ip}</span></span>
+                <span class="knock-meta"><span style="color:var(--ui-label)">ISP:</span> <span style="color:var(--data-blue)">${d.isp}</span> <span style="color:var(--ui-label); margin-left:10px;">IP:</span> <span style="color:var(--data-blue)">${formatIP(d.ip)}</span></span>
             </div>
             <div class="info-item" style="margin-bottom:12px;">
                 <div><span style="color:var(--ui-label)">country:</span> <span style="color:var(--neon-green)">${d.country}${countryRank}</span></div>
@@ -888,7 +1089,7 @@
                 <div><span style="color:var(--ui-label)">last seen:</span> <span style="color:var(--neon-green)">${formatTimeSince(d.isp_last)}</span></div>
             </div>
             <div class="info-item" style="margin-bottom:12px;">
-                <div><span style="color:var(--ui-label)">IP:</span> <span style="color:var(--neon-green)">${d.ip}${ipRank}</span></div>
+                <div><span style="color:var(--ui-label)">IP:</span> <span style="color:var(--neon-green)">${formatIP(d.ip)}${ipRank}</span></div>
                 <div><span style="color:var(--ui-label)">count:</span> <span style="color:var(--neon-green)">${d.ip_hits || 0}</span></div>
                 <div><span style="color:var(--ui-label)">last seen:</span> <span style="color:var(--neon-green)">${formatTimeSince(d.ip_last)}</span></div>
             </div>
@@ -902,13 +1103,24 @@
 
     function connect() {
         if (ws) ws.close();
+        debugLog('WS: connecting...');
         ws = new WebSocket(wsUrl);
-        ws.onopen = () => document.querySelectorAll('.status-dot').forEach(d => d.classList.add('status-online'));
-        ws.onclose = () => { document.querySelectorAll('.status-dot').forEach(d => d.classList.remove('status-online')); setTimeout(connect, 3000); };
+        ws.onopen = () => {
+            debugLog('WS: connected');
+            document.querySelectorAll('.status-dot').forEach(d => d.classList.add('status-online'));
+        };
+        ws.onclose = (e) => {
+            debugLog(`WS: closed (code=${e.code}, reason=${e.reason || 'none'})`);
+            document.querySelectorAll('.status-dot').forEach(d => d.classList.remove('status-online'));
+            setTimeout(connect, 3000);
+        };
+        ws.onerror = (e) => debugLog('WS: error event');
         ws.onmessage = (event) => {
             const msg = JSON.parse(event.data);
             const d = msg.data;
             if (msg.type === 'new_knock') {
+                knockCount++;
+                debugLog(`Knock #${knockCount} from ${d.iso || '??'}`);
                 playClick();
                 pulseGlobeAtmosphere();
                 lastKnockTime = Math.floor(Date.now() / 1000);
@@ -925,8 +1137,9 @@
                 renderInfo(d);
                 updateGlobeLocation(d);
                 rotateGlobeToLocation(d.lat, d.lng);
-            } 
+            }
             else if (msg.type === 'init_stats') {
+                debugLog(`init_stats received (total=${d.total})`);
                 ['d-total', 'm-total'].forEach(id => document.getElementById(id).innerText = (d.total || 0).toLocaleString());
                 ['d-kpm', 'm-kpm'].forEach(id => document.getElementById(id).innerText = d.kpm || '0.00');
                 if (d.last_knock_time) {

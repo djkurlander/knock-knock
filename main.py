@@ -30,11 +30,16 @@ def init_visitors_db():
         iso_code TEXT,
         isp TEXT
     )""")
+    # Add asn column if it doesn't exist (migration for existing DBs)
+    try:
+        cur.execute("ALTER TABLE visitors ADD COLUMN asn INTEGER")
+    except:
+        pass  # Column already exists
     conn.commit()
     conn.close()
 
 def get_visitor_geo(ip):
-    geo = {"city": None, "region": None, "country": None, "iso": None, "isp": None}
+    geo = {"city": None, "region": None, "country": None, "iso": None, "isp": None, "asn": None}
     try:
         if visitor_city_reader:
             c_res = visitor_city_reader.city(ip)
@@ -46,6 +51,7 @@ def get_visitor_geo(ip):
         if visitor_asn_reader:
             a_res = visitor_asn_reader.asn(ip)
             geo["isp"] = a_res.autonomous_system_organization
+            geo["asn"] = a_res.autonomous_system_number
     except:
         pass
     return geo
@@ -56,9 +62,9 @@ def log_visitor(ip):
         geo = get_visitor_geo(ip)
         conn = sqlite3.connect(VISITORS_DB_PATH)
         cur = conn.cursor()
-        cur.execute("""INSERT INTO visitors (ip, city, region, country, iso_code, isp)
-                       VALUES (?, ?, ?, ?, ?, ?)""",
-                    (ip, geo['city'], geo['region'], geo['country'], geo['iso'], geo['isp']))
+        cur.execute("""INSERT INTO visitors (ip, city, region, country, iso_code, isp, asn)
+                       VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                    (ip, geo['city'], geo['region'], geo['country'], geo['iso'], geo['isp'], geo['asn']))
         conn.commit()
         conn.close()
     except Exception as e:

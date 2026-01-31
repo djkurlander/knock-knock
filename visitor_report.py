@@ -1,15 +1,22 @@
 #!/usr/bin/env python3
 """
-Daily visitor report script.
-Run via cron: 0 0 * * * /root/knock-knock/.venv/bin/python /root/knock-knock/daily_report.py
+Visitor report script (daily, weekly, or monthly).
+
+Usage:
+  python visitor_report.py --day      # Last 24 hours
+  python visitor_report.py --week     # Last 7 days
+  python visitor_report.py --month    # Previous calendar month (auto-calculated)
+  python visitor_report.py --days N   # Last N days (custom)
 
 Configure email settings in .env file or via environment variables.
 """
+import argparse
+import calendar
 import sqlite3
 import smtplib
 import socket
 from email.mime.text import MIMEText
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 import os
 from pathlib import Path
 
@@ -54,28 +61,28 @@ def resolve_exclusions(exclusion_str):
 
 EXCLUDE_IPS = resolve_exclusions(os.environ.get('EXCLUDE_IPS', ''))
 
-def get_daily_visitors():
-    """Get visitors from the last 24 hours, excluding specified IPs."""
+def get_visitors(days):
+    """Get visitors from the last N days, excluding specified IPs."""
     conn = sqlite3.connect(VISITORS_DB)
     conn.row_factory = sqlite3.Row
     cur = conn.cursor()
 
-    yesterday = (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d %H:%M:%S')
+    since = (datetime.now() - timedelta(days=days)).strftime('%Y-%m-%d %H:%M:%S')
 
     cur.execute("""
         SELECT timestamp, ip, city, region, country, iso_code, isp
         FROM visitors
         WHERE timestamp >= ?
         ORDER BY timestamp DESC
-    """, (yesterday,))
+    """, (since,))
 
     visitors = [dict(row) for row in cur.fetchall() if row['ip'] not in EXCLUDE_IPS]
     conn.close()
     return visitors
 
-def get_visitor_summary():
-    """Get summary stats for the last 24 hours, excluding specified IPs."""
-    visitors = get_daily_visitors()  # Already filtered
+def get_visitor_summary(days):
+    """Get summary stats for the last N days, excluding specified IPs."""
+    visitors = get_visitors(days)
 
     # Total visitors
     total = len(visitors)
@@ -104,47 +111,52 @@ def get_visitor_summary():
         'top_isps': top_isps
     }
 
-def format_report():
-    """Format the daily report."""
-    visitors = get_daily_visitors()
-    summary = get_visitor_summary()
-    
+def format_report(period_name, days):
+    """Format the visitor report."""
+    visitors = get_visitors(days)
+    summary = get_visitor_summary(days)
+
     report = []
-    report.append(f"KNOCK-KNOCK.NET - Daily Visitor Report")
+    report.append(f"KNOCK-KNOCK.NET - {period_name} Visitor Report")
     report.append(f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     report.append("=" * 50)
     report.append("")
-    report.append(f"Total visits (24h): {summary['total']}")
+    report.append(f"Total visits ({days} day{'s' if days > 1 else ''}): {summary['total']}")
     report.append(f"Unique IPs: {summary['unique_ips']}")
     report.append("")
-    
+
     report.append("TOP COUNTRIES:")
     for country, cnt in summary['top_countries']:
         report.append(f"  {country}: {cnt}")
     report.append("")
-    
+
     report.append("TOP ISPs:")
     for isp, cnt in summary['top_isps']:
         report.append(f"  {isp}: {cnt}")
     report.append("")
-    
+
     report.append("=" * 50)
     report.append("VISITOR DETAILS:")
     report.append("")
-    
-    for v in visitors[:100]:  # Limit to 100 entries
+
+    # Limit details based on period
+    limit = 100 if days == 1 else 200 if days == 7 else 300
+    for v in visitors[:limit]:
         loc = ", ".join(filter(None, [v['city'], v['region'], v['country']]))
         report.append(f"{v['timestamp']} | {v['ip']}")
         report.append(f"  Location: {loc or 'Unknown'}")
         report.append(f"  ISP: {v['isp'] or 'Unknown'}")
         report.append("")
-    
+
+    if len(visitors) > limit:
+        report.append(f"... and {len(visitors) - limit} more visitors")
+
     return "\n".join(report)
 
-def send_email(report):
+def send_email(report, period_name, total_visitors):
     """Send the report via email."""
     msg = MIMEText(report)
-    msg['Subject'] = f"Knock-Knock.net Visitor Report - {datetime.now().strftime('%Y-%m-%d')}"
+    msg['Subject'] = f"Knock-Knock.net {period_name} Visitor Report - {total_visitors} Visitors"
     msg['From'] = EMAIL_FROM
     msg['To'] = EMAIL_TO
 
@@ -170,6 +182,38 @@ def send_email(report):
         print("\nReport contents:")
         print(report)
 
+def get_previous_month_days():
+    """Calculate the number of days in the previous month."""
+    today = date.today()
+    if today.month == 1:
+        prev_month, prev_year = 12, today.year - 1
+    else:
+        prev_month, prev_year = today.month - 1, today.year
+    return calendar.monthrange(prev_year, prev_month)[1]
+
+def main():
+    parser = argparse.ArgumentParser(description='Send visitor report email.')
+    group = parser.add_mutually_exclusive_group(required=True)
+    group.add_argument('--day', action='store_true', help='Report for last 24 hours')
+    group.add_argument('--week', action='store_true', help='Report for last 7 days')
+    group.add_argument('--month', action='store_true', help='Report for previous calendar month')
+    group.add_argument('--days', type=int, metavar='N', help='Report for last N days')
+    args = parser.parse_args()
+
+    if args.day:
+        period_name, days = 'Daily', 1
+    elif args.week:
+        period_name, days = 'Weekly', 7
+    elif args.month:
+        days = get_previous_month_days()
+        period_name = 'Monthly'
+    else:
+        days = args.days
+        period_name = f'{days}-Day'
+
+    summary = get_visitor_summary(days)
+    report = format_report(period_name, days)
+    send_email(report, period_name, summary['total'])
+
 if __name__ == "__main__":
-    report = format_report()
-    send_email(report)
+    main()

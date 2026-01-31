@@ -46,6 +46,15 @@ def init_db():
         cur.execute("ALTER TABLE knocks ADD COLUMN region TEXT")
     except:
         pass  # Column already exists
+    # Add asn column if it doesn't exist (migration for existing DBs)
+    try:
+        cur.execute("ALTER TABLE knocks ADD COLUMN asn INTEGER")
+    except:
+        pass  # Column already exists
+    try:
+        cur.execute("ALTER TABLE isp_intel ADD COLUMN asn INTEGER")
+    except:
+        pass  # Column already exists
     cur.execute("CREATE TABLE IF NOT EXISTS user_intel (username TEXT PRIMARY KEY, hits INTEGER, last_seen DATETIME)")
     cur.execute("CREATE TABLE IF NOT EXISTS pass_intel (password TEXT PRIMARY KEY, hits INTEGER, last_seen DATETIME)")
     cur.execute("CREATE TABLE IF NOT EXISTS country_intel (iso_code TEXT PRIMARY KEY, country TEXT, hits INTEGER, last_seen DATETIME)")
@@ -77,14 +86,14 @@ def log_to_maximalist_db(data):
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
     try:
-        cur.execute("""INSERT INTO knocks (ip_address, iso_code, city, region, country, isp, username, password)
-                       VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-                    (data['ip'], data['iso'], data['city'], data.get('region'), data['country'], data['isp'], data['user'], data['pass']))
+        cur.execute("""INSERT INTO knocks (ip_address, iso_code, city, region, country, isp, asn, username, password)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (data['ip'], data['iso'], data['city'], data.get('region'), data['country'], data['isp'], data.get('asn'), data['user'], data['pass']))
         now = datetime.now()
         cur.execute("INSERT INTO user_intel VALUES (?, 1, ?) ON CONFLICT(username) DO UPDATE SET hits=hits+1, last_seen=?", (data['user'], now, now))
         cur.execute("INSERT INTO pass_intel VALUES (?, 1, ?) ON CONFLICT(password) DO UPDATE SET hits=hits+1, last_seen=?", (data['pass'], now, now))
         cur.execute("INSERT INTO country_intel VALUES (?, ?, 1, ?) ON CONFLICT(iso_code) DO UPDATE SET hits=hits+1, last_seen=?", (data['iso'], data['country'], now, now))
-        cur.execute("INSERT INTO isp_intel VALUES (?, 1, ?) ON CONFLICT(isp) DO UPDATE SET hits=hits+1, last_seen=?", (data['isp'], now, now))
+        cur.execute("INSERT INTO isp_intel VALUES (?, 1, ?, ?) ON CONFLICT(isp) DO UPDATE SET hits=hits+1, last_seen=?, asn=?", (data['isp'], now, data.get('asn'), now, data.get('asn')))
         cur.execute("INSERT INTO ip_intel VALUES (?, 1, ?, ?, ?) ON CONFLICT(ip) DO UPDATE SET hits=hits+1, last_seen=?, lat=?, lng=?",
                     (data['ip'], now, data.get('lat'), data.get('lng'), now, data.get('lat'), data.get('lng')))
         conn.commit()
@@ -121,7 +130,7 @@ def get_intel_stats_before_update(data):
     return stats
 
 def get_geo_maximal(ip, city_reader, asn_reader):
-    geo = {"iso": "XX", "country": "Unknown", "city": "Unknown", "region": None, "isp": "Unknown", "lat": None, "lng": None}
+    geo = {"iso": "XX", "country": "Unknown", "city": "Unknown", "region": None, "isp": "Unknown", "asn": None, "lat": None, "lng": None}
     try:
         if city_reader:
             c_res = city_reader.city(ip)
@@ -136,6 +145,7 @@ def get_geo_maximal(ip, city_reader, asn_reader):
         if asn_reader:
             a_res = asn_reader.asn(ip)
             geo["isp"] = a_res.autonomous_system_organization or "Unknown"
+            geo["asn"] = a_res.autonomous_system_number
     except:
         pass
     return geo
@@ -161,7 +171,7 @@ def monitor():
             package = {
                 "ip": ip, "user": user, "pass": pw,
                 "city": geo['city'], "region": geo['region'], "country": geo['country'],
-                "iso": geo['iso'], "isp": geo['isp'],
+                "iso": geo['iso'], "isp": geo['isp'], "asn": geo['asn'],
                 "lat": geo['lat'], "lng": geo['lng']
             }
             package.update(get_intel_stats_before_update(package))

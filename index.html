@@ -1033,7 +1033,7 @@
     }
 
     function formatTimeSince(lastSeen) {
-        if (!lastSeen) return 'never';
+        if (!lastSeen) return '<span style="color:#FF4444">never</span>';
         const now = new Date();
         // Handle SQLite datetime format (space instead of T), add Z for UTC
         const then = new Date(lastSeen.replace(' ', 'T') + 'Z');

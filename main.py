@@ -28,13 +28,11 @@ def init_visitors_db():
         region TEXT,
         country TEXT,
         iso_code TEXT,
-        isp TEXT
+        isp TEXT,
+        asn INTEGER,
+        referrer TEXT,
+        user_agent TEXT
     )""")
-    # Add asn column if it doesn't exist (migration for existing DBs)
-    try:
-        cur.execute("ALTER TABLE visitors ADD COLUMN asn INTEGER")
-    except:
-        pass  # Column already exists
     conn.commit()
     conn.close()
 
@@ -56,15 +54,15 @@ def get_visitor_geo(ip):
         pass
     return geo
 
-def log_visitor(ip):
+def log_visitor(ip, referrer=None, user_agent=None):
     """Log a visitor to the separate visitors database."""
     try:
         geo = get_visitor_geo(ip)
         conn = sqlite3.connect(VISITORS_DB_PATH)
         cur = conn.cursor()
-        cur.execute("""INSERT INTO visitors (ip, city, region, country, iso_code, isp, asn)
-                       VALUES (?, ?, ?, ?, ?, ?, ?)""",
-                    (ip, geo['city'], geo['region'], geo['country'], geo['iso'], geo['isp'], geo['asn']))
+        cur.execute("""INSERT INTO visitors (ip, city, region, country, iso_code, isp, asn, referrer, user_agent)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (ip, geo['city'], geo['region'], geo['country'], geo['iso'], geo['isp'], geo['asn'], referrer, user_agent))
         conn.commit()
         conn.close()
     except Exception as e:
@@ -301,7 +299,13 @@ async def websocket_endpoint(websocket: WebSocket):
     # Log visitor in background (non-blocking)
     client_ip = websocket.client.host if websocket.client else None
     if client_ip:
-        asyncio.get_event_loop().run_in_executor(None, log_visitor, client_ip)
+        # Extract referrer from WebSocket upgrade request headers
+        referrer = websocket.headers.get('referer') or websocket.headers.get('referrer')
+        # Filter out self-referrals (same site)
+        if referrer and 'knock-knock' in referrer.lower():
+            referrer = None
+        user_agent = websocket.headers.get('user-agent')
+        asyncio.get_event_loop().run_in_executor(None, log_visitor, client_ip, referrer, user_agent)
 
     await manager.connect(websocket)
     try:

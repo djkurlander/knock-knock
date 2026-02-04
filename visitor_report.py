@@ -70,38 +70,54 @@ def get_visitors(days):
     since = (datetime.now() - timedelta(days=days)).strftime('%Y-%m-%d %H:%M:%S')
 
     cur.execute("""
-        SELECT timestamp, ip, city, region, country, iso_code, isp
+        SELECT ip, city, region, country, iso_code, isp, referrer, user_agent,
+               COUNT(*) as visit_count
         FROM visitors
         WHERE timestamp >= ?
-        ORDER BY timestamp DESC
+        GROUP BY ip
+        ORDER BY MAX(timestamp) DESC
     """, (since,))
 
     visitors = [dict(row) for row in cur.fetchall() if row['ip'] not in EXCLUDE_IPS]
     conn.close()
     return visitors
 
+
+def get_referrers_for_ip(days, ip):
+    """Get unique referrers for a specific IP."""
+    conn = sqlite3.connect(VISITORS_DB)
+    cur = conn.cursor()
+    since = (datetime.now() - timedelta(days=days)).strftime('%Y-%m-%d %H:%M:%S')
+    cur.execute("""
+        SELECT DISTINCT referrer FROM visitors
+        WHERE timestamp >= ? AND ip = ? AND referrer IS NOT NULL AND referrer != ''
+    """, (since, ip))
+    referrers = [row[0] for row in cur.fetchall()]
+    conn.close()
+    return referrers
+
 def get_visitor_summary(days):
     """Get summary stats for the last N days, excluding specified IPs."""
     visitors = get_visitors(days)
 
-    # Total visitors
-    total = len(visitors)
+    # Total connections (sum of all visit counts)
+    total = sum(v['visit_count'] for v in visitors)
 
-    # Unique IPs
-    unique_ips = len(set(v['ip'] for v in visitors))
+    # Unique IPs (already grouped)
+    unique_ips = len(visitors)
 
-    # Top countries
+    # Top countries (by total connections)
     country_counts = {}
     for v in visitors:
         if v['country']:
-            country_counts[v['country']] = country_counts.get(v['country'], 0) + 1
+            country_counts[v['country']] = country_counts.get(v['country'], 0) + v['visit_count']
     top_countries = sorted(country_counts.items(), key=lambda x: -x[1])[:10]
 
-    # Top ISPs
+    # Top ISPs (by total connections)
     isp_counts = {}
     for v in visitors:
         if v['isp']:
-            isp_counts[v['isp']] = isp_counts.get(v['isp'], 0) + 1
+            isp_counts[v['isp']] = isp_counts.get(v['isp'], 0) + v['visit_count']
     top_isps = sorted(isp_counts.items(), key=lambda x: -x[1])[:10]
 
     return {
@@ -143,9 +159,16 @@ def format_report(period_name, days):
     limit = 100 if days == 1 else 200 if days == 7 else 300
     for v in visitors[:limit]:
         loc = ", ".join(filter(None, [v['city'], v['region'], v['country']]))
-        report.append(f"{v['timestamp']} | {v['ip']}")
+        count_str = f"({v['visit_count']} connections)" if v['visit_count'] > 1 else "(1 connection)"
+        report.append(f"{v['ip']} {count_str}")
         report.append(f"  Location: {loc or 'Unknown'}")
         report.append(f"  ISP: {v['isp'] or 'Unknown'}")
+        if v.get('user_agent'):
+            report.append(f"  User-Agent: {v['user_agent']}")
+        # Show referrers if any
+        referrers = get_referrers_for_ip(days, v['ip'])
+        for ref in referrers:
+            report.append(f"  Referral: {ref}")
         report.append("")
 
     if len(visitors) > limit:

@@ -24,14 +24,15 @@
             --ui-grey-dim: #707070;
         }
         
-        html, body { 
-            background: var(--bg-dark); 
-            color: var(--neon-green); 
-            font-family: 'Inter', sans-serif; 
-            margin: 0; padding: 0; 
-            width: 100vw; 
-            height: 100vh;      /* HARD LOCK: Kill the ghost at the bottom */
-            overflow: hidden;   /* Forbidden to scroll the window itself */
+        html, body {
+            background: var(--bg-dark);
+            color: var(--neon-green);
+            font-family: 'Inter', sans-serif;
+            margin: 0; padding: 0;
+            width: 100vw;
+            height: 100dvh;
+            height: -webkit-fill-available;  /* iOS fallback */
+            overflow: hidden;
             font-size: 16px;
         }
         
@@ -47,7 +48,7 @@
 
         .knock { margin-bottom: 10px; padding: 5px 0 10px 0; border-bottom: 1px solid #1a1a1a; font-size: 1.1em; line-height: 1.5; }
         .knock-meta { font-size: 0.9em; }
-        .knock-pass { color: var(--neon-green); font-weight: bold; }
+        .knock-pass { color: var(--neon-green); }
 
         .bar-row { margin-bottom: 12px; padding: 8px 12px; border-radius: 4px; border: 1px solid transparent; }
         .bar-label { display: flex; justify-content: space-between; align-items: center; font-size: 1.1em; margin-bottom: 6px; gap: 10px; }
@@ -99,12 +100,13 @@
             .d-header h1 { font-size: 2.2em; margin: 0 0 5px 0; }
 
             .d-nav {
-                display: flex; gap: 40px; margin-bottom: 10px;
+                display: flex; flex-wrap: wrap; gap: 20px 40px; margin-bottom: 10px;
                 border-bottom: 1px solid #222; padding-bottom: 10px;
             }
-            .d-nav-item { 
-                color: var(--ui-grey-dim); font-size: 1.6em; cursor: pointer; 
+            .d-nav-item {
+                color: var(--ui-grey-dim); font-size: 1.6em; cursor: pointer;
                 display: flex; align-items: center; gap: 10px; transition: 0.3s;
+                flex: 0 0 90px;
             }
             .d-nav-item span { font-size: 0.5em; font-weight: bold; letter-spacing: 1px; }
             .d-nav-item.active { color: var(--neon-green); text-shadow: 0 0 10px var(--neon-green); }
@@ -150,6 +152,9 @@
             #d-box-jokes {
                 flex: 0 0 275px;
             }
+            #d-box-trivia {
+                flex: 0 0 300px;
+            }
             #d-globe-pane {
                 display: flex;
                 justify-content: center;
@@ -177,9 +182,13 @@
         @media (max-width: 800px) {
             #desktop-layout { display: none !important; }
             
-            #mobile-layout { 
-                display: flex; height: 100dvh; width: 100vw; 
-                flex-direction: column; overflow: hidden; 
+            #mobile-layout {
+                display: flex;
+                width: 100vw;
+                height: 100dvh;
+                min-height: -webkit-fill-available;  /* iOS fallback */
+                flex-direction: column;
+                overflow: hidden;
             }
             
             .m-header { flex: 0 0 auto; padding: 15px; background: #0a0a0a; border-bottom: 1px solid #222; }
@@ -245,8 +254,9 @@
             <div class="d-nav-item" onclick="dJump(5)">🔌<span>ISP</span></div>
             <div class="d-nav-item" onclick="dJump(6)">🔢<span>IP</span></div>
             <div class="d-nav-item" onclick="dJump(7)">📋<span>STATS</span></div>
-            <div class="d-nav-item" onclick="dJump(8)">😂<span>JOKES</span></div>
-            <div class="d-nav-item" onclick="dJump(9)">ℹ️<span>ABOUT</span></div>
+            <div class="d-nav-item" onclick="dJump(8)">🎲<span>TRIVIA</span></div>
+            <div class="d-nav-item" onclick="dJump(9)">😂<span>JOKES</span></div>
+            <div class="d-nav-item" onclick="dJump(10)">ℹ️<span>ABOUT</span></div>
             <div class="d-nav-item" id="d-sound-toggle" onclick="toggleSound()">🔈</div>
         </nav>
 
@@ -276,8 +286,9 @@
         <div class="d-box" onclick="dJump(5)"><h2>ISP</h2><div id="d-prov" class="d-content"></div></div>
         <div class="d-box" onclick="dJump(6)"><h2>IP ADDRESS</h2><div id="d-ip" class="d-content"></div></div>
         <div class="d-box" id="d-box-info" onclick="dJump(7)"><h2>STATS</h2><div id="d-details" class="d-content"></div></div>
-        <div class="d-box" id="d-box-jokes" onclick="dJump(8)"><h2>KNOCK-KNOCK JOKES</h2><div id="d-jokes" class="d-content" style="color:var(--neon-green); line-height:1.6;"></div></div>
-        <div class="d-box" onclick="dJump(9)"><h2>ABOUT</h2><div class="d-content" style="color:var(--neon-green); line-height:1.6;">
+        <div class="d-box" id="d-box-trivia" onclick="dJump(8)"><h2>TRIVIA</h2><div id="d-trivia" class="d-content"></div></div>
+        <div class="d-box" id="d-box-jokes" onclick="dJump(9)"><h2>KNOCK-KNOCK JOKES</h2><div id="d-jokes" class="d-content" style="color:var(--neon-green); line-height:1.6;"></div></div>
+        <div class="d-box" onclick="dJump(10)"><h2>ABOUT</h2><div class="d-content" style="color:var(--neon-green); line-height:1.6;">
             <div style="font-size:1.4em; font-weight:bold; margin-bottom:20px;">KNOCK-KNOCK.NET</div>
             <p>This site shows attempted logins of bots to an ordinary internet server.</p>
             <p>When setting up my first internet server, I was amazed by the constant chatter of bots, trying to infiltrate the server.</p>
@@ -316,6 +327,7 @@
         <div class="m-pane" id="m-pane-prov"><h2>ISP</h2><div id="m-prov" class="m-content"></div></div>
         <div class="m-pane" id="m-pane-ip"><h2>IP ADDRESS</h2><div id="m-ip" class="m-content"></div></div>
         <div class="m-pane" id="m-pane-details"><h2>STATS</h2><div id="m-details" class="m-content"></div></div>
+        <div class="m-pane" id="m-pane-trivia"><h2>TRIVIA</h2><div id="m-trivia" class="m-content"></div></div>
         <div class="m-pane" id="m-pane-jokes"><h2>KNOCK-KNOCK JOKES</h2><div id="m-jokes" class="m-content" style="color:var(--neon-green); line-height:1.6;"></div></div>
         <div class="m-pane" id="m-pane-about"><h2>ABOUT</h2><div class="m-content" style="color:var(--neon-green); line-height:1.6;">
             <div style="font-size:1.4em; font-weight:bold; margin-bottom:20px;">KNOCK-KNOCK.NET</div>
@@ -328,7 +340,7 @@
     </div>
     <div class="m-footer">
         <div class="m-dots">
-            <div class="dot active" onclick="jump(0)"></div><div class="dot" onclick="jump(1)"></div><div class="dot" onclick="jump(2)"></div><div class="dot" onclick="jump(3)"></div><div class="dot" onclick="jump(4)"></div><div class="dot" onclick="jump(5)"></div><div class="dot" onclick="jump(6)"></div><div class="dot" onclick="jump(7)"></div><div class="dot" onclick="jump(8)"></div><div class="dot" onclick="jump(9)"></div>
+            <div class="dot active" onclick="jump(0)"></div><div class="dot" onclick="jump(1)"></div><div class="dot" onclick="jump(2)"></div><div class="dot" onclick="jump(3)"></div><div class="dot" onclick="jump(4)"></div><div class="dot" onclick="jump(5)"></div><div class="dot" onclick="jump(6)"></div><div class="dot" onclick="jump(7)"></div><div class="dot" onclick="jump(8)"></div><div class="dot" onclick="jump(9)"></div><div class="dot" onclick="jump(10)"></div>
         </div>
         <div class="m-nav-container">
         <nav class="m-nav">
@@ -340,8 +352,9 @@
             <div class="nav-item" onclick="jump(5)">🔌<span>ISP</span></div>
             <div class="nav-item" onclick="jump(6)">🔢<span>IP</span></div>
             <div class="nav-item" onclick="jump(7)">📋<span>STATS</span></div>
-            <div class="nav-item" onclick="jump(8)">😂<span>JOKES</span></div>
-            <div class="nav-item" onclick="jump(9)">ℹ️<span>ABOUT</span></div>
+            <div class="nav-item" onclick="jump(8)">🎲<span>TRIVIA</span></div>
+            <div class="nav-item" onclick="jump(9)">😂<span>JOKES</span></div>
+            <div class="nav-item" onclick="jump(10)">ℹ️<span>ABOUT</span></div>
             <div class="nav-item" id="m-sound-toggle" onclick="toggleSound()">🔈</div>
         </nav>
         </div>
@@ -478,6 +491,7 @@
         osc.stop(audioCtx.currentTime + 0.05);
     }
     let lastKnockTime = null;
+    let currentKnock = null;
     let mobileGlobe = null;
     let desktopGlobe = null;
     let lastLat = null;
@@ -951,7 +965,7 @@
                 div.className = 'bar-row';
                 div.setAttribute('data-id', `${prefix}-${rawId}`);
                 div.setAttribute('data-count', item.count);
-                div.innerHTML = `<div class="bar-label"><span>${label}</span><span style="color:#ffcc00">${item.count}</span></div><div class="bar-bg"><div class="bar-fill ${colorClass}" style="width: ${pct}%"></div></div>`;
+                div.innerHTML = `<div class="bar-label"><span>${label}</span><span style="color:#ffcc00">${item.count.toLocaleString()}</span></div><div class="bar-bg"><div class="bar-fill ${colorClass}" style="width: ${pct}%"></div></div>`;
                 container.appendChild(div);
                 if (useFlags) twemoji.parse(div);
             });
@@ -967,8 +981,8 @@
             if (!row) return;
 
             const countSpan = row.querySelector('span:last-child');
-            let newCount = (parseInt(countSpan.innerText) || 0) + 1;
-            countSpan.innerText = newCount;
+            let newCount = (parseInt(countSpan.innerText.replace(/\D/g, '')) || 0) + 1;
+            countSpan.innerText = newCount.toLocaleString();
             row.setAttribute('data-count', newCount);
 
             if (row.highlightAnimation) row.highlightAnimation.cancel();
@@ -1101,6 +1115,74 @@
         });
     }
 
+    function renderTrivia(d) {
+        if (!d) return;
+        const loc = formatLocation(d);
+
+        // Build trivia content
+        let triviaItems = [];
+
+        // User trivia (blue)
+        const userFacts = triviaUserMap[d.user];
+        if (userFacts && userFacts.length > 0) {
+            const fact = userFacts[Math.floor(Math.random() * userFacts.length)];
+            triviaItems.push(`<p style="margin-bottom:12px;"><span style="color:var(--ui-label)">User trivia:</span> <span style="color:var(--data-blue)">${fact}</span></p>`);
+        }
+
+        // Password trivia (blue) - from JSON or computed
+        const passFacts = triviaPassMap[d.pass];
+        if (passFacts && passFacts.length > 0) {
+            const fact = passFacts[Math.floor(Math.random() * passFacts.length)];
+            triviaItems.push(`<p style="margin-bottom:12px;"><span style="color:var(--ui-label)">Password trivia:</span> <span style="color:var(--data-blue)">${fact}</span></p>`);
+        } else {
+            // Try computed trivia rules
+            const computed = getComputedPassTrivia(d);
+            if (computed) {
+                triviaItems.push(`<p style="margin-bottom:12px;"><span style="color:var(--ui-label)">Password trivia:</span> <span style="color:var(--data-blue)">${computed}</span></p>`);
+            }
+        }
+
+        // Country trivia (blue) - cycles through facts starting from random position
+        const countryData = triviaCountryMap[d.country];
+        if (countryData && countryData.facts && countryData.facts.length > 0) {
+            // Initialize index randomly if first time seeing this country
+            if (countryData.index === undefined) {
+                countryData.index = Math.floor(Math.random() * countryData.facts.length);
+            }
+            const fact = countryData.facts[countryData.index];
+            // Advance to next index for next time
+            countryData.index = (countryData.index + 1) % countryData.facts.length;
+            triviaItems.push(`<p style="margin-bottom:12px;"><span style="color:var(--ui-label)">Country trivia:</span> <span style="color:var(--data-blue)">${fact}</span></p>`);
+        }
+
+        // Fallback if no trivia or still loading
+        let triviaContent;
+        if (!triviaLoaded) {
+            triviaContent = '<p style="color:var(--ui-grey-dim); font-style:italic;">Loading trivia...</p>';
+        } else if (triviaItems.length > 0) {
+            triviaContent = triviaItems.join('');
+        } else {
+            triviaContent = '<p style="color:var(--ui-grey-dim); font-style:italic;">Sorry, I\'ve got nothing.</p>';
+        }
+
+        const html = `
+            <div class="info-section" style="font-size:1.1em; margin-bottom:15px; padding-bottom:10px; border-bottom:1px solid #333;">
+                <div class="knock-location"><strong>${getFlag(d.iso)}</strong> <strong>${loc}</strong></div>
+                <span style="color:var(--ui-label)">user:</span> <span>${d.user}</span>
+                <span style="color:var(--ui-label); margin-left:10px;">password:</span> <span class="knock-pass">${d.pass}</span><br>
+                <span class="knock-meta"><span style="color:var(--ui-label)">ISP:</span> <span style="color:var(--data-blue)">${d.isp}</span> <span style="color:var(--ui-label); margin-left:10px;">IP:</span> <span style="color:var(--data-blue)">${formatIP(d.ip)}</span></span>
+            </div>
+            <div style="line-height:1.6;">
+                ${triviaContent}
+            </div>
+        `;
+        ['d-trivia', 'm-trivia'].forEach(id => {
+            const el = document.getElementById(id);
+            el.innerHTML = html;
+            twemoji.parse(el);
+        });
+    }
+
     function connect() {
         if (ws) ws.close();
         debugLog('WS: connecting...');
@@ -1134,7 +1216,9 @@
                 incrementAndSort('prov', d.isp);
                 incrementAndSort('user', d.user);
                 incrementAndSort('ip', d.ip);
+                currentKnock = d;
                 renderInfo(d);
+                scheduleTrivia(d);
                 updateGlobeLocation(d);
                 rotateGlobeToLocation(d.lat, d.lng);
             }
@@ -1168,9 +1252,11 @@
                     d.history.forEach(k => renderKnock(k, false));
                     if (d.history.length > 0) updateGlobeLocation(d.history[0]);
                 }
-                // Render Stats pane with enriched last knock data
+                // Render Stats and Trivia panes with enriched last knock data
                 if (d.last_knock_stats) {
+                    currentKnock = d.last_knock_stats;
                     renderInfo(d.last_knock_stats);
+                    scheduleTrivia(d.last_knock_stats);
                 }
             }
         };
@@ -1195,6 +1281,124 @@
         });
     }, { root: vp, threshold: 0.6 });
     document.querySelectorAll('.m-pane').forEach(p => observer.observe(p));
+
+    // --- TRIVIA PANE LOGIC ---
+    const TRIVIA_MIN_DISPLAY_SECONDS = 12;
+    let triviaUserMap = {};      // user -> facts array
+    let triviaPassMap = {};      // pass -> facts array
+    let triviaCountryMap = {};   // country -> {facts: [...], index: n}
+    let triviaLastRenderTime = 0;
+    let triviaPendingKnock = null;
+    let triviaTimeout = null;
+    let triviaLoaded = false;
+
+    function scheduleTrivia(d) {
+        const now = Date.now();
+        const elapsed = (now - triviaLastRenderTime) / 1000;
+
+        if (elapsed >= TRIVIA_MIN_DISPLAY_SECONDS) {
+            // Enough time has passed, render immediately
+            renderTrivia(d);
+            triviaLastRenderTime = now;
+            triviaPendingKnock = null;
+        } else {
+            // Too soon, queue this knock
+            triviaPendingKnock = d;
+            if (!triviaTimeout) {
+                const remaining = (TRIVIA_MIN_DISPLAY_SECONDS - elapsed) * 1000;
+                triviaTimeout = setTimeout(() => {
+                    triviaTimeout = null;
+                    if (triviaPendingKnock) {
+                        renderTrivia(triviaPendingKnock);
+                        triviaLastRenderTime = Date.now();
+                        triviaPendingKnock = null;
+                    }
+                }, remaining);
+            }
+        }
+    }
+
+    function colorizeKey(fact, key) {
+        // Replace all occurrences of the key as a standalone word with green-colored version
+        const escaped = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const regex = new RegExp(`\\b${escaped}\\b`, 'g');
+        return fact.replace(regex, `<span style="color:var(--neon-green)">${key}</span>`);
+    }
+
+    function greenText(text) {
+        return `<span style="color:var(--neon-green)">${text}</span>`;
+    }
+
+    // Computed trivia rules - each returns HTML string or null
+    const computedPassRules = [
+        // Rule: Username equals password
+        (d) => {
+            if (d.user === d.pass) {
+                return `The user and password are both ${greenText(d.pass)}. Pro tip: Don't double up.`;
+            }
+            return null;
+        },
+        // Rule: Username is prefix of password
+        (d) => {
+            if (d.pass.startsWith(d.user) && d.pass.length > d.user.length) {
+                const suffix = d.pass.slice(d.user.length);
+                return `This password is simply the user with a suffix added: ${greenText(d.user + ' + ' + suffix)}. Don't be simple.`;
+            }
+            return null;
+        }
+    ];
+
+    function getComputedPassTrivia(d) {
+        for (const rule of computedPassRules) {
+            const result = rule(d);
+            if (result) return result;
+        }
+        return null;
+    }
+
+    function loadTriviaData() {
+        fetch('/static/user_trivia.json')
+            .then(r => r.json())
+            .then(data => {
+                data.forEach(item => {
+                    triviaUserMap[item.user] = item.facts.map(f => colorizeKey(f, item.user));
+                });
+            })
+            .catch(err => console.error('Failed to load user trivia:', err));
+
+        fetch('/static/password_trivia.json')
+            .then(r => r.json())
+            .then(data => {
+                data.forEach(item => {
+                    triviaPassMap[item.pass] = item.facts.map(f => colorizeKey(f, item.pass));
+                });
+            })
+            .catch(err => console.error('Failed to load password trivia:', err));
+
+        fetch('/static/country_trivia10.json')
+            .then(r => r.json())
+            .then(data => {
+                data.forEach(item => {
+                    triviaCountryMap[item.country] = {
+                        facts: item.facts.map(f => colorizeKey(f, item.country))
+                    };
+                });
+                triviaLoaded = true;
+                // Re-render with current knock if available
+                if (currentKnock) renderTrivia(currentKnock);
+            })
+            .catch(err => console.error('Failed to load country trivia:', err));
+    }
+
+    function setupTriviaObserver() {
+        const targets = [document.getElementById('d-trivia'), document.getElementById('m-trivia')].filter(el => el);
+        const observer = new IntersectionObserver((entries) => {
+            if (entries.some(e => e.isIntersecting) && !triviaLoaded) {
+                loadTriviaData();
+            }
+        }, { threshold: 0.1 });
+        targets.forEach(t => observer.observe(t));
+    }
 
     // --- JOKES PANE LOGIC ---
     let jokesData = null;
@@ -1305,11 +1509,28 @@
         targets.forEach(t => observer.observe(t));
     }
 
+    // iOS Safari/Chrome tab restoration fix: force layout recalc on visibility change
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') {
+            // Force layout recalculation by briefly changing height
+            const ml = document.getElementById('mobile-layout');
+            if (ml && window.innerWidth <= 800) {
+                ml.style.height = '99.9dvh';
+                requestAnimationFrame(() => {
+                    requestAnimationFrame(() => {
+                        ml.style.height = '';
+                    });
+                });
+            }
+        }
+    });
+
     window.addEventListener('load', () => {
         dJump(0);
         initGlobes();
         initPaneGlobes();
         setupJokesObserver();
+        setupTriviaObserver();
         updateSoundIcon();
 
         // Add drag-aware click handler for desktop GLOBE pane

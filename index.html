@@ -290,11 +290,11 @@
         <div class="d-box" id="d-box-jokes" onclick="dJump(9)"><h2>KNOCK-KNOCK JOKES</h2><div id="d-jokes" class="d-content" style="color:var(--neon-green); line-height:1.6;"></div></div>
         <div class="d-box" onclick="dJump(10)"><h2>ABOUT</h2><div class="d-content" style="color:var(--neon-green); line-height:1.6;">
             <div style="font-size:1.4em; font-weight:bold; margin-bottom:20px;">KNOCK-KNOCK.NET</div>
-            <p>This site shows attempted logins of bots to an ordinary internet server.</p>
-            <p>When setting up my first internet server, I was amazed by the constant chatter of bots, trying to infiltrate the server.</p>
-            <p>This constant chatter of bots knocking on the doors of machines on the net has been referred to as <em style="color:var(--warning-yellow); font-style:italic;">"the background radiation of the Internet"</em>.</p>
-            <p>Knock-knock.net is a visualization of this Internet Background Radiation - bots doing their best to break into just one machine.</p>
-            <p>It shows the bot activity in real-time, and provides historic stats of the bot attacks over time.</p>
+	    <p>Set up an unprotected server on the net, and the bots start swarming!</p><p> This site shows bots attempting (unsuccessfully) to break into an ordinary internet server.</p>
+            <p>This constant chatter of bots knocking on the doors of machines on the net has been referred to as <em>"the background radiation of the Internet".</em></p>
+	    <p>Knock-knock.net is a visualization of this bot traffic.
+	    It shows the bot activity in real-time, and provides historic stats of the bot attacks over time: where they are coming from, the most common usernames and passwords attempted, the worst offending ISPs, and in some cases, why the password or username was chosen.</p>
+            <p>Have fun! Send questions or comments to <a class="contact-email" href="#" style="color:var(--data-blue)"></a>.</p>
         </div></div>
     </div>
 </div>
@@ -331,11 +331,11 @@
         <div class="m-pane" id="m-pane-jokes"><h2>KNOCK-KNOCK JOKES</h2><div id="m-jokes" class="m-content" style="color:var(--neon-green); line-height:1.6;"></div></div>
         <div class="m-pane" id="m-pane-about"><h2>ABOUT</h2><div class="m-content" style="color:var(--neon-green); line-height:1.6;">
             <div style="font-size:1.4em; font-weight:bold; margin-bottom:20px;">KNOCK-KNOCK.NET</div>
-            <p>This site shows attempted logins of bots to an ordinary internet server.</p>
-            <p>When setting up my first internet server, I was amazed by the constant chatter of bots, trying to infiltrate the server.</p>
-            <p>This constant chatter of bots knocking on the doors of machines on the net has been referred to as <em style="color:var(--warning-yellow); font-style:italic;">"the background radiation of the Internet"</em>.</p>
-            <p>Knock-knock.net is a visualization of this Internet Background Radiation - bots doing their best to break into just one machine.</p>
-            <p>It shows the bot activity in real-time, and provides historic stats of the bot attacks over time.</p>
+	    <p>Set up an unprotected server on the net, and the bots start swarming!</p><p> This site shows bots attempting (unsuccessfully) to break into an ordinary internet server.</p>
+            <p>This constant chatter of bots knocking on the doors of machines on the net has been referred to as <em>"the background radiation of the Internet".</em></p>
+	    <p>Knock-knock.net is a visualization of this bot traffic.
+	    It shows the bot activity in real-time, and provides historic stats of the bot attacks over time: where they are coming from, the most common usernames and passwords attempted, the worst offending ISPs, and in some cases, why the password or username was chosen.</p>
+            <p>Have fun! Send questions or comments to <a class="contact-email" href="#" style="color:var(--data-blue)"></a>.</p>
         </div></div>
     </div>
     <div class="m-footer">
@@ -1538,6 +1538,14 @@
         if (globeBox) {
             addGlobeClickHandler(globeBox, () => dJump(1));
         }
+
+        // Obfuscated email assembly (anti-harvester)
+        const u = 'support', d = 'knock-knock', t = 'net';
+        const addr = u + '@' + d + '.' + t;
+        document.querySelectorAll('.contact-email').forEach(el => {
+            el.href = 'mai' + 'lto:' + addr;
+            el.textContent = addr;
+        });
     });
     connect();
 </script>

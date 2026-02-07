@@ -27,7 +27,7 @@ source .venv/bin/activate
 # SSH honeypot (port 22)
 python honeypot.py
 
-# Log monitor + geo-enricher
+# Log monitor + geo-enricher (add --save-knocks to store individual knocks in SQLite)
 python monitor.py
 
 # Web server (port 443 with SSL)
@@ -66,7 +66,7 @@ SSH Attacker → honeypot.py (port 22) → journalctl logs
 
 **Three Services:**
 - `honeypot.py`: Paramiko SSH server that accepts connections, logs credentials, always rejects auth
-- `monitor.py`: Tails journalctl for `[*] KNOCK |` events, performs GeoIP lookups, stores in SQLite, publishes to Redis
+- `monitor.py`: Tails journalctl for `[*] KNOCK |` events, performs GeoIP lookups, updates intel tables in SQLite, publishes to Redis. Individual knocks are only saved to SQLite with `--save-knocks`
 - `main.py`: FastAPI server with WebSocket endpoint `/ws`, subscribes to Redis, broadcasts to all connected browsers
 
 **Data Flow:**
@@ -87,7 +87,7 @@ SSH Attacker → honeypot.py (port 22) → journalctl logs
 ## Database Schema
 
 ```sql
--- Main attack log
+-- Main attack log (only populated with --save-knocks)
 knocks(id, timestamp, ip_address, iso_code, city, country, isp, username, password)
 
 -- Intelligence tables (aggregated counts with indexed hits for fast top-N queries)
@@ -116,6 +116,7 @@ Intel tables are updated on each knock via `INSERT ... ON CONFLICT DO UPDATE`. T
 - `knock:last_time` - Unix timestamp of last knock
 - `knock:last_lat` - Latitude of last knock location
 - `knock:last_lng` - Longitude of last knock location
+- `knock:recent` - Last 100 knocks (JSON list, used for initial page load)
 - `radiation_stream` - Pub/sub channel for real-time events
 
 ## Frontend Features

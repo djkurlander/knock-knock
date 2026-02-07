@@ -188,7 +188,7 @@ class ConnectionManager:
         conn = sqlite3.connect(DB_PATH)
         conn.row_factory = sqlite3.Row
         cur = conn.cursor()
-        cur.execute("SELECT iso_code as iso, country, hits as count FROM country_intel ORDER BY hits DESC LIMIT 100")
+        cur.execute("SELECT iso_code as iso, country, hits as count FROM country_intel ORDER BY hits DESC")
         shame_list = [dict(row) for row in cur.fetchall()]
         conn.close()
 

@@ -140,69 +140,15 @@ ssh -p 2222 user@your-server
 ufw allow 2222/tcp
 ```
 
-## 7. Create Systemd Services
+## 7. Install Systemd Services
 
-Create three service files:
+Sample unit files are provided in the `systemd/` directory. Copy them into place and adjust paths if your installation directory differs from `/root/knock-knock`:
 
-### /etc/systemd/system/knock-honeypot.service
-```ini
-[Unit]
-Description=SSH Honeypot Decoy Service
-After=network.target
-
-[Service]
-WorkingDirectory=/root/knock-knock
-ExecStart=/root/knock-knock/.venv/bin/python honeypot.py
-Restart=always
-User=root
-Group=root
-
-[Install]
-WantedBy=multi-user.target
+```bash
+cp systemd/*.service /etc/systemd/system/
 ```
 
-### /etc/systemd/system/knock-monitor.service
-```ini
-[Unit]
-Description=Knock-Knock SSH Log Monitor
-After=network.target redis-server.service
-
-[Service]
-User=root
-WorkingDirectory=/root/knock-knock
-ExecStart=/root/knock-knock/.venv/bin/python monitor.py
-Restart=always
-RestartSec=5
-
-[Install]
-WantedBy=multi-user.target
-```
-
-### /etc/systemd/system/knock-web.service
-```ini
-[Unit]
-Description=Knock-Knock FastAPI Web Server
-After=network.target redis-server.service knock-monitor.service
-
-[Service]
-User=root
-WorkingDirectory=/root/knock-knock
-ExecStart=/root/knock-knock/.venv/bin/python3 -m uvicorn main:app \
-    --host 0.0.0.0 \
-    --port 443 \
-    --ssl-keyfile /root/knock-knock/certs/key.pem \
-    --ssl-certfile /root/knock-knock/certs/cert.pem \
-    --proxy-headers \
-    --forwarded-allow-ips='*' \
-    --workers 2 \
-    --timeout-keep-alive 30 \
-    --log-level warning
-Restart=always
-RestartSec=5
-
-[Install]
-WantedBy=multi-user.target
-```
+By default, the monitor does not save individual knock records to SQLite (only aggregated intel tables are updated). To also store every knock for research queries, add `--save-knocks` to the `ExecStart` line in `knock-monitor.service`. Note this will use significantly more disk space (~600MB+/year).
 
 Enable and start services:
 ```bash

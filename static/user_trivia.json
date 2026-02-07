@@ -1,0 +1,2930 @@
+[
+  {
+    "user": "root",
+    "facts": [
+      "root is the undisputed king of SSH brute-force attacks; since this is the privileged account on typical Unix and Linux systems, botnets hammer this username millions of times a day."
+    ]
+  },
+  {
+    "user": "admin",
+    "facts": [
+      "While root rules Port 22, admin is the runner-up; it is the standard default login for routers, web panels, and appliances, making it the second most guessed credential."
+    ]
+  },
+  {
+    "user": "user",
+    "facts": [
+      "user is the epitome of low entropy; bots target this hoping for a 'user:user' credential pair, which is shockingly common on unconfigured IoT devices."
+    ]
+  },
+  {
+    "user": "test",
+    "facts": [
+      "test is a classic 'security through obscurity' fail; admins create this account for 5 minutes of debugging code and often leave it open for years with a weak password."
+    ]
+  },
+  {
+    "user": "ubuntu",
+    "facts": [
+      "ubuntu is the default user for Ubuntu cloud images; bots spray this expecting that someone foolishly enabled password authentication instead of using SSH keys."
+    ]
+  },
+  {
+    "user": "oracle",
+    "facts": [
+      "oracle is the default owner of Oracle Database; compromising this user often grants access to the 'crown jewels' of enterprise data warehouses."
+    ]
+  },
+  {
+    "user": "guest",
+    "facts": [
+      "guest is often a legacy account with null (empty) passwords; attackers use it to gain a toehold on the system before attempting 'privilege escalation' to become root."
+    ]
+  },
+  {
+    "user": "postgres",
+    "facts": [
+      "postgres is the default superuser for PostgreSQL; it is often left with 'trust' authentication on localhost, allowing attackers to move laterally."
+    ]
+  },
+  {
+    "user": "mysql",
+    "facts": [
+      "mysql is the root user for the MySQL database powering WordPress; access here usually means the attacker can dump the entire website's user table."
+    ]
+  },
+  {
+    "user": "cloud",
+    "facts": [
+      "cloud is a generic catch-all for tools like OpenStack; it implies the server is a hypervisor managing other virtual machines."
+    ]
+  },
+  {
+    "user": "debian",
+    "facts": [
+      "debian is the default user for the Debian OS; like the 'ubuntu' user, it is a frequent target for cloud setup script failures."
+    ]
+  },
+  {
+    "user": "git",
+    "facts": [
+      "git is used for git-shell access; compromising this user could allow an attacker to 'poison' your software supply chain by injecting backdoors into your code."
+    ]
+  },
+  {
+    "user": "ftpuser",
+    "facts": [
+      "ftpuser targets the File Transfer Protocol (Port 21); a successful breach of this user often leads to malware being uploaded to public web directories."
+    ]
+  },
+  {
+    "user": "hadoop",
+    "facts": [
+      "hadoop is the default user for Apache Hadoop; this user controls the file system (HDFS) and resource management for massive data clusters."
+    ]
+  },
+  {
+    "user": "es",
+    "facts": [
+      "es is shorthand for Elasticsearch; this user was famous for exposing massive unauthenticated datasets to the public internet by default in older versions."
+    ]
+  },
+  {
+    "user": "deploy",
+    "facts": [
+      "deploy is the dedicated CI/CD pipeline user; this account usually has write access to the web root, making it a one-stop-shop for defacing a site."
+    ]
+  },
+  {
+    "user": "pi",
+    "facts": [
+      "pi was the hardcoded default user for Raspberry Pi OS; usually paired with the password 'raspberry', creating a massive botnet of tiny computers."
+    ]
+  },
+  {
+    "user": "test1",
+    "facts": [
+      "test1 exists because 'test' was taken; implies a frustrated developer who likely set an even weaker password just to get the code working."
+    ]
+  },
+  {
+    "user": "backup",
+    "facts": [
+      "backup is the holy grail for ransomware gangs; compromising this user allows them to corrupt your archives before encrypting live data."
+    ]
+  },
+  {
+    "user": "sol",
+    "facts": [
+      "sol likely targets validators for Solana; access to this user could allow an attacker to slash the node's 'stake' or steal private wallet keys."
+    ]
+  },
+  {
+    "user": "dev",
+    "facts": [
+      "dev represents a target-rich environment; developers notoriously disable security features 'temporarily' and leave API keys lying around in home directories."
+    ]
+  },
+  {
+    "user": "centos",
+    "facts": [
+      "centos is the default user for CentOS (Community Enterprise Operating System), the backbone of the web hosting industry for decades."
+    ]
+  },
+  {
+    "user": "elastic",
+    "facts": [
+      "elastic is the built-in superuser for the Elastic Stack (ELK); if you find this user exposed, you've found the logs for the entire infrastructure."
+    ]
+  },
+  {
+    "user": "frappeuser",
+    "facts": [
+      "frappeuser is specific to the Frappe Framework (ERPNext); a niche target that usually yields full business logic access."
+    ]
+  },
+  {
+    "user": "support",
+    "facts": [
+      "support is a shared account often used by external vendors; typically has weak password rotation policies and dangerously high privileges."
+    ]
+  },
+  {
+    "user": "www",
+    "facts": [
+      "www is a legacy alias for the web server user; attackers want this to inject 'webshells' or modify .htaccess configuration files."
+    ]
+  },
+  {
+    "user": "developer",
+    "facts": [
+      "developer is similar to 'dev' but more formal; implies a workstation instance rich in intellectual property and source code."
+    ]
+  },
+  {
+    "user": "test2",
+    "facts": [
+      "test2 is the sequel to the 'test1' vulnerability; evidence of a chaotic testing environment with no cleanup procedures."
+    ]
+  },
+  {
+    "user": "ftptest",
+    "facts": [
+      "ftptest is a temporary account for testing file transfers that became a permanent backdoor; likely has write permissions to a public folder."
+    ]
+  },
+  {
+    "user": "ftp",
+    "facts": [
+      "ftp is the anonymous FTP user; if configured incorrectly, it allows the 'FTP Bounce Attack' or serves as a drop-zone for malware."
+    ]
+  },
+  {
+    "user": "nginx",
+    "facts": [
+      "nginx is the worker process user for the Nginx web server; usually sandboxed, but attackers target it to exploit vulnerabilities in modules like ImageMagick."
+    ]
+  },
+  {
+    "user": "dspace",
+    "facts": [
+      "dspace is the user for DSpace, an open-source repository used by universities; it is a target for academic data theft."
+    ]
+  },
+  {
+    "user": "daemon",
+    "facts": [
+      "daemon is a system user dating back to the earliest Unix days; if you can log in as daemon, the system is severely misconfigured."
+    ]
+  },
+  {
+    "user": "docker",
+    "facts": [
+      "docker is a user often added to the 'docker' group; this group is effectively 'root' equivalent because it allows mounting the host filesystem into a container."
+    ]
+  },
+  {
+    "user": "elasticsearch",
+    "facts": [
+      "elasticsearch is the verbose service account for the search engine; bots scan for this on port 9200 to hijack the server's massive CPU resources."
+    ]
+  },
+  {
+    "user": "zabbix",
+    "facts": [
+      "zabbix is the user for the Zabbix monitoring solution; compelling because the monitoring agent runs on *every* server in the fleet."
+    ]
+  },
+  {
+    "user": "ec2-user",
+    "facts": [
+      "ec2-user is the standard default user for Amazon Linux AMIs; a signature target for bots sweeping IP ranges owned by AWS."
+    ]
+  },
+  {
+    "user": "master",
+    "facts": [
+      "master refers to the 'Master Node' in Kubernetes or Jenkins clusters; the control plane that commands the worker drones."
+    ]
+  },
+  {
+    "user": "server",
+    "facts": [
+      "server is a generic guess; implies the admin has zero imagination and likely zero security hygiene."
+    ]
+  },
+  {
+    "user": "apache",
+    "facts": [
+      "apache is the user running the HTTP Server; attackers target this to execute remote code via vulnerabilities in web apps like Log4j."
+    ]
+  },
+  {
+    "user": "ubnt",
+    "facts": [
+      "ubnt is the notorious default user for Ubiquiti networking gear; a favorite target for Mirai-style botnets recruiting routers for DDoS attacks."
+    ]
+  },
+  {
+    "user": "solv",
+    "facts": [
+      "solv is a typo-squat or shorthand for 'solver' or 'solana'; targets automated high-frequency trading bots."
+    ]
+  },
+  {
+    "user": "solana",
+    "facts": [
+      "solana explicitly targets the Solana blockchain infrastructure; validators handle millions in staked SOL tokens and require high uptime."
+    ]
+  },
+  {
+    "user": "administrator",
+    "facts": [
+      "administrator is the Windows equivalent of root; the primary target for SMB brute-force attacks and RDP exploitation."
+    ]
+  },
+  {
+    "user": "minecraft",
+    "facts": [
+      "minecraft runs the Java process for Minecraft game servers; these are often set up by hobbyists with zero firewall knowledge."
+    ]
+  },
+  {
+    "user": "odoo",
+    "facts": [
+      "odoo is the system user for the Odoo ERP suite; access here exposes customer data, accounting, and inventory for thousands of businesses."
+    ]
+  },
+  {
+    "user": "operator",
+    "facts": [
+      "operator is a legacy Unix account typically used for system dumps; a relic from the days when admins manually mounted physical tape drives."
+    ]
+  },
+  {
+    "user": "testuser",
+    "facts": [
+      "testuser is a placeholder found in thousands of 'How To' tutorials; users copy/paste the commands and forget to remove the account."
+    ]
+  },
+  {
+    "user": "usuario",
+    "facts": [
+      "usuario is a localized attack vector (Spanish/Portuguese for 'User'); bots switch dictionaries based on the server's GeoIP location."
+    ]
+  },
+  {
+    "user": "tomcat",
+    "facts": [
+      "tomcat is the user for Apache Tomcat; famous for the 'Manager App' vulnerability where default creds allow uploading a malicious WAR file."
+    ]
+  },
+  {
+    "user": "alex",
+    "facts": [
+      "alex is a high-frequency first name; bots use actuarial tables of popular baby names from 20-30 years ago to guess admin names."
+    ]
+  },
+  {
+    "user": "steam",
+    "facts": [
+      "steam is used by `steamcmd` to manage dedicated game servers; compromising this allows hijacking the server for DDoS amplification attacks."
+    ]
+  },
+  {
+    "user": "temp",
+    "facts": [
+      "temp represents the most permanent thing in IT: a temporary fix. These accounts are created for a 'quick check' and left open forever."
+    ]
+  },
+  {
+    "user": "deployer",
+    "facts": [
+      "deployer is an automated agent; often configured with password-less `sudo` access to restart services, giving an attacker full root privileges."
+    ]
+  },
+  {
+    "user": "student",
+    "facts": [
+      "student is common in university labs; machines imaged with this account are often linked to huge, high-bandwidth academic networks."
+    ]
+  },
+  {
+    "user": "kafka",
+    "facts": [
+      "kafka is the user for Apache Kafka event streaming; access here allows an attacker to tap into the real-time data nervous system of a company."
+    ]
+  },
+  {
+    "user": "newuser",
+    "facts": [
+      "newuser indicates a setup script that failed to complete or a sysadmin who hit 'Next' too fast during installation."
+    ]
+  },
+  {
+    "user": "jenkins",
+    "facts": [
+      "jenkins is the leading open-source automation server; access usually allows arbitrary code execution via the script console."
+    ]
+  },
+  {
+    "user": "gerrit",
+    "facts": [
+      "gerrit is a code review tool user; compromising this allows an attacker to approve their own malicious pull requests and merge code."
+    ]
+  },
+  {
+    "user": "supervisor",
+    "facts": [
+      "supervisor refers to `supervisord`, a client/server system that allows its users to monitor and control processes on Unix systems."
+    ]
+  },
+  {
+    "user": "nagios",
+    "facts": [
+      "nagios is the user for Nagios Core monitoring; it is a classic tool with a history of authenticated remote code execution vulnerabilities."
+    ]
+  },
+  {
+    "user": "demo",
+    "facts": [
+      "demo targets accounts meant for sales demonstrations; usually public-facing and notoriously stripped of all security controls."
+    ]
+  },
+  {
+    "user": "bot",
+    "facts": [
+      "bot is meta! A user created for other automated scripts; often has hardcoded API tokens in its shell history."
+    ]
+  },
+  {
+    "user": "teamspeak",
+    "facts": [
+      "teamspeak is the user for TeamSpeak VoIP software; historically targeted to turn high-bandwidth voice servers into UDP flood cannons."
+    ]
+  },
+  {
+    "user": "user1",
+    "facts": [
+      "user1 is the first sequential user; implies a system with no naming convention, likely managed by a novice."
+    ]
+  },
+  {
+    "user": "default",
+    "facts": [
+      "default is often found on factory-reset hardware; attackers scan for this immediately after power outages or firmware updates."
+    ]
+  },
+  {
+    "user": "www-data",
+    "facts": [
+      "www-data is the standard web server user on Debian/Ubuntu; it usually owns the `/var/www` directory and is the primary target for web exploits."
+    ]
+  },
+  {
+    "user": "web",
+    "facts": [
+      "web is a shorthand alias for the webmaster; often found in shared hosting environments with weak isolation."
+    ]
+  },
+  {
+    "user": "ts3",
+    "facts": [
+      "ts3 is an abbreviation for TeamSpeak 3; confirms the server is hosting voice comms, likely on a high-speed residential line."
+    ]
+  },
+  {
+    "user": "tempuser",
+    "facts": [
+      "tempuser is another 'temporary' user that became permanent; usually has a password that matches the username."
+    ]
+  },
+  {
+    "user": "weblogic",
+    "facts": [
+      "weblogic is the user for Oracle WebLogic Server; a frequent victim of deserialization attacks that lead to remote code execution."
+    ]
+  },
+  {
+    "user": "nobody",
+    "facts": [
+      "nobody is the NFS anonymous user; designed to have minimal privileges, but historically prone to privilege escalation exploits."
+    ]
+  },
+  {
+    "user": "app",
+    "facts": [
+      "app is a generic container user; prevalent in modern microservice architectures like Docker or Kubernetes."
+    ]
+  },
+  {
+    "user": "sysadmin",
+    "facts": [
+      "sysadmin is a trap! While it sounds authoritative, legitimate admins rarely use this generic name. Often a honeypot."
+    ]
+  },
+  {
+    "user": "gitlab",
+    "facts": [
+      "gitlab is the bundled user for Omnibus GitLab installs; manages the repositories, CI runners, and PostgreSQL database."
+    ]
+  },
+  {
+    "user": "tom",
+    "facts": [
+      "tom is a common name, but also a potential shorthand for 'Tomcat'; bots cover both bases with one guess."
+    ]
+  },
+  {
+    "user": "redhat",
+    "facts": [
+      "redhat is the default user on older Red Hat Enterprise Linux (RHEL) installations; targets enterprise-grade servers that might have been forgotten."
+    ]
+  },
+  {
+    "user": "wang",
+    "facts": [
+      "wang is one of the most common surnames in the world; targeted by botnets specifically focusing on Chinese infrastructure."
+    ]
+  },
+  {
+    "user": "teamspeak3",
+    "facts": [
+      "teamspeak3 is the full service name for the VoIP server; attackers target these specifically for their stable, high-bandwidth connections."
+    ]
+  },
+  {
+    "user": "rancher",
+    "facts": [
+      "rancher is the user for Rancher Kubernetes management; compromising this is equivalent to gaining control over the entire container fleet."
+    ]
+  },
+  {
+    "user": "uftp",
+    "facts": [
+      "uftp is the user for UFTP (Encrypted UDP-based FTP); used for moving massive files (like media or seismic data) over high-latency networks."
+    ]
+  },
+  {
+    "user": "admin1",
+    "facts": [
+      "admin1 is the 'I forgot the password to admin so I made a new one' account; usually indicative of sloppy management."
+    ]
+  },
+  {
+    "user": "runner",
+    "facts": [
+      "runner is likely a GitLab CI or GitHub Actions runner; a high-value target because it can execute arbitrary code pulled from the git repository."
+    ]
+  },
+  {
+    "user": "sonar",
+    "facts": [
+      "sonar is the user for SonarQube; access here reveals source code vulnerabilities before the developers even fix them."
+    ]
+  },
+  {
+    "user": "username",
+    "facts": [
+      "username is the ultimate tautology; targeting users who didn't understand the prompt 'Enter Username:' during setup."
+    ]
+  },
+  {
+    "user": "erp",
+    "facts": [
+      "erp stands for Enterprise Resource Planning; access here means access to payroll, inventory, and sales data."
+    ]
+  },
+  {
+    "user": "appuser",
+    "facts": [
+      "appuser is a generic service account pattern used in Java/Spring applications to avoid running as root."
+    ]
+  },
+  {
+    "user": "a",
+    "facts": [
+      "a represents maximum efficiency, minimum security; a single-letter account is often a test user created by a lazy admin."
+    ]
+  },
+  {
+    "user": "vmail",
+    "facts": [
+      "vmail is the Virtual Mail user; it owns the mailboxes on a Postfix/Dovecot server. Access allows reading everyone's email."
+    ]
+  },
+  {
+    "user": "webmaster",
+    "facts": [
+      "webmaster is a retro 90s title; implies a legacy system or a cPanel hosting account that hasn't been updated in years."
+    ]
+  },
+  {
+    "user": "oscar",
+    "facts": [
+      "oscar is the phonetic alphabet for 'O', but also a common name. Bots use dictionary attacks to find 'personal' servers."
+    ]
+  },
+  {
+    "user": "esuser",
+    "facts": [
+      "esuser is another variation for Elasticsearch; attackers hunt for this database because it's often packed with Personally Identifiable Information."
+    ]
+  },
+  {
+    "user": "nexus",
+    "facts": [
+      "nexus is the user for Sonatype Nexus Repository; compromising this allows 'DLL hijacking' on a massive scale."
+    ]
+  },
+  {
+    "user": "hosting",
+    "facts": [
+      "hosting is a generic reseller account on web panels; it often controls multiple client sites."
+    ]
+  },
+  {
+    "user": "system",
+    "facts": [
+      "system is usually a reserved keyword in Windows, but sometimes foolishly created as a normal user on Linux."
+    ]
+  },
+  {
+    "user": "dolphinscheduler",
+    "facts": [
+      "dolphinscheduler is the user for Apache DolphinScheduler; a specific target for hijacking large compute clusters for crypto mining."
+    ]
+  },
+  {
+    "user": "vagrant",
+    "facts": [
+      "vagrant is the default user for HashiCorp Vagrant boxes; intended for local dev only, but disastrously insecure if exposed to the web."
+    ]
+  },
+  {
+    "user": "service",
+    "facts": [
+      "service is a generic account for headless processes; often has `sudo` privileges without a password for automation purposes."
+    ]
+  },
+  {
+    "user": "gitlab-runner",
+    "facts": [
+      "gitlab-runner is the agent that executes CI/CD jobs; if an attacker compromises this, they can steal secrets and deployment keys."
+    ]
+  },
+  {
+    "user": "izaodiandao",
+    "facts": [
+      "izaodiandao is a specific signature user associated with Chinese-origin botnets; likely a hardcoded backdoor credential."
+    ]
+  },
+  {
+    "user": "knockknock",
+    "facts": [
+      "knockknock is a playful but malicious probe; likely checking for port knocking sequences or backdoor services."
+    ]
+  },
+  {
+    "user": "csdq",
+    "facts": [
+      "csdq is a known hardcoded credential from specific IoT malware families targeting DVRs and IP cameras."
+    ]
+  },
+  {
+    "user": "nuerang",
+    "facts": [
+      "nuerang is another signature username found in botnet glossaries; specific to compromised IoT firmware."
+    ]
+  },
+  {
+    "user": "wanxiequan",
+    "facts": [
+      "wanxiequan is a phonetic username likely associated with a specific targeted campaign or leaked database from Asia."
+    ]
+  },
+  {
+    "user": "knock",
+    "facts": [
+      "knock refers to 'Port Knocking', a method of hiding services by sending packets to closed ports; bots try this to trigger hidden daemons."
+    ]
+  },
+  {
+    "user": "kaiding",
+    "facts": [
+      "kaiding likely refers to 'Kai Ding' (Start/Open); a hardcoded backdoor user found in certain router firmwares."
+    ]
+  },
+  {
+    "user": "bob",
+    "facts": [
+      "bob is the standard cryptographic placeholder (along with Alice); implies a test server set up by a student or developer."
+    ]
+  },
+  {
+    "user": "david",
+    "facts": [
+      "david is a statistically top-tier name choice; bots prioritize this in dictionary attacks due to its global prevalence."
+    ]
+  },
+  {
+    "user": "unknown",
+    "facts": [
+      "unknown is sometimes a default account created when a system fails to read configuration data properly."
+    ]
+  },
+  {
+    "user": "daniel",
+    "facts": [
+      "daniel is another high-probability dictionary attack entry; common across Europe and the Americas."
+    ]
+  },
+  {
+    "user": "super",
+    "facts": [
+      "super is short for 'Superuser'; a legacy administrative name often found on older switches and industrial control systems."
+    ]
+  },
+  {
+    "user": "upload",
+    "facts": [
+      "upload is a designated user for file uploads; attackers target this to place 'webshells' (malicious scripts) on the server."
+    ]
+  },
+  {
+    "user": "webtest",
+    "facts": [
+      "webtest represents the classic staging environment mistake; often a clone of production but with zero security hardening."
+    ]
+  },
+  {
+    "user": "sinusbot",
+    "facts": [
+      "sinusbot is a popular music bot for TeamSpeak/Discord; runs on a server and is often managed by non-technical users."
+    ]
+  },
+  {
+    "user": "ts",
+    "facts": [
+      "ts is shorthand for TeamSpeak or Terminal Server; a high-value target for hijacking communications."
+    ]
+  },
+  {
+    "user": "devops",
+    "facts": [
+      "devops is the modern 'sysadmin'; this account likely holds keys to the cloud kingdom (AWS/Azure/GCP credentials)."
+    ]
+  },
+  {
+    "user": "ftpadmin",
+    "facts": [
+      "ftpadmin is the boss of file transfers; compromising this gives total control over the site's content and file structure."
+    ]
+  },
+  {
+    "user": "pool",
+    "facts": [
+      "pool refers to ZFS pools (file storage) or crypto mining pools; implies a server with significant storage or compute resources."
+    ]
+  },
+  {
+    "user": "mc",
+    "facts": [
+      "mc is short for Minecraft; indicates a game server, which is a prime target for recruitment into DDoS botnets."
+    ]
+  },
+  {
+    "user": "games",
+    "facts": [
+      "games is a standard Linux system user meant to own game binaries; historically insecure and rarely used for its intended purpose."
+    ]
+  },
+  {
+    "user": "botuser",
+    "facts": [
+      "botuser is a service account for automation; typically configured with high privileges and no multi-factor authentication."
+    ]
+  },
+  {
+    "user": "amp",
+    "facts": [
+      "amp stands for CubeCoders AMP, a popular web interface for managing game servers; access here controls the whole gaming fleet."
+    ]
+  },
+  {
+    "user": "linux",
+    "facts": [
+      "linux is a generic account name; suggests a user who is new to the OS and followed a 'Getting Started' guide too literally."
+    ]
+  },
+  {
+    "user": "proxy",
+    "facts": [
+      "proxy is the user running Squid or HAProxy; compromising this allows attackers to intercept or reroute all network traffic."
+    ]
+  },
+  {
+    "user": "search",
+    "facts": [
+      "search likely implies the server is running Solr, Elasticsearch, or Sphinx; a data-heavy process user."
+    ]
+  },
+  {
+    "user": "teste",
+    "facts": [
+      "teste is Portuguese for 'test'; widely used in Brazil and Portugal for temporary accounts that are never deleted."
+    ]
+  },
+  {
+    "user": "sammy",
+    "facts": [
+      "sammy is the mascot/default user for DigitalOcean tutorials; seeing this means the admin copy-pasted the guide without changing the name."
+    ]
+  },
+  {
+    "user": "redis",
+    "facts": [
+      "redis is the user for the Redis in-memory database; it was notorious for being insecure by default (no password) on older versions."
+    ]
+  },
+  {
+    "user": "frappe",
+    "facts": [
+      "frappe is the user for the Frappe full-stack web application framework; this user runs the python code and manages the database."
+    ]
+  },
+  {
+    "user": "tester",
+    "facts": [
+      "tester is a distinct user from 'test'; implies a QA person who needs persistent access, likely with a weak password."
+    ]
+  },
+  {
+    "user": "gpadmin",
+    "facts": [
+      "gpadmin is the Greenplum Database admin; a target for big data analytics platforms based on PostgreSQL."
+    ]
+  },
+  {
+    "user": "azureuser",
+    "facts": [
+      "azureuser is the mandatory default user for Linux VMs on Microsoft Azure; bots hammer this name on any IP address owned by Microsoft."
+    ]
+  },
+  {
+    "user": "devuser",
+    "facts": [
+      "devuser is a generic development account; often has 'sudo' access for debugging purposes."
+    ]
+  },
+  {
+    "user": "svn",
+    "facts": [
+      "svn stands for Apache Subversion, a centralized version control system; hacking this user gives access to the entire project history."
+    ]
+  },
+  {
+    "user": "matt",
+    "facts": [
+      "matt is a common name attack; possibly targeting 'Matt' (Mullenweg, creator of WordPress) fans in the web dev community."
+    ]
+  },
+  {
+    "user": "ansible",
+    "facts": [
+      "ansible is the user for the Ansible automation tool; this user typically has password-less SSH access to the *entire* server fleet."
+    ]
+  },
+  {
+    "user": "validator",
+    "facts": [
+      "validator is specific to Proof-of-Stake blockchains; this node validates transactions and holds staking keys."
+    ]
+  },
+  {
+    "user": "testing",
+    "facts": [
+      "testing is the continuous tense of 'test'; implies an active testing phase where security controls are temporarily relaxed."
+    ]
+  },
+  {
+    "user": "amir",
+    "facts": [
+      "amir is a very common name in the Middle East and South Asia; bots use region-specific wordlists to improve success rates."
+    ]
+  },
+  {
+    "user": "ali",
+    "facts": [
+      "ali is an extremely common name globally (Arabic/Swahili); highly efficient for dictionary attacks."
+    ]
+  },
+  {
+    "user": "ranger",
+    "facts": [
+      "ranger refers to Apache Ranger, a framework to enable, monitor and manage comprehensive data security across the Hadoop platform."
+    ]
+  },
+  {
+    "user": "rajesh",
+    "facts": [
+      "rajesh is a top-tier common name in India; targeting the massive IT workforce in that region."
+    ]
+  },
+  {
+    "user": "administrador",
+    "facts": [
+      "administrador is Spanish for 'Administrator'; targeted heavily in Spain and Latin America."
+    ]
+  },
+  {
+    "user": "remote",
+    "facts": [
+      "remote is an account explicitly created for remote access (RDP/SSH); implies the user expected to log in from outside."
+    ]
+  },
+  {
+    "user": "scan",
+    "facts": [
+      "scan is used by automated vulnerability scanners or printer/scanner combos to dump files onto the server."
+    ]
+  },
+  {
+    "user": "user4",
+    "facts": [
+      "user4 is the fourth user; indicates a system where accounts are handed out sequentially, likely to students or temps."
+    ]
+  },
+  {
+    "user": "bin",
+    "facts": [
+      "bin is a legacy standard user that owns executable files; access here allows replacing system binaries with malware."
+    ]
+  },
+  {
+    "user": "lighthouse",
+    "facts": [
+      "lighthouse is an Ethereum 2.0 consensus client; this user runs the software that keeps the Ethereum beacon chain running."
+    ]
+  },
+  {
+    "user": "manoj",
+    "facts": [
+      "manoj is another highly common Indian name; standard inclusion in global dictionary attacks."
+    ]
+  },
+  {
+    "user": "opc",
+    "facts": [
+      "opc stands for Oracle Public Cloud; the default user for Oracle Cloud Infrastructure (OCI) compute instances."
+    ]
+  },
+  {
+    "user": "postgresql",
+    "facts": [
+      "postgresql is the descriptive service name; equivalent to the 'postgres' user, just more verbose."
+    ]
+  },
+  {
+    "user": "vncuser",
+    "facts": [
+      "vncuser is specific to Virtual Network Computing; implies a GUI is running, which consumes resources and offers a visual attack surface."
+    ]
+  },
+  {
+    "user": "g",
+    "facts": [
+      "g is a single-letter account; hard to type by accident, but easy to guess. Often a test or a lazy alias."
+    ]
+  },
+  {
+    "user": "neo4j",
+    "facts": [
+      "neo4j is the user for the Neo4j Graph Database; famously used in the Panama Papers leak to map complex data relationships."
+    ]
+  },
+  {
+    "user": "mail",
+    "facts": [
+      "mail is a legacy standard user for the mail subsystem; often owns `/var/mail`."
+    ]
+  },
+  {
+    "user": "github",
+    "facts": [
+      "github is likely a user for a GitHub Actions runner or a mirroring script; has write access to code repositories."
+    ]
+  },
+  {
+    "user": "miner",
+    "facts": [
+      "miner is honesty in naming! A user created specifically for crypto mining; hackers check if they can hijack an existing rig."
+    ]
+  },
+  {
+    "user": "User",
+    "facts": [
+      "User is the capitalized variant; targets Windows systems or users who follow Proper Noun capitalization rules."
+    ]
+  },
+  {
+    "user": "install",
+    "facts": [
+      "install is a temporary account used during OS or app installation; if found, the admin forgot the post-install cleanup."
+    ]
+  },
+  {
+    "user": "kubernetes",
+    "facts": [
+      "kubernetes is the system user for K8s components; access here is effectively root over the entire cluster."
+    ]
+  },
+  {
+    "user": "splunk",
+    "facts": [
+      "splunk is the user for Splunk Enterprise; manages massive logs. Compromising this allows attackers to delete evidence."
+    ]
+  },
+  {
+    "user": "samba",
+    "facts": [
+      "samba is the user for the SMB/CIFS networking protocol; used for sharing files with Windows clients."
+    ]
+  },
+  {
+    "user": "test3",
+    "facts": [
+      "test3 implies 'Third time's the charm?'; evidence of a persistent testing process that leaves debris behind."
+    ]
+  },
+  {
+    "user": "webuser",
+    "facts": [
+      "webuser is a generic account for web management; frequently found in ISP-provided hosting packages."
+    ]
+  },
+  {
+    "user": "team",
+    "facts": [
+      "team is a shared account; the cardinal sin of identity management. 'Everyone knows the password' means 'Everyone can be hacked'."
+    ]
+  },
+  {
+    "user": "build",
+    "facts": [
+      "build is a build server user; runs compilers and linkers. Attackers love this to inject malicious code into binaries."
+    ]
+  },
+  {
+    "user": "bitrix",
+    "facts": [
+      "bitrix is the user for Bitrix24 (CRM/CMS); widely used in Eastern Europe. Contains sensitive client databases."
+    ]
+  },
+  {
+    "user": "vbox",
+    "facts": [
+      "vbox is the user for VirtualBox headless mode; implies the host is running hidden Virtual Machines."
+    ]
+  },
+  {
+    "user": "nvidia",
+    "facts": [
+      "nvidia is associated with CUDA drivers; implies the server has expensive GPUs, making it a prime target for crypto-mining malware."
+    ]
+  },
+  {
+    "user": "test01",
+    "facts": [
+      "test01 is the zero-padded test account; implies a sysadmin who likes sorting but dislikes security."
+    ]
+  },
+  {
+    "user": "max",
+    "facts": [
+      "max is a common name, but also 'Max' privileges? Bots try it because it's short and popular."
+    ]
+  },
+  {
+    "user": "Admin",
+    "facts": [
+      "Admin is the capitalized version; specifically targets Windows machines where usernames can be case-sensitive in certain contexts."
+    ]
+  },
+  {
+    "user": "factorio",
+    "facts": [
+      "factorio means the factory must grow! Dedicated user for Factorio servers; these run 24/7 and have high uptime."
+    ]
+  },
+  {
+    "user": "downloader",
+    "facts": [
+      "downloader is likely running tools like `youtube-dl` or BitTorrent clients; access here reveals media libraries."
+    ]
+  },
+  {
+    "user": "vyos",
+    "facts": [
+      "vyos is the default admin for the VyOS software router; gaining access here allows manipulating the network routing table."
+    ]
+  },
+  {
+    "user": "boss",
+    "facts": [
+      "boss is a social engineering guess; checking if the boss demanded a vanity username with full privileges."
+    ]
+  },
+  {
+    "user": "cesar",
+    "facts": [
+      "cesar is a common name and a nod to the Caesar Cipher. Dictionary attack target."
+    ]
+  },
+  {
+    "user": "db2admin",
+    "facts": [
+      "db2admin is the IBM DB2 Administrator; a legacy enterprise database. Access here is serious business."
+    ]
+  },
+  {
+    "user": "flask",
+    "facts": [
+      "flask refers to the Python microframework; suggests a dev environment running an app in debug mode."
+    ]
+  },
+  {
+    "user": "keycloak",
+    "facts": [
+      "keycloak is an open-source Identity and Access Management solution; if you own Keycloak, you own the keys to every application it protects."
+    ]
+  },
+  {
+    "user": "manager",
+    "facts": [
+      "manager is a generic administrative title; often used in Tomcat 'manager' apps or specific appliance web UIs."
+    ]
+  },
+  {
+    "user": "hive",
+    "facts": [
+      "hive is the user for Apache Hive, a data warehouse software project built on top of Apache Hadoop."
+    ]
+  },
+  {
+    "user": "user3",
+    "facts": [
+      "user3 is a sequential account; implies a multi-user system managed by scripts."
+    ]
+  },
+  {
+    "user": "user2",
+    "facts": [
+      "user2 is the second user; implies the first one (user1) was already taken or locked."
+    ]
+  },
+  {
+    "user": "db2inst1",
+    "facts": [
+      "db2inst1 is the default instance owner for DB2 on Linux/Unix; standardized naming makes it an easy guess."
+    ]
+  },
+  {
+    "user": "erpnext",
+    "facts": [
+      "erpnext is the default site user for ERPNext, an open-source ERP system holding full business records."
+    ]
+  },
+  {
+    "user": "vpntest",
+    "facts": [
+      "vpntest is a temporary VPN config that was never removed; likely has a simple pre-shared key or weak password."
+    ]
+  },
+  {
+    "user": "proxyuser",
+    "facts": [
+      "proxyuser is used for authenticating to a proxy; compromising this gives the attacker a free hop to hide their traffic."
+    ]
+  },
+  {
+    "user": "bryan",
+    "facts": [
+      "bryan is a common name; standard dictionary attack."
+    ]
+  },
+  {
+    "user": "python",
+    "facts": [
+      "python is a user running python scripts; likely has access to `pip` and virtual environments, often insecurely configured."
+    ]
+  },
+  {
+    "user": "starbound",
+    "facts": [
+      "starbound is the dedicated user for Starbound, an extraterrestrial sandbox adventure game; 2D space exploration game, 3D security risk."
+    ]
+  },
+  {
+    "user": "asterisk",
+    "facts": [
+      "asterisk is the engine of the VoIP world (PBX software); hacking this leads to toll fraud (making expensive calls on your dime)."
+    ]
+  },
+  {
+    "user": "data",
+    "facts": [
+      "data is a generic owner for a data partition; if you breach this, you usually find the database files directly."
+    ]
+  },
+  {
+    "user": "registry",
+    "facts": [
+      "registry is the Docker Registry user; controls the container images. Hackers poison the images here to infect downstream servers."
+    ]
+  },
+  {
+    "user": "admin123",
+    "facts": [
+      "admin123 is the laziness multiplier; when 'admin' is taken, and you have zero creativity."
+    ]
+  },
+  {
+    "user": "webdev",
+    "facts": [
+      "webdev is a contractor or developer account; often shared via email and rarely secured with 2FA."
+    ]
+  },
+  {
+    "user": "tmp",
+    "facts": [
+      "tmp is the definition of ephemeral; these accounts are often created for a quick test and forgotten."
+    ]
+  },
+  {
+    "user": "webserver",
+    "facts": [
+      "webserver is a literal naming convention; implies a novice admin who names things exactly what they are."
+    ]
+  },
+  {
+    "user": "myuser",
+    "facts": [
+      "myuser is found in beginner tutorials (e.g., 'create a user named myuser'); indicates a copy-paste server setup."
+    ]
+  },
+  {
+    "user": "superuser",
+    "facts": [
+      "superuser is the modern, slightly more verbose cousin of 'root'; it often bypasses standard permission checks in web applications."
+    ]
+  },
+  {
+    "user": "marketing",
+    "facts": [
+      "Bots target marketing assuming non-technical marketing teams share a single login with a weak password to access dashboards."
+    ]
+  },
+  {
+    "user": "javier",
+    "facts": [
+      "javier is a common first name in Spanish-speaking regions; bots use high-frequency global names to spray-and-pray."
+    ]
+  },
+  {
+    "user": "config",
+    "facts": [
+      "Attackers hope a lazy sysadmin created a user named config to manage backups or system settings, often leaving it with default permissions."
+    ]
+  },
+  {
+    "user": "download",
+    "facts": [
+      "download is often a default account on older FTP servers or download managers, allowing anonymous access."
+    ]
+  },
+  {
+    "user": "rg",
+    "facts": [
+      "rg likely refers to 'Resource Group' (Azure) or a specific hardware gateway admin user; short, two-letter usernames are often legacy leftovers."
+    ]
+  },
+  {
+    "user": "local",
+    "facts": [
+      "local is a generic account name often created during local development or testing phases and accidentally left active."
+    ]
+  },
+  {
+    "user": "localadmin",
+    "facts": [
+      "localadmin is the classic Windows local administrator account; attackers love this because it often exists even when the machine is joined to a domain."
+    ]
+  },
+  {
+    "user": "public",
+    "facts": [
+      "public is the standard SNMP community string (read-only) or a generic shared folder user; often grants information disclosure."
+    ]
+  },
+  {
+    "user": "anna",
+    "facts": [
+      "anna is one of the most common female names globally; bots use top-100 name lists to perform dictionary attacks."
+    ]
+  },
+  {
+    "user": "andrew",
+    "facts": [
+      "andrew is a statistically common English name; bots target these expecting individuals to reuse passwords."
+    ]
+  },
+  {
+    "user": "readonly",
+    "facts": [
+      "readonly is intended to be safe, but often has read access to sensitive configuration files that contain secrets."
+    ]
+  },
+  {
+    "user": "develop",
+    "facts": [
+      "develop is a leftover account from the development phase; developers often set weak passwords like '123456' on these temporary accounts."
+    ]
+  },
+  {
+    "user": "ark",
+    "facts": [
+      "ark is the server user for 'ARK: Survival Evolved' game servers; popular targets for botnets looking to hijack high-bandwidth rigs."
+    ]
+  },
+  {
+    "user": "d",
+    "facts": [
+      "d is an ultra-short username often used as a lazy alias for 'daemon' or 'debug'; hard for humans to type by accident, easy for bots to guess."
+    ]
+  },
+  {
+    "user": "ts3server",
+    "facts": [
+      "ts3server is the dedicated user for TeamSpeak 3 VoIP servers, which were the gold standard for gamer communication before Discord."
+    ]
+  },
+  {
+    "user": "cc",
+    "facts": [
+      "cc could stand for 'Credit Card' or 'Carbon Copy'; often a shorthand user for financial data access or email archival."
+    ]
+  },
+  {
+    "user": "lw",
+    "facts": [
+      "lw likely stands for 'Lightweight' or initials for a specific legacy service; two-letter users are often holdovers from old Unix System V."
+    ]
+  },
+  {
+    "user": "bigdata",
+    "facts": [
+      "bigdata is a trendy username found in Hadoop or Spark clusters; often has permissions to read massive datasets."
+    ]
+  },
+  {
+    "user": "news",
+    "facts": [
+      "news is a legacy Unix user from the 1980s used to manage Usenet newsgroups; it still exists by default in many modern distributions."
+    ]
+  },
+  {
+    "user": "hduser",
+    "facts": [
+      "hduser is the default user for the Hadoop Distributed File System (HDFS); obtaining this gives control over the cluster's data nodes."
+    ]
+  },
+  {
+    "user": "localhost",
+    "facts": [
+      "localhost is a confusion attack; the bot hopes a misconfigured script treats the username 'localhost' as a trusted internal network request."
+    ]
+  },
+  {
+    "user": "qbtuser",
+    "facts": [
+      "qbtuser is the user for qBittorrent-nox (headless); if compromised, attackers can use your bandwidth to seed illegal content."
+    ]
+  },
+  {
+    "user": "work",
+    "facts": [
+      "work is a generic placeholder name; bots try this hoping someone created a 'work' profile on a shared machine."
+    ]
+  },
+  {
+    "user": "nas",
+    "facts": [
+      "nas stands for Network Attached Storage; the holy grail for ransomware gangs, as it usually holds the backups."
+    ]
+  },
+  {
+    "user": "vps",
+    "facts": [
+      "vps (Virtual Private Server) providers sometimes provision this default user for customers to log in initially."
+    ]
+  },
+  {
+    "user": "suporte",
+    "facts": [
+      "suporte is Portuguese for 'Support'; targeted heavily by botnets focusing on Brazilian and Portuguese infrastructure."
+    ]
+  },
+  {
+    "user": "labuser",
+    "facts": [
+      "labuser is common in university or corporate training environments; these accounts often have weak passwords reset daily."
+    ]
+  },
+  {
+    "user": "veeam",
+    "facts": [
+      "veeam is the service account for Veeam Backup & Replication; compromising this allows attackers to delete backups."
+    ]
+  },
+  {
+    "user": "thomas",
+    "facts": [
+      "thomas is a classic biblical name common in Western countries; used in high-frequency dictionary attacks."
+    ]
+  },
+  {
+    "user": "test123",
+    "facts": [
+      "test123 is the ultimate lazy test account; checks for the 'password is the username' or '123456' vulnerability."
+    ]
+  },
+  {
+    "user": "alumni",
+    "facts": [
+      "alumni targets university portals; these accounts often belong to former students and sit dormant and unmonitored for years."
+    ]
+  },
+  {
+    "user": "leo",
+    "facts": [
+      "leo is short, common, and easy to type; frequently appears in default user lists for various software packages."
+    ]
+  },
+  {
+    "user": "kali",
+    "facts": [
+      "kali is the default user for Kali Linux; if found on a server, it implies the machine might be a forgotten penetration testing box."
+    ]
+  },
+  {
+    "user": "odoo17",
+    "facts": [
+      "odoo17 is specific to Odoo version 17 ERP software; bots target specific versions to exploit known vulnerabilities."
+    ]
+  },
+  {
+    "user": "test4",
+    "facts": [
+      "test4 exists because 'test1', 'test2', and 'test3' were already taken; implies a persistent manual testing session."
+    ]
+  },
+  {
+    "user": "peer",
+    "facts": [
+      "peer is likely related to VPN peering or P2P networking configurations; often used in BGP or wireguard setups."
+    ]
+  },
+  {
+    "user": "redmine",
+    "facts": [
+      "redmine is the user for Redmine project management software; access here reveals internal roadmaps and bug tickets."
+    ]
+  },
+  {
+    "user": "socks",
+    "facts": [
+      "socks refers to SOCKS proxy; attackers want this account to tunnel their traffic and hide their origin IP address."
+    ]
+  },
+  {
+    "user": "sam",
+    "facts": [
+      "sam is a common name, but also refers to the Security Account Manager (SAM) database in Windows."
+    ]
+  },
+  {
+    "user": "router",
+    "facts": [
+      "Bots try router on port 22/80 hoping to hit a ISP-provided gateway that still has the factory default credentials."
+    ]
+  },
+  {
+    "user": "vpn",
+    "facts": [
+      "vpn is a generic VPN service account; access here is a golden ticket into the internal corporate network."
+    ]
+  },
+  {
+    "user": "sshuser",
+    "facts": [
+      "sshuser is a placeholder often found in SSH client configuration tutorials; many users forget to change it during setup."
+    ]
+  },
+  {
+    "user": "test02",
+    "facts": [
+      "test02 is a variant of the test account; the leading zero suggests an organized IT department that still forgot to delete the account."
+    ]
+  },
+  {
+    "user": "andreas",
+    "facts": [
+      "andreas is a very common name in Germany and Greece; reflects regional targeting by botnets."
+    ]
+  },
+  {
+    "user": "kelvin",
+    "facts": [
+      "kelvin is a common name, but also a unit of temperature; sometimes used as a clever hostname or user for HVAC control."
+    ]
+  },
+  {
+    "user": "tv",
+    "facts": [
+      "tv is common on smart TVs or Android boxes with SSH enabled; these devices have notoriously poor security."
+    ]
+  },
+  {
+    "user": "mongodb",
+    "facts": [
+      "mongodb is the default user for MongoDB databases; historically famous for being left open to the public internet."
+    ]
+  },
+  {
+    "user": "victor",
+    "facts": [
+      "victor is the phonetic alphabet for 'V'; common name and often used in military or aviation related system setups."
+    ]
+  },
+  {
+    "user": "backend",
+    "facts": [
+      "backend is used for backend service communication; often hardcoded in API calls and accidentally exposed to the frontend."
+    ]
+  },
+  {
+    "user": "travis",
+    "facts": [
+      "travis refers to Travis CI; a user often created for continuous integration pipelines that has high-level deployment permissions."
+    ]
+  },
+  {
+    "user": "yarn",
+    "facts": [
+      "yarn refers to the package manager or 'Yet Another Resource Negotiator' in Hadoop; a system user for managing compute resources."
+    ]
+  },
+  {
+    "user": "user5",
+    "facts": [
+      "user5 is another iteration of the generic user; implies a system where accounts are bulk-created for temporary staff."
+    ]
+  },
+  {
+    "user": "media",
+    "facts": [
+      "media is the default user for media servers like Jellyfin or Plex; usually has access to large storage arrays."
+    ]
+  },
+  {
+    "user": "z",
+    "facts": [
+      "z is a single letter user; sometimes an alias for 'zimbra' or a lazy sysadmin's test account."
+    ]
+  },
+  {
+    "user": "web1",
+    "facts": [
+      "web1 is common in shared hosting environments to denote the first web server or customer slot."
+    ]
+  },
+  {
+    "user": "apps",
+    "facts": [
+      "apps is a generic container user for applications; often owns the `/opt/apps` directory on Linux servers."
+    ]
+  },
+  {
+    "user": "osboxes",
+    "facts": [
+      "osboxes is the default user on pre-built virtual machine images downloaded from OSBoxes.org."
+    ]
+  },
+  {
+    "user": "soporte",
+    "facts": [
+      "soporte is Spanish for 'Support'; primarily targeted by botnets sweeping IP ranges in Latin America and Spain."
+    ]
+  },
+  {
+    "user": "luis",
+    "facts": [
+      "luis is an extremely common Spanish/Portuguese name; part of the standard 'top global names' dictionary attack."
+    ]
+  },
+  {
+    "user": "user01",
+    "facts": [
+      "user01 is a systematic generic user; suggests a corporate environment with strict naming conventions but poor lifecycle management."
+    ]
+  },
+  {
+    "user": "kevin",
+    "facts": [
+      "kevin is a common name, but also famously associated with Kevin Mitnick; occasionally used by hackers as a nod to the legend."
+    ]
+  },
+  {
+    "user": "felix",
+    "facts": [
+      "felix is Latin for 'lucky', also a common name; but likely just a dictionary attack candidate."
+    ]
+  },
+  {
+    "user": "raza",
+    "facts": [
+      "raza is a common name in South Asia; indicates the botnet is using a localized wordlist for that region."
+    ]
+  },
+  {
+    "user": "syslog",
+    "facts": [
+      "syslog is the standard logging protocol user; it owns the logs, and attackers want it to cover their tracks."
+    ]
+  },
+  {
+    "user": "openvpn",
+    "facts": [
+      "openvpn is the default user for OpenVPN Access Server; compromising this grants full network access to the attacker."
+    ]
+  },
+  {
+    "user": "nikita",
+    "facts": [
+      "nikita is a common Slavic name; famously the name of the rogue agent in 'La Femme Nikita', adding a spy thriller vibe."
+    ]
+  },
+  {
+    "user": "stream",
+    "facts": [
+      "stream is a user often associated with audio/video streaming services like Shoutcast or Icecast."
+    ]
+  },
+  {
+    "user": "chen",
+    "facts": [
+      "chen is one of the most common surnames in the world; heavily targeted by bots focusing on Chinese infrastructure."
+    ]
+  },
+  {
+    "user": "worker",
+    "facts": [
+      "worker is a common process name in Nginx or Celery (Python); sometimes mistakenly created as a login user."
+    ]
+  },
+  {
+    "user": "adminuser",
+    "facts": [
+      "adminuser is redundant but common; created by people who think 'admin' is too obvious but 'adminuser' is somehow secure."
+    ]
+  },
+  {
+    "user": "packer",
+    "facts": [
+      "packer refers to HashiCorp Packer; this user builds automated machine images and often has root-level cloud credentials."
+    ]
+  },
+  {
+    "user": "student2",
+    "facts": [
+      "student2 is another academic leftover; universities often image thousands of machines with these accounts pre-baked."
+    ]
+  },
+  {
+    "user": "rock",
+    "facts": [
+      "rock could refer to 'Rockstor' NAS, but more likely a fragment of the famous 'RockYou' password list."
+    ]
+  },
+  {
+    "user": "sftpuser",
+    "facts": [
+      "sftpuser is a jailed user specifically for Secure FTP; attackers try to break out of the jail to gain full shell access."
+    ]
+  },
+  {
+    "user": "vnc",
+    "facts": [
+      "vnc stands for Virtual Network Computing; it is a graphical desktop sharing system often left open without strong encryption."
+    ]
+  },
+  {
+    "user": "gogs",
+    "facts": [
+      "gogs stands for 'Go Git Service'; a lightweight, self-hosted Git service that runs on low-power devices."
+    ]
+  },
+  {
+    "user": "aa",
+    "facts": [
+      "aa is lazy typing; the user just hit the first key on the left hand twice. Very low effort credential creation."
+    ]
+  },
+  {
+    "user": "composer",
+    "facts": [
+      "composer is the dependency manager for PHP; likely a system user required to run scripts on web servers."
+    ]
+  },
+  {
+    "user": "philip",
+    "facts": [
+      "philip is a classic name attack; bots often try 'philip', 'phillip', and 'philipp' to catch spelling variations."
+    ]
+  },
+  {
+    "user": "dmitry",
+    "facts": [
+      "dmitry is a common Russian name, also the name of a popular command-line information gathering tool ('DMitry')."
+    ]
+  },
+  {
+    "user": "tony",
+    "facts": [
+      "tony is a common name, but potentially checking for 'Tony Stark' references in geeky system administrator setups."
+    ]
+  },
+  {
+    "user": "prueba",
+    "facts": [
+      "prueba is Spanish for 'Test'; the Latin American equivalent of the 'test123' account."
+    ]
+  },
+  {
+    "user": "vpnuser",
+    "facts": [
+      "vpnuser is another generic VPN login; often given to external vendors who need temporary access."
+    ]
+  },
+  {
+    "user": "cecilia",
+    "facts": [
+      "cecilia is a standard name from dictionary lists; St. Cecilia is also the patron saint of musicians."
+    ]
+  },
+  {
+    "user": "kfserver",
+    "facts": [
+      "kfserver is the dedicated server user for 'Killing Floor 2', a popular co-op zombie shooter game."
+    ]
+  },
+  {
+    "user": "ftp1",
+    "facts": [
+      "ftp1 is a designated FTP slot; usually implies a shared hosting environment where 'ftp2', 'ftp3', etc., also exist."
+    ]
+  },
+  {
+    "user": "marina",
+    "facts": [
+      "marina is a common name, but also refers to dock/harbor management software in logistics systems."
+    ]
+  },
+  {
+    "user": "telnet",
+    "facts": [
+      "telnet is the ancient, unencrypted predecessor to SSH; if this account exists, the machine is a living dinosaur."
+    ]
+  },
+  {
+    "user": "admin01",
+    "facts": [
+      "admin01 is a slight variation on 'admin'; used by organizations that have 'admin01', 'admin02' for auditing different shifts."
+    ]
+  },
+  {
+    "user": "sispac",
+    "facts": [
+      "sispac likely refers to a specific legacy software suite or security system used in Portuguese/Brazilian markets."
+    ]
+  },
+  {
+    "user": "icinga",
+    "facts": [
+      "icinga is a popular open-source network monitoring tool (forked from Nagios); the user runs the monitoring daemons."
+    ]
+  },
+  {
+    "user": "lee",
+    "facts": [
+      "lee is an extremely common surname in Korea and China, and first name in English; highly efficient for bots to guess."
+    ]
+  },
+  {
+    "user": "solr",
+    "facts": [
+      "solr is the user for Apache Solr, the open-source search platform built on Lucene."
+    ]
+  },
+  {
+    "user": "flink",
+    "facts": [
+      "flink (Apache Flink) is a framework for heavy-duty stream processing of data. Targeted to hijack compute clusters."
+    ]
+  },
+  {
+    "user": "fred",
+    "facts": [
+      "fred is a generic placeholder name in computing examples (along with Barney), dating back to Flintstones references."
+    ]
+  },
+  {
+    "user": "sys",
+    "facts": [
+      "sys is short for 'System'; often owns system-level files and can sometimes execute commands with elevated privileges."
+    ]
+  },
+  {
+    "user": "update",
+    "facts": [
+      "update is a user often created solely to run automated update scripts; likely has write access to system binaries."
+    ]
+  },
+  {
+    "user": "zl",
+    "facts": [
+      "zl likely stands for initials or a short alias; obscure two-letter combinations are often brute-forced."
+    ]
+  },
+  {
+    "user": "emerson",
+    "facts": [
+      "emerson is a common name, but also a major manufacturer of industrial automation equipment (Emerson Electric)."
+    ]
+  },
+  {
+    "user": "webadmin",
+    "facts": [
+      "webadmin is the default superuser for many web hosting control panels like Plesk or Webmin."
+    ]
+  },
+  {
+    "user": "squadserver",
+    "facts": [
+      "squadserver is the dedicated server account for 'Squad', a tactical FPS game; these servers require significant CPU power."
+    ]
+  },
+  {
+    "user": "arma3server",
+    "facts": [
+      "arma3server is the server user for 'Arma 3'; known for being resource-intensive, making it a juicy target for cryptojacking."
+    ]
+  },
+  {
+    "user": "dm",
+    "facts": [
+      "dm could stand for 'Direct Message', 'Display Manager', or 'Dungeon Master' in geeky contexts; likely a service alias."
+    ]
+  },
+  {
+    "user": "jean",
+    "facts": [
+      "jean is a name that works for both males (French) and females (English); highly efficient for dictionary attacks."
+    ]
+  },
+  {
+    "user": "mahdi",
+    "facts": [
+      "mahdi is a common Arabic name; indicates targeting of servers in the Middle East or using region-specific wordlists."
+    ]
+  },
+  {
+    "user": "sss",
+    "facts": [
+      "sss is pattern typing (three s's) or potentially 'Surveillance Station Service' on Synology NAS devices."
+    ]
+  },
+  {
+    "user": "bpoint",
+    "facts": [
+      "bpoint refers to the BPoint Payment Gateway system, widely used by the Commonwealth Bank of Australia."
+    ]
+  },
+  {
+    "user": "yang",
+    "facts": [
+      "yang is a very common Chinese surname; also the name of a data modeling language used in network configuration protocols."
+    ]
+  },
+  {
+    "user": "gmodserver",
+    "facts": [
+      "gmodserver is the dedicated server user for Garry's Mod (GMod), a sandbox game that is a frequent target for DDoS attacks."
+    ]
+  },
+  {
+    "user": "x",
+    "facts": [
+      "x refers to the X Window System (GUI) user; though usually 'root' runs X, this is a legacy guess for graphical subsystems."
+    ]
+  },
+  {
+    "user": "sap",
+    "facts": [
+      "sap is the user for SAP, the massive German enterprise software; SAP instances hold the 'crown jewels' of corporate data."
+    ]
+  },
+  {
+    "user": "cassandra",
+    "facts": [
+      "cassandra (Apache Cassandra) is a NoSQL database named after the Greek prophet whose warnings were ignored."
+    ]
+  },
+  {
+    "user": "dasusr1",
+    "facts": [
+      "dasusr1 is the default user for the DB2 Administration Server (DAS); a classic IBM database account."
+    ]
+  },
+  {
+    "user": "colin",
+    "facts": [
+      "colin is a standard name attack; 'Colin' is often used in examples in British computing textbooks."
+    ]
+  },
+  {
+    "user": "sami",
+    "facts": [
+      "sami is a common name in Finland (home of Linux) and Arabic regions; broad demographic appeal for bots."
+    ]
+  },
+  {
+    "user": "butter",
+    "facts": [
+      "butter likely refers to Btrfs (B-tree file system), often pronounced 'Butter FS'; a filesystem admin user."
+    ]
+  },
+  {
+    "user": "pub",
+    "facts": [
+      "pub is short for 'Public'; usually a directory for public file sharing on FTP servers."
+    ]
+  },
+  {
+    "user": "cron",
+    "facts": [
+      "cron is the time-based job scheduler in Unix; a user named 'cron' might have permissions to execute scripts."
+    ]
+  },
+  {
+    "user": "xerox",
+    "facts": [
+      "xerox is the default user on many Xerox multifunction printers; printers are notoriously insecure entry points into networks."
+    ]
+  },
+  {
+    "user": "orangepi",
+    "facts": [
+      "orangepi is the default username for Orange Pi single-board computers; default password is usually 'orangepi'."
+    ]
+  },
+  {
+    "user": "abhishek",
+    "facts": [
+      "abhishek is a very common Indian first name; targeting the large number of developers and sysadmins in India."
+    ]
+  },
+  {
+    "user": "arthur",
+    "facts": [
+      "arthur is a classic name; maybe a 'Hitchhiker's Guide to the Galaxy' reference (Arthur Dent) in geeky setups?"
+    ]
+  },
+  {
+    "user": "miguel",
+    "facts": [
+      "miguel is a common Spanish/Portuguese name; part of the standard global name dictionary."
+    ]
+  },
+  {
+    "user": "zookeeper",
+    "facts": [
+      "zookeeper (Apache ZooKeeper) coordinates distributed services. Named because managing distributed systems is like running a zoo."
+    ]
+  },
+  {
+    "user": "tech",
+    "facts": [
+      "tech is short for 'Technician'; a generic account often used by IT support staff."
+    ]
+  },
+  {
+    "user": "fastuser",
+    "facts": [
+      "fastuser is possibly related to 'FastUserSwitching' on Windows or a speed-test related account."
+    ]
+  },
+  {
+    "user": "ps",
+    "facts": [
+      "ps stands for PostScript (printing), Photoshop, or PowerShell; two-letter acronyms are frequent bot targets."
+    ]
+  },
+  {
+    "user": "anders",
+    "facts": [
+      "anders is a common Scandinavian name; implies targeting of servers in Sweden, Norway, or Denmark."
+    ]
+  },
+  {
+    "user": "j",
+    "facts": [
+      "j is a single letter account; rare and prestigious. Hackers might want it for the 'cool factor' or testing short-username bugs."
+    ]
+  },
+  {
+    "user": "r",
+    "facts": [
+      "r refers to the R programming language for statistics; likely a user on a data science server."
+    ]
+  },
+  {
+    "user": "visitor",
+    "facts": [
+      "visitor is a guest account, usually with low privileges, but often with a blank or 'visitor' password."
+    ]
+  },
+  {
+    "user": "m1",
+    "facts": [
+      "m1 could refer to the Apple M1 chip architecture or a specific machine slot 'Machine 1'."
+    ]
+  },
+  {
+    "user": "globalflash",
+    "facts": [
+      "globalflash is likely a specific service account for a legacy Flash application or content delivery system."
+    ]
+  },
+  {
+    "user": "vftp",
+    "facts": [
+      "vftp stands for Visual FTP or Virtual FTP; a dedicated user for handling file transfers."
+    ]
+  },
+  {
+    "user": "superadmin",
+    "facts": [
+      "superadmin is used when 'admin' isn't enough; used in systems (like Ubiquiti) to denote the highest level of privilege."
+    ]
+  },
+  {
+    "user": "gl",
+    "facts": [
+      "gl is often short for 'GitLab' or 'Graphics Library'; a two-letter guess for service accounts."
+    ]
+  },
+  {
+    "user": "zimbra",
+    "facts": [
+      "zimbra is the user for the Zimbra Collaboration Suite (email/calendar); a high-value target for stealing corporate comms."
+    ]
+  },
+  {
+    "user": "ts3server1",
+    "facts": [
+      "ts3server1 is a variation of the TeamSpeak 3 server user; indicates a setup running multiple voice server instances."
+    ]
+  },
+  {
+    "user": "train",
+    "facts": [
+      "train is used for training environments; accounts like these are often shared by many trainees and rarely secured."
+    ]
+  },
+  {
+    "user": "meteor",
+    "facts": [
+      "meteor refers to Meteor.js, a full-stack JavaScript framework; targets node.js application servers."
+    ]
+  },
+  {
+    "user": "dockeradmin",
+    "facts": [
+      "dockeradmin is a specific admin user for Docker Swarm or older container orchestration tools."
+    ]
+  },
+  {
+    "user": "ts3serv",
+    "facts": [
+      "ts3serv is another abbreviation for the TeamSpeak 3 server user."
+    ]
+  },
+  {
+    "user": "jenns",
+    "facts": [
+      "jenns is a typo of 'jenna' or 'jennifer', or perhaps a specific company acronym."
+    ]
+  },
+  {
+    "user": "rajat",
+    "facts": [
+      "rajat is a common Indian name; part of region-specific wordlists."
+    ]
+  },
+  {
+    "user": "michele",
+    "facts": [
+      "michele is a name that spans Italian (male) and English/French (female) naming conventions."
+    ]
+  },
+  {
+    "user": "noc",
+    "facts": [
+      "noc (Network Operations Center) monitors the entire network infrastructure—a jackpot for hackers."
+    ]
+  },
+  {
+    "user": "openhab",
+    "facts": [
+      "openhab is the user for openHAB, a popular open-source home automation software; grants control over smart home devices."
+    ]
+  },
+  {
+    "user": "linuxadmin",
+    "facts": [
+      "linuxadmin is a generic and hopeful guess; assumes the sysadmin named their account literally after their job."
+    ]
+  },
+  {
+    "user": "mc3",
+    "facts": [
+      "mc3 might mean Minecraft Server #3? Or Midnight Commander? Likely a slot for a game server or tool."
+    ]
+  },
+  {
+    "user": "honda",
+    "facts": [
+      "honda is a brand name, but likely a default or test user in automotive supply chain software."
+    ]
+  },
+  {
+    "user": "fernando",
+    "facts": [
+      "fernando is a common Spanish/Portuguese name; targeted by bots focusing on Latin American infrastructure."
+    ]
+  },
+  {
+    "user": "userftp",
+    "facts": [
+      "userftp does what it says on the tin; a user created solely for FTP access."
+    ]
+  },
+  {
+    "user": "r00t",
+    "facts": [
+      "r00t is leet speak for 'root'; used by hackers who set up backdoors, or sysadmins trying to be edgy."
+    ]
+  },
+  {
+    "user": "fileshare",
+    "facts": [
+      "fileshare is a generic user for SMB/Samba shares; often has access to shared office documents."
+    ]
+  },
+  {
+    "user": "escaner",
+    "facts": [
+      "escaner is Spanish for 'Scanner'; used by network-connected scanners to save files to a server."
+    ]
+  },
+  {
+    "user": "spider",
+    "facts": [
+      "spider could refer to a web crawler/scraper bot user, or a 'Spider' database visualization tool."
+    ]
+  },
+  {
+    "user": "devmon",
+    "facts": [
+      "devmon stands for Device Monitor; a user for monitoring scripts, likely in a network management context."
+    ]
+  },
+  {
+    "user": "hdfs",
+    "facts": [
+      "hdfs (Hadoop Distributed File System) is the user that owns the data in a Big Data cluster."
+    ]
+  },
+  {
+    "user": "odoo18",
+    "facts": [
+      "odoo18 refers to Odoo version 18; bots target future/beta versions to catch early adopters who haven't secured their new installs."
+    ]
+  },
+  {
+    "user": "dmdba",
+    "facts": [
+      "dmdba is the Database Administrator for Dameng DB, a popular database system in China."
+    ]
+  },
+  {
+    "user": "testuser1",
+    "facts": [
+      "testuser1 is the most uninspired test account name imaginable; almost guaranteed to have 'password' as the password."
+    ]
+  },
+  {
+    "user": "usertest",
+    "facts": [
+      "usertest is a dyslexic version of 'testuser'; bots try every permutation."
+    ]
+  },
+  {
+    "user": "httpadmin",
+    "facts": [
+      "httpadmin is a legacy user for older web server administration interfaces."
+    ]
+  },
+  {
+    "user": "alfred",
+    "facts": [
+      "alfred... Batman's butler? Likely just a common name, or a reference to the Alfred productivity app for Mac."
+    ]
+  },
+  {
+    "user": "alvin",
+    "facts": [
+      "alvin... from the Chipmunks? Just a common name dictionary attack."
+    ]
+  },
+  {
+    "user": "hoge",
+    "facts": [
+      "hoge is a metasyntactic variable used in Japan (like 'foo' or 'bar'); indicates the bot or developer has Japanese origins."
+    ]
+  },
+  {
+    "user": "csserver",
+    "facts": [
+      "csserver stands for Counter-Strike Server; the dedicated user for hosting Counter-Strike matches."
+    ]
+  },
+  {
+    "user": "ftpuser2",
+    "facts": [
+      "ftpuser2 is the backup FTP user; because one insecure FTP account is never enough."
+    ]
+  },
+  {
+    "user": "gold",
+    "facts": [
+      "gold is often a tier of service (Gold, Silver, Bronze); used in hosting environments to manage premium customer slots."
+    ]
+  },
+  {
+    "user": "samp",
+    "facts": [
+      "samp stands for San Andreas Multiplayer; a wildly popular mod for GTA: San Andreas that requires dedicated servers."
+    ]
+  },
+  {
+    "user": "power",
+    "facts": [
+      "power could refer to PowerPC architecture or a power management user (UPS monitoring)."
+    ]
+  },
+  {
+    "user": "grafana",
+    "facts": [
+      "grafana is the user for Grafana, the dashboarding tool; compromising this allows attackers to fake metrics or delete dashboards."
+    ]
+  },
+  {
+    "user": "tuser",
+    "facts": [
+      "tuser is short for 'Test User' or 'Technical User'; saving keystrokes at the expense of security."
+    ]
+  },
+  {
+    "user": "lingan",
+    "facts": [
+      "lingan is likely a specific name or a transliteration; possibly from a specific leaked database."
+    ]
+  },
+  {
+    "user": "testftp",
+    "facts": [
+      "testftp is a temporary FTP account created to test connection speeds, then immediately forgotten about."
+    ]
+  },
+  {
+    "user": "neeraj",
+    "facts": [
+      "neeraj is a common Indian name; reflects the global nature of botnet targeting."
+    ]
+  },
+  {
+    "user": "mmx",
+    "facts": [
+      "mmx refers to Multimedia Extensions (Intel legacy) or a specific multimedia service account."
+    ]
+  },
+  {
+    "user": "archive",
+    "facts": [
+      "archive is a user for archival scripts; often has write access to backup storage locations."
+    ]
+  },
+  {
+    "user": "testsftp",
+    "facts": [
+      "testsftp is the secure version of 'testftp'; usually indicates a slightly more security-conscious admin who still forgot to delete the account."
+    ]
+  },
+  {
+    "user": "marge",
+    "facts": [
+      "marge... a Simpsons reference? Used in tutorial code alongside 'Homer', 'Bart', and 'Lisa'."
+    ]
+  },
+  {
+    "user": "sun",
+    "facts": [
+      "sun refers to Sun Microsystems (Solaris); legacy Unix systems still have deep roots in the internet."
+    ]
+  },
+  {
+    "user": "cups",
+    "facts": [
+      "cups (Common Unix Printing System) is a print server user that has historically had many security vulnerabilities."
+    ]
+  },
+  {
+    "user": "fivem",
+    "facts": [
+      "fivem is the dedicated user for FiveM, a modification framework for GTA V that allows custom multiplayer servers."
+    ]
+  },
+  {
+    "user": "vitor",
+    "facts": [
+      "vitor is the Portuguese form of Victor; common in Brazil and Portugal."
+    ]
+  },
+  {
+    "user": "ada",
+    "facts": [
+      "ada refers to Ada Lovelace, the first programmer; also the Ada programming language."
+    ]
+  },
+  {
+    "user": "mongo",
+    "facts": [
+      "mongo is short for MongoDB; often the default user for database processes."
+    ]
+  },
+  {
+    "user": "lucas",
+    "facts": [
+      "lucas is a common name globally; popularized by George Lucas? Just a standard dictionary entry."
+    ]
+  },
+  {
+    "user": "john",
+    "facts": [
+      "john is the most generic male name in English; 'John Doe' accounts are everywhere."
+    ]
+  },
+  {
+    "user": "student3",
+    "facts": [
+      "student3 is the third student in the lab; usually has a password like 'student3'."
+    ]
+  },
+  {
+    "user": "shan",
+    "facts": [
+      "shan is a common Chinese or South Asian name; part of regional targeting lists."
+    ]
+  },
+  {
+    "user": "contabil",
+    "facts": [
+      "contabil is Portuguese/Romanian for 'Accounting'; targeting the financial department's server."
+    ]
+  },
+  {
+    "user": "orange",
+    "facts": [
+      "orange could refer to Orange Pi, or the French telecom giant Orange."
+    ]
+  },
+  {
+    "user": "svnuser",
+    "facts": [
+      "svnuser stands for Subversion (SVN) user; SVN is a version control system that predates Git dominance."
+    ]
+  },
+  {
+    "user": "uucp",
+    "facts": [
+      "uucp (Unix-to-Unix Copy) is a protocol from 1976! This user still exists on modern Linux systems for legacy compatibility."
+    ]
+  },
+  {
+    "user": "angel",
+    "facts": [
+      "angel is a common name in Spanish (Angel) and English; also a reference to 'Angel' investors or startups?"
+    ]
+  },
+  {
+    "user": "nova",
+    "facts": [
+      "nova refers to OpenStack Nova; the compute controller in OpenStack clouds. A high-value target for cloud infrastructure."
+    ]
+  },
+  {
+    "user": "potok",
+    "facts": [
+      "potok is Russian for 'stream' or 'flow'; likely refers to a specific streaming software or workflow tool in Russia."
+    ]
+  },
+  {
+    "user": "root1",
+    "facts": [
+      "root1 is a clumsy attempt to be root; or a backup root account created by a paranoid admin."
+    ]
+  },
+  {
+    "user": "systemx",
+    "facts": [
+      "systemx sounds like a generic 'System X' placeholder; potentially from a specific tutorial or textbook."
+    ]
+  },
+  {
+    "user": "iliagermansela",
+    "facts": [
+      "iliagermansela is highly specific; likely a 'Patient Zero' username from a leaked credential database that bots are simply replaying."
+    ]
+  },
+  {
+    "user": "alisson",
+    "facts": [
+      "alisson is a variation of Allison; very common in Brazil."
+    ]
+  },
+  {
+    "user": "springboot",
+    "facts": [
+      "springboot is the user for Spring Boot applications (Java); often runs the executable jar files."
+    ]
+  },
+  {
+    "user": "systemd",
+    "facts": [
+      "systemd is the init system for Linux; a user named 'systemd' is likely a confusion attack to look like a legitimate system process."
+    ]
+  },
+  {
+    "user": "pydio",
+    "facts": [
+      "pydio stands for Put Your Data In Orbit; an open-source file sharing and sync platform similar to Dropbox."
+    ]
+  },
+  {
+    "user": "rsync",
+    "facts": [
+      "rsync (Remote Sync) is a utility for efficiently transferring files. The rsync user often has module-level access to file trees."
+    ]
+  },
+  {
+    "user": "sysop",
+    "facts": [
+      "sysop (System Operator) is a term from the Bulletin Board System (BBS) era of the 80s/90s, still used in some legacy IT shops."
+    ]
+  },
+  {
+    "user": "anderson",
+    "facts": [
+      "anderson... Neo from The Matrix? (Mr. Anderson). Also a very common surname."
+    ]
+  },
+  {
+    "user": "gmod",
+    "facts": [
+      "gmod is short for Garry's Mod; the server user for this physics sandbox game."
+    ]
+  },
+  {
+    "user": "intern",
+    "facts": [
+      "intern is the account given to the summer intern; notorious for having weak passwords and being forgotten when they leave."
+    ]
+  },
+  {
+    "user": "iptv",
+    "facts": [
+      "iptv (Internet Protocol Television) bots target these to hijack streams or use the boxes for DDoS attacks."
+    ]
+  },
+  {
+    "user": "kettle",
+    "facts": [
+      "kettle is the former name for Pentaho Data Integration; an ETL tool."
+    ]
+  },
+  {
+    "user": "one",
+    "facts": [
+      "one stands for OpenNebula (ONE); a cloud computing platform to manage heterogeneous data center infrastructure."
+    ]
+  },
+  {
+    "user": "zhou",
+    "facts": [
+      "zhou is an extremely common Chinese surname; targeted heavily by bots sweeping Asian IP ranges."
+    ]
+  },
+  {
+    "user": "Administrator",
+    "facts": [
+      "Administrator is the capitalized default admin account for Windows systems; Linux is case-sensitive, so this targets Windows servers specifically."
+    ]
+  },
+  {
+    "user": "apitest",
+    "facts": [
+      "apitest is an account created to test API endpoints; often given excessive permissions to 'just make it work'."
+    ]
+  },
+  {
+    "user": "bwadmin",
+    "facts": [
+      "bwadmin is the TIBCO BusinessWorks administrator; enterprise integration software used by large corporations."
+    ]
+  },
+  {
+    "user": "jobs",
+    "facts": [
+      "jobs... Steve Jobs? Or a user for managing background 'jobs' and cron tasks."
+    ]
+  },
+  {
+    "user": "ma",
+    "facts": [
+      "ma is short, two letters. Could be 'Marketing Admin', 'Mail Admin', or just a common surname."
+    ]
+  },
+  {
+    "user": "informix",
+    "facts": [
+      "informix is the IBM Informix database user; a legacy database famous for handling time-series data."
+    ]
+  },
+  {
+    "user": "ts2",
+    "facts": [
+      "ts2 stands for TeamSpeak 2; the predecessor to TeamSpeak 3. If this exists, the server is ancient."
+    ]
+  },
+  {
+    "user": "Guest",
+    "facts": [
+      "Guest is the standard Windows Guest account; usually disabled by default, but bots check it just in case."
+    ]
+  },
+  {
+    "user": "dockeruser",
+    "facts": [
+      "dockeruser is a generic user added to the 'docker' group to run containers without using root."
+    ]
+  },
+  {
+    "user": "michelle",
+    "facts": [
+      "michelle is a common name; standard dictionary attack entry."
+    ]
+  },
+  {
+    "user": "ray",
+    "facts": [
+      "ray refers to Ray Framework (Python) for distributed computing? Or just a name."
+    ]
+  },
+  {
+    "user": "mcserver",
+    "facts": [
+      "mcserver stands for Minecraft Server; the standard user created by many Minecraft server setup scripts."
+    ]
+  },
+  {
+    "user": "tian",
+    "facts": [
+      "tian is a common Chinese name (Sky/Heaven); part of regional wordlists."
+    ]
+  },
+  {
+    "user": "adriano",
+    "facts": [
+      "adriano is a common Italian/Portuguese name."
+    ]
+  },
+  {
+    "user": "auditor",
+    "facts": [
+      "auditor is an account created for external security auditors; paradoxically often left insecure after the audit is done."
+    ]
+  },
+  {
+    "user": "james",
+    "facts": [
+      "james is one of the most common English names; and 007 (James Bond)."
+    ]
+  },
+  {
+    "user": "wocloud",
+    "facts": [
+      "wocloud is China Unicom's cloud service brand 'Wo Cloud'; indicates targeting of Chinese cloud infrastructure."
+    ]
+  },
+  {
+    "user": "prueba1",
+    "facts": [
+      "prueba1 is Spanish for 'Test 1'; seeing a pattern here with 'test' accounts?"
+    ]
+  },
+  {
+    "user": "mary",
+    "facts": [
+      "mary is historically one of the most common female names in English; a staple of every password cracker's dictionary."
+    ]
+  },
+  {
+    "user": "ari",
+    "facts": [
+      "ari is a common name (Hebrew/Nordic) or Asterisk REST Interface (VoIP)."
+    ]
+  },
+  {
+    "user": "security",
+    "facts": [
+      "security is an account meant for the security team; ironically often targeted because it has high privileges."
+    ]
+  },
+  {
+    "user": "useradmin",
+    "facts": [
+      "useradmin is a role-based name; used in systems where one admin manages users specifically."
+    ]
+  },
+  {
+    "user": "AdminGPON",
+    "facts": [
+      "AdminGPON is specific to GPON (Gigabit Passive Optical Network) fiber routers; usually the default login for fiber modems."
+    ]
+  },
+  {
+    "user": "abel",
+    "facts": [
+      "abel is a biblical name; first murder victim? Dark humor for a bot target."
+    ]
+  },
+  {
+    "user": "terminal",
+    "facts": [
+      "terminal refers to a terminal access user; often found on point-of-sale (POS) systems."
+    ]
+  },
+  {
+    "user": "pacs",
+    "facts": [
+      "pacs (Picture Archiving and Communication System) is the global standard for storing medical imaging (X-rays, MRIs)."
+    ]
+  },
+  {
+    "user": "ttf",
+    "facts": [
+      "ttf... TrueType Font? Or a specific technical fund/framework acronym."
+    ]
+  },
+  {
+    "user": "menu",
+    "facts": [
+      "menu is a user that, when logged in, presents a text-based menu instead of a shell; common in legacy banking/telco systems."
+    ]
+  },
+  {
+    "user": "haoyu",
+    "facts": [
+      "haoyu is a specific Chinese name; possibly associated with a known threat actor or a specific leaked database."
+    ]
+  },
+  {
+    "user": "sabnzbd",
+    "facts": [
+      "sabnzbd is the daemon user for SABnzbd, a legendary newsreader for downloading binary files from Usenet."
+    ]
+  },
+  {
+    "user": "webapps",
+    "facts": [
+      "webapps is a directory/user for hosting web applications; common in Tomcat or Java environments."
+    ]
+  },
+  {
+    "user": "teamcity",
+    "facts": [
+      "teamcity (JetBrains TeamCity) is a CI/CD server. Compromising this allows attackers to inject malware into software builds."
+    ]
+  },
+  {
+    "user": "cyber",
+    "facts": [
+      "cyber is short for CyberPanel (web hosting control panel) or just a buzzword user."
+    ]
+  },
+  {
+    "user": "ocs",
+    "facts": [
+      "ocs stands for OCS Inventory; software for inventorying IT assets. Access here reveals details about every machine on the network."
+    ]
+  },
+  {
+    "user": "appluat",
+    "facts": [
+      "appluat stands for User Acceptance Testing (UAT) for an Apple-related app? Or 'Appl' (Application) UAT."
+    ]
+  },
+  {
+    "user": "bounce",
+    "facts": [
+      "bounce is used in email servers to handle bounced messages; usually an unprivileged automated account."
+    ]
+  },
+  {
+    "user": "ekp",
+    "facts": [
+      "ekp might stand for Enterprise Knowledge Portal? Acronym for a specific enterprise software suite."
+    ]
+  },
+  {
+    "user": "tools",
+    "facts": [
+      "tools is a shared account for accessing utility scripts and tools on a server."
+    ]
+  },
+  {
+    "user": "ahmad",
+    "facts": [
+      "ahmad is one of the most common names in the world; standard dictionary attack."
+    ]
+  },
+  {
+    "user": "esadmin",
+    "facts": [
+      "esadmin stands for Elasticsearch Admin; allows control over the Elasticsearch cluster/database."
+    ]
+  },
+  {
+    "user": "nxautomation",
+    "facts": [
+      "nxautomation is the user for NX Witness or similar automation software; likely vendor-specific."
+    ]
+  },
+  {
+    "user": "ec2",
+    "facts": [
+      "ec2 refers to Amazon EC2; bots try this hoping a user created a local account matching the cloud service name."
+    ]
+  },
+  {
+    "user": "emqx",
+    "facts": [
+      "emqx is the user for the EMQX MQTT broker; connects millions of IoT devices. A target for hijacking IoT networks."
+    ]
+  },
+  {
+    "user": "vscode",
+    "facts": [
+      "vscode is used by VS Code Remote Server; developers use this to code on remote machines."
+    ]
+  },
+  {
+    "user": "fastmail",
+    "facts": [
+      "fastmail is a specific email service brand; checking for migrated accounts."
+    ]
+  },
+  {
+    "user": "omsagent",
+    "facts": [
+      "omsagent (Operations Management Suite Agent) is Microsoft's monitoring agent for Linux. It collects logs and metrics."
+    ]
+  },
+  {
+    "user": "emps",
+    "facts": [
+      "emps is potentially 'Employees' or a specific payroll system acronym."
+    ]
+  },
+  {
+    "user": "x2goprint",
+    "facts": [
+      "x2goprint is part of X2Go, a remote desktop software for Linux; this user handles remote printing tasks."
+    ]
+  },
+  {
+    "user": "main",
+    "facts": [
+      "main is the 'main' user; generic, simple, and often used as a default in casual setups."
+    ]
+  },
+  {
+    "user": "noama",
+    "facts": [
+      "noama is likely a name (Noa Ma?) or a specific obscure service account."
+    ]
+  },
+  {
+    "user": "gke-a02662ac27ad32de2130",
+    "facts": [
+      "gke-a02662ac27ad32de2130 is a Google Kubernetes Engine (GKE) node or service account name. This is a very specific bot searching for a misconfigured K8s cluster."
+    ]
+  },
+  {
+    "user": "brute",
+    "facts": [
+      "brute is likely a 'brute force' testing account left behind by a security scan."
+    ]
+  },
+  {
+    "user": "dogeman",
+    "facts": [
+      "dogeman... Doge? A crypto-miner reference? Likely a custom username that got into a wordlist."
+    ]
+  },
+  {
+    "user": "kipt",
+    "facts": [
+      "kipt is possibly KIPT (Kharkiv Institute of Physics and Technology) or a typo of 'kopt'."
+    ]
+  },
+  {
+    "user": "linuxuser",
+    "facts": [
+      "linuxuser is another generic default found in beginner Linux tutorials."
+    ]
+  },
+  {
+    "user": "spamfilter",
+    "facts": [
+      "spamfilter is the user running SpamAssassin or similar filters; access allows an attacker to bypass spam checks."
+    ]
+  },
+  {
+    "user": "jiffyexp-usr",
+    "facts": [
+      "jiffyexp-usr is very specific; likely related to Jiffy Expres or a logistics software integration user."
+    ]
+  },
+  {
+    "user": "amandabackup",
+    "facts": [
+      "amandabackup is the default user for AMANDA (Advanced Maryland Automatic Network Disk Archiver), an open-source backup tool."
+    ]
+  },
+  {
+    "user": "selvananthi",
+    "facts": [
+      "selvananthi is a specific personal name; almost certainly from a leaked database of credentials."
+    ]
+  },
+  {
+    "user": "mitmproxyuser",
+    "facts": [
+      "mitmproxyuser is used by mitmproxy, a tool for intercepting HTTPS traffic. If found, someone is likely analyzing your traffic."
+    ]
+  },
+  {
+    "user": "abc",
+    "facts": [
+      "abc is as easy as 1-2-3; extremely low-effort username creation."
+    ]
+  },
+  {
+    "user": "reception",
+    "facts": [
+      "reception is the computer at the front desk; often shared by multiple staff members and notoriously insecure."
+    ]
+  },
+  {
+    "user": "aaron",
+    "facts": [
+      "aaron is the first name alphabetically in many English name lists; always gets hit first in sequential attacks."
+    ]
+  },
+  {
+    "user": "viewer",
+    "facts": [
+      "viewer is a read-only account for viewing documents or camera feeds; often has no password because 'it can't change anything'."
+    ]
+  },
+  {
+    "user": "jacky",
+    "facts": [
+      "jacky is a common name nickname; frequent dictionary target."
+    ]
+  },
+  {
+    "user": "brainy",
+    "facts": [
+      "brainy... Brainy Smurf? Or a specific admin who thinks highly of themselves."
+    ]
+  },
+  {
+    "user": "bitnami",
+    "facts": [
+      "bitnami is the default user for Bitnami application stacks (WordPress, Drupal, etc.) on cloud marketplaces."
+    ]
+  },
+  {
+    "user": "dany",
+    "facts": [
+      "dany is short for Daniel/Danielle; or Daenerys Targaryen (Game of Thrones) for geeky admins."
+    ]
+  },
+  {
+    "user": "django",
+    "facts": [
+      "django is the Python web framework; developers often name the user after the framework they are using."
+    ]
+  },
+  {
+    "user": "gituser",
+    "facts": [
+      "gituser is a generic user for Git operations; often used in automated deployment scripts."
+    ]
+  },
+  {
+    "user": "idempiere",
+    "facts": [
+      "idempiere is the user for iDempiere, an open-source Business Suite (ERP/CRM); holds all the business data."
+    ]
+  },
+  {
+    "user": "jboss",
+    "facts": [
+      "jboss is the user for JBoss Application Server (now WildFly); a classic target for Java deserialization exploits."
+    ]
+  },
+  {
+    "user": "olga",
+    "facts": [
+      "olga is a common Slavic name; frequently appears in Russian/Eastern European password leaks."
+    ]
+  },
+  {
+    "user": "jenny",
+    "facts": [
+      "jenny is a generic name; or a reference to the song '867-5309/Jenny'? (Bots don't sing, but admins do)."
+    ]
+  },
+  {
+    "user": "serveur",
+    "facts": [
+      "serveur is French for 'Server'; targeted by bots hitting French-language infrastructure."
+    ]
+  }
+]

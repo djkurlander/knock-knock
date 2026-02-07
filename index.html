@@ -1084,27 +1084,27 @@
             </div>
             <div class="info-item" style="margin-bottom:12px;">
                 <div><span style="color:var(--ui-label)">country:</span> <span style="color:var(--neon-green)">${d.country}${countryRank}</span></div>
-                <div><span style="color:var(--ui-label)">count:</span> <span style="color:var(--neon-green)">${d.country_hits || 0}</span></div>
+                <div><span style="color:var(--ui-label)">count:</span> <span style="color:var(--neon-green)">${(d.country_hits || 0).toLocaleString()}</span></div>
                 <div><span style="color:var(--ui-label)">last seen:</span> <span style="color:var(--neon-green)">${formatTimeSince(d.country_last)}</span></div>
             </div>
             <div class="info-item" style="margin-bottom:12px;">
                 <div><span style="color:var(--ui-label)">user:</span> <span style="color:var(--neon-green)">${d.user}${userRank}</span></div>
-                <div><span style="color:var(--ui-label)">count:</span> <span style="color:var(--neon-green)">${d.user_hits || 0}</span></div>
+                <div><span style="color:var(--ui-label)">count:</span> <span style="color:var(--neon-green)">${(d.user_hits || 0).toLocaleString()}</span></div>
                 <div><span style="color:var(--ui-label)">last seen:</span> <span style="color:var(--neon-green)">${formatTimeSince(d.user_last)}</span></div>
             </div>
             <div class="info-item" style="margin-bottom:12px;">
                 <div><span style="color:var(--ui-label)">password:</span> <span style="color:var(--neon-green)">${d.pass}${passRank}</span></div>
-                <div><span style="color:var(--ui-label)">count:</span> <span style="color:var(--neon-green)">${d.pass_hits || 0}</span></div>
+                <div><span style="color:var(--ui-label)">count:</span> <span style="color:var(--neon-green)">${(d.pass_hits || 0).toLocaleString()}</span></div>
                 <div><span style="color:var(--ui-label)">last seen:</span> <span style="color:var(--neon-green)">${formatTimeSince(d.pass_last)}</span></div>
             </div>
             <div class="info-item" style="margin-bottom:12px;">
                 <div><span style="color:var(--ui-label)">ISP:</span> <span style="color:var(--neon-green)">${d.isp}${ispRank}</span></div>
-                <div><span style="color:var(--ui-label)">count:</span> <span style="color:var(--neon-green)">${d.isp_hits || 0}</span></div>
+                <div><span style="color:var(--ui-label)">count:</span> <span style="color:var(--neon-green)">${(d.isp_hits || 0).toLocaleString()}</span></div>
                 <div><span style="color:var(--ui-label)">last seen:</span> <span style="color:var(--neon-green)">${formatTimeSince(d.isp_last)}</span></div>
             </div>
             <div class="info-item" style="margin-bottom:12px;">
                 <div><span style="color:var(--ui-label)">IP:</span> <span style="color:var(--neon-green)">${formatIP(d.ip)}${ipRank}</span></div>
-                <div><span style="color:var(--ui-label)">count:</span> <span style="color:var(--neon-green)">${d.ip_hits || 0}</span></div>
+                <div><span style="color:var(--ui-label)">count:</span> <span style="color:var(--neon-green)">${(d.ip_hits || 0).toLocaleString()}</span></div>
                 <div><span style="color:var(--ui-label)">last seen:</span> <span style="color:var(--neon-green)">${formatTimeSince(d.ip_last)}</span></div>
             </div>
         `;

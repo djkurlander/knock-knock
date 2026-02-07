@@ -25,7 +25,7 @@ def reset_all():
             print(f"   [!] Error deleting {DB_PATH}: {e}")
     try:
         r = redis.Redis(host='localhost', port=6379, db=0, decode_responses=True)
-        keys_to_clear = ["knock:total_global", "knock:wall_of_shame", "knock:ip_hits"]
+        keys_to_clear = ["knock:total_global", "knock:wall_of_shame", "knock:ip_hits", "knock:recent"]
         for key in keys_to_clear:
             r.delete(key)
         print("   [+] Cleared Redis keys")
@@ -82,14 +82,15 @@ def heartbeat_worker():
             print(f"❌ Heartbeat Error: {e}")
         time.sleep(60)
 
-def log_to_maximalist_db(data):
+def log_to_maximalist_db(data, save_knocks=True):
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
     try:
-        cur.execute("""INSERT INTO knocks (ip_address, iso_code, city, region, country, isp, asn, username, password)
-                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                    (data['ip'], data['iso'], data['city'], data.get('region'), data['country'], data['isp'], data.get('asn'), data['user'], data['pass']))
-        now = datetime.now()
+        if save_knocks:
+            cur.execute("""INSERT INTO knocks (ip_address, iso_code, city, region, country, isp, asn, username, password)
+                           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                        (data['ip'], data['iso'], data['city'], data.get('region'), data['country'], data['isp'], data.get('asn'), data['user'], data['pass']))
+        now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         cur.execute("INSERT INTO user_intel VALUES (?, 1, ?) ON CONFLICT(username) DO UPDATE SET hits=hits+1, last_seen=?", (data['user'], now, now))
         cur.execute("INSERT INTO pass_intel VALUES (?, 1, ?) ON CONFLICT(password) DO UPDATE SET hits=hits+1, last_seen=?", (data['pass'], now, now))
         cur.execute("INSERT INTO country_intel VALUES (?, ?, 1, ?) ON CONFLICT(iso_code) DO UPDATE SET hits=hits+1, last_seen=?", (data['iso'], data['country'], now, now))
@@ -150,7 +151,7 @@ def get_geo_maximal(ip, city_reader, asn_reader):
         pass
     return geo
 
-def monitor():
+def monitor(save_knocks=False):
     init_db()
     threading.Thread(target=heartbeat_worker, daemon=True).start()
     r = redis.Redis(host='localhost', port=6379, db=0, decode_responses=True)
@@ -175,7 +176,9 @@ def monitor():
                 "lat": geo['lat'], "lng": geo['lng']
             }
             package.update(get_intel_stats_before_update(package))
-            log_to_maximalist_db(package)
+            log_to_maximalist_db(package, save_knocks=save_knocks)
+            r.lpush("knock:recent", json.dumps(package))
+            r.ltrim("knock:recent", 0, 99)
             shame_key = f"{geo['iso']}:{geo['country']}"
             r.zincrby("knock:wall_of_shame", 1, shame_key)
             r.incr("knock:total_global")
@@ -189,6 +192,7 @@ def monitor():
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Knock-Knock Monitor")
     parser.add_argument("--reset-all", action="store_true", help="Delete DB and clear Redis")
+    parser.add_argument("--save-knocks", action="store_true", help="Save individual knocks to SQLite (off by default)")
     args = parser.parse_args()
     if args.reset_all: reset_all()
-    monitor()
+    monitor(save_knocks=args.save_knocks)

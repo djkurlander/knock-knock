@@ -24,7 +24,7 @@ if [ "$RESET" = true ]; then
         echo "   [+] Deleted $DB_PATH"
     fi
     # Clear Redis keys for the dashboard
-    redis-cli del knock:total_global knock:wall_of_shame knock:ip_hits > /dev/null
+    redis-cli del knock:total_global knock:wall_of_shame knock:ip_hits knock:recent > /dev/null
     echo "   [+] Cleared Redis keys from memory"
 fi
 

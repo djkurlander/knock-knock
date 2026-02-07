@@ -172,17 +172,8 @@ class ConnectionManager:
 
     async def get_recent_knocks(self, limit=10):
         try:
-            conn = sqlite3.connect(DB_PATH)
-            conn.row_factory = sqlite3.Row
-            cur = conn.cursor()
-            cur.execute("""
-                SELECT ip_address as ip, username as user, password as pass,
-                       city, region, country, iso_code as iso, isp
-                FROM knocks ORDER BY id DESC LIMIT ?
-            """, (limit,))
-            rows = cur.fetchall()
-            conn.close()
-            return [dict(row) for row in rows]
+            raw = await r.lrange("knock:recent", 0, limit - 1)
+            return [json.loads(item) for item in raw]
         except Exception as e:
             print(f"Error fetching history: {e}")
             return []

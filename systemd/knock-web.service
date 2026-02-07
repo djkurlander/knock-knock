@@ -1,0 +1,23 @@
+[Unit]
+Description=Knock-Knock FastAPI Web Server
+After=network.target redis-server.service knock-monitor.service
+
+[Service]
+User=root
+WorkingDirectory=/root/knock-knock
+# Using uvicorn standard from your venv
+ExecStart=/root/knock-knock/.venv/bin/python3 -m uvicorn main:app \
+    --host 0.0.0.0 \
+    --port 443 \
+    --ssl-keyfile /root/knock-knock/certs/key.pem \
+    --ssl-certfile /root/knock-knock/certs/cert.pem \
+    --proxy-headers \
+    --forwarded-allow-ips='*' \
+    --workers 2 \
+    --timeout-keep-alive 30 \
+    --log-level warning
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

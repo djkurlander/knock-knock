@@ -1,0 +1,16 @@
+[Unit]
+Description=SSH Honeypot Decoy Service
+After=network.target
+
+[Service]
+# Points to your project directory
+WorkingDirectory=/root/knock-knock
+# Use the full path to your venv python
+ExecStart=/root/knock-knock/.venv/bin/python honeypot.py
+Restart=always
+# Running as root is required to bind to port 22 directly
+User=root
+Group=root
+
+[Install]
+WantedBy=multi-user.target

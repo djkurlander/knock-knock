@@ -974,7 +974,7 @@
 
     const fillClasses = { loc: 'loc-fill', pass: 'password-fill', prov: 'provider-fill', user: 'user-fill', ip: 'ip-fill' };
 
-    function incrementAndSort(prefix, id) {
+    function incrementAndSort(prefix, id, displayName) {
         ['d-', 'm-'].forEach(layout => {
             const container = document.getElementById(layout + prefix);
             if (!container) return;
@@ -983,13 +983,16 @@
             let newCount;
 
             if (!row) {
-                let label = (prefix === 'ip') ? formatIP(id) : id;
+                let label = id;
+                if (prefix === 'loc') label = `${getFlag(id)} ${displayName || id}`;
+                else if (prefix === 'ip') label = formatIP(id);
                 row = document.createElement('div');
                 row.className = 'bar-row';
                 row.setAttribute('data-id', uniqueId);
                 row.setAttribute('data-count', 1);
                 row.innerHTML = `<div class="bar-label"><span>${label}</span><span style="color:#ffcc00">1</span></div><div class="bar-bg"><div class="bar-fill ${fillClasses[prefix] || ''}" style="width: 0%"></div></div>`;
                 container.appendChild(row);
+                if (prefix === 'loc') twemoji.parse(row);
                 newCount = 1;
             } else {
                 const countSpan = row.querySelector('span:last-child');
@@ -1224,7 +1227,7 @@
                 renderKnock(d, true);
                 ['d-total', 'm-total'].forEach(id => document.getElementById(id).innerText = d.total_global.toLocaleString());
                 ['d-kpm', 'm-kpm'].forEach(id => document.getElementById(id).innerText = d.kpm);
-                incrementAndSort('loc', d.iso);
+                incrementAndSort('loc', d.iso, d.country);
                 incrementAndSort('pass', d.pass);
                 incrementAndSort('prov', d.isp);
                 incrementAndSort('user', d.user);

@@ -77,11 +77,13 @@ rm server.key.pub
 chmod 600 server.key
 ```
 
-### SSL Certificates
+### SSL Certificates (Optional)
 
-The web dashboard works over HTTP by default. To enable HTTPS, you'll need SSL certificates:
+The web dashboard runs over HTTP by default. Skip this section if you don't need HTTPS.
 
-**Self-Signed (testing):**
+If you want HTTPS, place your certificate and key at `certs/key.pem` and `certs/cert.pem`. Any certificate provider works — just copy the files into place. Two common options:
+
+**Self-Signed (testing/LAN):**
 ```bash
 mkdir -p /root/knock-knock/certs
 openssl req -x509 -newkey rsa:4096 -nodes \
@@ -92,7 +94,7 @@ openssl req -x509 -newkey rsa:4096 -nodes \
 chmod 600 /root/knock-knock/certs/*.pem
 ```
 
-**Let's Encrypt (production):**
+**Let's Encrypt (free, auto-renewing):**
 ```bash
 apt install -y certbot   # or: dnf install -y certbot
 certbot certonly --standalone -d your-domain.com

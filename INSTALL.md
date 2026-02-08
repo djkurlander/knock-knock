@@ -109,8 +109,14 @@ systemctl enable certbot.timer
 
 ## Option 1: Docker (Simplest)
 
-Requires Docker and Docker Compose. Complete the [Prerequisites](#prerequisites) above first.
+Complete the [Prerequisites](#prerequisites) above first.
 
+**Install Docker (skip if already installed):**
+```bash
+curl -fsSL https://get.docker.com | sh
+```
+
+Then clone the repo:
 ```bash
 cd /root
 git clone https://github.com/YOUR_USERNAME/knock-knock.git

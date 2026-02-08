@@ -972,18 +972,31 @@
         });
     }
 
+    const fillClasses = { pass: 'password-fill', prov: 'provider-fill', user: 'user-fill', ip: 'ip-fill', shame: 'shame-fill' };
+
     function incrementAndSort(prefix, id) {
         ['d-', 'm-'].forEach(layout => {
             const container = document.getElementById(layout + prefix);
             if (!container) return;
             const uniqueId = `${prefix}-${id}`;
-            const row = container.querySelector(`.bar-row[data-id="${CSS.escape(uniqueId)}"]`);
-            if (!row) return;
+            let row = container.querySelector(`.bar-row[data-id="${CSS.escape(uniqueId)}"]`);
+            let newCount;
 
-            const countSpan = row.querySelector('span:last-child');
-            let newCount = (parseInt(countSpan.innerText.replace(/\D/g, '')) || 0) + 1;
-            countSpan.innerText = newCount.toLocaleString();
-            row.setAttribute('data-count', newCount);
+            if (!row) {
+                let label = (prefix === 'ip') ? formatIP(id) : id;
+                row = document.createElement('div');
+                row.className = 'bar-row';
+                row.setAttribute('data-id', uniqueId);
+                row.setAttribute('data-count', 1);
+                row.innerHTML = `<div class="bar-label"><span>${label}</span><span style="color:#ffcc00">1</span></div><div class="bar-bg"><div class="bar-fill ${fillClasses[prefix] || ''}" style="width: 0%"></div></div>`;
+                container.appendChild(row);
+                newCount = 1;
+            } else {
+                const countSpan = row.querySelector('span:last-child');
+                newCount = (parseInt(countSpan.innerText.replace(/\D/g, '')) || 0) + 1;
+                countSpan.innerText = newCount.toLocaleString();
+                row.setAttribute('data-count', newCount);
+            }
 
             if (row.highlightAnimation) row.highlightAnimation.cancel();
             row.highlightAnimation = row.animate([

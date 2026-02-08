@@ -102,16 +102,6 @@ class GlobalStatsCache:
             # Refresh every 60 seconds
             await asyncio.sleep(60)
 
-    async def refresh_if_empty(self):
-        """One-shot refresh when cache has no data (e.g. after reset)."""
-        if not self.top_users and not self.top_passwords:
-            loop = asyncio.get_event_loop()
-            self.top_passwords = await loop.run_in_executor(None, self._get_top_stats, "password")
-            self.top_providers = await loop.run_in_executor(None, self._get_top_stats, "isp")
-            self.top_users = await loop.run_in_executor(None, self._get_top_stats, "username")
-            self.top_ips = await loop.run_in_executor(None, self._get_top_stats, "ip")
-            self.last_updated = datetime.now().strftime("%H:%M:%S")
-
     def _get_top_stats(self, stat_type):
         """Synchronous helper for the executor - uses indexed intel tables."""
         conn = sqlite3.connect(DB_PATH)
@@ -201,8 +191,6 @@ class ConnectionManager:
         cur.execute("SELECT iso_code as iso, country, hits as count FROM country_intel ORDER BY hits DESC")
         shame_list = [dict(row) for row in cur.fetchall()]
         conn.close()
-
-        await stats_cache.refresh_if_empty()
 
         return {
             "shame": shame_list,

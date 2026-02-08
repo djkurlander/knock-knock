@@ -13,7 +13,7 @@ from datetime import datetime
 # --- Configuration ---
 GEOIP_CITY_PATH = '/usr/share/GeoIP/GeoLite2-City.mmdb'
 GEOIP_ASN_PATH = '/usr/share/GeoIP/GeoLite2-ASN.mmdb' 
-DB_PATH = os.environ.get('DB_DIR', '.') + '/knock_knock.db'
+DB_PATH = os.environ.get('DB_DIR', 'data') + '/knock_knock.db'
 
 def reset_all():
     """Wipes the SQLite database and clears relevant Redis keys."""

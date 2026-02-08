@@ -6,7 +6,7 @@ import logging
 import os
 import time
 
-BLOCKLIST_FILE = os.environ.get('DB_DIR', '.') + '/blocklist.txt'
+BLOCKLIST_FILE = os.environ.get('DB_DIR', 'data') + '/blocklist.txt'
 BLOCKLIST_RELOAD_INTERVAL = 60  # seconds
 
 _blocklist_cache = set()

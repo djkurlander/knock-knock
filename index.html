@@ -578,7 +578,7 @@
         g.controls().autoRotate = false;
         g.pointOfView({ lat: 0, lng: 0, altitude: 1.4 });
         // Delay pause until texture has loaded and rendered
-        setTimeout(() => g.pauseAnimation(), 1000);
+        setTimeout(() => g.pauseAnimation(), 5000);
 
         // Resume on user interaction, pause when done
         g.controls().addEventListener('start', () => {
@@ -737,7 +737,7 @@
                 }
                 if (lastLat !== null) paneGlobeDesktop.pointOfView({ lat: lastLat, lng: lastLng, altitude: 1.8 });
                 // Delay pause to allow initial render at full size
-                setTimeout(() => paneGlobeDesktop.pauseAnimation(), 1000);
+                setTimeout(() => paneGlobeDesktop.pauseAnimation(), 5000);
             }
 
             if (mobilePane && window.innerWidth <= 800) {
@@ -767,7 +767,7 @@
                 }
                 if (lastLat !== null) paneGlobeMobile.pointOfView({ lat: lastLat, lng: lastLng, altitude: 1.8 });
                 // Delay pause to allow initial render at full size
-                setTimeout(() => paneGlobeMobile.pauseAnimation(), 1000);
+                setTimeout(() => paneGlobeMobile.pauseAnimation(), 5000);
             }
 
             // Pause/resume pane globes based on visibility

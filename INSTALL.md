@@ -121,7 +121,7 @@ curl -fsSL https://get.docker.com | sh
 Then clone the repo:
 ```bash
 cd /root
-git clone https://github.com/YOUR_USERNAME/knock-knock.git
+git clone https://github.com/djkurlander/knock-knock.git
 cd knock-knock
 ```
 
@@ -173,7 +173,7 @@ source ~/.bashrc
 
 ```bash
 cd /root
-git clone https://github.com/YOUR_USERNAME/knock-knock.git
+git clone https://github.com/djkurlander/knock-knock.git
 cd knock-knock
 
 uv venv
@@ -241,7 +241,7 @@ source ~/.bashrc
 
 ```bash
 cd /root
-git clone https://github.com/YOUR_USERNAME/knock-knock.git
+git clone https://github.com/djkurlander/knock-knock.git
 cd knock-knock
 
 uv venv

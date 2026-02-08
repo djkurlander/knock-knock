@@ -128,9 +128,6 @@ cd knock-knock
 Make sure `server.key` and GeoIP databases are in place (see Prerequisites), then:
 
 ```bash
-# Create the data directory
-mkdir -p data
-
 # Build and start
 docker compose up -d
 
@@ -178,7 +175,6 @@ source ~/.bashrc
 cd /root
 git clone https://github.com/YOUR_USERNAME/knock-knock.git
 cd knock-knock
-mkdir -p data
 
 uv venv
 source .venv/bin/activate
@@ -247,7 +243,6 @@ source ~/.bashrc
 cd /root
 git clone https://github.com/YOUR_USERNAME/knock-knock.git
 cd knock-knock
-mkdir -p data
 
 uv venv
 source .venv/bin/activate

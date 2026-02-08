@@ -4,7 +4,8 @@ server.key
 server.key.pub
 
 # Data and logs
-knock_knock.db
+data/*
+!data/.gitkeep
 *.log
 
 # Python
@@ -12,4 +13,3 @@ __pycache__/
 .venv/
 *.pyc
 .env
-visitors.db

@@ -1,0 +1,52 @@
+services:
+  redis:
+    image: redis:7-alpine
+    volumes:
+      - redis-data:/data
+    restart: unless-stopped
+
+  honeypot-monitor:
+    build: .
+    command: bash -c "python -u honeypot.py 2>&1 | python -u monitor.py --stdin"
+    environment:
+      - REDIS_HOST=redis
+      - DB_DIR=data
+    ports:
+      - "22:22"
+    volumes:
+      - ./data:/app/data
+      - /usr/share/GeoIP:/usr/share/GeoIP:ro
+      - ./blocklist.txt:/app/blocklist.txt
+    depends_on:
+      - redis
+    restart: unless-stopped
+
+  web:
+    build: .
+    command: >
+      sh -c "
+      if [ \"$$ENABLE_SSL\" = 'true' ]; then
+        exec python -m uvicorn main:app --host 0.0.0.0 --port 443
+          --ssl-keyfile /app/certs/key.pem --ssl-certfile /app/certs/cert.pem
+          --proxy-headers --forwarded-allow-ips='*' --workers 2;
+      else
+        exec python -m uvicorn main:app --host 0.0.0.0 --port 80
+          --proxy-headers --forwarded-allow-ips='*' --workers 2;
+      fi"
+    environment:
+      - REDIS_HOST=redis
+      - DB_DIR=data
+      # - ENABLE_SSL=true  # Uncomment for HTTPS on port 443 (requires certs/)
+    ports:
+      - "80:80"
+      # - "443:443"  # Use instead of 80:80 when ENABLE_SSL=true
+    volumes:
+      - ./data:/app/data
+      # - ./certs:/app/certs:ro  # Uncomment when ENABLE_SSL=true
+      - /usr/share/GeoIP:/usr/share/GeoIP:ro
+    depends_on:
+      - redis
+    restart: unless-stopped
+
+volumes:
+  redis-data:

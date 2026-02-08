@@ -6,7 +6,7 @@ import logging
 import os
 import time
 
-BLOCKLIST_FILE = '/root/knock-knock/blocklist.txt'
+BLOCKLIST_FILE = 'blocklist.txt'
 BLOCKLIST_RELOAD_INTERVAL = 60  # seconds
 
 _blocklist_cache = set()

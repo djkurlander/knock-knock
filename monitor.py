@@ -1,4 +1,5 @@
 import subprocess
+import sys
 import geoip2.database
 import redis
 import json
@@ -12,7 +13,7 @@ from datetime import datetime
 # --- Configuration ---
 GEOIP_CITY_PATH = '/usr/share/GeoIP/GeoLite2-City.mmdb'
 GEOIP_ASN_PATH = '/usr/share/GeoIP/GeoLite2-ASN.mmdb' 
-DB_PATH = 'knock_knock.db'
+DB_PATH = os.environ.get('DB_DIR', '.') + '/knock_knock.db'
 
 def reset_all():
     """Wipes the SQLite database and clears relevant Redis keys."""
@@ -24,7 +25,7 @@ def reset_all():
         except Exception as e:
             print(f"   [!] Error deleting {DB_PATH}: {e}")
     try:
-        r = redis.Redis(host='localhost', port=6379, db=0, decode_responses=True)
+        r = redis.Redis(host=os.environ.get('REDIS_HOST', 'localhost'), port=6379, db=0, decode_responses=True)
         keys_to_clear = ["knock:total_global", "knock:wall_of_shame", "knock:ip_hits", "knock:recent"]
         for key in keys_to_clear:
             r.delete(key)
@@ -151,19 +152,23 @@ def get_geo_maximal(ip, city_reader, asn_reader):
         pass
     return geo
 
-def monitor(save_knocks=False):
+def monitor(save_knocks=False, use_stdin=False):
     init_db()
     threading.Thread(target=heartbeat_worker, daemon=True).start()
-    r = redis.Redis(host='localhost', port=6379, db=0, decode_responses=True)
+    r = redis.Redis(host=os.environ.get('REDIS_HOST', 'localhost'), port=6379, db=0, decode_responses=True)
     c_reader = geoip2.database.Reader(GEOIP_CITY_PATH) if os.path.exists(GEOIP_CITY_PATH) else None
     a_reader = geoip2.database.Reader(GEOIP_ASN_PATH) if os.path.exists(GEOIP_ASN_PATH) else None
 
-    cmd = ["journalctl", "-u", "knock-honeypot", "-f", "-n", "0"]
-    process = subprocess.Popen(cmd, stdout=subprocess.PIPE, text=True)
+    if use_stdin:
+        source = sys.stdin
+    else:
+        cmd = ["journalctl", "-u", "knock-honeypot", "-f", "-n", "0"]
+        process = subprocess.Popen(cmd, stdout=subprocess.PIPE, text=True)
+        source = process.stdout
 
     print("🚀 Maximalist Monitor Active...")
 
-    for line in process.stdout:
+    for line in source:
         if "[*] KNOCK |" in line:
             parts = [p.strip() for p in line.split("|")]
             if len(parts) < 4: continue
@@ -193,6 +198,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Knock-Knock Monitor")
     parser.add_argument("--reset-all", action="store_true", help="Delete DB and clear Redis")
     parser.add_argument("--save-knocks", action="store_true", help="Save individual knocks to SQLite (off by default)")
+    parser.add_argument("--stdin", action="store_true", help="Read from stdin instead of journalctl (for Docker piped input)")
     args = parser.parse_args()
     if args.reset_all: reset_all()
-    monitor(save_knocks=args.save_knocks)
+    monitor(save_knocks=args.save_knocks, use_stdin=args.stdin)

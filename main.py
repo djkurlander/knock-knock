@@ -9,7 +9,7 @@ from fastapi.staticfiles import StaticFiles
 app = FastAPI()
 
 # --- Visitor Tracking ---
-VISITORS_DB_PATH = 'visitors.db'
+VISITORS_DB_PATH = os.environ.get('DB_DIR', '.') + '/visitors.db'
 GEOIP_CITY_PATH = '/usr/share/GeoIP/GeoLite2-City.mmdb'
 GEOIP_ASN_PATH = '/usr/share/GeoIP/GeoLite2-ASN.mmdb'
 
@@ -74,8 +74,8 @@ init_visitors_db()
 # This ensures /static/robot1.png is available immediately
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-r = redis.from_url("redis://localhost", decode_responses=True)
-DB_PATH = 'knock_knock.db'
+r = redis.from_url(f"redis://{os.environ.get('REDIS_HOST', 'localhost')}", decode_responses=True)
+DB_PATH = os.environ.get('DB_DIR', '.') + '/knock_knock.db'
 
 class GlobalStatsCache:
     def __init__(self):

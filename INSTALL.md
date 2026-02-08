@@ -1,128 +1,17 @@
 # Knock-Knock Installation Guide
 
-This guide walks through installing Knock-Knock on a fresh Linux server (Debian/Ubuntu-based).
-
 ## Prerequisites
+
+All installation methods require:
 
 - Linux server with root access
 - Public IP address (for receiving SSH attacks)
 - Domain name (optional, for valid SSL)
+- **Real SSH moved to a non-standard port** (the honeypot needs port 22)
 
-## 1. System Dependencies
+### Move Real SSH to a Different Port
 
-```bash
-# Update package lists
-apt update
-
-# Install Redis
-apt install -y redis-server
-systemctl enable redis-server
-systemctl start redis-server
-
-# Install Python 3.12+ and uv
-apt install -y python3.12 python3.12-venv
-curl -LsSf https://astral.sh/uv/install.sh | sh
-source ~/.bashrc
-```
-
-## 2. GeoIP Databases
-
-Knock-Knock uses MaxMind GeoLite2 databases for IP geolocation. You'll need a free MaxMind account.
-
-1. Create account at https://www.maxmind.com/en/geolite2/signup
-2. Generate a license key in your account dashboard
-3. Install and configure geoipupdate:
-
-```bash
-apt install -y geoipupdate
-
-# Edit /etc/GeoIP.conf with your credentials:
-cat > /etc/GeoIP.conf << 'EOF'
-AccountID YOUR_ACCOUNT_ID
-LicenseKey YOUR_LICENSE_KEY
-EditionIDs GeoLite2-City GeoLite2-ASN
-DatabaseDirectory /usr/share/GeoIP
-EOF
-
-# Download databases
-geoipupdate
-
-# Verify installation
-ls -la /usr/share/GeoIP/
-# Should show: GeoLite2-City.mmdb, GeoLite2-ASN.mmdb
-```
-
-Set up automatic updates (databases update weekly):
-```bash
-# Add to root crontab
-crontab -e
-# Add line:
-0 3 * * 3 /usr/bin/geoipupdate
-```
-
-## 3. Clone and Setup Project
-
-```bash
-cd /root
-git clone https://github.com/YOUR_USERNAME/knock-knock.git
-cd knock-knock
-
-# Create virtual environment with uv
-uv venv
-
-# Activate and install dependencies
-source .venv/bin/activate
-uv pip install paramiko geoip2 redis fastapi uvicorn[standard] python-dotenv
-```
-
-## 4. Generate SSH Host Key
-
-The honeypot needs an RSA key to present to connecting clients:
-
-```bash
-cd /root/knock-knock
-ssh-keygen -t rsa -b 2048 -f server.key -N ""
-# This creates server.key (private) and server.key.pub (public)
-# Only server.key is needed
-rm server.key.pub
-chmod 600 server.key
-```
-
-## 5. SSL Certificates
-
-The web dashboard requires HTTPS. Choose one option:
-
-### Option A: Self-Signed (Testing)
-```bash
-mkdir -p /root/knock-knock/certs
-openssl req -x509 -newkey rsa:4096 -nodes \
-    -keyout /root/knock-knock/certs/key.pem \
-    -out /root/knock-knock/certs/cert.pem \
-    -days 365 \
-    -subj "/CN=localhost"
-chmod 600 /root/knock-knock/certs/*.pem
-```
-
-### Option B: Let's Encrypt (Production)
-```bash
-apt install -y certbot
-
-# Stop any service on port 80 temporarily
-certbot certonly --standalone -d your-domain.com
-
-# Copy/link certs
-mkdir -p /root/knock-knock/certs
-cp /etc/letsencrypt/live/your-domain.com/privkey.pem /root/knock-knock/certs/key.pem
-cp /etc/letsencrypt/live/your-domain.com/fullchain.pem /root/knock-knock/certs/cert.pem
-chmod 600 /root/knock-knock/certs/*.pem
-
-# Set up auto-renewal
-systemctl enable certbot.timer
-```
-
-## 6. Move Real SSH to Different Port
-
-**Critical**: The honeypot must bind to port 22. Move your real SSH first or you'll lock yourself out.
+**Do this first** or you will lock yourself out.
 
 ```bash
 # Edit SSH config
@@ -133,87 +22,285 @@ nano /etc/ssh/sshd_config
 # Restart SSH (do this in a screen/tmux session or have console access)
 systemctl restart sshd
 
-# Test new port before disconnecting
+# Test new port before disconnecting!
 ssh -p 2222 user@your-server
-
-# Update firewall if applicable
-ufw allow 2222/tcp
 ```
 
-## 7. Install Systemd Services
+### GeoIP Databases
 
-Sample unit files are provided in the `systemd/` directory. Copy them into place and adjust paths if your installation directory differs from `/root/knock-knock`:
+Knock-Knock uses MaxMind GeoLite2 databases for IP geolocation. You need a free MaxMind account.
+
+1. Create account at https://www.maxmind.com/en/geolite2/signup
+2. Generate a license key in your account dashboard
+3. Install and configure geoipupdate:
+
+**Debian/Ubuntu:**
+```bash
+apt install -y geoipupdate
+```
+
+**RHEL/CentOS/Fedora:**
+```bash
+dnf install -y geoipupdate
+```
+
+Then configure and download:
+```bash
+cat > /etc/GeoIP.conf << 'EOF'
+AccountID YOUR_ACCOUNT_ID
+LicenseKey YOUR_LICENSE_KEY
+EditionIDs GeoLite2-City GeoLite2-ASN
+DatabaseDirectory /usr/share/GeoIP
+EOF
+
+geoipupdate
+
+# Verify
+ls /usr/share/GeoIP/GeoLite2-*.mmdb
+```
+
+Set up weekly auto-updates:
+```bash
+crontab -e
+# Add line:
+0 3 * * 3 /usr/bin/geoipupdate
+```
+
+### SSH Host Key
+
+The honeypot needs an RSA key to present to connecting clients:
+
+```bash
+cd /root/knock-knock
+ssh-keygen -t rsa -b 2048 -f server.key -N ""
+rm server.key.pub
+chmod 600 server.key
+```
+
+### SSL Certificates
+
+The web dashboard requires HTTPS.
+
+**Self-Signed (testing):**
+```bash
+mkdir -p /root/knock-knock/certs
+openssl req -x509 -newkey rsa:4096 -nodes \
+    -keyout /root/knock-knock/certs/key.pem \
+    -out /root/knock-knock/certs/cert.pem \
+    -days 365 \
+    -subj "/CN=localhost"
+chmod 600 /root/knock-knock/certs/*.pem
+```
+
+**Let's Encrypt (production):**
+```bash
+apt install -y certbot   # or: dnf install -y certbot
+certbot certonly --standalone -d your-domain.com
+
+mkdir -p /root/knock-knock/certs
+cp /etc/letsencrypt/live/your-domain.com/privkey.pem /root/knock-knock/certs/key.pem
+cp /etc/letsencrypt/live/your-domain.com/fullchain.pem /root/knock-knock/certs/cert.pem
+chmod 600 /root/knock-knock/certs/*.pem
+
+systemctl enable certbot.timer
+```
+
+---
+
+## Option 1: Docker (Simplest)
+
+Requires Docker and Docker Compose. Complete the [Prerequisites](#prerequisites) above first.
+
+```bash
+cd /root
+git clone https://github.com/YOUR_USERNAME/knock-knock.git
+cd knock-knock
+```
+
+Make sure `server.key` and GeoIP databases are in place (see Prerequisites), then:
+
+```bash
+# Create the data directory and blocklist
+mkdir -p data
+touch blocklist.txt
+
+# Build and start
+docker compose up -d
+
+# Verify
+docker compose logs honeypot-monitor   # Should show "Monitor Active"
+docker compose logs web                # Should show uvicorn startup
+```
+
+That's it. Three containers (Redis, honeypot+monitor, web) start automatically and restart on failure.
+
+**Useful commands:**
+```bash
+docker compose logs -f              # Follow all logs
+docker compose restart              # Restart all services
+docker compose down                 # Stop everything
+docker compose up -d --build        # Rebuild after code changes
+```
+
+To save individual knock records to SQLite (uses more disk, see Option 2 notes), edit `docker-compose.yml` and add `--save-knocks` to the honeypot-monitor command.
+
+**Enabling SSL (HTTPS):** Uncomment `ENABLE_SSL=true`, swap the port mapping from `80:80` to `443:443`, and uncomment the `certs` volume in `docker-compose.yml`. Requires SSL certificates in `certs/` (see Prerequisites).
+
+---
+
+## Option 2: Ubuntu/Debian
+
+Complete the [Prerequisites](#prerequisites) above first.
+
+### System Dependencies
+
+```bash
+apt update
+apt install -y redis-server python3.12 python3.12-venv
+systemctl enable redis-server
+systemctl start redis-server
+
+# Install uv
+curl -LsSf https://astral.sh/uv/install.sh | sh
+source ~/.bashrc
+```
+
+### Clone and Setup
+
+```bash
+cd /root
+git clone https://github.com/YOUR_USERNAME/knock-knock.git
+cd knock-knock
+
+uv venv
+source .venv/bin/activate
+uv pip install paramiko geoip2 redis fastapi uvicorn[standard] python-dotenv
+```
+
+### Install Systemd Services
+
+Sample unit files are in the `systemd/` directory:
 
 ```bash
 cp systemd/*.service /etc/systemd/system/
-```
-
-By default, the monitor does not save individual knock records to SQLite (only aggregated intel tables are updated). To also store every knock for research queries, add `--save-knocks` to the `ExecStart` line in `knock-monitor.service`. Note this will use significantly more disk space (~600MB+/year).
-
-Enable and start services:
-```bash
 systemctl daemon-reload
 systemctl enable knock-honeypot knock-monitor knock-web
 systemctl start knock-honeypot knock-monitor knock-web
 ```
 
-## 8. Firewall Configuration
+By default the monitor does not save individual knock records to SQLite (only aggregated intel tables are updated). To store every knock for research queries, add `--save-knocks` to the `ExecStart` line in `knock-monitor.service`. This will use significantly more disk space (~600MB+/year).
+
+**Running without SSL (plain HTTP):** Remove the `--ssl-keyfile` and `--ssl-certfile` flags from `knock-web.service` and change `--port 443` to `--port 80`.
+
+### Firewall
 
 ```bash
-# Allow honeypot SSH
-ufw allow 22/tcp
-
-# Allow HTTPS dashboard
-ufw allow 443/tcp
-
-# Ensure your real SSH port is allowed
-ufw allow 2222/tcp
-
-# Enable firewall
+ufw allow 22/tcp     # Honeypot
+ufw allow 443/tcp    # Dashboard (or 80/tcp if using HTTP)
+ufw allow 2222/tcp   # Your real SSH
 ufw enable
 ```
 
-## 9. Verify Installation
+### Verify
 
 ```bash
-# Check all services are running
 systemctl status knock-honeypot knock-monitor knock-web
 
-# Check logs
 journalctl -u knock-honeypot -f   # Should show "Honeypot Active"
 journalctl -u knock-monitor -f    # Should show "Monitor Active"
 journalctl -u knock-web -f        # Should show uvicorn startup
 
-# Test honeypot (from another machine)
+# Test from another machine
 ssh test@your-server-ip
-# Should reject auth but honeypot logs the attempt
-
-# View dashboard
 # Open https://your-server-ip in browser
 ```
 
-## 10. Optional: Email Reports
+---
 
-To receive daily attack reports, configure SMTP:
+## Option 3: RHEL/CentOS/Fedora
+
+Complete the [Prerequisites](#prerequisites) above first.
+
+### System Dependencies
 
 ```bash
-cp .env.example .env
-nano .env
-# Fill in your SMTP credentials
+dnf install -y redis python3.12
+systemctl enable redis
+systemctl start redis
+
+# Install uv
+curl -LsSf https://astral.sh/uv/install.sh | sh
+source ~/.bashrc
 ```
+
+### Clone and Setup
+
+```bash
+cd /root
+git clone https://github.com/YOUR_USERNAME/knock-knock.git
+cd knock-knock
+
+uv venv
+source .venv/bin/activate
+uv pip install paramiko geoip2 redis fastapi uvicorn[standard] python-dotenv
+```
+
+### Install Systemd Services
+
+Sample unit files are in the `systemd/` directory. The Redis service name may differ on RHEL-based systems:
+
+```bash
+cp systemd/*.service /etc/systemd/system/
+
+# Update the Redis dependency in knock-monitor.service and knock-web.service
+# Change "After=... redis-server.service" to "After=... redis.service"
+sed -i 's/redis-server.service/redis.service/g' /etc/systemd/system/knock-monitor.service
+sed -i 's/redis-server.service/redis.service/g' /etc/systemd/system/knock-web.service
+
+systemctl daemon-reload
+systemctl enable knock-honeypot knock-monitor knock-web
+systemctl start knock-honeypot knock-monitor knock-web
+```
+
+By default the monitor does not save individual knock records to SQLite (only aggregated intel tables are updated). To store every knock for research queries, add `--save-knocks` to the `ExecStart` line in `knock-monitor.service`. This will use significantly more disk space (~600MB+/year).
+
+**Running without SSL (plain HTTP):** Remove the `--ssl-keyfile` and `--ssl-certfile` flags from `knock-web.service` and change `--port 443` to `--port 80`.
+
+### Firewall
+
+```bash
+firewall-cmd --permanent --add-port=22/tcp     # Honeypot
+firewall-cmd --permanent --add-port=443/tcp    # Dashboard (or 80/tcp if using HTTP)
+firewall-cmd --permanent --add-port=2222/tcp   # Your real SSH
+firewall-cmd --reload
+```
+
+### Verify
+
+```bash
+systemctl status knock-honeypot knock-monitor knock-web
+
+journalctl -u knock-honeypot -f   # Should show "Honeypot Active"
+journalctl -u knock-monitor -f    # Should show "Monitor Active"
+journalctl -u knock-web -f        # Should show uvicorn startup
+
+# Test from another machine
+ssh test@your-server-ip
+# Open https://your-server-ip in browser
+```
+
+---
 
 ## Troubleshooting
 
 ### Port 22 already in use
 ```bash
-# Find what's using port 22
 ss -tlnp | grep :22
 # Make sure real SSH is moved to another port first
 ```
 
 ### GeoIP lookups failing
 ```bash
-# Verify databases exist
 ls -la /usr/share/GeoIP/GeoLite2-*.mmdb
 # Re-run geoipupdate if missing
 ```
@@ -221,7 +308,7 @@ ls -la /usr/share/GeoIP/GeoLite2-*.mmdb
 ### Redis connection errors
 ```bash
 redis-cli ping   # Should return PONG
-systemctl status redis-server
+systemctl status redis-server   # or: systemctl status redis
 ```
 
 ### WebSocket not connecting
@@ -237,7 +324,7 @@ sqlite3 /root/knock-knock/knock_knock.db "SELECT * FROM knocks ORDER BY id DESC 
 ## Maintenance
 
 ```bash
-# Restart all services
+# Restart all services (systemd)
 ./restart.sh
 
 # Reset all data (clear database and Redis)
@@ -250,7 +337,7 @@ geoipupdate
 certbot renew
 cp /etc/letsencrypt/live/your-domain.com/privkey.pem /root/knock-knock/certs/key.pem
 cp /etc/letsencrypt/live/your-domain.com/fullchain.pem /root/knock-knock/certs/cert.pem
-systemctl restart knock-web
+systemctl restart knock-web   # or: docker compose restart web
 ```
 
 ## Security Notes

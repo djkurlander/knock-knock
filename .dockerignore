@@ -1,0 +1,13 @@
+.venv
+*.db
+certs/
+__pycache__
+.git
+data/
+systemd/
+*.md
+*.sh
+sample_emailer.py
+.dockerignore
+Dockerfile
+docker-compose.yml

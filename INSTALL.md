@@ -190,13 +190,13 @@ systemctl start knock-honeypot knock-monitor knock-web
 
 By default the monitor does not save individual knock records to SQLite (only aggregated intel tables are updated). To store every knock for research queries, add `--save-knocks` to the `ExecStart` line in `knock-monitor.service`. This will use significantly more disk space (~600MB+/year).
 
-**Running without SSL (plain HTTP):** Remove the `--ssl-keyfile` and `--ssl-certfile` flags from `knock-web.service` and change `--port 443` to `--port 80`.
+**Enabling SSL (HTTPS):** Swap the commented-out HTTPS `ExecStart` block in `knock-web.service` for the HTTP one. Requires SSL certificates in `certs/` (see Prerequisites).
 
 ### Firewall
 
 ```bash
 ufw allow 22/tcp     # Honeypot
-ufw allow 443/tcp    # Dashboard (or 80/tcp if using HTTP)
+ufw allow 80/tcp     # Dashboard (or 443/tcp if using HTTPS)
 ufw allow 2222/tcp   # Your real SSH
 ufw enable
 ```
@@ -264,13 +264,13 @@ systemctl start knock-honeypot knock-monitor knock-web
 
 By default the monitor does not save individual knock records to SQLite (only aggregated intel tables are updated). To store every knock for research queries, add `--save-knocks` to the `ExecStart` line in `knock-monitor.service`. This will use significantly more disk space (~600MB+/year).
 
-**Running without SSL (plain HTTP):** Remove the `--ssl-keyfile` and `--ssl-certfile` flags from `knock-web.service` and change `--port 443` to `--port 80`.
+**Enabling SSL (HTTPS):** Swap the commented-out HTTPS `ExecStart` block in `knock-web.service` for the HTTP one. Requires SSL certificates in `certs/` (see Prerequisites).
 
 ### Firewall
 
 ```bash
 firewall-cmd --permanent --add-port=22/tcp     # Honeypot
-firewall-cmd --permanent --add-port=443/tcp    # Dashboard (or 80/tcp if using HTTP)
+firewall-cmd --permanent --add-port=80/tcp     # Dashboard (or 443/tcp if using HTTPS)
 firewall-cmd --permanent --add-port=2222/tcp   # Your real SSH
 firewall-cmd --reload
 ```

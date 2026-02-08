@@ -26,7 +26,7 @@ def reset_all():
             print(f"   [!] Error deleting {DB_PATH}: {e}")
     try:
         r = redis.Redis(host=os.environ.get('REDIS_HOST', 'localhost'), port=6379, db=0, decode_responses=True)
-        keys_to_clear = ["knock:total_global", "knock:wall_of_shame", "knock:ip_hits", "knock:recent"]
+        keys_to_clear = ["knock:total_global", "knock:last_time", "knock:last_lat", "knock:last_lng", "knock:recent"]
         for key in keys_to_clear:
             r.delete(key)
         print("   [+] Cleared Redis keys")
@@ -170,8 +170,6 @@ def monitor(save_knocks=False, use_stdin=False):
             log_to_maximalist_db(package, save_knocks=save_knocks)
             r.lpush("knock:recent", json.dumps(package))
             r.ltrim("knock:recent", 0, 99)
-            shame_key = f"{geo['iso']}:{geo['country']}"
-            r.zincrby("knock:wall_of_shame", 1, shame_key)
             r.incr("knock:total_global")
             r.set("knock:last_time", int(time.time()))
             if geo['lat'] is not None:

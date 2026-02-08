@@ -57,7 +57,7 @@
         .bar-bg { background: #1a1a1a; height: 10px; border-radius: 5px; overflow: hidden; }
         .bar-fill { background: var(--neon-green); height: 100%; transition: width 1s; opacity: 0.7; }
         
-        .shame-fill { background: var(--warning-yellow); }
+        .loc-fill { background: var(--warning-yellow); }
         .password-fill { background: var(--hazard-red); }
         .provider-fill { background: var(--data-blue); }
         .user-fill { background: var(--user-magenta); }
@@ -280,7 +280,7 @@
     <div class="d-grid" id="d-slider-container">
         <div class="d-box" id="d-box-feed" onclick="dJump(0)"><h2>LIVE FEED: LOGIN ATTEMPTS</h2><div id="d-feed" class="d-content"></div></div>
         <div class="d-box" id="d-box-globe"><h2>GLOBE</h2><div id="d-globe-location" style="text-align:center; margin-bottom:10px;"><div id="d-globe-loc-text" style="color:var(--neon-green);"></div><div id="d-globe-loc-isp" style="color:var(--data-blue); font-size:0.85em;"></div></div><div id="d-globe-pane" class="d-content"></div></div>
-        <div class="d-box" onclick="dJump(2)"><h2>LOCATION</h2><div id="d-shame" class="d-content"></div></div>
+        <div class="d-box" onclick="dJump(2)"><h2>LOCATION</h2><div id="d-loc" class="d-content"></div></div>
         <div class="d-box" onclick="dJump(3)"><h2>USERNAME</h2><div id="d-user" class="d-content"></div></div>
         <div class="d-box" onclick="dJump(4)"><h2>PASSWORD</h2><div id="d-pass" class="d-content"></div></div>
         <div class="d-box" onclick="dJump(5)"><h2>ISP</h2><div id="d-prov" class="d-content"></div></div>
@@ -321,7 +321,7 @@
     <div class="m-viewport" id="m-viewport">
         <div class="m-pane" id="m-pane-feed"><h2>LIVE FEED: LOGIN ATTEMPTS</h2><div id="m-feed" class="m-content"></div></div>
         <div class="m-pane" id="m-pane-globe"><h2>GLOBE</h2><div id="m-globe-location" style="text-align:center; margin-bottom:10px;"><div id="m-globe-loc-text" style="color:var(--neon-green);"></div><div id="m-globe-loc-isp" style="color:var(--data-blue); font-size:0.85em;"></div></div><div id="m-globe-pane" class="m-content" style="display:flex; justify-content:center; align-items:center;"></div></div>
-        <div class="m-pane" id="m-pane-shame"><h2>LOCATION</h2><div id="m-shame" class="m-content"></div></div>
+        <div class="m-pane" id="m-pane-loc"><h2>LOCATION</h2><div id="m-loc" class="m-content"></div></div>
         <div class="m-pane" id="m-pane-user"><h2>USERNAME</h2><div id="m-user" class="m-content"></div></div>
         <div class="m-pane" id="m-pane-pass"><h2>PASSWORD</h2><div id="m-pass" class="m-content"></div></div>
         <div class="m-pane" id="m-pane-prov"><h2>ISP</h2><div id="m-prov" class="m-content"></div></div>
@@ -502,7 +502,7 @@
 
     // Store leaderboard data globally for ranking lookups
     let leaderboards = {
-        shame: [],      // country data {iso, country, count}
+        loc: [],        // country data {iso, country, count}
         users: [],      // {label, count}
         passwords: [],  // {label, count}
         providers: [],  // {label, count}
@@ -972,7 +972,7 @@
         });
     }
 
-    const fillClasses = { pass: 'password-fill', prov: 'provider-fill', user: 'user-fill', ip: 'ip-fill', shame: 'shame-fill' };
+    const fillClasses = { loc: 'loc-fill', pass: 'password-fill', prov: 'provider-fill', user: 'user-fill', ip: 'ip-fill' };
 
     function incrementAndSort(prefix, id) {
         ['d-', 'm-'].forEach(layout => {
@@ -1082,7 +1082,7 @@
         const loc = formatLocation(d);
 
         // Get rankings from leaderboards
-        const countryRank = formatRank(getRank(leaderboards.shame, d.iso, 'iso'));
+        const countryRank = formatRank(getRank(leaderboards.loc, d.iso, 'iso'));
         const userRank = formatRank(getRank(leaderboards.users, d.user));
         const passRank = formatRank(getRank(leaderboards.passwords, d.pass));
         const ispRank = formatRank(getRank(leaderboards.providers, d.isp));
@@ -1224,7 +1224,7 @@
                 renderKnock(d, true);
                 ['d-total', 'm-total'].forEach(id => document.getElementById(id).innerText = d.total_global.toLocaleString());
                 ['d-kpm', 'm-kpm'].forEach(id => document.getElementById(id).innerText = d.kpm);
-                incrementAndSort('shame', d.iso);
+                incrementAndSort('loc', d.iso);
                 incrementAndSort('pass', d.pass);
                 incrementAndSort('prov', d.isp);
                 incrementAndSort('user', d.user);
@@ -1249,13 +1249,13 @@
                     rotateGlobeToLocation(d.last_lat, d.last_lng);
                 }
                 // Store leaderboards globally for ranking lookups
-                leaderboards.shame = d.shame || [];
+                leaderboards.loc = d.top_locations || [];
                 leaderboards.passwords = d.top_passwords || [];
                 leaderboards.providers = d.top_providers || [];
                 leaderboards.users = d.top_users || [];
                 leaderboards.ips = d.top_ips || [];
 
-                renderBars('shame', d.shame, 'shame-fill', true);
+                renderBars('loc', d.top_locations, 'loc-fill', true);
                 renderBars('pass', d.top_passwords, 'password-fill');
                 renderBars('prov', d.top_providers, 'provider-fill');
                 renderBars('user', d.top_users, 'user-fill');

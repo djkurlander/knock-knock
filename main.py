@@ -79,6 +79,7 @@ DB_PATH = os.environ.get('DB_DIR', 'data') + '/knock_knock.db'
 
 class GlobalStatsCache:
     def __init__(self):
+        self.top_locations = []
         self.top_passwords = []
         self.top_providers = []
         self.top_users = []
@@ -89,16 +90,17 @@ class GlobalStatsCache:
         while True:
             try:
                 loop = asyncio.get_event_loop()
+                self.top_locations = await loop.run_in_executor(None, self._get_top_stats, "location")
                 self.top_passwords = await loop.run_in_executor(None, self._get_top_stats, "password")
                 self.top_providers = await loop.run_in_executor(None, self._get_top_stats, "isp")
                 self.top_users = await loop.run_in_executor(None, self._get_top_stats, "username")
                 self.top_ips = await loop.run_in_executor(None, self._get_top_stats, "ip")
-                
+
                 self.last_updated = datetime.now().strftime("%H:%M:%S")
                 print(f"📊 Stats Cache Updated: {self.last_updated}")
             except Exception as e:
                 print(f"❌ Cache Update Error: {e}")
-            
+
             # Refresh every 60 seconds
             await asyncio.sleep(60)
 
@@ -108,6 +110,7 @@ class GlobalStatsCache:
         conn.row_factory = sqlite3.Row
         cur = conn.cursor()
         queries = {
+            "location": "SELECT iso_code as iso, country, hits as count FROM country_intel ORDER BY hits DESC",
             "password": "SELECT password as label, hits as count FROM pass_intel ORDER BY hits DESC LIMIT 100",
             "username": "SELECT username as label, hits as count FROM user_intel ORDER BY hits DESC LIMIT 100",
             "isp": "SELECT isp as label, hits as count FROM isp_intel ORDER BY hits DESC LIMIT 100",
@@ -184,16 +187,9 @@ class ConnectionManager:
         last_lat_val = await r.get("knock:last_lat")
         last_lng_val = await r.get("knock:last_lng")
         current_kpm = await self.get_kpm()
-        # Get country stats from SQLite intel table
-        conn = sqlite3.connect(DB_PATH)
-        conn.row_factory = sqlite3.Row
-        cur = conn.cursor()
-        cur.execute("SELECT iso_code as iso, country, hits as count FROM country_intel ORDER BY hits DESC")
-        shame_list = [dict(row) for row in cur.fetchall()]
-        conn.close()
 
         return {
-            "shame": shame_list,
+            "top_locations": stats_cache.top_locations,
             "total": int(total_val) if total_val else 0,
             "kpm": current_kpm,
             "last_knock_time": int(last_knock_val) if last_knock_val else None,
@@ -229,7 +225,7 @@ class ConnectionManager:
                     "last_knock_time": stats.get("last_knock_time"),
                     "last_lat": stats.get("last_lat"),
                     "last_lng": stats.get("last_lng"),
-                    "shame": stats.get("shame", []),
+                    "top_locations": stats.get("top_locations", []),
                     "history": history if history else [],
                     "top_passwords": stats.get("top_passwords", []),
                     "top_providers": stats.get("top_providers", []),

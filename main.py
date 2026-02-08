@@ -86,8 +86,9 @@ class GlobalStatsCache:
         self.top_ips = []
         self.last_updated = None
 
-    async def update(self):
+    async def update_and_broadcast(self):
         while True:
+            await asyncio.sleep(60)
             try:
                 loop = asyncio.get_event_loop()
                 self.top_locations = await loop.run_in_executor(None, self._get_top_stats, "location")
@@ -98,11 +99,11 @@ class GlobalStatsCache:
 
                 self.last_updated = datetime.now().strftime("%H:%M:%S")
                 print(f"📊 Stats Cache Updated: {self.last_updated}")
+
+                payload = await manager.get_initial_data()
+                await manager.broadcast(json.dumps({"type": "init_stats", "data": payload}))
             except Exception as e:
                 print(f"❌ Cache Update Error: {e}")
-
-            # Refresh every 60 seconds
-            await asyncio.sleep(60)
 
     def _get_top_stats(self, stat_type):
         """Synchronous helper for the executor - uses indexed intel tables."""
@@ -265,21 +266,10 @@ async def redis_listener():
             payload = json.dumps({"type": "new_knock", "data": data})
             await manager.broadcast(payload)
 
-async def periodic_stats_sync():
-    while True:
-        await asyncio.sleep(60)
-        try:
-            payload = await manager.get_initial_data()
-            await manager.broadcast(json.dumps({"type": "init_stats", "data": payload}))
-        except Exception as e:
-            print(f"Sync error: {e}")
-
 @app.on_event("startup")
 async def startup_event():
     asyncio.create_task(redis_listener())
-    asyncio.create_task(periodic_stats_sync())
-    # START THE STATS CACHER
-    asyncio.create_task(stats_cache.update())
+    asyncio.create_task(stats_cache.update_and_broadcast())
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):

@@ -86,18 +86,27 @@ class GlobalStatsCache:
         self.top_ips = []
         self.last_updated = None
 
+    async def _refresh_cache(self):
+        loop = asyncio.get_event_loop()
+        self.top_locations = await loop.run_in_executor(None, self._get_top_stats, "location")
+        self.top_passwords = await loop.run_in_executor(None, self._get_top_stats, "password")
+        self.top_providers = await loop.run_in_executor(None, self._get_top_stats, "isp")
+        self.top_users = await loop.run_in_executor(None, self._get_top_stats, "username")
+        self.top_ips = await loop.run_in_executor(None, self._get_top_stats, "ip")
+        self.last_updated = datetime.now().strftime("%H:%M:%S")
+
     async def update_and_broadcast(self):
+        # Prime the cache immediately so first visitors get full data
+        try:
+            await self._refresh_cache()
+            print(f"📊 Stats Cache Primed: {self.last_updated}")
+        except Exception as e:
+            print(f"❌ Cache Prime Error: {e}")
+
         while True:
             await asyncio.sleep(60)
             try:
-                loop = asyncio.get_event_loop()
-                self.top_locations = await loop.run_in_executor(None, self._get_top_stats, "location")
-                self.top_passwords = await loop.run_in_executor(None, self._get_top_stats, "password")
-                self.top_providers = await loop.run_in_executor(None, self._get_top_stats, "isp")
-                self.top_users = await loop.run_in_executor(None, self._get_top_stats, "username")
-                self.top_ips = await loop.run_in_executor(None, self._get_top_stats, "ip")
-
-                self.last_updated = datetime.now().strftime("%H:%M:%S")
+                await self._refresh_cache()
                 print(f"📊 Stats Cache Updated: {self.last_updated}")
 
                 payload = await manager.get_initial_data()

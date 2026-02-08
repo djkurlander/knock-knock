@@ -39,23 +39,9 @@ def init_db():
     cur.execute("""CREATE TABLE IF NOT EXISTS knocks (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-        ip_address TEXT, iso_code TEXT, city TEXT, region TEXT, country TEXT, isp TEXT,
+        ip_address TEXT, iso_code TEXT, city TEXT, region TEXT, country TEXT, isp TEXT, asn INTEGER,
         username TEXT, password TEXT
     )""")
-    # Add region column if it doesn't exist (migration for existing DBs)
-    try:
-        cur.execute("ALTER TABLE knocks ADD COLUMN region TEXT")
-    except:
-        pass  # Column already exists
-    # Add asn column if it doesn't exist (migration for existing DBs)
-    try:
-        cur.execute("ALTER TABLE knocks ADD COLUMN asn INTEGER")
-    except:
-        pass  # Column already exists
-    try:
-        cur.execute("ALTER TABLE isp_intel ADD COLUMN asn INTEGER")
-    except:
-        pass  # Column already exists
     cur.execute("CREATE TABLE IF NOT EXISTS user_intel (username TEXT PRIMARY KEY, hits INTEGER, last_seen DATETIME)")
     cur.execute("CREATE TABLE IF NOT EXISTS pass_intel (password TEXT PRIMARY KEY, hits INTEGER, last_seen DATETIME)")
     cur.execute("CREATE TABLE IF NOT EXISTS country_intel (iso_code TEXT PRIMARY KEY, country TEXT, hits INTEGER, last_seen DATETIME)")

@@ -68,7 +68,7 @@ crontab -e
 
 ### SSH Host Key
 
-The honeypot needs an RSA key to present to connecting clients:
+The honeypot needs an RSA key to present to connecting clients. Generate this after cloning the repo:
 
 ```bash
 cd /root/knock-knock
@@ -178,6 +178,7 @@ source ~/.bashrc
 cd /root
 git clone https://github.com/YOUR_USERNAME/knock-knock.git
 cd knock-knock
+mkdir -p data
 
 uv venv
 source .venv/bin/activate
@@ -219,7 +220,7 @@ journalctl -u knock-web -f        # Should show uvicorn startup
 
 # Test from another machine
 ssh test@your-server-ip
-# Open https://your-server-ip in browser
+# Open http://your-server-ip in browser
 ```
 
 ---
@@ -246,6 +247,7 @@ source ~/.bashrc
 cd /root
 git clone https://github.com/YOUR_USERNAME/knock-knock.git
 cd knock-knock
+mkdir -p data
 
 uv venv
 source .venv/bin/activate
@@ -293,7 +295,7 @@ journalctl -u knock-web -f        # Should show uvicorn startup
 
 # Test from another machine
 ssh test@your-server-ip
-# Open https://your-server-ip in browser
+# Open http://your-server-ip in browser
 ```
 
 ---
@@ -325,7 +327,7 @@ systemctl status redis-server   # or: systemctl status redis
 
 ### View database contents
 ```bash
-sqlite3 /root/knock-knock/knock_knock.db "SELECT * FROM knocks ORDER BY id DESC LIMIT 5;"
+sqlite3 /root/knock-knock/data/knock_knock.db "SELECT * FROM knocks ORDER BY id DESC LIMIT 5;"
 ```
 
 ## Maintenance

@@ -44,16 +44,14 @@ apt install -y geoipupdate
 dnf install -y geoipupdate
 ```
 
-Then configure and download:
+Then add your credentials to `/etc/GeoIP.conf` (created by the package installer) and download:
 ```bash
-cat > /etc/GeoIP.conf << 'EOF'
-AccountID YOUR_ACCOUNT_ID
-LicenseKey YOUR_LICENSE_KEY
-EditionIDs GeoLite2-City GeoLite2-ASN
-DatabaseDirectory /usr/share/GeoIP
-EOF
-
+# Edit /etc/GeoIP.conf and set your AccountID and LicenseKey
+# Then:
 geoipupdate
+
+# Ensure databases are at /usr/share/GeoIP (some distros use /var/lib/GeoIP)
+[ ! -e /usr/share/GeoIP ] && ln -s /var/lib/GeoIP /usr/share/GeoIP
 
 # Verify
 ls /usr/share/GeoIP/GeoLite2-*.mmdb
@@ -306,7 +304,8 @@ ss -tlnp | grep :22
 ### GeoIP lookups failing
 ```bash
 ls -la /usr/share/GeoIP/GeoLite2-*.mmdb
-# Re-run geoipupdate if missing
+# If missing, ensure /etc/GeoIP.conf includes: DatabaseDirectory /usr/share/GeoIP
+# Then re-run: geoipupdate
 ```
 
 ### Redis connection errors

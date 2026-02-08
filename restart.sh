@@ -69,8 +69,8 @@ fi
 # --- Start ---
 echo "Starting services..."
 if [ "$MODE" = "docker" ]; then
-    docker compose -f "$PROJECT_DIR/docker-compose.yml" up -d
-    echo "  [+] Docker containers started"
+    docker compose -f "$PROJECT_DIR/docker-compose.yml" up -d --build
+    echo "  [+] Docker containers built and started"
     docker compose -f "$PROJECT_DIR/docker-compose.yml" ps --format "table {{.Name}}\t{{.Status}}\t{{.Ports}}"
 else
     systemctl daemon-reload

@@ -304,4 +304,4 @@ async def websocket_endpoint(websocket: WebSocket):
 
 @app.get("/")
 async def get():
-    return HTMLResponse(content=open("index.html").read())
+    return HTMLResponse(content=open("index.html").read(), headers={"Cache-Control": "no-cache"})

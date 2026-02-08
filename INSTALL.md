@@ -79,7 +79,7 @@ chmod 600 server.key
 
 ### SSL Certificates
 
-The web dashboard requires HTTPS.
+The web dashboard works over HTTP by default. To enable HTTPS, you'll need SSL certificates:
 
 **Self-Signed (testing):**
 ```bash

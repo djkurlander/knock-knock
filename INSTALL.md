@@ -128,9 +128,8 @@ cd knock-knock
 Make sure `server.key` and GeoIP databases are in place (see Prerequisites), then:
 
 ```bash
-# Create the data directory and blocklist
+# Create the data directory
 mkdir -p data
-touch blocklist.txt
 
 # Build and start
 docker compose up -d
@@ -353,5 +352,5 @@ systemctl restart knock-web   # or: docker compose restart web
 - The honeypot runs as root to bind port 22 - this is intentional
 - Never expose the SQLite database or Redis to the network
 - Keep your real SSH on a non-standard port
-- Consider IP blocklisting repeat offenders via `blocklist.txt`
+- Consider IP blocklisting repeat offenders via `data/blocklist.txt`
 - The honeypot always rejects authentication - no shell access is ever granted

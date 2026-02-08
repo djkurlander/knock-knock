@@ -16,7 +16,6 @@ services:
     volumes:
       - ./data:/app/data
       - /usr/share/GeoIP:/usr/share/GeoIP:ro
-      - ./blocklist.txt:/app/blocklist.txt
     depends_on:
       - redis
     restart: unless-stopped

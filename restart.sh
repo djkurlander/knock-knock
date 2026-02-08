@@ -1,47 +1,89 @@
 #!/bin/bash
 
 # --- Configuration ---
-PROJECT_DIR="/root/knock-knock"
-DB_PATH="$PROJECT_DIR/knock_knock.db"
+PROJECT_DIR="$(cd "$(dirname "$0")" && pwd)"
+DB_DIR="${DB_DIR:-$PROJECT_DIR/data}"
 
-# Check for reset flag
+# --- Parse flags ---
 RESET=false
-if [[ "$1" == "--reset-all" ]]; then
-    RESET=true
-fi
+MODE=""
+for arg in "$@"; do
+    case "$arg" in
+        --reset-all) RESET=true ;;
+        --docker)    MODE="docker" ;;
+        --systemd)   MODE="systemd" ;;
+    esac
+done
 
-echo "🚀 Refreshing Knock-Knock Infrastructure..."
-
-# 1. Stop services (using your actual service names)
-echo "🛑 Stopping services..."
-systemctl stop knock-honeypot knock-monitor knock-web
-
-if [ "$RESET" = true ]; then
-    echo "🧹 Performing Data Wipe..."
-    # Delete SQLite DB
-    if [ -f "$DB_PATH" ]; then
-        rm "$DB_PATH"
-        echo "   [+] Deleted $DB_PATH"
+# --- Auto-detect mode if not specified ---
+if [ -z "$MODE" ]; then
+    if docker compose version &>/dev/null && [ -f "$PROJECT_DIR/docker-compose.yml" ]; then
+        # Check if containers are running or if there are no systemd units installed
+        if docker compose -f "$PROJECT_DIR/docker-compose.yml" ps --quiet 2>/dev/null | grep -q . \
+           || ! systemctl list-unit-files knock-honeypot.service &>/dev/null; then
+            MODE="docker"
+        else
+            MODE="systemd"
+        fi
+    else
+        MODE="systemd"
     fi
-    # Clear Redis keys for the dashboard
-    redis-cli del knock:total_global knock:wall_of_shame knock:ip_hits knock:recent > /dev/null
-    echo "   [+] Cleared Redis keys from memory"
 fi
 
-# 1b. Reload the service info just in case
-systemctl daemon-reload
+echo "Refreshing Knock-Knock Infrastructure (mode: $MODE)..."
 
-# 2. Restart in dependency order
-echo "🟢 Re-engaging services..."
+# --- Stop ---
+echo "Stopping services..."
+if [ "$MODE" = "docker" ]; then
+    docker compose -f "$PROJECT_DIR/docker-compose.yml" down
+else
+    systemctl stop knock-honeypot knock-monitor knock-web 2>/dev/null
+fi
 
-systemctl start knock-honeypot
-echo "   [+] Honeypot online (Port 22)"
-sleep 1 
+# --- Reset (optional) ---
+if [ "$RESET" = true ]; then
+    echo "Performing data wipe..."
 
-systemctl start knock-monitor
-echo "   [+] Monitor online (Log parsing active)"
+    # Delete SQLite databases
+    for db in "$DB_DIR/knock_knock.db" "$DB_DIR/visitors.db"; do
+        if [ -f "$db" ]; then
+            rm "$db"
+            echo "  [+] Deleted $db"
+        fi
+    done
 
-systemctl start knock-web
-echo "   [+] Web Server online (WebSockets active)"
+    # Determine redis-cli command (host may differ per mode)
+    if [ "$MODE" = "docker" ]; then
+        REDIS_CMD="docker compose -f $PROJECT_DIR/docker-compose.yml run --rm redis redis-cli -h redis"
+        # Need redis running to flush it
+        docker compose -f "$PROJECT_DIR/docker-compose.yml" up -d redis
+        sleep 1
+    else
+        REDIS_CMD="redis-cli"
+    fi
 
-echo "✅ System Restored."
+    $REDIS_CMD del knock:total_global knock:last_time knock:last_lat knock:last_lng knock:recent > /dev/null
+    echo "  [+] Cleared Redis keys"
+fi
+
+# --- Start ---
+echo "Starting services..."
+if [ "$MODE" = "docker" ]; then
+    docker compose -f "$PROJECT_DIR/docker-compose.yml" up -d
+    echo "  [+] Docker containers started"
+    docker compose -f "$PROJECT_DIR/docker-compose.yml" ps --format "table {{.Name}}\t{{.Status}}\t{{.Ports}}"
+else
+    systemctl daemon-reload
+
+    systemctl start knock-honeypot
+    echo "  [+] Honeypot online (port 22)"
+    sleep 1
+
+    systemctl start knock-monitor
+    echo "  [+] Monitor online (log parsing active)"
+
+    systemctl start knock-web
+    echo "  [+] Web server online (WebSockets active)"
+fi
+
+echo "System restored."

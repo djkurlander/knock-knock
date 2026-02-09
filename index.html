@@ -238,6 +238,31 @@
             .nav-item { color: var(--ui-grey-dim); font-size: 1.8em; display: flex; flex-direction: column; align-items: center; cursor: pointer; transition: 0.2s; flex-shrink: 0; }
             .nav-item span { font-size: 0.45em; margin-top: 4px; font-weight: bold; }
             .nav-item.active { color: var(--neon-green); text-shadow: 0 0 12px var(--neon-green); transform: translateY(-3px); }
+
+            #m-pane-globe { padding-left: 10px; padding-right: 10px; }
+            #m-globe-pane { overflow: hidden; }
+            #m-globe-pane {
+                position: relative;
+                padding-right: 0;
+                background: radial-gradient(circle closest-side, transparent 0%, transparent var(--globe-edge, 84%), rgba(0,255,65,0.5) var(--globe-edge, 84%), transparent var(--glow-outer, 100%));
+            }
+            #m-globe-pane > * { position: relative; z-index: 1; }
+            #m-globe-pane::after {
+                content: '';
+                position: absolute;
+                inset: 0;
+                background: radial-gradient(circle closest-side, transparent 0%, transparent var(--globe-edge, 84%), rgba(0,255,65,1.0) var(--globe-edge, 84%), transparent 100%);
+                opacity: 0;
+                pointer-events: none;
+                z-index: 0;
+            }
+            #m-globe-pane.glow-pulse::after {
+                animation: globe-glow-pulse 3s ease-out forwards;
+            }
+            @keyframes globe-glow-pulse {
+                0%   { opacity: 1; }
+                100% { opacity: 0; }
+            }
         }
     </style>
 </head>
@@ -552,15 +577,6 @@
                 paneGlobeDesktop.polygonAltitude(0.01);
                 countriesApplied = true;
             }
-            // Mobile pane globe: country outlines only (no hexagons)
-            if (paneGlobeMobile && !countriesApplied) {
-                paneGlobeMobile.polygonsData(countriesData);
-                paneGlobeMobile.polygonCapColor(() => 'rgba(0,0,0,0)');
-                paneGlobeMobile.polygonSideColor(() => 'rgba(0,0,0,0)');
-                paneGlobeMobile.polygonStrokeColor(() => '#00ff41');
-                paneGlobeMobile.polygonAltitude(0.002);
-                countriesApplied = true;
-            }
         });
 
     function createGlobe(container, size) {
@@ -633,11 +649,14 @@
         });
     }
 
+    const noHeaderGlobe = new URLSearchParams(window.location.search).has('noheader');
+    const noGlobePane = new URLSearchParams(window.location.search).has('noglobepane');
+
     function initGlobes() {
         const mobileContainer = document.getElementById('globe-container');
         const desktopContainer = document.getElementById('d-globe-container');
 
-        if (mobileContainer && window.innerWidth <= 800) {
+        if (mobileContainer && window.innerWidth <= 800 && !noHeaderGlobe) {
             mobileGlobe = createGlobe(mobileContainer, 85);
             addGlobeClickHandler(mobileContainer, () => toggleGlobeFullscreen(mobileContainer, mobileGlobe, 85));
         }
@@ -740,15 +759,14 @@
     }
 
     function createMobilePaneGlobe() {
+        if (noGlobePane) return;
         const pane = document.getElementById('m-globe-pane');
         if (!pane) return;
         const size = Math.min(pane.clientWidth, pane.clientHeight) || 250;
         paneGlobeMobile = Globe()
-            .globeImageUrl('//unpkg.com/three-globe/example/img/earth-blue-marble.jpg')
+            .globeImageUrl('/static/earth-borders-mobile.jpg')
             .backgroundColor('rgba(0,0,0,0)')
-            .showAtmosphere(true)
-            .atmosphereColor('#00ff41')
-            .atmosphereAltitude(0.15)
+            .showAtmosphere(false)
             .width(size)
             .height(size)
             .pointsData([])
@@ -759,14 +777,13 @@
         paneGlobeMobile.controls().enableZoom = false;
         paneGlobeMobile.controls().autoRotate = false;
         if (lastLat !== null) paneGlobeMobile.pointOfView({ lat: lastLat, lng: lastLng, altitude: 1.8 });
-        if (countriesData && !countriesApplied) {
-            paneGlobeMobile.polygonsData(countriesData);
-            paneGlobeMobile.polygonCapColor(() => 'rgba(0,0,0,0)');
-            paneGlobeMobile.polygonSideColor(() => 'rgba(0,0,0,0)');
-            paneGlobeMobile.polygonStrokeColor(() => '#00ff41');
-            paneGlobeMobile.polygonAltitude(0.002);
-            countriesApplied = true;
-        }
+        const cam = paneGlobeMobile.camera();
+        const globeEdge = Math.asin(1 / (1.8 + 1)) / ((cam.fov / 2) * Math.PI / 180) * 100;
+        const closestSidePx = Math.min(pane.clientWidth, pane.clientHeight) / 2;
+        const glowSpreadPx = Math.min(globeEdge * 0.25 / 100 * closestSidePx, 25);
+        const glowOuter = Math.min(globeEdge + glowSpreadPx / closestSidePx * 100, 100);
+        pane.style.setProperty('--globe-edge', globeEdge.toFixed(1) + '%');
+        pane.style.setProperty('--glow-outer', glowOuter.toFixed(1) + '%');
         setTimeout(() => paneGlobeMobile.pauseAnimation(), 5000);
     }
 
@@ -864,24 +881,31 @@
 
     let atmospherePulseStart = null;
     function pulseGlobeAtmosphere() {
-        const globes = [paneGlobeDesktop, paneGlobeMobile].filter(g => g);
-        if (globes.length === 0) return;
+        // Desktop pane globe: animate Three.js atmosphere
+        if (paneGlobeDesktop) {
+            const duration = 3000;
+            const startAlt = 0.3;
+            const endAlt = 0.15;
+            atmospherePulseStart = performance.now();
 
-        const duration = 3000;
-        const startAlt = 0.3;
-        const endAlt = 0.15;
-        atmospherePulseStart = performance.now();
-
-        function animate(now) {
-            const elapsed = now - atmospherePulseStart;
-            const progress = Math.min(elapsed / duration, 1);
-            // Ease-out curve matching CSS default
-            const eased = 1 - Math.pow(1 - progress, 2);
-            const alt = startAlt - (startAlt - endAlt) * eased;
-            globes.forEach(g => g.atmosphereAltitude(alt));
-            if (progress < 1) requestAnimationFrame(animate);
+            function animate(now) {
+                const elapsed = now - atmospherePulseStart;
+                const progress = Math.min(elapsed / duration, 1);
+                const eased = 1 - Math.pow(1 - progress, 2);
+                const alt = startAlt - (startAlt - endAlt) * eased;
+                paneGlobeDesktop.atmosphereAltitude(alt);
+                if (progress < 1) requestAnimationFrame(animate);
+            }
+            requestAnimationFrame(animate);
         }
-        requestAnimationFrame(animate);
+
+        // Mobile pane globe: CSS radial gradient pulse
+        const mPane = document.getElementById('m-globe-pane');
+        if (mPane) {
+            mPane.classList.remove('glow-pulse');
+            void mPane.offsetWidth; // force reflow to restart animation
+            mPane.classList.add('glow-pulse');
+        }
     }
 
     function updateGlobeLocation(d) {
@@ -936,7 +960,7 @@
             const mobileContainer = document.getElementById('globe-container');
             const desktopContainer = document.getElementById('d-globe-container');
 
-            if (isMobile && !mobileGlobe && mobileContainer) {
+            if (isMobile && !mobileGlobe && mobileContainer && !noHeaderGlobe) {
                 mobileContainer.innerHTML = '';
                 mobileGlobe = createGlobe(mobileContainer, 85);
                 if (lastLat !== null) rotateGlobeToLocation(lastLat, lastLng);

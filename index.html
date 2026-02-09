@@ -1259,11 +1259,13 @@
                 leaderboards.users = d.top_users || [];
                 leaderboards.ips = d.top_ips || [];
 
+                const preScroll = vp.scrollLeft;
                 renderBars('loc', d.top_locations, 'loc-fill', true);
                 renderBars('pass', d.top_passwords, 'password-fill');
                 renderBars('prov', d.top_providers, 'provider-fill');
                 renderBars('user', d.top_users, 'user-fill');
                 renderBars('ip', d.top_ips, 'ip-fill');
+                if (vp.scrollLeft !== preScroll) debugLog(`⚠️ SCROLL SHIFTED during init_stats: ${preScroll} → ${vp.scrollLeft}`);
                 if (d.history) {
                     ['d-feed', 'm-feed'].forEach(id => document.getElementById(id).innerHTML = '');
                     d.history.forEach(k => renderKnock(k, false));
@@ -1280,9 +1282,15 @@
     }
 
     const vp = document.getElementById('m-viewport');
+    let lastPaneIdx = 0;
     vp.addEventListener('scroll', () => {
         const scrolled = (vp.scrollLeft / (vp.scrollWidth - vp.clientWidth)) * 100;
         document.getElementById('m-progress-bar').style.width = scrolled + '%';
+        const currentIdx = Math.round(vp.scrollLeft / vp.clientWidth);
+        if (currentIdx !== lastPaneIdx) {
+            debugLog(`PANE CHANGE: ${lastPaneIdx} → ${currentIdx}`);
+            lastPaneIdx = currentIdx;
+        }
     });
 
     const observer = new IntersectionObserver((entries) => {

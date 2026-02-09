@@ -497,6 +497,7 @@
     let lastLat = null;
     let lastLng = null;
     let countriesData = null;
+    let countriesApplied = false;
     let paneGlobeDesktop = null;
     let paneGlobeMobile = null;
 
@@ -539,7 +540,7 @@
             countriesData = data.features;
             // Add hex polygons and neon outlines to pane globes if they exist
             const hexColor = () => `hsl(${140 + Math.random() * 40}, 100%, 50%)`;
-            if (paneGlobeDesktop) {
+            if (paneGlobeDesktop && !countriesApplied) {
                 paneGlobeDesktop.hexPolygonsData(countriesData);
                 paneGlobeDesktop.hexPolygonResolution(3);
                 paneGlobeDesktop.hexPolygonMargin(0.4);
@@ -549,14 +550,16 @@
                 paneGlobeDesktop.polygonSideColor(() => 'rgba(0,0,0,0)');
                 paneGlobeDesktop.polygonStrokeColor(() => '#000080');
                 paneGlobeDesktop.polygonAltitude(0.01);
+                countriesApplied = true;
             }
             // Mobile pane globe: country outlines only (no hexagons)
-            if (paneGlobeMobile) {
+            if (paneGlobeMobile && !countriesApplied) {
                 paneGlobeMobile.polygonsData(countriesData);
                 paneGlobeMobile.polygonCapColor(() => 'rgba(0,0,0,0)');
                 paneGlobeMobile.polygonSideColor(() => 'rgba(0,0,0,0)');
                 paneGlobeMobile.polygonStrokeColor(() => '#00ff41');
                 paneGlobeMobile.polygonAltitude(0.002);
+                countriesApplied = true;
             }
         });
 
@@ -723,19 +726,21 @@
                     (desktopPane);
                 paneGlobeDesktop.controls().enableZoom = false;
                 paneGlobeDesktop.controls().autoRotate = false;
-                if (countriesData) {
+                if (lastLat !== null) paneGlobeDesktop.pointOfView({ lat: lastLat, lng: lastLng, altitude: 1.8 });
+                // Apply country polygons if fetch already completed
+                if (countriesData && !countriesApplied) {
+                    const hexColor = () => `hsl(${140 + Math.random() * 40}, 100%, 50%)`;
                     paneGlobeDesktop.hexPolygonsData(countriesData);
                     paneGlobeDesktop.hexPolygonResolution(3);
                     paneGlobeDesktop.hexPolygonMargin(0.4);
-                    paneGlobeDesktop.hexPolygonColor(() => `hsl(${140 + Math.random() * 40}, 100%, 50%)`);
-                    // Layer neon outlines on top
+                    paneGlobeDesktop.hexPolygonColor(hexColor);
                     paneGlobeDesktop.polygonsData(countriesData);
                     paneGlobeDesktop.polygonCapColor(() => 'rgba(0,0,0,0)');
                     paneGlobeDesktop.polygonSideColor(() => 'rgba(0,0,0,0)');
                     paneGlobeDesktop.polygonStrokeColor(() => '#000080');
                     paneGlobeDesktop.polygonAltitude(0.01);
+                    countriesApplied = true;
                 }
-                if (lastLat !== null) paneGlobeDesktop.pointOfView({ lat: lastLat, lng: lastLng, altitude: 1.8 });
                 // Delay pause to allow initial render at full size
                 setTimeout(() => paneGlobeDesktop.pauseAnimation(), 5000);
             }
@@ -757,15 +762,16 @@
                     (mobilePane);
                 paneGlobeMobile.controls().enableZoom = false;
                 paneGlobeMobile.controls().autoRotate = false;
-                // Country outlines only (no hexagons)
-                if (countriesData) {
+                if (lastLat !== null) paneGlobeMobile.pointOfView({ lat: lastLat, lng: lastLng, altitude: 1.8 });
+                // Apply country outlines if fetch already completed
+                if (countriesData && !countriesApplied) {
                     paneGlobeMobile.polygonsData(countriesData);
                     paneGlobeMobile.polygonCapColor(() => 'rgba(0,0,0,0)');
                     paneGlobeMobile.polygonSideColor(() => 'rgba(0,0,0,0)');
                     paneGlobeMobile.polygonStrokeColor(() => '#00ff41');
                     paneGlobeMobile.polygonAltitude(0.002);
+                    countriesApplied = true;
                 }
-                if (lastLat !== null) paneGlobeMobile.pointOfView({ lat: lastLat, lng: lastLng, altitude: 1.8 });
                 // Delay pause to allow initial render at full size
                 setTimeout(() => paneGlobeMobile.pauseAnimation(), 5000);
             }

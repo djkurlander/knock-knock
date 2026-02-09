@@ -703,83 +703,111 @@
         }
     }
 
+    function createDesktopPaneGlobe() {
+        const pane = document.getElementById('d-globe-pane');
+        if (!pane) return;
+        const size = Math.min(pane.clientWidth, pane.clientHeight) || 300;
+        paneGlobeDesktop = Globe()
+            .globeImageUrl('//unpkg.com/three-globe/example/img/earth-night.jpg')
+            .backgroundColor('rgba(0,0,0,0)')
+            .showAtmosphere(true)
+            .atmosphereColor('#00ff41')
+            .atmosphereAltitude(0.15)
+            .width(size)
+            .height(size)
+            .pointsData([])
+            .pointAltitude(0.01)
+            .pointColor(() => '#ff0000')
+            .pointRadius(1.5)
+            (pane);
+        paneGlobeDesktop.controls().enableZoom = false;
+        paneGlobeDesktop.controls().autoRotate = false;
+        if (lastLat !== null) paneGlobeDesktop.pointOfView({ lat: lastLat, lng: lastLng, altitude: 1.8 });
+        if (countriesData && !countriesApplied) {
+            const hexColor = () => `hsl(${140 + Math.random() * 40}, 100%, 50%)`;
+            paneGlobeDesktop.hexPolygonsData(countriesData);
+            paneGlobeDesktop.hexPolygonResolution(3);
+            paneGlobeDesktop.hexPolygonMargin(0.4);
+            paneGlobeDesktop.hexPolygonColor(hexColor);
+            paneGlobeDesktop.polygonsData(countriesData);
+            paneGlobeDesktop.polygonCapColor(() => 'rgba(0,0,0,0)');
+            paneGlobeDesktop.polygonSideColor(() => 'rgba(0,0,0,0)');
+            paneGlobeDesktop.polygonStrokeColor(() => '#000080');
+            paneGlobeDesktop.polygonAltitude(0.01);
+            countriesApplied = true;
+        }
+        setTimeout(() => paneGlobeDesktop.pauseAnimation(), 5000);
+    }
+
+    function createMobilePaneGlobe() {
+        const pane = document.getElementById('m-globe-pane');
+        if (!pane) return;
+        const size = Math.min(pane.clientWidth, pane.clientHeight) || 250;
+        paneGlobeMobile = Globe()
+            .globeImageUrl('//unpkg.com/three-globe/example/img/earth-blue-marble.jpg')
+            .backgroundColor('rgba(0,0,0,0)')
+            .showAtmosphere(true)
+            .atmosphereColor('#00ff41')
+            .atmosphereAltitude(0.15)
+            .width(size)
+            .height(size)
+            .pointsData([])
+            .pointAltitude(0.01)
+            .pointColor(() => '#ff0000')
+            .pointRadius(1.5)
+            (pane);
+        paneGlobeMobile.controls().enableZoom = false;
+        paneGlobeMobile.controls().autoRotate = false;
+        if (lastLat !== null) paneGlobeMobile.pointOfView({ lat: lastLat, lng: lastLng, altitude: 1.8 });
+        if (countriesData && !countriesApplied) {
+            paneGlobeMobile.polygonsData(countriesData);
+            paneGlobeMobile.polygonCapColor(() => 'rgba(0,0,0,0)');
+            paneGlobeMobile.polygonSideColor(() => 'rgba(0,0,0,0)');
+            paneGlobeMobile.polygonStrokeColor(() => '#00ff41');
+            paneGlobeMobile.polygonAltitude(0.002);
+            countriesApplied = true;
+        }
+        setTimeout(() => paneGlobeMobile.pauseAnimation(), 5000);
+    }
+
+    function destroyPaneGlobe(which) {
+        if (which === 'desktop' && paneGlobeDesktop) {
+            paneGlobeDesktop._destructor();
+            paneGlobeDesktop = null;
+        } else if (which === 'mobile' && paneGlobeMobile) {
+            paneGlobeMobile._destructor();
+            paneGlobeMobile = null;
+        }
+        countriesApplied = false;
+    }
+
     function initPaneGlobes() {
-        // Initialize asynchronously to not block page load
         setTimeout(() => {
-            const desktopPane = document.getElementById('d-globe-pane');
-            const mobilePane = document.getElementById('m-globe-pane');
-
-            if (desktopPane && window.innerWidth > 800) {
-                const size = Math.min(desktopPane.clientWidth, desktopPane.clientHeight) || 300;
-                paneGlobeDesktop = Globe()
-                    .globeImageUrl('//unpkg.com/three-globe/example/img/earth-night.jpg')
-                    .backgroundColor('rgba(0,0,0,0)')
-                    .showAtmosphere(true)
-                    .atmosphereColor('#00ff41')
-                    .atmosphereAltitude(0.15)
-                    .width(size)
-                    .height(size)
-                    .pointsData([])
-                    .pointAltitude(0.01)
-                    .pointColor(() => '#ff0000')
-                    .pointRadius(1.5)
-                    (desktopPane);
-                paneGlobeDesktop.controls().enableZoom = false;
-                paneGlobeDesktop.controls().autoRotate = false;
-                if (lastLat !== null) paneGlobeDesktop.pointOfView({ lat: lastLat, lng: lastLng, altitude: 1.8 });
-                // Apply country polygons if fetch already completed
-                if (countriesData && !countriesApplied) {
-                    const hexColor = () => `hsl(${140 + Math.random() * 40}, 100%, 50%)`;
-                    paneGlobeDesktop.hexPolygonsData(countriesData);
-                    paneGlobeDesktop.hexPolygonResolution(3);
-                    paneGlobeDesktop.hexPolygonMargin(0.4);
-                    paneGlobeDesktop.hexPolygonColor(hexColor);
-                    paneGlobeDesktop.polygonsData(countriesData);
-                    paneGlobeDesktop.polygonCapColor(() => 'rgba(0,0,0,0)');
-                    paneGlobeDesktop.polygonSideColor(() => 'rgba(0,0,0,0)');
-                    paneGlobeDesktop.polygonStrokeColor(() => '#000080');
-                    paneGlobeDesktop.polygonAltitude(0.01);
-                    countriesApplied = true;
-                }
-                // Delay pause to allow initial render at full size
-                setTimeout(() => paneGlobeDesktop.pauseAnimation(), 5000);
-            }
-
-            if (mobilePane && window.innerWidth <= 800 && !DEBUG) {
-                const size = Math.min(mobilePane.clientWidth, mobilePane.clientHeight) || 250;
-                paneGlobeMobile = Globe()
-                    .globeImageUrl('//unpkg.com/three-globe/example/img/earth-blue-marble.jpg')
-                    .backgroundColor('rgba(0,0,0,0)')
-                    .showAtmosphere(true)
-                    .atmosphereColor('#00ff41')
-                    .atmosphereAltitude(0.15)
-                    .width(size)
-                    .height(size)
-                    .pointsData([])
-                    .pointAltitude(0.01)
-                    .pointColor(() => '#ff0000')
-                    .pointRadius(1.5)
-                    (mobilePane);
-                paneGlobeMobile.controls().enableZoom = false;
-                paneGlobeMobile.controls().autoRotate = false;
-                if (lastLat !== null) paneGlobeMobile.pointOfView({ lat: lastLat, lng: lastLng, altitude: 1.8 });
-                // Apply country outlines if fetch already completed
-                if (countriesData && !countriesApplied) {
-                    paneGlobeMobile.polygonsData(countriesData);
-                    paneGlobeMobile.polygonCapColor(() => 'rgba(0,0,0,0)');
-                    paneGlobeMobile.polygonSideColor(() => 'rgba(0,0,0,0)');
-                    paneGlobeMobile.polygonStrokeColor(() => '#00ff41');
-                    paneGlobeMobile.polygonAltitude(0.002);
-                    countriesApplied = true;
-                }
-                // Delay pause to allow initial render at full size
-                setTimeout(() => paneGlobeMobile.pauseAnimation(), 5000);
-            }
-
-            // Pause/resume pane globes based on visibility
+            if (window.innerWidth > 800) createDesktopPaneGlobe();
+            else if (!DEBUG) createMobilePaneGlobe();
             setupPaneGlobeVisibility();
         }, 100);
     }
+
+    // Switch pane globe when crossing the 800px breakpoint
+    let lastWasDesktop = window.innerWidth > 800;
+    let resizeTimer;
+    window.addEventListener('resize', () => {
+        clearTimeout(resizeTimer);
+        resizeTimer = setTimeout(() => {
+            const isDesktop = window.innerWidth > 800;
+            if (isDesktop === lastWasDesktop) return;
+            lastWasDesktop = isDesktop;
+            if (isDesktop) {
+                destroyPaneGlobe('mobile');
+                createDesktopPaneGlobe();
+            } else if (!DEBUG) {
+                destroyPaneGlobe('desktop');
+                createMobilePaneGlobe();
+            }
+            setupPaneGlobeVisibility();
+        }, 300);
+    });
 
     function setupPaneGlobeVisibility() {
         const targets = [

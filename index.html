@@ -740,7 +740,7 @@
                 setTimeout(() => paneGlobeDesktop.pauseAnimation(), 5000);
             }
 
-            if (mobilePane && window.innerWidth <= 800) {
+            if (mobilePane && window.innerWidth <= 800 && !DEBUG) {
                 const size = Math.min(mobilePane.clientWidth, mobilePane.clientHeight) || 250;
                 paneGlobeMobile = Globe()
                     .globeImageUrl('//unpkg.com/three-globe/example/img/earth-blue-marble.jpg')

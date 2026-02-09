@@ -69,20 +69,6 @@
         .status-dot { height: 14px; width: 14px; border-radius: 50%; background: var(--hazard-red); display: inline-block; vertical-align: 0.2em; margin-left: 10px; }
         .status-online { background: var(--neon-green); box-shadow: 0 0 10px var(--neon-green); }
 
-        .globe-fullscreen {
-            position: fixed !important;
-            top: 0 !important;
-            left: 0 !important;
-            width: 100vw !important;
-            height: 100vh !important;
-            z-index: 9999 !important;
-            background: rgba(0, 0, 0, 0.5) !important;
-            display: flex !important;
-            align-items: center !important;
-            justify-content: center !important;
-            cursor: pointer;
-        }
-
         /* --- 2. DESKTOP VIEW (> 800px) --- */
         @media (min-width: 801px) {
             #mobile-layout { display: none !important; }
@@ -143,11 +129,14 @@
                 transition: all 1.0s cubic-bezier(0.65, 0, 0.35, 1);
             }
 
-            #d-box-feed, #d-box-info {
+            #d-box-feed {
                 flex: 0 0 425px;
             }
+            #d-box-info {
+                flex: 0 0 340px;
+            }
             #d-box-globe {
-                flex: 0 0 350px;
+                flex: 0 0 420px;
             }
             #d-box-jokes {
                 flex: 0 0 275px;
@@ -160,7 +149,15 @@
                 justify-content: center;
                 align-items: center;
                 overflow: hidden;
+                position: relative;
+                scrollbar-gutter: auto;
+                margin-right: 0;
+                padding-right: 0;
             }
+            #d-globe-pane.glow-active {
+                background: radial-gradient(circle closest-side, transparent 0%, transparent var(--globe-edge, 84%), rgba(0,255,65,0.15) var(--globe-edge, 84%), transparent var(--glow-outer, 100%));
+            }
+            #d-globe-pane.glow-pulse::after { animation: globe-glow-pulse 2.5s ease-out forwards; }
             
             .d-box.is-active { 
                 border-color: var(--neon-green); 
@@ -240,30 +237,34 @@
             .nav-item.active { color: var(--neon-green); text-shadow: 0 0 12px var(--neon-green); transform: translateY(-3px); }
 
             #m-pane-globe { padding-left: 10px; padding-right: 10px; }
-            #m-globe-pane { overflow: hidden; }
-            #m-globe-pane {
-                position: relative;
-                padding-right: 0;
+            #m-globe-pane { padding-right: 0; }
+            #m-globe-pane.glow-active {
                 background: radial-gradient(circle closest-side, transparent 0%, transparent var(--globe-edge, 84%), rgba(0,255,65,0.5) var(--globe-edge, 84%), transparent var(--glow-outer, 100%));
             }
-            #m-globe-pane > * { position: relative; z-index: 1; }
-            #m-globe-pane::after {
-                content: '';
-                position: absolute;
-                inset: 0;
-                background: radial-gradient(circle closest-side, transparent 0%, transparent var(--globe-edge, 84%), rgba(0,255,65,1.0) var(--globe-edge, 84%), transparent 100%);
-                opacity: 0;
-                pointer-events: none;
-                z-index: 0;
-            }
-            #m-globe-pane.glow-pulse::after {
-                animation: globe-glow-pulse 3s ease-out forwards;
-            }
-            @keyframes globe-glow-pulse {
-                0%   { opacity: 1; }
-                100% { opacity: 0; }
-            }
+            #m-globe-pane.glow-pulse::after { animation: globe-glow-pulse 3s ease-out forwards; }
         }
+        .globe-pane { position: relative; overflow: hidden; }
+        .globe-pane > * { position: relative; z-index: 1; }
+        .globe-pane::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: radial-gradient(circle closest-side, transparent 0%, transparent var(--globe-edge, 84%), rgba(0,255,65,1.0) var(--globe-edge, 84%), transparent 100%);
+            opacity: 0;
+            pointer-events: none;
+            z-index: 0;
+        }
+        @keyframes globe-glow-pulse {
+            0%   { opacity: 1; }
+            100% { opacity: 0; }
+        }
+
+        .pane-globe-style-btn {
+            position: absolute; bottom: 8px; right: 8px; z-index: 2;
+            color: rgba(255,255,255,0.45); font-size: 2.2em; cursor: pointer;
+            transition: color 0.2s; line-height: 1; user-select: none;
+        }
+        .pane-globe-style-btn:hover { color: rgba(255,255,255,0.9); }
     </style>
 </head>
 <body>
@@ -304,7 +305,7 @@
     
     <div class="d-grid" id="d-slider-container">
         <div class="d-box" id="d-box-feed" onclick="dJump(0)"><h2>LIVE FEED: LOGIN ATTEMPTS</h2><div id="d-feed" class="d-content"></div></div>
-        <div class="d-box" id="d-box-globe"><h2>GLOBE</h2><div id="d-globe-location" style="text-align:center; margin-bottom:10px;"><div id="d-globe-loc-text" style="color:var(--neon-green);"></div><div id="d-globe-loc-isp" style="color:var(--data-blue); font-size:0.85em;"></div></div><div id="d-globe-pane" class="d-content"></div></div>
+        <div class="d-box" id="d-box-globe"><h2>GLOBE VIEW</h2><div id="d-globe-location" style="text-align:center; margin-bottom:10px;"><div id="d-globe-loc-text" style="color:var(--neon-green);"></div><div id="d-globe-loc-isp" style="color:var(--data-blue); font-size:0.85em;"></div></div><div id="d-globe-pane" class="d-content globe-pane"></div></div>
         <div class="d-box" onclick="dJump(2)"><h2>LOCATION</h2><div id="d-loc" class="d-content"></div></div>
         <div class="d-box" onclick="dJump(3)"><h2>USERNAME</h2><div id="d-user" class="d-content"></div></div>
         <div class="d-box" onclick="dJump(4)"><h2>PASSWORD</h2><div id="d-pass" class="d-content"></div></div>
@@ -345,7 +346,7 @@
     <div class="m-progress-container"><div id="m-progress-bar"></div></div>
     <div class="m-viewport" id="m-viewport">
         <div class="m-pane" id="m-pane-feed"><h2>LIVE FEED: LOGIN ATTEMPTS</h2><div id="m-feed" class="m-content"></div></div>
-        <div class="m-pane" id="m-pane-globe"><h2>GLOBE</h2><div id="m-globe-location" style="text-align:center; margin-bottom:10px;"><div id="m-globe-loc-text" style="color:var(--neon-green);"></div><div id="m-globe-loc-isp" style="color:var(--data-blue); font-size:0.85em;"></div></div><div id="m-globe-pane" class="m-content" style="display:flex; justify-content:center; align-items:center;"></div></div>
+        <div class="m-pane" id="m-pane-globe"><h2>GLOBE VIEW</h2><div id="m-globe-location" style="text-align:center; margin-bottom:10px;"><div id="m-globe-loc-text" style="color:var(--neon-green);"></div><div id="m-globe-loc-isp" style="color:var(--data-blue); font-size:0.85em;"></div></div><div id="m-globe-pane" class="m-content globe-pane" style="display:flex; justify-content:center; align-items:center;"></div></div>
         <div class="m-pane" id="m-pane-loc"><h2>LOCATION</h2><div id="m-loc" class="m-content"></div></div>
         <div class="m-pane" id="m-pane-user"><h2>USERNAME</h2><div id="m-user" class="m-content"></div></div>
         <div class="m-pane" id="m-pane-pass"><h2>PASSWORD</h2><div id="m-pass" class="m-content"></div></div>
@@ -500,21 +501,23 @@
     document.addEventListener('click', initAudio, { once: true });
     document.addEventListener('touchstart', initAudio, { once: true });
 
-    function playClick() {
-        if (!soundEnabled) return;
+    function playTone(freq, type, vol, dur) {
         if (!audioCtx) initAudio();
         if (!audioCtx || audioCtx.state === 'suspended') return;
         const osc = audioCtx.createOscillator();
         const gain = audioCtx.createGain();
         osc.connect(gain);
         gain.connect(audioCtx.destination);
-        osc.frequency.value = 800;
-        osc.type = 'sine';
-        gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.05);
+        osc.frequency.value = freq;
+        osc.type = type;
+        gain.gain.setValueAtTime(vol, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + dur);
         osc.start(audioCtx.currentTime);
-        osc.stop(audioCtx.currentTime + 0.05);
+        osc.stop(audioCtx.currentTime + dur);
     }
+
+    function playClick() { if (soundEnabled) playTone(800, 'sine', 0.1, 0.05); }
+    function playUIClick() { playTone(1200, 'triangle', 0.08, 0.08); }
     let lastKnockTime = null;
     let currentKnock = null;
     let mobileGlobe = null;
@@ -522,7 +525,6 @@
     let lastLat = null;
     let lastLng = null;
     let countriesData = null;
-    let countriesApplied = false;
     let paneGlobeDesktop = null;
     let paneGlobeMobile = null;
 
@@ -558,25 +560,14 @@
         return ` <span style="color:var(--data-blue)">(${rank}${suffix}${star})</span>`;
     }
 
-    // Load countries GeoJSON on startup for fullscreen mode and globe panes
+    // Load countries GeoJSON on startup for globe panes
     fetch('/static/countries.geojson')
         .then(res => res.json())
         .then(data => {
             countriesData = data.features;
-            // Add hex polygons and neon outlines to pane globes if they exist
-            const hexColor = () => `hsl(${140 + Math.random() * 40}, 100%, 50%)`;
-            if (paneGlobeDesktop && !countriesApplied) {
-                paneGlobeDesktop.hexPolygonsData(countriesData);
-                paneGlobeDesktop.hexPolygonResolution(3);
-                paneGlobeDesktop.hexPolygonMargin(0.4);
-                paneGlobeDesktop.hexPolygonColor(hexColor);
-                paneGlobeDesktop.polygonsData(countriesData);
-                paneGlobeDesktop.polygonCapColor(() => 'rgba(0,0,0,0)');
-                paneGlobeDesktop.polygonSideColor(() => 'rgba(0,0,0,0)');
-                paneGlobeDesktop.polygonStrokeColor(() => '#000080');
-                paneGlobeDesktop.polygonAltitude(0.01);
-                countriesApplied = true;
-            }
+            // Apply current style to any existing pane globe (hex polygons need countriesData)
+            if (paneGlobeDesktop) applyGlobeStyle(paneGlobeDesktop, paneGlobeStyleIdx);
+            if (paneGlobeMobile) applyGlobeStyle(paneGlobeMobile, paneGlobeStyleIdx);
         });
 
     function createGlobe(container, size) {
@@ -658,150 +649,117 @@
 
         if (mobileContainer && window.innerWidth <= 800 && !noHeaderGlobe) {
             mobileGlobe = createGlobe(mobileContainer, 85);
-            addGlobeClickHandler(mobileContainer, () => toggleGlobeFullscreen(mobileContainer, mobileGlobe, 85));
+            addGlobeClickHandler(mobileContainer, () => jump(1));
         }
         if (desktopContainer && window.innerWidth > 800) {
             desktopGlobe = createGlobe(desktopContainer, 110);
-            addGlobeClickHandler(desktopContainer, () => toggleGlobeFullscreen(desktopContainer, desktopGlobe, 120));
+            addGlobeClickHandler(desktopContainer, () => dJump(1));
         }
     }
 
-    let globeIsFullscreen = false;
+    const GLOBE_STYLES = [
+        { name: 'Night', img: '//unpkg.com/three-globe/example/img/earth-night.jpg', hex: true },
+        { name: 'Borders', img: '/static/earth-borders-mobile.jpg', hex: false },
+    ];
+    let paneGlobeStyleIdx = window.innerWidth <= 800 ? 1 : 0;
 
-    function toggleGlobeFullscreen(container, globe, smallSize) {
-        if (!globe) return;
-
-        const isDesktop = window.innerWidth > 800;
-        globeIsFullscreen = !globeIsFullscreen;
-
-        if (globeIsFullscreen) {
-            // Hide during transition
-            container.style.visibility = 'hidden';
-            container.classList.add('globe-fullscreen');
-
-            const size = Math.min(window.innerWidth, window.innerHeight) * 0.9;
-            globe.width(size).height(size);
-
-            // Add neon country outlines for fullscreen
-            if (countriesData) {
-                globe.polygonsData(countriesData);
-                globe.polygonCapColor(() => 'rgba(0, 0, 0, 0)');
-                globe.polygonSideColor(() => 'rgba(0, 0, 0, 0)');
-                globe.polygonStrokeColor(() => '#000080');
-                globe.polygonAltitude(0.002);
-            }
-            // Reduce marker size on desktop when zoomed
-            if (isDesktop) {
-                globe.pointRadius(0.75);
-            }
-
-            // Show after globe has resized
-            setTimeout(() => { container.style.visibility = 'visible'; }, 100);
+    function applyGlobeStyle(globe, idx) {
+        const style = GLOBE_STYLES[idx];
+        globe.globeImageUrl(style.img);
+        if (style.hex && countriesData) {
+            globe.hexPolygonsData(countriesData);
+            globe.hexPolygonResolution(3);
+            globe.hexPolygonMargin(0.4);
+            globe.hexPolygonColor(() => `hsl(${140 + Math.random() * 40}, 100%, 50%)`);
+            globe.polygonsData(countriesData);
+            globe.polygonCapColor(() => 'rgba(0,0,0,0)');
+            globe.polygonSideColor(() => 'rgba(0,0,0,0)');
+            globe.polygonStrokeColor(() => '#000080');
+            globe.polygonAltitude(0.01);
         } else {
-            // Clear outlines first while still in fullscreen position
+            globe.hexPolygonsData([]);
             globe.polygonsData([]);
-            globe.pointRadius(1.5);
-
-            container.style.visibility = 'hidden';
-
-            setTimeout(() => {
-                container.classList.remove('globe-fullscreen');
-                globe.width(smallSize).height(smallSize);
-                // Wait for layout to settle before showing
-                requestAnimationFrame(() => {
-                    requestAnimationFrame(() => {
-                        container.style.visibility = 'visible';
-                    });
-                });
-            }, 100);
         }
-
-        // Re-center on current location
-        if (lastLat !== null) {
-            globe.pointOfView({ lat: lastLat, lng: lastLng, altitude: 1.4 }, 500);
-        }
+        globe.resumeAnimation();
+        schedulePaneGlobePause();
     }
 
-    function createDesktopPaneGlobe() {
-        const pane = document.getElementById('d-globe-pane');
-        if (!pane) return;
-        const size = Math.min(pane.clientWidth, pane.clientHeight) || 300;
-        paneGlobeDesktop = Globe()
-            .globeImageUrl('//unpkg.com/three-globe/example/img/earth-night.jpg')
-            .backgroundColor('rgba(0,0,0,0)')
-            .showAtmosphere(true)
-            .atmosphereColor('#00ff41')
-            .atmosphereAltitude(0.15)
-            .width(size)
-            .height(size)
-            .pointsData([])
-            .pointAltitude(0.01)
-            .pointColor(() => '#ff0000')
-            .pointRadius(1.5)
-            (pane);
-        paneGlobeDesktop.controls().enableZoom = false;
-        paneGlobeDesktop.controls().autoRotate = false;
-        if (lastLat !== null) paneGlobeDesktop.pointOfView({ lat: lastLat, lng: lastLng, altitude: 1.8 });
-        if (countriesData && !countriesApplied) {
-            const hexColor = () => `hsl(${140 + Math.random() * 40}, 100%, 50%)`;
-            paneGlobeDesktop.hexPolygonsData(countriesData);
-            paneGlobeDesktop.hexPolygonResolution(3);
-            paneGlobeDesktop.hexPolygonMargin(0.4);
-            paneGlobeDesktop.hexPolygonColor(hexColor);
-            paneGlobeDesktop.polygonsData(countriesData);
-            paneGlobeDesktop.polygonCapColor(() => 'rgba(0,0,0,0)');
-            paneGlobeDesktop.polygonSideColor(() => 'rgba(0,0,0,0)');
-            paneGlobeDesktop.polygonStrokeColor(() => '#000080');
-            paneGlobeDesktop.polygonAltitude(0.01);
-            countriesApplied = true;
-        }
-        setTimeout(() => paneGlobeDesktop.pauseAnimation(), 5000);
+    function cyclePaneGlobeStyle() {
+        playUIClick();
+        paneGlobeStyleIdx = (paneGlobeStyleIdx + 1) % GLOBE_STYLES.length;
+        if (paneGlobeDesktop) applyGlobeStyle(paneGlobeDesktop, paneGlobeStyleIdx);
+        if (paneGlobeMobile) applyGlobeStyle(paneGlobeMobile, paneGlobeStyleIdx);
+        // Update button labels
+        const next = GLOBE_STYLES[(paneGlobeStyleIdx + 1) % GLOBE_STYLES.length].name;
+        document.querySelectorAll('.pane-globe-style-btn').forEach(b => b.title = next);
     }
 
-    function createMobilePaneGlobe() {
-        if (noGlobePane) return;
-        const pane = document.getElementById('m-globe-pane');
+    function addStyleButton(parentBox) {
+        parentBox.style.position = 'relative';
+        const btn = document.createElement('div');
+        btn.className = 'pane-globe-style-btn';
+        btn.innerHTML = '&#x25D1;'; // ◑ half-circle
+        btn.title = GLOBE_STYLES[(paneGlobeStyleIdx + 1) % GLOBE_STYLES.length].name;
+        btn.addEventListener('click', (e) => { e.stopPropagation(); cyclePaneGlobeStyle(); });
+        parentBox.appendChild(btn);
+    }
+
+    const PANE_GLOBE_CFG = {
+        desktop: { paneId: 'd-globe-pane', btnParentId: 'd-box-globe', fallbackSize: 300, altitude: 1.5, glowCap: 15 },
+        mobile:  { paneId: 'm-globe-pane', btnParentId: 'm-pane-globe', fallbackSize: 250, altitude: 1.8, glowCap: 25 },
+    };
+
+    function createPaneGlobe(which) {
+        if (which === 'mobile' && noGlobePane) return;
+        const cfg = PANE_GLOBE_CFG[which];
+        const pane = document.getElementById(cfg.paneId);
         if (!pane) return;
-        const size = Math.min(pane.clientWidth, pane.clientHeight) || 250;
-        paneGlobeMobile = Globe()
-            .globeImageUrl('/static/earth-borders-mobile.jpg')
+        const size = Math.min(pane.clientWidth, pane.clientHeight) || cfg.fallbackSize;
+        const globe = Globe()
+            .globeImageUrl(GLOBE_STYLES[paneGlobeStyleIdx].img)
             .backgroundColor('rgba(0,0,0,0)')
             .showAtmosphere(false)
-            .width(size)
-            .height(size)
+            .width(size).height(size)
             .pointsData([])
             .pointAltitude(0.01)
             .pointColor(() => '#ff0000')
             .pointRadius(1.5)
             (pane);
-        paneGlobeMobile.controls().enableZoom = false;
-        paneGlobeMobile.controls().autoRotate = false;
-        if (lastLat !== null) paneGlobeMobile.pointOfView({ lat: lastLat, lng: lastLng, altitude: 1.8 });
-        const cam = paneGlobeMobile.camera();
-        const globeEdge = Math.asin(1 / (1.8 + 1)) / ((cam.fov / 2) * Math.PI / 180) * 100;
-        const closestSidePx = Math.min(pane.clientWidth, pane.clientHeight) / 2;
-        const glowSpreadPx = Math.min(globeEdge * 0.25 / 100 * closestSidePx, 25);
-        const glowOuter = Math.min(globeEdge + glowSpreadPx / closestSidePx * 100, 100);
+        globe.controls().enableZoom = false;
+        globe.controls().autoRotate = false;
+        globe.pointOfView(lastLat !== null ? { lat: lastLat, lng: lastLng, altitude: cfg.altitude } : { altitude: cfg.altitude });
+        const cam = globe.camera();
+        const globeEdge = Math.asin(1 / (cfg.altitude + 1)) / ((cam.fov / 2) * Math.PI / 180) * 100;
+        const closestSide = Math.min(pane.clientWidth, pane.clientHeight) / 2;
+        const glowSpread = Math.min(globeEdge * 0.25 / 100 * closestSide, cfg.glowCap);
+        const glowOuter = Math.min(globeEdge + glowSpread / closestSide * 100, 100);
         pane.style.setProperty('--globe-edge', globeEdge.toFixed(1) + '%');
         pane.style.setProperty('--glow-outer', glowOuter.toFixed(1) + '%');
-        setTimeout(() => paneGlobeMobile.pauseAnimation(), 5000);
+        globe.onGlobeReady(() => pane.classList.add('glow-active'));
+        if (which === 'desktop') paneGlobeDesktop = globe; else paneGlobeMobile = globe;
+        applyGlobeStyle(globe, paneGlobeStyleIdx);
+        setTimeout(() => globe.pauseAnimation(), 5000);
+        addStyleButton(document.getElementById(cfg.btnParentId));
     }
 
     function destroyPaneGlobe(which) {
         if (which === 'desktop' && paneGlobeDesktop) {
+            document.getElementById('d-globe-pane')?.classList.remove('glow-active');
+            document.getElementById('d-box-globe')?.querySelector('.pane-globe-style-btn')?.remove();
             paneGlobeDesktop._destructor();
             paneGlobeDesktop = null;
         } else if (which === 'mobile' && paneGlobeMobile) {
+            document.getElementById('m-globe-pane')?.classList.remove('glow-active');
+            document.getElementById('m-pane-globe')?.querySelector('.pane-globe-style-btn')?.remove();
             paneGlobeMobile._destructor();
             paneGlobeMobile = null;
         }
-        countriesApplied = false;
     }
 
     function initPaneGlobes() {
         setTimeout(() => {
-            if (window.innerWidth > 800) createDesktopPaneGlobe();
-            else if (!DEBUG) createMobilePaneGlobe();
+            if (window.innerWidth > 800) createPaneGlobe('desktop');
+            else if (!DEBUG) createPaneGlobe('mobile');
             setupPaneGlobeVisibility();
         }, 100);
     }
@@ -817,10 +775,10 @@
             lastWasDesktop = isDesktop;
             if (isDesktop) {
                 destroyPaneGlobe('mobile');
-                createDesktopPaneGlobe();
+                createPaneGlobe('desktop');
             } else if (!DEBUG) {
                 destroyPaneGlobe('desktop');
-                createMobilePaneGlobe();
+                createPaneGlobe('mobile');
             }
             setupPaneGlobeVisibility();
         }, 300);
@@ -879,33 +837,14 @@
         }, 3100); // 3s pulse animation + 100ms buffer
     }
 
-    let atmospherePulseStart = null;
     function pulseGlobeAtmosphere() {
-        // Desktop pane globe: animate Three.js atmosphere
-        if (paneGlobeDesktop) {
-            const duration = 3000;
-            const startAlt = 0.3;
-            const endAlt = 0.15;
-            atmospherePulseStart = performance.now();
-
-            function animate(now) {
-                const elapsed = now - atmospherePulseStart;
-                const progress = Math.min(elapsed / duration, 1);
-                const eased = 1 - Math.pow(1 - progress, 2);
-                const alt = startAlt - (startAlt - endAlt) * eased;
-                paneGlobeDesktop.atmosphereAltitude(alt);
-                if (progress < 1) requestAnimationFrame(animate);
-            }
-            requestAnimationFrame(animate);
-        }
-
-        // Mobile pane globe: CSS radial gradient pulse
-        const mPane = document.getElementById('m-globe-pane');
-        if (mPane) {
-            mPane.classList.remove('glow-pulse');
-            void mPane.offsetWidth; // force reflow to restart animation
-            mPane.classList.add('glow-pulse');
-        }
+        ['d-globe-pane', 'm-globe-pane'].forEach(id => {
+            const el = document.getElementById(id);
+            if (!el) return;
+            el.classList.remove('glow-pulse');
+            void el.offsetWidth;
+            el.classList.add('glow-pulse');
+        });
     }
 
     function updateGlobeLocation(d) {
@@ -926,27 +865,18 @@
         if (lat === null || lng === null) return;
         lastLat = lat;
         lastLng = lng;
-        const point = [{ lat: lat, lng: lng }];
+        const point = [{ lat, lng }];
 
-        // Resume globes for animation, then pause
         animateGlobesOnKnock();
 
-        if (mobileGlobe) {
-            mobileGlobe.pointsData(point);
-            mobileGlobe.pointOfView({ lat: lat, lng: lng, altitude: 1.4 }, 1000);
-        }
-        if (desktopGlobe) {
-            desktopGlobe.pointsData(point);
-            desktopGlobe.pointOfView({ lat: lat, lng: lng, altitude: 1.4 }, 1000);
-        }
-        if (paneGlobeDesktop) {
-            paneGlobeDesktop.pointsData(point);
-            paneGlobeDesktop.pointOfView({ lat: lat, lng: lng, altitude: 1.8 }, 1000);
-        }
-        if (paneGlobeMobile) {
-            paneGlobeMobile.pointsData(point);
-            paneGlobeMobile.pointOfView({ lat: lat, lng: lng, altitude: 1.8 }, 1000);
-        }
+        [
+            { g: mobileGlobe, alt: 1.4 }, { g: desktopGlobe, alt: 1.4 },
+            { g: paneGlobeDesktop, alt: 1.5 }, { g: paneGlobeMobile, alt: 1.8 },
+        ].forEach(({ g, alt }) => {
+            if (!g) return;
+            g.pointsData(point);
+            g.pointOfView({ lat, lng, altitude: alt }, 1000);
+        });
     }
 
     // Handle resize across breakpoint

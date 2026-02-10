@@ -103,7 +103,7 @@
             .d-stats .stat-value { font-size: 1em; }
 
             .d-header-content { display: flex; justify-content: space-between; align-items: flex-start; }
-            .d-header-left { flex: 1; }
+            .d-header-left { flex: 1; -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; }
             .d-header-right { flex: 0 0 110px; display: flex; align-items: center; justify-content: center; }
             #d-globe-container { width: 110px; height: 110px; cursor: pointer; }
             #d-globe-container canvas { width: 100% !important; height: 100% !important; }
@@ -190,7 +190,7 @@
             
             .m-header { flex: 0 0 auto; padding: 15px; background: #0a0a0a; border-bottom: 1px solid #222; }
             .m-header-content { display: flex; justify-content: space-between; align-items: flex-start; }
-            .m-header-left { flex: 1; }
+            .m-header-left { flex: 1; -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; }
             .m-header-right { flex: 0 0 80px; display: flex; align-items: center; justify-content: center; }
             #globe-container { width: 85px; height: 85px; cursor: pointer; }
             #globe-container canvas { width: 100% !important; height: 100% !important; }
@@ -283,13 +283,12 @@
             <div class="d-nav-item" onclick="dJump(8)">🎲<span>TRIVIA</span></div>
             <div class="d-nav-item" onclick="dJump(9)">😂<span>JOKES</span></div>
             <div class="d-nav-item" onclick="dJump(10)">ℹ️<span>ABOUT</span></div>
-            <div class="d-nav-item" id="d-sound-toggle" onclick="toggleSound()">🔈</div>
         </nav>
 
         <div class="d-header-content">
-            <div class="d-header-left">
+            <div class="d-header-left" onclick="toggleSound()" style="cursor:pointer;">
                 <h1>BOTS ARE KNOCKING <span class="status-dot"></span></h1>
-                <div style="font-size: 1em; color: var(--neon-green); margin-top: -8px; margin-bottom: 12px; font-style: italic;">... BUT THEY CAN'T COME IN.</div>
+                <div style="font-size: 1em; color: var(--neon-green); margin-top: -8px; margin-bottom: 12px; font-style: italic;">... BUT THEY CAN'T COME IN. &nbsp;<span id="d-header-sound" style="font-style:normal; cursor:pointer;">🔈</span></div>
                 <div class="d-stats">
                     <span class="stat-label">Knocks:</span>&nbsp;<span id="d-total" class="stat-value">0</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="stat-label">Per Min:</span>&nbsp;<span id="d-kpm" class="stat-value">0.00</span>
                 </div>
@@ -328,9 +327,9 @@
 <div id="mobile-layout">
     <div class="m-header">
         <div class="m-header-content">
-            <div class="m-header-left">
+            <div class="m-header-left" onclick="toggleSound()" style="cursor:pointer;">
                 <h1>BOTS ARE KNOCKING <span class="status-dot"></span></h1>
-                <div style="font-size: 0.85em; color: var(--neon-green); margin-top: -2px; margin-bottom: 8px; font-style: italic;">... BUT THEY CAN'T COME IN.</div>
+                <div style="font-size: 0.85em; color: var(--neon-green); margin-top: -2px; margin-bottom: 8px; font-style: italic;">... BUT THEY CAN'T COME IN. &nbsp;<span id="m-header-sound" style="font-style:normal; cursor:pointer;">🔈</span></div>
                 <div class="m-stat-row">
                     <span class="stat-label">Knocks:</span>&nbsp;<span id="m-total" class="stat-value">0</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="stat-label">Per Min:</span>&nbsp;<span id="m-kpm" class="stat-value">0.00</span>
                 </div>
@@ -381,7 +380,6 @@
             <div class="nav-item" onclick="jump(8)">🎲<span>TRIVIA</span></div>
             <div class="nav-item" onclick="jump(9)">😂<span>JOKES</span></div>
             <div class="nav-item" onclick="jump(10)">ℹ️<span>ABOUT</span></div>
-            <div class="nav-item" id="m-sound-toggle" onclick="toggleSound()">🔈</div>
         </nav>
         </div>
     </div>
@@ -475,17 +473,17 @@
     }
 
     function updateSoundIcon() {
-        const icon = soundEnabled ? '🔊' : '🔈';
-        const dToggle = document.getElementById('d-sound-toggle');
-        const mToggle = document.getElementById('m-sound-toggle');
-        if (dToggle) dToggle.innerHTML = icon;
-        if (mToggle) mToggle.innerHTML = icon;
+        const icon = soundEnabled ? '🔊' : '🔇';
+        document.querySelectorAll('#d-header-sound, #m-header-sound').forEach(el => {
+            el.innerHTML = icon;
+            twemoji.parse(el);
+        });
     }
 
     function toggleSound() {
         soundEnabled = !soundEnabled;
         updateSoundIcon();
-        if (soundEnabled) initAudio();
+        if (soundEnabled) { initAudio(); audioCtx.resume().then(() => playUIClick()); }
     }
 
     function initAudio() {

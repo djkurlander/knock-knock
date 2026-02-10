@@ -6,6 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0">
     <script src="https://cdn.jsdelivr.net/npm/@twemoji/api@latest/dist/twemoji.min.js" crossorigin="anonymous"></script>
     <script src="https://unpkg.com/globe.gl"></script>
+    <script src="https://unpkg.com/topojson-client@3"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
@@ -259,12 +260,20 @@
             100% { opacity: 0; }
         }
 
-        .pane-globe-style-btn {
+        .pane-globe-style-label {
             position: absolute; bottom: 8px; right: 8px; z-index: 2;
-            color: rgba(255,255,255,0.45); font-size: 2.2em; cursor: pointer;
-            transition: color 0.2s; line-height: 1; user-select: none;
+            display: flex; align-items: center; gap: 4px;
+            color: var(--ui-label); font-size: 0.9em; font-family: monospace;
+            user-select: none;
         }
-        .pane-globe-style-btn:hover { color: rgba(255,255,255,0.9); }
+        .pane-globe-style-btn {
+            color: var(--neon-green); font-size: 1em; cursor: pointer;
+            transition: color 0.2s, border-color 0.2s; user-select: none;
+            border: 1px solid rgba(0,255,65,0.3); border-radius: 3px;
+            padding: 2px 7px; font-family: monospace; letter-spacing: 1px;
+            text-transform: uppercase;
+        }
+        @media (hover: hover) { .pane-globe-style-btn:hover { border-color: rgba(0,255,65,0.7); } }
     </style>
 </head>
 <body>
@@ -390,7 +399,7 @@
     const wsUrl = `${protocol}//${window.location.host}/ws`;
     let ws;
     let audioCtx = null;
-    let soundEnabled = false;
+    let soundEnabled = localStorage.getItem('soundEnabled') === 'true';
 
     // --- DEBUG OVERLAY (add ?debug to URL to enable) ---
     const DEBUG = new URLSearchParams(window.location.search).has('debug');
@@ -482,6 +491,7 @@
 
     function toggleSound() {
         soundEnabled = !soundEnabled;
+        localStorage.setItem('soundEnabled', soundEnabled);
         updateSoundIcon();
         if (soundEnabled) { initAudio(); audioCtx.resume().then(() => playUIClick()); }
     }
@@ -655,11 +665,25 @@
         }
     }
 
+    let citiesData = null;
+    let landData = null;
+    fetch('/static/cities.geojson')
+        .then(r => r.json())
+        .then(d => { citiesData = d.features; });
+    fetch('//cdn.jsdelivr.net/npm/world-atlas@2/land-110m.json')
+        .then(r => r.json())
+        .then(d => { landData = topojson.feature(d, d.objects.land).features; });
+
     const GLOBE_STYLES = [
-        { name: 'Night', img: '//unpkg.com/three-globe/example/img/earth-night.jpg', hex: true },
-        { name: 'Borders', img: '/static/earth-borders-mobile.jpg', hex: false },
+        { name: 'Matrix', img: '//unpkg.com/three-globe/example/img/earth-night.jpg', hex: true, outlines: false, cities: false },
+        { name: 'Night', img: '//unpkg.com/three-globe/example/img/earth-night.jpg', hex: false, outlines: '#00ff41', cities: false },
+        { name: 'Vectors', img: '/static/earth-black.png', hex: false, outlines: '#00ff41', cities: false },
+        { name: 'Cities', img: '//unpkg.com/three-globe/example/img/earth-night.jpg', hex: false, outlines: 'rgba(255, 204, 0, 0.5)', cities: true, land: true },
+        { name: 'Heat', img: '/static/earth-black.png', hex: false, outlines: false, cities: false, extruded: true, viewAlt: 0.3 },
+        { name: 'Atlas', img: '/static/earth-borders-mobile.jpg', hex: false, outlines: false, cities: false },
     ];
-    let paneGlobeStyleIdx = window.innerWidth <= 800 ? 1 : 0;
+    const savedStyle = parseInt(localStorage.getItem('globeStyle'));
+    let paneGlobeStyleIdx = (savedStyle >= 0 && savedStyle < GLOBE_STYLES.length) ? savedStyle : (window.innerWidth <= 800 ? 5 : 0);
 
     function applyGlobeStyle(globe, idx) {
         const style = GLOBE_STYLES[idx];
@@ -674,10 +698,70 @@
             globe.polygonSideColor(() => 'rgba(0,0,0,0)');
             globe.polygonStrokeColor(() => '#000080');
             globe.polygonAltitude(0.01);
+            globe.labelsData([]);
+        } else if (style.outlines && countriesData) {
+            const outlineColor = style.outlines;
+            const polyData = (style.land && landData) ? landData : countriesData;
+            globe.hexPolygonsData([]);
+            globe.polygonsData(polyData);
+            globe.polygonCapColor(() => 'rgba(0,0,0,0)');
+            globe.polygonSideColor(() => 'rgba(0,0,0,0)');
+            globe.polygonStrokeColor(() => outlineColor);
+            globe.polygonAltitude(0.006);
+            globe.labelsData([]);
+        } else if (style.extruded && countriesData) {
+            const hitsMap = {};
+            let maxHits = 1;
+            leaderboards.loc.forEach(c => {
+                hitsMap[c.iso] = c.count;
+                if (c.count > maxHits) maxHits = c.count;
+            });
+            const logMax = Math.log(1 + maxHits);
+            globe.hexPolygonsData([]);
+            globe.polygonsData(countriesData);
+            globe.polygonCapColor(d => {
+                const h = hitsMap[d.properties.ISO_A2] || 0;
+                if (!h) return 'rgba(0, 255, 65, 0.05)';
+                const t = Math.log(1 + h) / logMax;
+                const r = Math.round(255 * t);
+                const g = Math.round(255 * (1 - t * 0.6));
+                return `rgb(${r}, ${g}, 0)`;
+            });
+            globe.polygonSideColor(d => {
+                const h = hitsMap[d.properties.ISO_A2] || 0;
+                if (!h) return 'rgba(0,0,0,0)';
+                const t = Math.log(1 + h) / logMax;
+                return `rgba(255, ${Math.round(200 * (1 - t))}, 0, 0.6)`;
+            });
+            globe.polygonStrokeColor(() => 'rgba(0, 255, 65, 0.15)');
+            globe.polygonAltitude(d => {
+                const h = hitsMap[d.properties.ISO_A2] || 0;
+                if (!h) return 0.002;
+                return 0.002 + 0.12 * Math.log(1 + h) / logMax;
+            });
+            globe.labelsData([]);
         } else {
             globe.hexPolygonsData([]);
             globe.polygonsData([]);
+            globe.labelsData([]);
         }
+        if (style.cities && citiesData) {
+            const sorted = [...citiesData].sort((a, b) => b.properties.pop_max - a.properties.pop_max);
+            const top50 = new Set(sorted.slice(0, 50));
+            globe.labelsData(citiesData)
+                .labelLat(d => d.properties.latitude)
+                .labelLng(d => d.properties.longitude)
+                .labelText(d => top50.has(d) ? d.properties.name : '')
+                .labelSize(d => Math.sqrt(d.properties.pop_max) * 6e-4)
+                .labelDotRadius(d => Math.sqrt(d.properties.pop_max) * 4e-4)
+                .labelColor(() => '#00ff41')
+                .labelAltitude(0.015)
+                .labelResolution(2);
+        }
+        globe.pointAltitude(style.extruded ? 0.15 : style.cities ? 0.025 : 0.01);
+        const pov = globe.pointOfView();
+        const baseAlt = globe === paneGlobeDesktop ? 1.5 : 1.8;
+        globe.pointOfView({ lat: pov.lat, lng: pov.lng, altitude: baseAlt + (style.viewAlt || 0) }, 500);
         globe.resumeAnimation();
         schedulePaneGlobePause();
     }
@@ -685,21 +769,25 @@
     function cyclePaneGlobeStyle() {
         playUIClick();
         paneGlobeStyleIdx = (paneGlobeStyleIdx + 1) % GLOBE_STYLES.length;
+        localStorage.setItem('globeStyle', paneGlobeStyleIdx);
         if (paneGlobeDesktop) applyGlobeStyle(paneGlobeDesktop, paneGlobeStyleIdx);
         if (paneGlobeMobile) applyGlobeStyle(paneGlobeMobile, paneGlobeStyleIdx);
         // Update button labels
-        const next = GLOBE_STYLES[(paneGlobeStyleIdx + 1) % GLOBE_STYLES.length].name;
-        document.querySelectorAll('.pane-globe-style-btn').forEach(b => b.title = next);
+        const name = GLOBE_STYLES[paneGlobeStyleIdx].name;
+        document.querySelectorAll('.pane-globe-style-btn').forEach(b => b.textContent = '⟳ ' + name);
     }
 
     function addStyleButton(parentBox) {
         parentBox.style.position = 'relative';
+        const wrap = document.createElement('div');
+        wrap.className = 'pane-globe-style-label';
+        wrap.innerHTML = 'Style:';
         const btn = document.createElement('div');
         btn.className = 'pane-globe-style-btn';
-        btn.innerHTML = '&#x25D1;'; // ◑ half-circle
-        btn.title = GLOBE_STYLES[(paneGlobeStyleIdx + 1) % GLOBE_STYLES.length].name;
+        btn.textContent = '⟳ ' + GLOBE_STYLES[paneGlobeStyleIdx].name;
         btn.addEventListener('click', (e) => { e.stopPropagation(); cyclePaneGlobeStyle(); });
-        parentBox.appendChild(btn);
+        wrap.appendChild(btn);
+        parentBox.appendChild(wrap);
     }
 
     const PANE_GLOBE_CFG = {
@@ -743,12 +831,12 @@
     function destroyPaneGlobe(which) {
         if (which === 'desktop' && paneGlobeDesktop) {
             document.getElementById('d-globe-pane')?.classList.remove('glow-active');
-            document.getElementById('d-box-globe')?.querySelector('.pane-globe-style-btn')?.remove();
+            document.getElementById('d-box-globe')?.querySelector('.pane-globe-style-label')?.remove();
             paneGlobeDesktop._destructor();
             paneGlobeDesktop = null;
         } else if (which === 'mobile' && paneGlobeMobile) {
             document.getElementById('m-globe-pane')?.classList.remove('glow-active');
-            document.getElementById('m-pane-globe')?.querySelector('.pane-globe-style-btn')?.remove();
+            document.getElementById('m-pane-globe')?.querySelector('.pane-globe-style-label')?.remove();
             paneGlobeMobile._destructor();
             paneGlobeMobile = null;
         }
@@ -869,7 +957,8 @@
 
         [
             { g: mobileGlobe, alt: 1.4 }, { g: desktopGlobe, alt: 1.4 },
-            { g: paneGlobeDesktop, alt: 1.5 }, { g: paneGlobeMobile, alt: 1.8 },
+            { g: paneGlobeDesktop, alt: 1.5 + (GLOBE_STYLES[paneGlobeStyleIdx].viewAlt || 0) },
+            { g: paneGlobeMobile, alt: 1.8 + (GLOBE_STYLES[paneGlobeStyleIdx].viewAlt || 0) },
         ].forEach(({ g, alt }) => {
             if (!g) return;
             g.pointsData(point);

@@ -8,10 +8,20 @@ from fastapi.staticfiles import StaticFiles
 
 app = FastAPI()
 
-# --- Visitor Tracking (opt-in via TRACK_VISITORS=true) ---
-TRACK_VISITORS = os.environ.get('TRACK_VISITORS', '').lower() == 'true'
+def get_client_ip(websocket: WebSocket) -> str:
+    """Extract real client IP: CF-Connecting-IP > X-Forwarded-For > direct."""
+    cf_ip = websocket.headers.get('cf-connecting-ip')
+    if cf_ip:
+        return cf_ip.strip()
+    xff = websocket.headers.get('x-forwarded-for')
+    if xff:
+        return xff.split(',')[0].strip()
+    return websocket.client.host if websocket.client else None
 
-if TRACK_VISITORS:
+# --- Visitor Logging (opt-in via LOG_VISITORS=true) ---
+LOG_VISITORS = os.environ.get('LOG_VISITORS', '').lower() == 'true'
+
+if LOG_VISITORS:
     VISITORS_DB_PATH = os.environ.get('DB_DIR', 'data') + '/visitors.db'
     GEOIP_CITY_PATH = '/usr/share/GeoIP/GeoLite2-City.mmdb'
     GEOIP_ASN_PATH = '/usr/share/GeoIP/GeoLite2-ASN.mmdb'
@@ -285,8 +295,8 @@ async def startup_event():
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     # Log visitor in background (non-blocking)
-    if TRACK_VISITORS:
-        client_ip = websocket.client.host if websocket.client else None
+    if LOG_VISITORS:
+        client_ip = get_client_ip(websocket)
         if client_ip:
             referrer = websocket.headers.get('referer') or websocket.headers.get('referrer')
             if referrer and 'knock-knock' in referrer.lower():

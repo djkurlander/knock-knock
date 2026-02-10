@@ -34,7 +34,7 @@ services:
     environment:
       - REDIS_HOST=redis
       # - ENABLE_SSL=true  # Uncomment for HTTPS on port 443 (requires certs/)
-      # - TRACK_VISITORS=true  # Uncomment to log dashboard visitors to visitors.db
+      # - LOG_VISITORS=true  # Uncomment to log dashboard visitors to visitors.db
     ports:
       - "80:80"
       # - "443:443"  # Use instead of 80:80 when ENABLE_SSL=true

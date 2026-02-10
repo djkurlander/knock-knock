@@ -25,7 +25,7 @@ ExecStart=/root/knock-knock/.venv/bin/python3 -m uvicorn main:app \
 #     --workers 2 \
 #     --timeout-keep-alive 30 \
 #     --log-level warning
-# Environment=TRACK_VISITORS=true  # Uncomment to log dashboard visitors to visitors.db
+# Environment=LOG_VISITORS=true  # Uncomment to log dashboard visitors to visitors.db
 Restart=always
 RestartSec=5
 

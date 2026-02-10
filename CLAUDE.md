@@ -116,7 +116,7 @@ All persistent data lives in `data/`:
 | `REDIS_HOST` | `localhost` | Redis server hostname (set to `redis` in Docker) |
 | `DB_DIR` | `data` | Directory for SQLite databases and blocklist |
 | `ENABLE_SSL` | unset | Set to `true` in Docker for HTTPS |
-| `TRACK_VISITORS` | unset | Set to `true` to log dashboard visitors to `visitors.db` |
+| `LOG_VISITORS` | unset | Set to `true` to log dashboard visitors to `visitors.db` |
 
 ## Database Schema
 

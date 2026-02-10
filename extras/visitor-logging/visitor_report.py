@@ -20,8 +20,8 @@ from datetime import datetime, timedelta, date
 import os
 from pathlib import Path
 
-# --- Load .env file if it exists ---
-env_path = Path(__file__).parent / '.env'
+# --- Load .env file if it exists (looks in project root, two levels up from extras/visitor-logging/) ---
+env_path = Path(__file__).resolve().parent.parent.parent / '.env'
 if env_path.exists():
     with open(env_path) as f:
         for line in f:
@@ -31,7 +31,8 @@ if env_path.exists():
                 os.environ.setdefault(key.strip(), value.strip())
 
 # --- Configuration ---
-VISITORS_DB = '/root/knock-knock/visitors.db'
+_project_root = Path(__file__).resolve().parent.parent.parent
+VISITORS_DB = os.environ.get('VISITORS_DB', str(_project_root / 'data' / 'visitors.db'))
 EMAIL_TO = os.environ.get('REPORT_EMAIL_TO', 'your-email@example.com')
 EMAIL_FROM = os.environ.get('REPORT_EMAIL_FROM', 'knock-knock@knock-knock.net')
 SMTP_HOST = os.environ.get('SMTP_HOST', 'localhost')

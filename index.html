@@ -679,7 +679,7 @@
         { name: 'Night', img: '//unpkg.com/three-globe/example/img/earth-night.jpg', hex: false, outlines: '#00ff41', cities: false },
         { name: 'Vectors', img: '/static/earth-black.png', hex: false, outlines: '#00ff41', cities: false },
         { name: 'Cities', img: '//unpkg.com/three-globe/example/img/earth-night.jpg', hex: false, outlines: 'rgba(255, 204, 0, 0.5)', cities: true, land: true },
-        { name: 'Heat', img: '/static/earth-black.png', hex: false, outlines: false, cities: false, extruded: true, viewAlt: 0.3 },
+        { name: 'Heat', img: '/static/earth-black.png', hex: false, outlines: false, cities: false, extruded: true, viewAlt: 0.3, viewAltDesktop: 0.2 },
         { name: 'Atlas', img: '/static/marble_with_borders.jpg', hex: false, outlines: false, cities: false },
     ];
     const savedStyle = parseInt(localStorage.getItem('globeStyle'));
@@ -761,8 +761,10 @@
         globe.pointAltitude(style.extruded ? 0.15 : style.cities ? 0.025 : 0.01);
         globe.pointColor(() => style.extruded ? '#00fbff' : '#ff0000');
         const pov = globe.pointOfView();
-        const baseAlt = globe === paneGlobeDesktop ? 1.5 : 1.8;
-        globe.pointOfView({ lat: pov.lat, lng: pov.lng, altitude: baseAlt + (style.viewAlt || 0) }, 500);
+        const isDesktop = globe === paneGlobeDesktop;
+        const baseAlt = isDesktop ? 1.5 : 1.8;
+        const extraAlt = (isDesktop && style.viewAltDesktop != null) ? style.viewAltDesktop : (style.viewAlt || 0);
+        globe.pointOfView({ lat: pov.lat, lng: pov.lng, altitude: baseAlt + extraAlt }, 500);
         globe.resumeAnimation();
         schedulePaneGlobePause();
     }
@@ -959,7 +961,7 @@
 
         [
             { g: mobileGlobe, alt: 1.4 }, { g: desktopGlobe, alt: 1.4 },
-            { g: paneGlobeDesktop, alt: 1.5 + (GLOBE_STYLES[paneGlobeStyleIdx].viewAlt || 0) },
+            { g: paneGlobeDesktop, alt: 1.5 + (GLOBE_STYLES[paneGlobeStyleIdx].viewAltDesktop != null ? GLOBE_STYLES[paneGlobeStyleIdx].viewAltDesktop : (GLOBE_STYLES[paneGlobeStyleIdx].viewAlt || 0)) },
             { g: paneGlobeMobile, alt: 1.8 + (GLOBE_STYLES[paneGlobeStyleIdx].viewAlt || 0) },
         ].forEach(({ g, alt }) => {
             if (!g) return;

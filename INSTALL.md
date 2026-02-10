@@ -186,8 +186,8 @@ Sample unit files are in the `systemd/` directory:
 ```bash
 cp systemd/*.service /etc/systemd/system/
 systemctl daemon-reload
-systemctl enable knock-honeypot knock-monitor knock-web
-systemctl start knock-honeypot knock-monitor knock-web
+systemctl enable knock-monitor knock-web
+systemctl start knock-monitor knock-web
 ```
 
 By default the monitor does not save individual knock records to SQLite (only aggregated intel tables are updated). To store every knock for research queries, add `--save-knocks` to the `ExecStart` line in `knock-monitor.service`. This will use significantly more disk space (~600MB+/year).
@@ -206,10 +206,9 @@ ufw enable
 ### Verify
 
 ```bash
-systemctl status knock-honeypot knock-monitor knock-web
+systemctl status knock-monitor knock-web
 
-journalctl -u knock-honeypot -f   # Should show "Honeypot Active"
-journalctl -u knock-monitor -f    # Should show "Monitor Active"
+journalctl -u knock-monitor -f    # Should show "Honeypot Active" and "Monitor Active"
 journalctl -u knock-web -f        # Should show uvicorn startup
 
 # Test from another machine
@@ -254,14 +253,14 @@ Sample unit files are in the `systemd/` directory. The Redis service name may di
 ```bash
 cp systemd/*.service /etc/systemd/system/
 
-# Update the Redis dependency in knock-monitor.service and knock-web.service
+# Update the Redis dependency in unit files
 # Change "After=... redis-server.service" to "After=... redis.service"
 sed -i 's/redis-server.service/redis.service/g' /etc/systemd/system/knock-monitor.service
 sed -i 's/redis-server.service/redis.service/g' /etc/systemd/system/knock-web.service
 
 systemctl daemon-reload
-systemctl enable knock-honeypot knock-monitor knock-web
-systemctl start knock-honeypot knock-monitor knock-web
+systemctl enable knock-monitor knock-web
+systemctl start knock-monitor knock-web
 ```
 
 By default the monitor does not save individual knock records to SQLite (only aggregated intel tables are updated). To store every knock for research queries, add `--save-knocks` to the `ExecStart` line in `knock-monitor.service`. This will use significantly more disk space (~600MB+/year).
@@ -280,10 +279,9 @@ firewall-cmd --reload
 ### Verify
 
 ```bash
-systemctl status knock-honeypot knock-monitor knock-web
+systemctl status knock-monitor knock-web
 
-journalctl -u knock-honeypot -f   # Should show "Honeypot Active"
-journalctl -u knock-monitor -f    # Should show "Monitor Active"
+journalctl -u knock-monitor -f    # Should show "Honeypot Active" and "Monitor Active"
 journalctl -u knock-web -f        # Should show uvicorn startup
 
 # Test from another machine

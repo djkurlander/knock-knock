@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Knock-Knock is an SSH honeypot monitoring system that captures unauthorized SSH login attempts and displays real-time attack data through a live web dashboard. It can be deployed via Docker or as three coordinated systemd services.
+Knock-Knock is an SSH honeypot monitoring system that captures unauthorized SSH login attempts and displays real-time attack data through a live web dashboard. It can be deployed via Docker or as two coordinated systemd services.
 
 ## Commands
 
@@ -17,7 +17,7 @@ Knock-Knock is an SSH honeypot monitoring system that captures unauthorized SSH 
 ./restart.sh --reset-all
 
 # Individual service control
-systemctl start|stop|restart|status knock-honeypot knock-monitor knock-web
+systemctl start|stop|restart|status knock-monitor knock-web
 
 # Docker
 docker compose up -d
@@ -33,10 +33,8 @@ source .venv/bin/activate
 python honeypot.py
 
 # Log monitor + geo-enricher (add --save-knocks to store individual knocks in SQLite)
-python monitor.py
-
-# Log monitor reading from stdin (Docker mode)
-python honeypot.py 2>&1 | python monitor.py --stdin
+# Pipe honeypot stdout directly to monitor (used by both systemd and Docker)
+python honeypot.py 2>&1 | python monitor.py
 
 # Web server (HTTP, port 80)
 python3 -m uvicorn main:app --host 0.0.0.0 --port 80 \
@@ -51,7 +49,6 @@ python3 -m uvicorn main:app --host 0.0.0.0 --port 443 \
 ### Debugging
 ```bash
 # Service logs
-journalctl -u knock-honeypot -f
 journalctl -u knock-monitor -f
 journalctl -u knock-web -f
 
@@ -65,9 +62,9 @@ redis-cli ping
 ## Architecture
 
 ```
-SSH Attacker → honeypot.py (port 22) → stdout / journalctl logs
+SSH Attacker → honeypot.py (port 22) → stdout (piped)
                                               ↓
-                                       monitor.py (parses logs, GeoIP lookup)
+                                       monitor.py (parses output, GeoIP lookup)
                                               ↓
                                     SQLite DB (data/) + Redis pub/sub
                                               ↓
@@ -76,19 +73,19 @@ SSH Attacker → honeypot.py (port 22) → stdout / journalctl logs
                                     Browser WebSocket → Live Dashboard
 ```
 
-**Three Services:**
-- `honeypot.py`: Paramiko SSH server that accepts connections, logs credentials, always rejects auth
-- `monitor.py`: Tails journalctl (or reads stdin with `--stdin`) for `[*] KNOCK |` events, performs GeoIP lookups, updates intel tables in SQLite, publishes to Redis. Individual knocks are only saved to SQLite with `--save-knocks`
+**Two Services:**
+- `honeypot.py` + `monitor.py`: Combined into a single systemd unit via pipe. Honeypot accepts SSH connections and logs credentials to stdout; monitor reads stdin, performs GeoIP lookups, updates intel tables in SQLite, publishes to Redis. Individual knocks are only saved to SQLite with `--save-knocks`
 - `main.py`: FastAPI server with WebSocket endpoint `/ws`, subscribes to Redis, broadcasts to all connected browsers
 
 **Data Flow:**
+- Honeypot stdout is piped to monitor stdin (both systemd and Docker)
 - Inter-service communication via Redis pub/sub channel `radiation_stream`
 - Stats cached in memory (10-min refresh), periodic sync every 60 seconds
 - SQLite databases in `data/` directory for persistence
 
 **Deployment modes:**
-- **Docker:** `docker compose up -d` — honeypot stdout is piped to monitor via `--stdin`
-- **Systemd:** Three unit files in `systemd/` — monitor tails journalctl
+- **Docker:** `docker compose up -d` — honeypot stdout piped to monitor stdin
+- **Systemd:** Two unit files in `systemd/` — honeypot stdout piped to monitor stdin
 
 ## Key Files
 
@@ -98,9 +95,9 @@ SSH Attacker → honeypot.py (port 22) → stdout / journalctl logs
 | `monitor.py` | Log parser, GeoIP enrichment, DB writes, Redis publish |
 | `main.py` | FastAPI server, `ConnectionManager`, `GlobalStatsCache`, WebSocket |
 | `index.html` | Single-page dashboard with WebSocket client |
-| `restart.sh` | Systemd service orchestration |
+| `restart.sh` | Service orchestration (systemd and Docker) |
 | `Dockerfile` | Single image for honeypot-monitor and web containers |
-| `docker-compose.yml` | Three-service Docker deployment |
+| `docker-compose.yml` | Docker deployment (Redis, honeypot+monitor, web) |
 
 ## Data Directory
 

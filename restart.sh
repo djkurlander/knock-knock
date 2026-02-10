@@ -20,7 +20,7 @@ if [ -z "$MODE" ]; then
     if docker compose version &>/dev/null && [ -f "$PROJECT_DIR/docker-compose.yml" ]; then
         # Check if containers are running or if there are no systemd units installed
         if docker compose -f "$PROJECT_DIR/docker-compose.yml" ps --quiet 2>/dev/null | grep -q . \
-           || ! systemctl list-unit-files knock-honeypot.service &>/dev/null; then
+           || ! systemctl list-unit-files knock-monitor.service &>/dev/null; then
             MODE="docker"
         else
             MODE="systemd"
@@ -37,7 +37,7 @@ echo "Stopping services..."
 if [ "$MODE" = "docker" ]; then
     docker compose -f "$PROJECT_DIR/docker-compose.yml" down
 else
-    systemctl stop knock-honeypot knock-monitor knock-web 2>/dev/null
+    systemctl stop knock-monitor knock-web 2>/dev/null
 fi
 
 # --- Reset (optional) ---
@@ -75,12 +75,8 @@ if [ "$MODE" = "docker" ]; then
 else
     systemctl daemon-reload
 
-    systemctl start knock-honeypot
-    echo "  [+] Honeypot online (port 22)"
-    sleep 1
-
     systemctl start knock-monitor
-    echo "  [+] Monitor online (log parsing active)"
+    echo "  [+] Honeypot + Monitor online (port 22, log parsing active)"
 
     systemctl start knock-web
     echo "  [+] Web server online (WebSockets active)"

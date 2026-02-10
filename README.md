@@ -1,4 +1,4 @@
-# Knock-Knock.net
+# Knock-Knock
 
 A real-time SSH honeypot monitoring system with a live web dashboard showing global attack attempts.
 
@@ -14,7 +14,7 @@ A real-time SSH honeypot monitoring system with a live web dashboard showing glo
 ## Architecture
 
 ```
-SSH Attacker → honeypot.py (port 22) → journalctl logs
+SSH Attacker → honeypot.py (port 22) → stdout (piped)
                                               ↓
                                        monitor.py (GeoIP lookup)
                                               ↓
@@ -25,9 +25,8 @@ SSH Attacker → honeypot.py (port 22) → journalctl logs
                                     WebSocket → Live Dashboard
 ```
 
-**Three Services:**
-- `honeypot.py` - Paramiko SSH server that logs credentials
-- `monitor.py` - Parses logs, enriches with GeoIP, stores and publishes data
+**Two Services:**
+- `honeypot.py` + `monitor.py` - Honeypot logs credentials to stdout, piped to monitor for GeoIP enrichment and storage
 - `main.py` - FastAPI server with WebSocket endpoint for live updates
 
 ## Requirements
@@ -35,7 +34,7 @@ SSH Attacker → honeypot.py (port 22) → journalctl logs
 - Python 3.12+
 - Redis server
 - MaxMind GeoLite2 databases (City and ASN)
-- SSL certificates for HTTPS
+- SSL certificates (optional, for HTTPS)
 
 ## Quick Start
 
@@ -48,7 +47,7 @@ uv pip install -r requirements.txt
 ./restart.sh
 
 # View logs
-journalctl -u knock-honeypot -u knock-monitor -u knock-web -f
+journalctl -u knock-monitor -u knock-web -f
 ```
 
 ## Database

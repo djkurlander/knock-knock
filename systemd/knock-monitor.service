@@ -1,14 +1,12 @@
 [Unit]
-Description=Knock-Knock SSH Log Monitor
+Description=Knock-Knock SSH Honeypot and Monitor
 After=network.target redis-server.service
 
 [Service]
 User=root
 WorkingDirectory=/root/knock-knock
-# Point to the python binary inside your uv virtual environment
-# Add --save-knocks to save full knock history to SQLite (useful for
-# research queries, but the knocks table will grow to ~600MB+/year)
-ExecStart=/root/knock-knock/.venv/bin/python monitor.py
+ExecStart=/bin/bash -c '/root/knock-knock/.venv/bin/python -u honeypot.py 2>&1 | /root/knock-knock/.venv/bin/python -u monitor.py'
+# Add --save-knocks to store individual knock records in SQLite
 Restart=always
 RestartSec=5
 

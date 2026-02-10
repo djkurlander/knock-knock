@@ -1,4 +1,3 @@
-import subprocess
 import sys
 import geoip2.database
 import redis
@@ -138,23 +137,16 @@ def get_geo_maximal(ip, city_reader, asn_reader):
         pass
     return geo
 
-def monitor(save_knocks=False, use_stdin=False):
+def monitor(save_knocks=False):
     init_db()
     threading.Thread(target=heartbeat_worker, daemon=True).start()
     r = redis.Redis(host=os.environ.get('REDIS_HOST', 'localhost'), port=6379, db=0, decode_responses=True)
     c_reader = geoip2.database.Reader(GEOIP_CITY_PATH) if os.path.exists(GEOIP_CITY_PATH) else None
     a_reader = geoip2.database.Reader(GEOIP_ASN_PATH) if os.path.exists(GEOIP_ASN_PATH) else None
 
-    if use_stdin:
-        source = sys.stdin
-    else:
-        cmd = ["journalctl", "-u", "knock-honeypot", "-f", "-n", "0"]
-        process = subprocess.Popen(cmd, stdout=subprocess.PIPE, text=True)
-        source = process.stdout
-
     print("🚀 Maximalist Monitor Active...")
 
-    for line in source:
+    for line in sys.stdin:
         if "[*] KNOCK |" in line:
             parts = [p.strip() for p in line.split("|")]
             if len(parts) < 4: continue
@@ -182,7 +174,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Knock-Knock Monitor")
     parser.add_argument("--reset-all", action="store_true", help="Delete DB and clear Redis")
     parser.add_argument("--save-knocks", action="store_true", help="Save individual knocks to SQLite (off by default)")
-    parser.add_argument("--stdin", action="store_true", help="Read from stdin instead of journalctl (for Docker piped input)")
     args = parser.parse_args()
     if args.reset_all: reset_all()
-    monitor(save_knocks=args.save_knocks, use_stdin=args.stdin)
+    monitor(save_knocks=args.save_knocks)

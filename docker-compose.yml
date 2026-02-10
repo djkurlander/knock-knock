@@ -7,7 +7,7 @@ services:
 
   honeypot-monitor:
     build: .
-    command: bash -c "python -u honeypot.py 2>&1 | python -u monitor.py --stdin"
+    command: bash -c "python -u honeypot.py 2>&1 | python -u monitor.py"
     environment:
       - REDIS_HOST=redis
     ports:

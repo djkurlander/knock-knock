@@ -724,7 +724,7 @@
                 if (!h) return 'rgba(0, 255, 65, 0.05)';
                 const t = Math.log(1 + h) / logMax;
                 const r = Math.round(255 * t);
-                const g = Math.round(255 * (1 - t * 0.6));
+                const g = Math.round(255 * (1 - t));
                 return `rgb(${r}, ${g}, 0)`;
             });
             globe.polygonSideColor(d => {
@@ -759,6 +759,7 @@
                 .labelResolution(2);
         }
         globe.pointAltitude(style.extruded ? 0.15 : style.cities ? 0.025 : 0.01);
+        globe.pointColor(() => style.extruded ? '#00fbff' : '#ff0000');
         const pov = globe.pointOfView();
         const baseAlt = globe === paneGlobeDesktop ? 1.5 : 1.8;
         globe.pointOfView({ lat: pov.lat, lng: pov.lng, altitude: baseAlt + (style.viewAlt || 0) }, 500);
@@ -813,18 +814,19 @@
             (pane);
         globe.controls().enableZoom = false;
         globe.controls().autoRotate = false;
-        globe.pointOfView(lastLat !== null ? { lat: lastLat, lng: lastLng, altitude: cfg.altitude } : { altitude: cfg.altitude });
-        const cam = globe.camera();
-        const globeEdge = Math.asin(1 / (cfg.altitude + 1)) / ((cam.fov / 2) * Math.PI / 180) * 100;
-        const closestSide = Math.min(pane.clientWidth, pane.clientHeight) / 2;
-        const glowSpread = Math.min(globeEdge * 0.25 / 100 * closestSide, cfg.glowCap);
-        const glowOuter = Math.min(globeEdge + glowSpread / closestSide * 100, 100);
-        pane.style.setProperty('--globe-edge', globeEdge.toFixed(1) + '%');
-        pane.style.setProperty('--glow-outer', glowOuter.toFixed(1) + '%');
-        globe.onGlobeReady(() => pane.classList.add('glow-active'));
         if (which === 'desktop') paneGlobeDesktop = globe; else paneGlobeMobile = globe;
-        applyGlobeStyle(globe, paneGlobeStyleIdx);
-        setTimeout(() => globe.pauseAnimation(), 5000);
+        globe.onGlobeReady(() => {
+            globe.pointOfView(lastLat !== null ? { lat: lastLat, lng: lastLng, altitude: cfg.altitude } : { altitude: cfg.altitude });
+            const cam = globe.camera();
+            const globeEdge = Math.asin(1 / (cfg.altitude + 1)) / ((cam.fov / 2) * Math.PI / 180) * 100;
+            const closestSide = Math.min(pane.clientWidth, pane.clientHeight) / 2;
+            const glowSpread = Math.min(globeEdge * 0.25 / 100 * closestSide, cfg.glowCap);
+            const glowOuter = Math.min(globeEdge + glowSpread / closestSide * 100, 100);
+            pane.style.setProperty('--globe-edge', globeEdge.toFixed(1) + '%');
+            pane.style.setProperty('--glow-outer', glowOuter.toFixed(1) + '%');
+            pane.classList.add('glow-active');
+            applyGlobeStyle(globe, paneGlobeStyleIdx);
+        });
         addStyleButton(document.getElementById(cfg.btnParentId));
     }
 
@@ -1333,6 +1335,11 @@
                 leaderboards.providers = d.top_providers || [];
                 leaderboards.users = d.top_users || [];
                 leaderboards.ips = d.top_ips || [];
+                // Re-apply style if it depends on leaderboard data (e.g. Heat extrusions)
+                if (GLOBE_STYLES[paneGlobeStyleIdx].extruded || GLOBE_STYLES[paneGlobeStyleIdx].hex) {
+                    if (paneGlobeDesktop) applyGlobeStyle(paneGlobeDesktop, paneGlobeStyleIdx);
+                    if (paneGlobeMobile) applyGlobeStyle(paneGlobeMobile, paneGlobeStyleIdx);
+                }
 
                 const preScroll = vp.scrollLeft;
                 renderBars('loc', d.top_locations, 'loc-fill', true);

@@ -31,7 +31,7 @@ Restart the web service after enabling.
 
 ### 2. Configure email reports
 
-Create a `.env` file in your project root:
+Copy the included `.env.example` to your project root as `.env` and edit it:
 
 ```bash
 REPORT_EMAIL_TO=you@example.com

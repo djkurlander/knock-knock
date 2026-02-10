@@ -4,7 +4,7 @@
 import argparse
 import sqlite3
 
-DB_PATH = 'knock_knock.db'
+DB_PATH = 'data/knock_knock.db'
 
 def main():
     parser = argparse.ArgumentParser(description='Print knock-knock database statistics.')

@@ -19,7 +19,7 @@ from shapely.geometry import shape
 
 BLUE_MARBLE_URL = "https://unpkg.com/three-globe/example/img/earth-blue-marble.jpg"
 GEOJSON_PATH = Path(__file__).parent / "static" / "countries.geojson"
-OUTPUT_PATH = Path(__file__).parent / "static" / "earth-borders-mobile.jpg"
+OUTPUT_PATH = Path(__file__).parent / "static" / "marble_with_borders.jpg"
 BORDER_COLOR = (0, 255, 65)  # #00ff41
 BORDER_WIDTH = 2
 

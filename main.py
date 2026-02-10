@@ -8,68 +8,70 @@ from fastapi.staticfiles import StaticFiles
 
 app = FastAPI()
 
-# --- Visitor Tracking ---
-VISITORS_DB_PATH = os.environ.get('DB_DIR', 'data') + '/visitors.db'
-GEOIP_CITY_PATH = '/usr/share/GeoIP/GeoLite2-City.mmdb'
-GEOIP_ASN_PATH = '/usr/share/GeoIP/GeoLite2-ASN.mmdb'
+# --- Visitor Tracking (opt-in via TRACK_VISITORS=true) ---
+TRACK_VISITORS = os.environ.get('TRACK_VISITORS', '').lower() == 'true'
 
-# Initialize GeoIP readers for visitor tracking
-visitor_city_reader = geoip2.database.Reader(GEOIP_CITY_PATH) if os.path.exists(GEOIP_CITY_PATH) else None
-visitor_asn_reader = geoip2.database.Reader(GEOIP_ASN_PATH) if os.path.exists(GEOIP_ASN_PATH) else None
+if TRACK_VISITORS:
+    VISITORS_DB_PATH = os.environ.get('DB_DIR', 'data') + '/visitors.db'
+    GEOIP_CITY_PATH = '/usr/share/GeoIP/GeoLite2-City.mmdb'
+    GEOIP_ASN_PATH = '/usr/share/GeoIP/GeoLite2-ASN.mmdb'
 
-def init_visitors_db():
-    conn = sqlite3.connect(VISITORS_DB_PATH)
-    cur = conn.cursor()
-    cur.execute("""CREATE TABLE IF NOT EXISTS visitors (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-        ip TEXT,
-        city TEXT,
-        region TEXT,
-        country TEXT,
-        iso_code TEXT,
-        isp TEXT,
-        asn INTEGER,
-        referrer TEXT,
-        user_agent TEXT
-    )""")
-    conn.commit()
-    conn.close()
+    visitor_city_reader = geoip2.database.Reader(GEOIP_CITY_PATH) if os.path.exists(GEOIP_CITY_PATH) else None
+    visitor_asn_reader = geoip2.database.Reader(GEOIP_ASN_PATH) if os.path.exists(GEOIP_ASN_PATH) else None
 
-def get_visitor_geo(ip):
-    geo = {"city": None, "region": None, "country": None, "iso": None, "isp": None, "asn": None}
-    try:
-        if visitor_city_reader:
-            c_res = visitor_city_reader.city(ip)
-            geo["iso"] = c_res.country.iso_code
-            geo["country"] = c_res.country.name
-            geo["city"] = c_res.city.name
-            if c_res.subdivisions.most_specific.name:
-                geo["region"] = c_res.subdivisions.most_specific.name
-        if visitor_asn_reader:
-            a_res = visitor_asn_reader.asn(ip)
-            geo["isp"] = a_res.autonomous_system_organization
-            geo["asn"] = a_res.autonomous_system_number
-    except:
-        pass
-    return geo
-
-def log_visitor(ip, referrer=None, user_agent=None):
-    """Log a visitor to the separate visitors database."""
-    try:
-        geo = get_visitor_geo(ip)
+    def init_visitors_db():
         conn = sqlite3.connect(VISITORS_DB_PATH)
         cur = conn.cursor()
-        cur.execute("""INSERT INTO visitors (ip, city, region, country, iso_code, isp, asn, referrer, user_agent)
-                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                    (ip, geo['city'], geo['region'], geo['country'], geo['iso'], geo['isp'], geo['asn'], referrer, user_agent))
+        cur.execute("""CREATE TABLE IF NOT EXISTS visitors (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+            ip TEXT,
+            city TEXT,
+            region TEXT,
+            country TEXT,
+            iso_code TEXT,
+            isp TEXT,
+            asn INTEGER,
+            referrer TEXT,
+            user_agent TEXT
+        )""")
         conn.commit()
         conn.close()
-    except Exception as e:
-        print(f"Visitor log error: {e}")
 
-# Initialize visitors DB on module load
-init_visitors_db()
+    def get_visitor_geo(ip):
+        geo = {"city": None, "region": None, "country": None, "iso": None, "isp": None, "asn": None}
+        try:
+            if visitor_city_reader:
+                c_res = visitor_city_reader.city(ip)
+                geo["iso"] = c_res.country.iso_code
+                geo["country"] = c_res.country.name
+                geo["city"] = c_res.city.name
+                if c_res.subdivisions.most_specific.name:
+                    geo["region"] = c_res.subdivisions.most_specific.name
+            if visitor_asn_reader:
+                a_res = visitor_asn_reader.asn(ip)
+                geo["isp"] = a_res.autonomous_system_organization
+                geo["asn"] = a_res.autonomous_system_number
+        except:
+            pass
+        return geo
+
+    def log_visitor(ip, referrer=None, user_agent=None):
+        """Log a visitor to the separate visitors database."""
+        try:
+            geo = get_visitor_geo(ip)
+            conn = sqlite3.connect(VISITORS_DB_PATH)
+            cur = conn.cursor()
+            cur.execute("""INSERT INTO visitors (ip, city, region, country, iso_code, isp, asn, referrer, user_agent)
+                           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                        (ip, geo['city'], geo['region'], geo['country'], geo['iso'], geo['isp'], geo['asn'], referrer, user_agent))
+            conn.commit()
+            conn.close()
+        except Exception as e:
+            print(f"Visitor log error: {e}")
+
+    init_visitors_db()
+    print("👥 Visitor tracking enabled")
 
 # This ensures /static/robot1.png is available immediately
 app.mount("/static", StaticFiles(directory="static"), name="static")
@@ -283,15 +285,14 @@ async def startup_event():
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     # Log visitor in background (non-blocking)
-    client_ip = websocket.client.host if websocket.client else None
-    if client_ip:
-        # Extract referrer from WebSocket upgrade request headers
-        referrer = websocket.headers.get('referer') or websocket.headers.get('referrer')
-        # Filter out self-referrals (same site)
-        if referrer and 'knock-knock' in referrer.lower():
-            referrer = None
-        user_agent = websocket.headers.get('user-agent')
-        asyncio.get_event_loop().run_in_executor(None, log_visitor, client_ip, referrer, user_agent)
+    if TRACK_VISITORS:
+        client_ip = websocket.client.host if websocket.client else None
+        if client_ip:
+            referrer = websocket.headers.get('referer') or websocket.headers.get('referrer')
+            if referrer and 'knock-knock' in referrer.lower():
+                referrer = None
+            user_agent = websocket.headers.get('user-agent')
+            asyncio.get_event_loop().run_in_executor(None, log_visitor, client_ip, referrer, user_agent)
 
     await manager.connect(websocket)
     try:

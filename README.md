@@ -33,7 +33,7 @@ Check it out at https://knock-knock.net, or install it on your own server with a
 
 Knock-Knock is a web-based app that lets you watch bots trying to break into an Internet-accessible server. It shows, in a fun and engaging way, information about the current break-in attempt, as well as historic statistics about the bot traffic. Individual panels show a live feed of the bots knocking on the server door, a globe showing the bot's origin, a list of the most common countries of origin, the most frequent user names and passwords attempted, the most common ISPs and IP addresses, and stats related to the current attempt, and trivia such as why a particular username might be chosen.
 
-In technical speak, this program listens on the ssh port (22), and collects and displays new information every time a bot tries to log in. Here is the technical summary:
+This program listens on the ssh port (22), and collects and displays new information every time a bot tries to log in. Here is the technical summary:
 
 - Captures unauthorized SSH login attempts on port 22
 - Enriches attacker IPs with GeoIP (city, country, ISP, ASN)

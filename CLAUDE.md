@@ -48,9 +48,13 @@ python3 -m uvicorn main:app --host 0.0.0.0 --port 443 \
 
 ### Debugging
 ```bash
-# Service logs
+# Service logs (systemd)
 journalctl -u knock-monitor -f
 journalctl -u knock-web -f
+
+# Service logs (Docker)
+docker compose logs -f honeypot-monitor
+docker compose logs -f web
 
 # Database queries
 sqlite3 data/knock_knock.db "SELECT * FROM knocks ORDER BY id DESC LIMIT 10;"
@@ -98,6 +102,8 @@ SSH Attacker → honeypot.py (port 22) → stdout (piped)
 | `restart.sh` | Service orchestration (systemd and Docker) |
 | `Dockerfile` | Single image for honeypot-monitor and web containers |
 | `docker-compose.yml` | Docker deployment (Redis, honeypot+monitor, web) |
+| `stats.py` | CLI utility for printing database statistics |
+| `extras/` | Optional utilities (Cloudflare UFW rules, texture generation, visitor reports) |
 
 ## Data Directory
 
@@ -112,20 +118,20 @@ All persistent data lives in `data/`:
 |----------|---------|---------|
 | `REDIS_HOST` | `localhost` | Redis server hostname (set to `redis` in Docker) |
 | `DB_DIR` | `data` | Directory for SQLite databases and blocklist |
-| `ENABLE_SSL` | unset | Set to `true` in Docker for HTTPS |
+| `ENABLE_SSL` | unset | Set to `true` in `docker-compose.yml` for HTTPS |
 | `LOG_VISITORS` | unset | Set to `true` to log dashboard visitors to `visitors.db` |
 
 ## Database Schema
 
 ```sql
 -- Main attack log (only populated with --save-knocks)
-knocks(id, timestamp, ip_address, iso_code, city, country, isp, username, password)
+knocks(id, timestamp, ip_address, iso_code, city, region, country, isp, asn, username, password)
 
 -- Intelligence tables (aggregated counts with indexed hits for fast top-N queries)
 user_intel(username PRIMARY KEY, hits, last_seen)     -- INDEX on hits DESC
 pass_intel(password PRIMARY KEY, hits, last_seen)     -- INDEX on hits DESC
 country_intel(iso_code PRIMARY KEY, country, hits, last_seen)  -- INDEX on hits DESC
-isp_intel(isp PRIMARY KEY, hits, last_seen)           -- INDEX on hits DESC
+isp_intel(isp PRIMARY KEY, hits, last_seen, asn)       -- INDEX on hits DESC
 ip_intel(ip PRIMARY KEY, hits, last_seen, lat, lng)   -- INDEX on hits DESC, stores coordinates
 
 -- Uptime tracking for KPM calculation
@@ -152,8 +158,12 @@ Intel tables are updated on each knock via `INSERT ... ON CONFLICT DO UPDATE`. T
 
 ## Frontend Features
 
-- **3D Globe** (globe.gl): Displays attack location, rotates on new knocks
+- **3D Globe** (globe.gl): Displays attack location, rotates on new knocks; includes heat map mode
 - **Live Feed**: Real-time attack log with username/password/location
-- **Leaderboards**: Top countries, usernames, passwords, ISPs
+- **Leaderboards**: Top countries, usernames, passwords, ISPs, IPs
+- **Trivia & Jokes**: Context about why usernames/passwords are chosen, plus knock-knock jokes
+- **Sound Effects**: Optional audio notifications for new knocks
+- **About**: Project info section
+- **Debug Mode**: Overlay via `?debug` URL parameter
 - **Responsive**: Mobile carousel with swipe navigation, desktop grid layout
 - **WebSocket**: Auto-reconnect, live updates without polling

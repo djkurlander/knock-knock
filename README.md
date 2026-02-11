@@ -4,7 +4,7 @@
 
 **Live demo:** https://knock-knock.net
 
-Watch the bots trying to log into an exposed SSH port on this live, dynamic dashboard. Collect stats on the most frequent countries of origin, usernames & passwords attempted, and the worst ISPs and IPs. Learn why some of these usernames and passwords may have been attempted. Marvel at the spinning globe visualizations, including a funky heat map. View current break-in attempts and fascinating historic stats, in a series of dynamic, informative, and engaging panels.
+Watch the bots trying to log into an exposed SSH port on this live, information-packed dashboard. Collect stats on the most frequent countries of origin, usernames & passwords attempted, and the worst ISPs and IPs. Learn why the bots are choosing these usernames and passwords. Marvel at the spinning globe visualizations, including a funky heat map. View current break-in attempts and fascinating historic stats, in a series of dynamic, informative, and engaging panels.
 
 Check it out at https://knock-knock.net, or install it on your own server with an exposed SSH (22) port. Don't worry, these bots may be knocking, but they can't come in.
 

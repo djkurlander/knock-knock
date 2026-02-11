@@ -1,8 +1,6 @@
 # Knock-Knock: Watch the Bots Trying to Break In
 
-**Live demo:** https://knock-knock.net
-
-[![Live Demo](https://img.shields.io/badge/LIVE-DEMO-brightgreen?style=for-the-badge)](https://knock-knock.net)
+[![Live Demo](https://img.shields.io/badge/LIVE-DEMO-brightgreen?style=for-the-badge)](https://knock-knock.net) **Live demo:** https://knock-knock.net
 
 A real-time SSH honeypot with a live, globe-driven dashboard that makes internet noise feel like a weather map.
 

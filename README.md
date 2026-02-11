@@ -1,8 +1,11 @@
 # Knock-Knock: Watch the Bots Trying to Break In
 
-[![Live Demo](https://img.shields.io/badge/LIVE-DEMO-brightgreen?style=for-the-badge)](https://knock-knock.net) **Live demo:** https://knock-knock.net
+[![Live Demo](https://img.shields.io/badge/LIVE-DEMO-brightgreen?style=for-the-badge)](https://knock-knock.net)
+**Live demo:** https://knock-knock.net
 
-A real-time SSH honeypot with a live, globe-driven dashboard that makes internet noise feel like a weather map.
+Watch the bots trying to log into an exposed SSH port using this live, globe-driven dashboard. Collect stats on the most frequent countries of origin, usernames & passwords attempted, and the worst ISPs and IPs. Learn why some of these usernames and passwords may have been attempted. Marvel at the spinning globe visualizations, including a funky heat map.
+
+Check it out at https://knock-knock.net, or install it on your own server with an exposed SSH (22) port. Don't worry, these bots may be knocking, but they can't come in.
 
 ## Screenshots
 
@@ -22,9 +25,6 @@ A real-time SSH honeypot with a live, globe-driven dashboard that makes internet
 <p align="center">
   <img src="pix/Mobile_User.PNG" alt="Mobile usernames" width="210" />
   <img src="pix/Mobile_Passwd.PNG" alt="Mobile passwords" width="210" />
-  <img src="pix/Mobile_Stats.PNG" alt="Mobile stats" width="210" />
-</p>
-<p align="center">
   <img src="pix/Mobile_Trivia.PNG" alt="Mobile trivia" width="210" />
 </p>
 
@@ -42,11 +42,11 @@ In technical speak, this program listens on the ssh port (22), and collects and 
 
 ## Installation
 
-There are three supported install methods. Full instructions live in `INSTALL.md`.
+Knock-Knock supports three different installation methods, with docker being the simplest. Full instructions live in [INSTALL.md](INSTALL.md).
 
-- **Docker (simplest)**: `INSTALL.md#option-1-docker-simplest`
-- **Ubuntu/Debian**: `INSTALL.md#option-2-ubuntudebian`
-- **RHEL/CentOS/Fedora**: `INSTALL.md#option-3-rhelcentosfedora`
+- **Docker (simplest)**
+- **Ubuntu/Debian**
+- **RHEL/CentOS/Fedora**
 
 ## Architecture (In One Breath)
 

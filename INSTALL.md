@@ -1,6 +1,6 @@
 # Knock-Knock Installation Guide
 
-Knock-Knock can be installed most simply and universally using Docker, but can also, with a little more effort, be set up to run without Docker on Ubuntu/Debian and RHEL/CentOS/Fedora systems. All of these setups require a few prerequisites.
+Knock-Knock can be installed most simply and universally using Docker, but also can be configured to run without Docker on Ubuntu/Debian and RHEL/CentOS/Fedora systems. All of these setups require a few prerequisites.
 
 ## Prerequisites
 
@@ -33,7 +33,7 @@ ssh -p 2222 user@your-server
 Knock-Knock uses MaxMind GeoLite2 databases for IP geolocation. You need a free MaxMind account.
 
 1. Create account at https://www.maxmind.com/en/geolite2/signup
-2. Generate a license key in your account dashboard
+2. Generate a license key in your account dashboard, download the config file, and save it as /etc/GeoIP.conf on your server.
 3. Install and configure geoipupdate:
 
 **Debian/Ubuntu:**
@@ -46,7 +46,7 @@ apt install -y geoipupdate
 dnf install -y geoipupdate
 ```
 
-Then add your credentials to `/etc/GeoIP.conf` (created by the package installer) and download:
+Then download the databases:
 ```bash
 # Edit /etc/GeoIP.conf and set your AccountID and LicenseKey
 # Then:

@@ -28,7 +28,7 @@ systemctl restart sshd
 ssh -p 2222 user@your-server
 ```
 
-### Open Up Firewall Ports
+### Open Firewall Ports
 
 You must open up your firewall (if present) to expose ports 22, 80 or 443, and potentially your real SSH port. This is specific to your network configuration, so the exact steps are not presented here.
 
@@ -52,7 +52,7 @@ dnf install -y geoipupdate
 
 Then download the databases:
 ```bash
-# Edit /etc/GeoIP.conf and set your AccountID and LicenseKey
+# Make sure /etc/GeoIP.conf is in place, and includes your AccountID and LicenseKey
 # Then:
 geoipupdate
 
@@ -79,36 +79,6 @@ cd /root/knock-knock
 ssh-keygen -t rsa -b 2048 -f server.key -N ""
 rm server.key.pub
 chmod 600 server.key
-```
-
-### SSL Certificates (Optional)
-
-The web dashboard runs over HTTP by default. Skip this section if you don't need HTTPS.
-
-If you want HTTPS, place your certificate and key at `certs/key.pem` and `certs/cert.pem`. Any certificate provider works — just copy the files into place. Two common options:
-
-**Self-Signed (testing/LAN):**
-```bash
-mkdir -p /root/knock-knock/certs
-openssl req -x509 -newkey rsa:4096 -nodes \
-    -keyout /root/knock-knock/certs/key.pem \
-    -out /root/knock-knock/certs/cert.pem \
-    -days 365 \
-    -subj "/CN=localhost"
-chmod 600 /root/knock-knock/certs/*.pem
-```
-
-**Let's Encrypt (free, auto-renewing):**
-```bash
-apt install -y certbot   # or: dnf install -y certbot
-certbot certonly --standalone -d your-domain.com
-
-mkdir -p /root/knock-knock/certs
-cp /etc/letsencrypt/live/your-domain.com/privkey.pem /root/knock-knock/certs/key.pem
-cp /etc/letsencrypt/live/your-domain.com/fullchain.pem /root/knock-knock/certs/cert.pem
-chmod 600 /root/knock-knock/certs/*.pem
-
-systemctl enable certbot.timer
 ```
 
 ---
@@ -200,15 +170,6 @@ By default the monitor does not save individual knock records to SQLite (only ag
 
 **Enabling SSL (HTTPS):** Swap the commented-out HTTPS `ExecStart` block in `knock-web.service` for the HTTP one. Requires SSL certificates in `certs/` (see Prerequisites).
 
-### Firewall
-
-```bash
-ufw allow 22/tcp     # Honeypot
-ufw allow 80/tcp     # Dashboard (or 443/tcp if using HTTPS)
-ufw allow 2222/tcp   # Your real SSH
-ufw enable
-```
-
 ### Verify
 
 ```bash
@@ -272,15 +233,6 @@ systemctl start knock-monitor knock-web
 By default the monitor does not save individual knock records to SQLite (only aggregated intel tables are updated). To store every knock for research queries, add `--save-knocks` to the `ExecStart` line in `knock-monitor.service`. This will use significantly more disk space (~600MB+/year).
 
 **Enabling SSL (HTTPS):** Swap the commented-out HTTPS `ExecStart` block in `knock-web.service` for the HTTP one. Requires SSL certificates in `certs/` (see Prerequisites).
-
-### Firewall
-
-```bash
-firewall-cmd --permanent --add-port=22/tcp     # Honeypot
-firewall-cmd --permanent --add-port=80/tcp     # Dashboard (or 443/tcp if using HTTPS)
-firewall-cmd --permanent --add-port=2222/tcp   # Your real SSH
-firewall-cmd --reload
-```
 
 ### Verify
 

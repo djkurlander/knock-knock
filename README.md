@@ -4,7 +4,7 @@
 
 **Live demo:** https://knock-knock.net
 
-**Watch** the bots knocking on an exposed SSH port on this live, information-packed dashboard! **Discover** the most frequent countries of origin! **Learn** the most frequent usernames and passwords! **Be shocked** by the worst offending ISPs and IPs! **Find out** why the bots are choosing these usernames and passwords! **Marvel** at the spinning globe visualizations! Wait, is one of those globes a heat map too - how is that even possible? **View** current break-in attempts and fascinating historic stats, in a series of dynamic, informative, and engaging panels!
+**Watch the bots knocking on an exposed SSH port on this live, information-packed dashboard! Discover the most frequent countries of origin! Learn the most common usernames and passwords! Be shocked by the worst offending ISPs and IPs! Find out why the bots are choosing these usernames and passwords! Marvel at the spinning globe visualizations! Wait, is one of those globes a heat map too - how is that even possible? View current break-in attempts and fascinating historic stats, in a series of dynamic, informative, and engaging panels!**
 
 Check it out at https://knock-knock.net, or install it on your own server with an exposed SSH (22) port. Don't worry, these bots may be knocking, but they can't come in!
 

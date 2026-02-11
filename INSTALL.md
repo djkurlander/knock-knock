@@ -109,7 +109,7 @@ systemctl enable certbot.timer
 
 ---
 
-## Option 1: Docker (Simplest)
+## Option 1: Docker (Simplest, Universal)
 
 Complete the [Prerequisites](#prerequisites) above first.
 

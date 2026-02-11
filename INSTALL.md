@@ -120,9 +120,7 @@ docker compose down                 # Stop everything
 docker compose up -d --build        # Rebuild after code changes
 ```
 
-To save individual knock records to SQLite (uses more disk, see Option 2 notes), edit `docker-compose.yml` and add `--save-knocks` to the honeypot-monitor command.
-
-**Enabling SSL (HTTPS):** Uncomment `ENABLE_SSL=true`, swap the port mapping from `80:80` to `443:443`, and uncomment the `certs` volume in `docker-compose.yml`. Requires SSL certificates in `certs/` (see Prerequisites).
+See [Optional Configuration](#optional-configuration) for various site-specific settings, and [Troubleshooting](#troubleshooting) if you run into issues.
 
 ---
 
@@ -166,10 +164,6 @@ systemctl enable knock-monitor knock-web
 systemctl start knock-monitor knock-web
 ```
 
-By default the monitor does not save individual knock records to SQLite (only aggregated intel tables are updated). To store every knock for research queries, add `--save-knocks` to the `ExecStart` line in `knock-monitor.service`. This will use significantly more disk space (~600MB+/year).
-
-**Enabling SSL (HTTPS):** Swap the commented-out HTTPS `ExecStart` block in `knock-web.service` for the HTTP one. Requires SSL certificates in `certs/` (see Prerequisites).
-
 ### Verify
 
 ```bash
@@ -182,6 +176,8 @@ journalctl -u knock-web -f        # Should show uvicorn startup
 ssh test@your-server-ip
 # Open http://your-server-ip in browser
 ```
+
+See [Optional Configuration](#optional-configuration) for various site-specific settings, and [Troubleshooting](#troubleshooting) if you run into issues.
 
 ---
 
@@ -230,10 +226,6 @@ systemctl enable knock-monitor knock-web
 systemctl start knock-monitor knock-web
 ```
 
-By default the monitor does not save individual knock records to SQLite (only aggregated intel tables are updated). To store every knock for research queries, add `--save-knocks` to the `ExecStart` line in `knock-monitor.service`. This will use significantly more disk space (~600MB+/year).
-
-**Enabling SSL (HTTPS):** Swap the commented-out HTTPS `ExecStart` block in `knock-web.service` for the HTTP one. Requires SSL certificates in `certs/` (see Prerequisites).
-
 ### Verify
 
 ```bash
@@ -246,6 +238,55 @@ journalctl -u knock-web -f        # Should show uvicorn startup
 ssh test@your-server-ip
 # Open http://your-server-ip in browser
 ```
+
+See [Optional Configuration](#optional-configuration) for various site-specific settings, and [Troubleshooting](#troubleshooting) if you run into issues.
+
+---
+
+## Optional Configuration
+
+### Saving Individual Knocks (`--save-knocks`)
+
+By default, the monitor only updates aggregated intel tables (top usernames, passwords, countries, ISPs, IPs). To also store every individual knock in SQLite for later analysis, enable the `--save-knocks` flag. This uses more disk space (~600 MB/year at typical traffic levels).
+
+**Docker:** Edit `docker-compose.yml` and append `--save-knocks` to the honeypot-monitor command:
+```yaml
+command: bash -c "python -u honeypot.py 2>&1 | python -u monitor.py --save-knocks"
+```
+
+**Systemd:** Append `--save-knocks` to the `ExecStart` line in `/etc/systemd/system/knock-monitor.service`, then reload:
+```bash
+systemctl daemon-reload
+systemctl restart knock-monitor
+```
+
+### Enabling HTTPS
+
+Place your SSL certificate and private key in the `certs/` directory:
+```
+certs/cert.pem   # Certificate or fullchain
+certs/key.pem    # Private key
+```
+
+**Docker:** In `docker-compose.yml`, make three changes to the `web` service:
+1. Uncomment `ENABLE_SSL=true`
+2. Change the port mapping from `80:80` to `443:443`
+3. Uncomment the `certs` volume mount
+
+Then rebuild:
+```bash
+docker compose up -d --build
+```
+
+**Systemd:** In `/etc/systemd/system/knock-web.service`, replace the HTTP `ExecStart` line with the commented-out HTTPS block, then reload:
+```bash
+systemctl daemon-reload
+systemctl restart knock-web
+```
+
+### IP Blocklist
+
+To immediately reject connections from specific IPs, add them to `data/blocklist.txt` (one per line). The honeypot reloads this file automatically every 60 seconds. Lines starting with `#` are ignored.
 
 ---
 

@@ -4,7 +4,7 @@
 
 **Live demo:** https://knock-knock.net
 
-Watch the bots trying to log into an exposed SSH port using this live, globe-driven dashboard. Collect stats on the most frequent countries of origin, usernames & passwords attempted, and the worst ISPs and IPs. Learn why some of these usernames and passwords may have been attempted. Marvel at the spinning globe visualizations, including a funky heat map.
+Watch the bots trying to log into an exposed SSH port using this live, globe-driven dashboard. Collect stats on the most frequent countries of origin, usernames & passwords attempted, and the worst ISPs and IPs. Learn why some of these usernames and passwords may have been attempted. Marvel at the spinning globe visualizations, including a funky heat map. It displays, in a fun, informative, and engaging way, information about the current break-in attempt, as well as historic statistics about the bot traffic.
 
 Check it out at https://knock-knock.net, or install it on your own server with an exposed SSH (22) port. Don't worry, these bots may be knocking, but they can't come in.
 
@@ -45,9 +45,9 @@ In technical speak, this program listens on the ssh port (22), and collects and 
 
 Knock-Knock supports three different installation methods, with docker being the simplest. Full instructions live in [INSTALL.md](INSTALL.md).
 
-- **Docker (simplest)**
-- **Ubuntu/Debian**
-- **RHEL/CentOS/Fedora**
+- **Docker (simplest and universal)**
+- **Ubuntu/Debian without Docker**
+- **RHEL/CentOS/Fedora without Docker**
 
 ## Architecture (In One Breath)
 

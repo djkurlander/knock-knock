@@ -1,5 +1,7 @@
 # Knock-Knock Installation Guide
 
+Knock-Knock can be installed most simply and universally using Docker, but can also, with a little more effort, be set up to run without Docker on Ubuntu/Debian and RHEL/CentOS/Fedora systems. All of these setups require a few prerequisites.
+
 ## Prerequisites
 
 All installation methods require:

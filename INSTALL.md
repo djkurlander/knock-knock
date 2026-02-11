@@ -4,9 +4,9 @@
 
 All installation methods require:
 
-- Linux server with root access
+- Server with root access
 - Public IP address (for receiving SSH attacks)
-- Domain name (optional, for valid SSL)
+- Ability to expose port 22 to internet traffic
 - **Real SSH moved to a non-standard port** (the honeypot needs port 22)
 
 ### Move Real SSH to a Different Port

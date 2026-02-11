@@ -28,6 +28,10 @@ systemctl restart sshd
 ssh -p 2222 user@your-server
 ```
 
+### Open Up Firewall Ports
+
+You must open up your firewall (if present) to expose ports 22, 80 or 443, and potentially your real SSH port. This is specific to your network configuration, so the exact steps are not presented here.
+
 ### GeoIP Databases
 
 Knock-Knock uses MaxMind GeoLite2 databases for IP geolocation. You need a free MaxMind account.

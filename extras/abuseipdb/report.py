@@ -96,13 +96,24 @@ def main():
         return
 
     print('Submitting to AbuseIPDB...')
-    result = submit(csv_data, api_key)
+    try:
+        result = submit(csv_data, api_key)
+    except urllib.error.HTTPError as e:
+        print(f'FAILED: HTTP {e.code} — {e.reason}', file=sys.stderr)
+        sys.exit(1)
+    except urllib.error.URLError as e:
+        print(f'FAILED: {e.reason}', file=sys.stderr)
+        sys.exit(1)
+
     saved = result.get('data', {}).get('savedReports', 0)
     errors = result.get('errors', [])
-    print(f'Saved reports: {saved}')
     if errors:
+        print(f'FAILED: {saved} IPs accepted, but errors occurred:')
         for err in errors:
-            print(f'  Error: {err.get("detail", err)}', file=sys.stderr)
+            print(f'  {err.get("detail", err)}', file=sys.stderr)
+        sys.exit(1)
+    else:
+        print(f'SUCCESS: {saved} IPs reported.')
 
 
 if __name__ == '__main__':

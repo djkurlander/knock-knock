@@ -1244,7 +1244,7 @@
         }
 
         // Country trivia (blue) - cycles through facts starting from random position
-        const countryData = triviaCountryMap[d.country];
+        const countryData = triviaCountryMap[d.iso];
         if (countryData && countryData.facts && countryData.facts.length > 0) {
             // Initialize index randomly if first time seeing this country
             if (countryData.index === undefined) {
@@ -1493,7 +1493,7 @@
             .then(r => r.json())
             .then(data => {
                 data.forEach(item => {
-                    triviaCountryMap[item.country] = {
+                    triviaCountryMap[item.iso] = {
                         facts: item.facts.map(f => colorizeKey(f, item.country))
                     };
                 });

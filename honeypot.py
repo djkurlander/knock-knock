@@ -3,6 +3,7 @@ import paramiko
 import socket
 import threading
 import logging
+import json
 import os
 import time
 
@@ -46,7 +47,7 @@ class SSHHoneypot(paramiko.ServerInterface):
         self.event = threading.Event()
 
     def check_auth_password(self, username, password):
-        print(f"[*] KNOCK | {self.client_ip} | {username} | {password}", flush=True)
+        print(json.dumps({"type": "KNOCK", "ip": self.client_ip, "user": username, "pass": password}), flush=True)
         return paramiko.AUTH_FAILED
 
     def get_allowed_auths(self, username):

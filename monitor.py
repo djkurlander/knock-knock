@@ -147,10 +147,12 @@ def monitor(save_knocks=False):
     print("🚀 Maximalist Monitor Active...")
 
     for line in sys.stdin:
-        if "[*] KNOCK |" in line:
-            parts = [p.strip() for p in line.split("|")]
-            if len(parts) < 4: continue
-            _, ip, user, pw = parts
+        try:
+            knock = json.loads(line)
+        except (json.JSONDecodeError, ValueError):
+            continue
+        if knock.get("type") == "KNOCK":
+            ip, user, pw = knock["ip"], knock["user"], knock["pass"]
             geo = get_geo_maximal(ip, c_reader, a_reader)
             package = {
                 "ip": ip, "user": user, "pass": pw,

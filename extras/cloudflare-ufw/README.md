@@ -32,8 +32,8 @@ ufw default allow outgoing
 # Honeypot SSH (public — this is the whole point)
 ufw allow 22/tcp
 
-# Your real SSH port (replace 20791 with yours)
-ufw allow 20791/tcp
+# Your real SSH port (replace 2222 with yours)
+ufw allow 2222/tcp
 
 # Web port from Cloudflare IPs only
 for cidr in $(curl -sf https://www.cloudflare.com/ips-v4) $(curl -sf https://www.cloudflare.com/ips-v6); do

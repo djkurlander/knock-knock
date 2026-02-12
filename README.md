@@ -31,7 +31,7 @@ Check it out at https://knock-knock.net, or install it on your own server with a
 
 ## Features
 
-- **Live Feed — Login Attempts:** a realtime feed of bots trying to log in to port 22 (knocks). Includes the location, username, password, ISP, and IP
+- **Live Feed:** a realtime feed of bots trying to log in to port 22 (knocks). Includes the location, username, password, ISP, and IP
 - **Globe View:** a 3D globe showing the location of the last knock. Six different globe styles are available, including a cool extruded country heat map of worst offenders
 - **Location:** the countries with the highest knock counts
 - **Username:** the most popular usernames tried by the bots
@@ -41,7 +41,6 @@ Check it out at https://knock-knock.net, or install it on your own server with a
 - **Stats:** statistics on the country, user, password, ISP, and IP of the last knock
 - **Trivia:** learn why a username or password may have been chosen
 - **Jokes:** some very bad knock-knock jokes
-- **About:** info about the program
 
 ## How It Works
 

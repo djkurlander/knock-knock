@@ -36,7 +36,7 @@ Check it out at https://knock-knock.net, or install it on your own server with a
 - **Location:** the countries with the highest knock counts
 - **Username:** the most popular usernames tried by the bots
 - **Password:** the most common passwords attempted
-- **ISP:** the ISP Wall of Shame (ASN Provider, technically)
+- **ISP:** the ISP Wall of Shame
 - **IP:** the worst offending IP addresses
 - **Stats:** statistics on the country, user, password, ISP, and IP of the last knock
 - **Trivia:** learn why a username or password may have been chosen

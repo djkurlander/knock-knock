@@ -29,6 +29,20 @@ Check it out at https://knock-knock.net, or install it on your own server with a
   <img src="pix/Mobile_Trivia.PNG" alt="Mobile trivia" width="210" />
 </p>
 
+## Features
+
+- **Live Feed — Login Attempts:** a realtime feed of bots trying to log in to port 22 (knocks). Includes the location, username, password, ISP, and IP
+- **Globe View:** a 3D globe showing the location of the last knock. Six different globe styles are available, including a cool extruded country heat map of worst offenders
+- **Location:** the countries with the highest knock counts
+- **Username:** the most popular usernames tried by the bots
+- **Password:** the most common passwords attempted
+- **ISP:** the ISP Wall of Shame (ASN Provider, technically)
+- **IP:** the worst offending IP addresses
+- **Stats:** statistics on the country, user, password, ISP, and IP of the last knock
+- **Trivia:** learn why a username or password may have been chosen
+- **Jokes:** some very bad knock-knock jokes
+- **About:** info about the program
+
 ## How It Works
 
 - Listens on the SSH port (22) and captures every unauthorized login attempt

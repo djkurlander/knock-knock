@@ -81,7 +81,7 @@ def main():
     print(f"Passwords: {format_stat('passwords', passwords)}")
     print(f"ISPs:      {format_stat('isps', isps)}")
     print(f"IPs:       {format_stat('ips', ips)}")
-    print(f"Collected: {days}d {hours}h {mins}m")
+    print(f"Operative: {days}d {hours}h {mins}m")
 
 if __name__ == "__main__":
     main()

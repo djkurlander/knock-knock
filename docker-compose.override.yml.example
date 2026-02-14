@@ -8,7 +8,7 @@ services:
   # honeypot-monitor:
   #   command: bash -c "python -u honeypot.py 2>&1 | python -u monitor.py --save-knocks"
 
-  ## HTTPS — uncomment all four lines, then place certs in certs/
+  ## HTTPS — uncomment the block below, then place certs in certs/
   # web:
   #   environment:
   #     - ENABLE_SSL=true

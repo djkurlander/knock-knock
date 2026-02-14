@@ -38,7 +38,7 @@ services:
     environment:
       - REDIS_HOST=redis
     ports:
-      - "127.0.0.1:80:80"
+      - "${WEB_LISTEN:-0.0.0.0}:80:80"
     volumes:
       - ./data:/app/data
       - /usr/share/GeoIP:/usr/share/GeoIP:ro

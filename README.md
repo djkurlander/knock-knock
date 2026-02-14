@@ -71,7 +71,9 @@ SQLite + Redis pub/sub
   ↓
 main.py (FastAPI)
   ↓
-WebSocket → Live Dashboard
+WebSocket
+  ↓
+Live Dashboard
 ```
 
 ## License

@@ -23,16 +23,18 @@ services:
   web:
     image: ghcr.io/djkurlander/knock-knock:latest
     build: .  # Used when running: docker compose up --build
-    command: >
-      sh -c "
-      if [ \"$$ENABLE_SSL\" = 'true' ]; then
-        exec python -m uvicorn main:app --host 0.0.0.0 --port 443
-          --ssl-keyfile /app/certs/key.pem --ssl-certfile /app/certs/cert.pem
-          --proxy-headers --forwarded-allow-ips='*' --workers 2;
-      else
-        exec python -m uvicorn main:app --host 0.0.0.0 --port 80
-          --proxy-headers --forwarded-allow-ips='*' --workers 2;
-      fi"
+    command:
+      - sh
+      - -c
+      - |
+        if [ "$$ENABLE_SSL" = 'true' ]; then
+          exec python -m uvicorn main:app --host 0.0.0.0 --port 443 \
+            --ssl-keyfile /app/certs/key.pem --ssl-certfile /app/certs/cert.pem \
+            --proxy-headers --forwarded-allow-ips='*' --workers 2;
+        else
+          exec python -m uvicorn main:app --host 0.0.0.0 --port 80 \
+            --proxy-headers --forwarded-allow-ips='*' --workers 2;
+        fi
     environment:
       - REDIS_HOST=redis
     ports:

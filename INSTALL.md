@@ -263,9 +263,11 @@ See [Optional Configuration](#optional-configuration) for various site-specific 
 
 By default, the monitor only updates aggregated intel tables (top usernames, passwords, countries, ISPs, IPs). To also store every individual knock in SQLite for later analysis, enable the `--save-knocks` flag. This uses more disk space (~600 MB/year at typical traffic levels).
 
-**Docker:** Edit `docker-compose.yml` and append `--save-knocks` to the honeypot-monitor command:
-```yaml
-command: bash -c "python -u honeypot.py 2>&1 | python -u monitor.py --save-knocks"
+**Docker:** Copy the example override file and uncomment the `--save-knocks` command:
+```bash
+cp docker-compose.override.yml.example docker-compose.override.yml
+# Edit docker-compose.override.yml and uncomment the honeypot-monitor command
+docker compose up -d
 ```
 
 **Systemd:** Append `--save-knocks` to the `ExecStart` line in `/etc/systemd/system/knock-monitor.service`, then reload:
@@ -282,14 +284,11 @@ certs/cert.pem   # Certificate or fullchain
 certs/key.pem    # Private key
 ```
 
-**Docker:** In `docker-compose.yml`, make three changes to the `web` service:
-1. Uncomment `ENABLE_SSL=true`
-2. Change the port mapping from `80:80` to `443:443`
-3. Uncomment the `certs` volume mount
-
-Then rebuild:
+**Docker:** Copy the example override file (if you haven't already) and uncomment the SSL settings:
 ```bash
-docker compose up -d --build
+cp docker-compose.override.yml.example docker-compose.override.yml
+# Edit docker-compose.override.yml and uncomment ENABLE_SSL, the 443 port, and the certs volume
+docker compose up -d
 ```
 
 **Systemd:** In `/etc/systemd/system/knock-web.service`, replace the HTTP `ExecStart` line with the commented-out HTTPS block, then reload:

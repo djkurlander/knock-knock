@@ -1,0 +1,23 @@
+# Copy this file to docker-compose.override.yml and uncomment the options you need.
+# Docker Compose automatically merges it with docker-compose.yml.
+# This file is gitignored, so your settings won't conflict with git pull.
+
+services:
+
+  ## Store every individual knock in SQLite (uses ~600 MB/year)
+  # honeypot-monitor:
+  #   command: bash -c "python -u honeypot.py 2>&1 | python -u monitor.py --save-knocks"
+
+  ## HTTPS — uncomment all four lines, then place certs in certs/
+  # web:
+  #   environment:
+  #     - ENABLE_SSL=true
+  #   ports:
+  #     - "443:443"
+  #   volumes:
+  #     - ./certs:/app/certs:ro
+
+  ## Log dashboard visitors to visitors.db
+  # web:
+  #   environment:
+  #     - LOG_VISITORS=true

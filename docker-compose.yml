@@ -35,14 +35,10 @@ services:
       fi"
     environment:
       - REDIS_HOST=redis
-      # - ENABLE_SSL=true  # Uncomment for HTTPS on port 443 (requires certs/)
-      # - LOG_VISITORS=true  # Uncomment to log dashboard visitors to visitors.db
     ports:
       - "80:80"
-      # - "443:443"  # Use instead of 80:80 when ENABLE_SSL=true
     volumes:
       - ./data:/app/data
-      # - ./certs:/app/certs:ro  # Uncomment when ENABLE_SSL=true
       - /usr/share/GeoIP:/usr/share/GeoIP:ro
     depends_on:
       - redis

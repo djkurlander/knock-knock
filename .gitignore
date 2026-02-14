@@ -8,6 +8,9 @@ data/*
 !data/.gitkeep
 *.log
 
+# Docker overrides
+docker-compose.override.yml
+
 # Python
 __pycache__/
 .venv/

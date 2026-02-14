@@ -6,7 +6,8 @@ services:
     restart: unless-stopped
 
   honeypot-monitor:
-    build: .
+    image: ghcr.io/djkurlander/knock-knock:latest
+    build: .  # Used when running: docker compose up --build
     command: bash -c "python -u honeypot.py 2>&1 | python -u monitor.py"
     environment:
       - REDIS_HOST=redis
@@ -20,7 +21,8 @@ services:
     restart: unless-stopped
 
   web:
-    build: .
+    image: ghcr.io/djkurlander/knock-knock:latest
+    build: .  # Used when running: docker compose up --build
     command: >
       sh -c "
       if [ \"$$ENABLE_SSL\" = 'true' ]; then

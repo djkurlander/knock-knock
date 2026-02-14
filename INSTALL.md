@@ -36,9 +36,7 @@ You must open up your firewall (if present) to expose ports 22, 80 or 443, and p
 
 Knock-Knock uses MaxMind GeoLite2 databases for IP geolocation. You need a free MaxMind account.
 
-1. Create account at https://www.maxmind.com/en/geolite2/signup
-2. Generate a license key in your account dashboard, download the config file, and save it as /etc/GeoIP.conf on your server.
-3. Install and configure geoipupdate:
+1. Install geoipupdate:
 
 **Debian/Ubuntu:**
 ```bash
@@ -50,10 +48,11 @@ apt install -y geoipupdate
 dnf install -y geoipupdate
 ```
 
+2. Create a free account at https://www.maxmind.com/en/geolite2/signup
+3. Generate a license key in your account dashboard. Either download the config file and save it as `/etc/GeoIP.conf`, or edit the existing `/etc/GeoIP.conf` (created by the install) and add your `AccountID` and `LicenseKey`.
+
 Then download the databases:
 ```bash
-# Make sure /etc/GeoIP.conf is in place, and includes your AccountID and LicenseKey
-# Then:
 geoipupdate
 
 # Ensure databases are at /usr/share/GeoIP (some distros use /var/lib/GeoIP)

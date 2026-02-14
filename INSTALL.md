@@ -100,6 +100,10 @@ cd /root
 git clone https://github.com/djkurlander/knock-knock.git
 cd knock-knock
 
+# By default, the dashboard is only reachable at http://localhost.
+# To allow external access, copy the example override and uncomment the "80:80" port line:
+#   cp docker-compose.override.yml.example docker-compose.override.yml
+
 # Pull and start (uses pre-built image from ghcr.io)
 docker compose up -d
 ```
@@ -112,6 +116,10 @@ If you prefer to build from source:
 cd /root
 git clone https://github.com/djkurlander/knock-knock.git
 cd knock-knock
+
+# By default, the dashboard is only reachable at http://localhost.
+# To allow external access, copy the example override and uncomment the "80:80" port line:
+#   cp docker-compose.override.yml.example docker-compose.override.yml
 
 # Build and start from Dockerfile
 docker compose up -d --build

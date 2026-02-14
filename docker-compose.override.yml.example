@@ -4,9 +4,10 @@
 
 services:
 
-  ## Store every individual knock in SQLite (uses ~600 MB/year)
-  # honeypot-monitor:
-  #   command: bash -c "python -u honeypot.py 2>&1 | python -u monitor.py --save-knocks"
+  ## Expose dashboard publicly on HTTP (default is localhost-only)
+  # web:
+  #   ports:
+  #     - "80:80"
 
   ## HTTPS — uncomment the block below, then place certs in certs/
   # web:
@@ -16,6 +17,10 @@ services:
   #     - "443:443"
   #   volumes:
   #     - ./certs:/app/certs:ro
+
+  ## Store every individual knock in SQLite (uses ~600 MB/year)
+  # honeypot-monitor:
+  #   command: bash -c "python -u honeypot.py 2>&1 | python -u monitor.py --save-knocks"
 
   ## Log dashboard visitors to visitors.db
   # web:

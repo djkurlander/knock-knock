@@ -3,6 +3,7 @@
 # --- Configuration ---
 PROJECT_DIR="$(cd "$(dirname "$0")" && pwd)"
 DB_DIR="${DB_DIR:-$PROJECT_DIR/data}"
+DC="docker compose --project-directory $PROJECT_DIR"
 
 # --- Parse flags ---
 RESET=false
@@ -20,7 +21,7 @@ done
 if [ -z "$MODE" ]; then
     if docker compose version &>/dev/null && [ -f "$PROJECT_DIR/docker-compose.yml" ]; then
         # Check if containers are running or if there are no systemd units installed
-        if docker compose -f "$PROJECT_DIR/docker-compose.yml" ps --quiet 2>/dev/null | grep -q . \
+        if $DC ps --quiet 2>/dev/null | grep -q . \
            || ! systemctl list-unit-files knock-monitor.service &>/dev/null; then
             MODE="docker"
         else
@@ -36,7 +37,7 @@ echo "Refreshing Knock-Knock Infrastructure (mode: $MODE)..."
 # --- Stop ---
 echo "Stopping services..."
 if [ "$MODE" = "docker" ]; then
-    docker compose -f "$PROJECT_DIR/docker-compose.yml" down
+    $DC down
 else
     systemctl stop knock-monitor knock-web 2>/dev/null
 fi
@@ -55,9 +56,9 @@ if [ "$RESET" = true ]; then
 
     # Determine redis-cli command (host may differ per mode)
     if [ "$MODE" = "docker" ]; then
-        REDIS_CMD="docker compose -f $PROJECT_DIR/docker-compose.yml run --rm redis redis-cli -h redis"
+        REDIS_CMD="$DC run --rm redis redis-cli -h redis"
         # Need redis running to flush it
-        docker compose -f "$PROJECT_DIR/docker-compose.yml" up -d redis
+        $DC up -d redis
         sleep 1
     else
         REDIS_CMD="redis-cli"
@@ -71,13 +72,13 @@ fi
 echo "Starting services..."
 if [ "$MODE" = "docker" ]; then
     if [ "${BUILD:-false}" = true ]; then
-        docker compose -f "$PROJECT_DIR/docker-compose.yml" up -d --build
+        $DC up -d --build
         echo "  [+] Docker containers built and started"
     else
-        docker compose -f "$PROJECT_DIR/docker-compose.yml" up -d
+        $DC up -d
         echo "  [+] Docker containers started"
     fi
-    docker compose -f "$PROJECT_DIR/docker-compose.yml" ps --format "table {{.Name}}\t{{.Status}}\t{{.Ports}}"
+    $DC ps --format "table {{.Name}}\t{{.Status}}\t{{.Ports}}"
 else
     systemctl daemon-reload
 

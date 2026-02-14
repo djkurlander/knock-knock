@@ -312,6 +312,7 @@ async def websocket_endpoint(websocket: WebSocket):
     except WebSocketDisconnect:
         manager.disconnect(websocket)
 
+@app.head("/")
 @app.get("/")
 async def get():
     return HTMLResponse(content=open("index.html").read(), headers={"Cache-Control": "no-cache"})

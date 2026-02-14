@@ -69,9 +69,7 @@ monitor.py (GeoIP lookup)
   ↓
 SQLite + Redis pub/sub
   ↓
-main.py (FastAPI)
-  ↓
-WebSocket
+main.py (FastAPI + WebSocket)
   ↓
 Live Dashboard
 ```

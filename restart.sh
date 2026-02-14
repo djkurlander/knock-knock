@@ -10,6 +10,7 @@ MODE=""
 for arg in "$@"; do
     case "$arg" in
         --reset-all) RESET=true ;;
+        --build)     BUILD=true ;;
         --docker)    MODE="docker" ;;
         --systemd)   MODE="systemd" ;;
     esac
@@ -69,8 +70,13 @@ fi
 # --- Start ---
 echo "Starting services..."
 if [ "$MODE" = "docker" ]; then
-    docker compose -f "$PROJECT_DIR/docker-compose.yml" up -d --build
-    echo "  [+] Docker containers built and started"
+    if [ "${BUILD:-false}" = true ]; then
+        docker compose -f "$PROJECT_DIR/docker-compose.yml" up -d --build
+        echo "  [+] Docker containers built and started"
+    else
+        docker compose -f "$PROJECT_DIR/docker-compose.yml" up -d
+        echo "  [+] Docker containers started"
+    fi
     docker compose -f "$PROJECT_DIR/docker-compose.yml" ps --format "table {{.Name}}\t{{.Status}}\t{{.Ports}}"
 else
     systemctl daemon-reload

@@ -70,30 +70,7 @@ Add this line:
 0 4 * * * /bin/bash /path/to/knock-knock/extras/cloudflare-ufw/update-cloudflare-ufw.sh >> /var/log/cloudflare-ufw.log 2>&1
 ```
 
-### 6. Update main.py for real client IPs
-
-Behind Cloudflare, `websocket.client.host` will be a Cloudflare proxy IP, not the visitor's real IP. The main project's `main.py` includes a `get_client_ip()` helper that checks headers in this order:
-
-1. `CF-Connecting-IP` (Cloudflare's real client IP header)
-2. `X-Forwarded-For` (first entry)
-3. Direct connection IP (fallback for non-Cloudflare setups)
-
-No extra configuration needed — it works automatically whether or not you use Cloudflare.
-
-## Verification
-
-```bash
-# Confirm UFW is active
-ufw status
-
-# Test: direct HTTPS to your server IP should be refused
-curl -k https://YOUR_SERVER_IP --max-time 5
-# Expected: connection refused or timeout
-
-# Test: access via your Cloudflare domain should work
-curl -k https://your-domain.com
-# Expected: normal page response
-```
+**Note:** Behind Cloudflare, `websocket.client.host` will be a Cloudflare proxy IP, not the visitor's real IP. The app handles this automatically — `main.py` checks `CF-Connecting-IP` and `X-Forwarded-For` headers before falling back to the direct connection IP. No extra configuration needed.
 
 ## Docker: nginx reverse proxy
 
@@ -151,14 +128,19 @@ nginx -t && systemctl enable nginx && systemctl restart nginx
 
 The `Upgrade` and `Connection` headers are required for WebSocket (live feed) to work through the proxy.
 
-### 3. Verify
+## Verification
 
 ```bash
-# Direct access should be refused (UFW blocks non-Cloudflare on 443, Docker is localhost-only on 80)
-curl -k https://YOUR_SERVER_IP --max-time 5
+# Confirm UFW is active
+ufw status
 
-# Access via Cloudflare domain should work
+# Direct access to your server IP should be refused
+curl -k https://YOUR_SERVER_IP --max-time 5
+# Expected: connection refused or timeout
+
+# Access via your Cloudflare domain should work
 curl -k https://your-domain.com
+# Expected: normal page response
 ```
 
 ## Notes

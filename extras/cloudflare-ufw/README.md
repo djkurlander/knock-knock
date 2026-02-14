@@ -95,6 +95,72 @@ curl -k https://your-domain.com
 # Expected: normal page response
 ```
 
+## Docker: nginx reverse proxy
+
+**This section only applies to Docker deployments.** Systemd deployments can skip this — UFW controls traffic directly.
+
+Docker bypasses UFW by inserting its own iptables rules for published ports. This means the Cloudflare-only UFW rules above won't protect Docker's web port — anyone can reach it by IP regardless of UFW.
+
+To fix this, bind Docker to localhost and put nginx in front:
+
+### 1. Lock the web port to localhost
+
+Create a `.env` file in the project directory:
+
+```
+WEB_LISTEN=127.0.0.1
+```
+
+Then restart: `docker compose down && docker compose up -d`
+
+### 2. Install and configure nginx
+
+```bash
+apt install -y nginx
+```
+
+Create `/etc/nginx/sites-available/knock-knock`:
+
+```nginx
+server {
+    listen 443 ssl;
+    server_name YOUR_DOMAIN;
+
+    ssl_certificate     /root/knock-knock/certs/cert.pem;
+    ssl_certificate_key /root/knock-knock/certs/key.pem;
+
+    location / {
+        proxy_pass http://127.0.0.1:80;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header CF-Connecting-IP $http_cf_connecting_ip;
+    }
+}
+```
+
+Enable and start:
+
+```bash
+ln -s /etc/nginx/sites-available/knock-knock /etc/nginx/sites-enabled/
+rm -f /etc/nginx/sites-enabled/default
+nginx -t && systemctl enable nginx && systemctl restart nginx
+```
+
+The `Upgrade` and `Connection` headers are required for WebSocket (live feed) to work through the proxy.
+
+### 3. Verify
+
+```bash
+# Direct access should be refused (UFW blocks non-Cloudflare on 443, Docker is localhost-only on 80)
+curl -k https://YOUR_SERVER_IP --max-time 5
+
+# Access via Cloudflare domain should work
+curl -k https://your-domain.com
+```
+
 ## Notes
 
 - Redis (port 6379) listens on localhost only by default — no UFW rule needed

@@ -61,15 +61,17 @@ Knock-Knock supports three different installation methods, with docker being the
 ## Architecture (In One Breath)
 
 ```
-SSH Attacker → honeypot.py (port 22) → stdout (piped)
-                                              ↓
-                                       monitor.py (GeoIP lookup)
-                                              ↓
-                                    SQLite + Redis pub/sub
-                                              ↓
-                                       main.py (FastAPI)
-                                              ↓
-                                    WebSocket → Live Dashboard
+SSH Attacker
+  ↓
+honeypot.py (port 22)
+  ↓
+monitor.py (GeoIP lookup)
+  ↓
+SQLite + Redis pub/sub
+  ↓
+main.py (FastAPI)
+  ↓
+WebSocket → Live Dashboard
 ```
 
 ## License

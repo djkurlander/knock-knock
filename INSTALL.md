@@ -70,9 +70,9 @@ crontab -e
 0 3 * * 3 /usr/bin/geoipupdate
 ```
 
-### SSH Host Key
+### SSH Host Key (Systemd Only)
 
-The honeypot needs an RSA key to present to connecting clients. Generate this after cloning the repo:
+The honeypot needs an RSA key to present to connecting clients. **Docker users can skip this** — the Docker image generates one automatically.
 
 ```bash
 cd /root/knock-knock
@@ -85,27 +85,42 @@ chmod 600 server.key
 
 ## Option 1: Docker (Simplest, Universal)
 
-Complete the [Prerequisites](#prerequisites) above first.
+Complete the [Prerequisites](#prerequisites) above first (skip the SSH Host Key step — Docker handles it).
 
 **Install Docker (skip if already installed):**
 ```bash
 curl -fsSL https://get.docker.com | sh
 ```
 
-Then clone the repo:
+### Using the Pre-built Image (Recommended)
+
+A multi-arch image (amd64 + arm64) is published to GitHub Container Registry. You only need the `docker-compose.yml` file:
+
 ```bash
 cd /root
 git clone https://github.com/djkurlander/knock-knock.git
 cd knock-knock
+
+# Pull and start (uses pre-built image from ghcr.io)
+docker compose up -d
 ```
 
-Make sure `server.key` and GeoIP databases are in place (see Prerequisites), then:
+### Building Locally
+
+If you prefer to build from source:
 
 ```bash
-# Build and start
-docker compose up -d
+cd /root
+git clone https://github.com/djkurlander/knock-knock.git
+cd knock-knock
 
-# Verify
+# Build and start from Dockerfile
+docker compose up -d --build
+```
+
+### Verify
+
+```bash
 docker compose logs honeypot-monitor   # Should show "Monitor Active"
 docker compose logs web                # Should show uvicorn startup
 ```

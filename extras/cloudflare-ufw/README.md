@@ -1,12 +1,12 @@
 # Cloudflare UFW Setup for Knock-Knock
 
-By default, this setup allows Cloudflare traffic on both ports 80 (HTTP) and 443 (HTTPS). If you only use one, you can adjust the rules and update script to suit your setup.
-
 ## Why?
 
 If your Knock-Knock dashboard is served through Cloudflare, you want to hide your server's real IP address. Bots that discover the origin IP can bypass Cloudflare and access the web server directly — or worse, correlate the IP with the honeypot.
 
 This guide sets up UFW (Uncomplicated Firewall) so that only Cloudflare's proxy servers can reach your web port, while the honeypot and your real SSH port remain accessible.
+
+By default, this setup allows Cloudflare traffic on both ports 80 (HTTP) and 443 (HTTPS). If you only use one, you can adjust the rules and update script to suit your setup.
 
 ## Prerequisites
 

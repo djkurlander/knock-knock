@@ -1,8 +1,8 @@
 #!/bin/bash
-# Fetches latest Cloudflare IP ranges and updates UFW rules for port 443.
+# Fetches latest Cloudflare IP ranges and updates UFW rules for ports 80 and 443.
 # Intended to run daily via cron.
 
-PORT=443
+PORTS="80 443"
 COMMENT="Cloudflare"
 TMPFILE=$(mktemp)
 trap "rm -f $TMPFILE" EXIT
@@ -20,21 +20,25 @@ if [ ! -s "$TMPFILE" ]; then
     exit 1
 fi
 
-# Get current Cloudflare rules from UFW (extract CIDR ranges)
-CURRENT=$(ufw status | grep "# $COMMENT" | awk '{print $3}')
+for PORT in $PORTS; do
+    echo "Syncing port $PORT..."
 
-# Remove rules that are no longer in Cloudflare's list
-for cidr in $CURRENT; do
-    if ! grep -q "^${cidr}$" "$TMPFILE"; then
-        echo "y" | ufw delete allow from "$cidr" to any port $PORT proto tcp 2>/dev/null && echo "Removed: $cidr" || true
-    fi
-done
+    # Get current Cloudflare rules from UFW for this port (extract CIDR ranges)
+    CURRENT=$(ufw status | grep "$PORT/tcp.*# $COMMENT" | awk '{print $3}')
 
-# Add any new ranges not already in UFW
-for cidr in $(cat "$TMPFILE"); do
-    if ! echo "$CURRENT" | grep -q "^${cidr}$"; then
-        ufw allow from "$cidr" to any port $PORT proto tcp comment "$COMMENT" && echo "Added: $cidr"
-    fi
+    # Remove rules that are no longer in Cloudflare's list
+    for cidr in $CURRENT; do
+        if ! grep -q "^${cidr}$" "$TMPFILE"; then
+            echo "y" | ufw delete allow from "$cidr" to any port $PORT proto tcp 2>/dev/null && echo "Removed: $cidr (port $PORT)" || true
+        fi
+    done
+
+    # Add any new ranges not already in UFW
+    for cidr in $(cat "$TMPFILE"); do
+        if ! echo "$CURRENT" | grep -q "^${cidr}$"; then
+            ufw allow from "$cidr" to any port $PORT proto tcp comment "$COMMENT" && echo "Added: $cidr (port $PORT)"
+        fi
+    done
 done
 
 echo "Cloudflare UFW rules updated at $(date)"

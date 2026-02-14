@@ -1,5 +1,7 @@
 # Cloudflare UFW Setup for Knock-Knock
 
+By default, this setup allows Cloudflare traffic on both ports 80 (HTTP) and 443 (HTTPS). If you only use one, you can adjust the rules and update script to suit your setup.
+
 ## Why?
 
 If your Knock-Knock dashboard is served through Cloudflare, you want to hide your server's real IP address. Bots that discover the origin IP can bypass Cloudflare and access the web server directly — or worse, correlate the IP with the honeypot.
@@ -35,13 +37,12 @@ ufw allow 22/tcp
 # Your real SSH port (replace 2222 with yours)
 ufw allow 2222/tcp
 
-# Web port from Cloudflare IPs only
+# Web ports from Cloudflare IPs only (both HTTP and HTTPS)
 for cidr in $(curl -sf https://www.cloudflare.com/ips-v4) $(curl -sf https://www.cloudflare.com/ips-v6); do
+    ufw allow from "$cidr" to any port 80 proto tcp comment "Cloudflare"
     ufw allow from "$cidr" to any port 443 proto tcp comment "Cloudflare"
 done
 ```
-
-If you serve HTTP instead of HTTPS, replace `443` with `80`.
 
 ### 4. Enable UFW
 
@@ -49,7 +50,7 @@ If you serve HTTP instead of HTTPS, replace `443` with `80`.
 ufw enable
 ```
 
-Verify with `ufw status`. You should see your SSH port, port 22, and ~22 Cloudflare CIDR rules for port 443.
+Verify with `ufw status`. You should see your SSH port, port 22, and Cloudflare CIDR rules for ports 80 and 443.
 
 ### 5. Daily Cloudflare IP updates (cron)
 

@@ -144,6 +144,15 @@ def monitor(save_knocks=False):
     c_reader = geoip2.database.Reader(GEOIP_CITY_PATH) if os.path.exists(GEOIP_CITY_PATH) else None
     a_reader = geoip2.database.Reader(GEOIP_ASN_PATH) if os.path.exists(GEOIP_ASN_PATH) else None
 
+    # Seed Redis total from SQLite on startup to stay in sync
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        total = conn.execute("SELECT SUM(hits) FROM ip_intel").fetchone()[0] or 0
+        conn.close()
+        r.set("knock:total_global", total)
+    except Exception as e:
+        print(f"⚠️ Could not seed total from SQLite: {e}")
+
     print("🚀 Maximalist Monitor Active...")
 
     for line in sys.stdin:

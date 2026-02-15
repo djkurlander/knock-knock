@@ -146,36 +146,6 @@ class GlobalStatsCache:
 # Initialize the global cache
 stats_cache = GlobalStatsCache()
 
-def get_knock_intel_stats(knock):
-    """Get intel stats for a knock (hits, last_seen for each field)."""
-    if not knock:
-        return knock
-    conn = sqlite3.connect(DB_PATH)
-    cur = conn.cursor()
-    try:
-        cur.execute("SELECT hits, last_seen FROM country_intel WHERE iso_code=?", (knock.get('iso'),))
-        row = cur.fetchone()
-        knock['country_hits'], knock['country_last'] = (row[0], row[1]) if row else (0, None)
-
-        cur.execute("SELECT hits, last_seen FROM user_intel WHERE username=?", (knock.get('user'),))
-        row = cur.fetchone()
-        knock['user_hits'], knock['user_last'] = (row[0], row[1]) if row else (0, None)
-
-        cur.execute("SELECT hits, last_seen FROM pass_intel WHERE password=?", (knock.get('pass'),))
-        row = cur.fetchone()
-        knock['pass_hits'], knock['pass_last'] = (row[0], row[1]) if row else (0, None)
-
-        cur.execute("SELECT hits, last_seen FROM isp_intel WHERE isp=?", (knock.get('isp'),))
-        row = cur.fetchone()
-        knock['isp_hits'], knock['isp_last'] = (row[0], row[1]) if row else (0, None)
-
-        cur.execute("SELECT hits, last_seen FROM ip_intel WHERE ip=?", (knock.get('ip'),))
-        row = cur.fetchone()
-        knock['ip_hits'], knock['ip_last'] = (row[0], row[1]) if row else (0, None)
-    finally:
-        conn.close()
-    return knock
-
 class ConnectionManager:
     def __init__(self):
         self.active_connections: list[WebSocket] = []
@@ -234,11 +204,6 @@ class ConnectionManager:
             stats = await self.get_initial_data()
             history = await self.get_recent_knocks(100)
 
-            # Enrich most recent knock with intel stats
-            last_knock_stats = None
-            if history:
-                last_knock_stats = get_knock_intel_stats(dict(history[0]))
-
             payload = {
                 "type": "init_stats",
                 "data": {
@@ -254,7 +219,7 @@ class ConnectionManager:
                     "top_users": stats.get("top_users", []),
                     "top_ips": stats.get("top_ips", []),
                     "cache_ts": stats.get("cache_ts"),
-                    "last_knock_stats": last_knock_stats
+                    "last_knock_stats": history[0] if history else None
                 }
             }
             await websocket.send_json(payload)

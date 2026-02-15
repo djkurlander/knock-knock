@@ -154,14 +154,11 @@ class ConnectionManager:
         try:
             total_val = await r.get("knock:total_global")
             total_knocks = int(total_val) if total_val else 0
-            conn = sqlite3.connect(DB_PATH)
-            cur = conn.cursor()
-            cur.execute("SELECT COUNT(*) FROM monitor_heartbeats")
-            count_minutes = cur.fetchone()[0]
-            conn.close()
-            if count_minutes == 0:
+            uptime_val = await r.get("knock:uptime_minutes")
+            uptime_minutes = int(uptime_val) if uptime_val else 0
+            if uptime_minutes == 0:
                 return 0.0
-            return round(total_knocks / count_minutes, 2)
+            return round(total_knocks / uptime_minutes, 2)
         except Exception:
             return 0.0
 
@@ -232,11 +229,11 @@ class ConnectionManager:
             self.active_connections.remove(websocket)
 
     async def broadcast(self, message: str):
-        for connection in self.active_connections:
-            try:
-                await connection.send_text(message)
-            except:
-                pass
+        if self.active_connections:
+            await asyncio.gather(
+                *[c.send_text(message) for c in self.active_connections],
+                return_exceptions=True
+            )
 
 manager = ConnectionManager()
 

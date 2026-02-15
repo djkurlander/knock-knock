@@ -25,7 +25,7 @@ def reset_all():
             print(f"   [!] Error deleting {DB_PATH}: {e}")
     try:
         r = redis.Redis(host=os.environ.get('REDIS_HOST', 'localhost'), port=6379, db=0, decode_responses=True)
-        keys_to_clear = ["knock:total_global", "knock:last_time", "knock:last_lat", "knock:last_lng", "knock:recent"]
+        keys_to_clear = ["knock:total_global", "knock:uptime_minutes", "knock:last_time", "knock:last_lat", "knock:last_lng", "knock:recent"]
         for key in keys_to_clear:
             r.delete(key)
         print("   [+] Cleared Redis keys")
@@ -56,7 +56,7 @@ def init_db():
     conn.commit()
     conn.close()
 
-def heartbeat_worker():
+def heartbeat_worker(redis_conn):
     while True:
         try:
             conn = sqlite3.connect(DB_PATH)
@@ -64,6 +64,7 @@ def heartbeat_worker():
             cur.execute("INSERT INTO monitor_heartbeats DEFAULT VALUES")
             conn.commit()
             conn.close()
+            redis_conn.incr("knock:uptime_minutes")
         except Exception as e:
             print(f"❌ Heartbeat Error: {e}")
         time.sleep(60)
@@ -139,19 +140,22 @@ def get_geo_maximal(ip, city_reader, asn_reader):
 
 def monitor(save_knocks=False):
     init_db()
-    threading.Thread(target=heartbeat_worker, daemon=True).start()
     r = redis.Redis(host=os.environ.get('REDIS_HOST', 'localhost'), port=6379, db=0, decode_responses=True)
     c_reader = geoip2.database.Reader(GEOIP_CITY_PATH) if os.path.exists(GEOIP_CITY_PATH) else None
     a_reader = geoip2.database.Reader(GEOIP_ASN_PATH) if os.path.exists(GEOIP_ASN_PATH) else None
 
-    # Seed Redis total from SQLite on startup to stay in sync
+    # Seed Redis totals from SQLite on startup to stay in sync
     try:
         conn = sqlite3.connect(DB_PATH)
         total = conn.execute("SELECT SUM(hits) FROM ip_intel").fetchone()[0] or 0
+        uptime = conn.execute("SELECT COUNT(*) FROM monitor_heartbeats").fetchone()[0] or 0
         conn.close()
         r.set("knock:total_global", total)
+        r.set("knock:uptime_minutes", uptime)
     except Exception as e:
-        print(f"⚠️ Could not seed total from SQLite: {e}")
+        print(f"⚠️ Could not seed totals from SQLite: {e}")
+
+    threading.Thread(target=heartbeat_worker, args=(r,), daemon=True).start()
 
     print("🚀 Maximalist Monitor Active...")
 

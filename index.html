@@ -958,6 +958,7 @@
 
     function rotateGlobeToLocation(lat, lng) {
         if (lat === null || lng === null) return;
+        if (lat === lastLat && lng === lastLng) return;
         lastLat = lat;
         lastLng = lng;
         const point = [{ lat, lng }];

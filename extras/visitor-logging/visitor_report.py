@@ -41,26 +41,33 @@ SMTP_USER = os.environ.get('SMTP_USER', '')
 SMTP_PASS = os.environ.get('SMTP_PASS', '')
 
 # --- IPs to exclude from reports (e.g., your own IPs or domains) ---
+# Supports exact IPs, domains (resolved to IPs), and prefix matching with * wildcard
+# Example: EXCLUDE_IPS=bear-den.example.com,2600:1000:b0ef:*
 def resolve_exclusions(exclusion_str):
-    """Resolve a comma-separated list of IPs and/or domain names to a set of IPs."""
-    excluded = set()
+    """Resolve a comma-separated list of IPs, domains, and prefixes to exclude."""
+    exact = set()
+    prefixes = []
     for entry in filter(None, exclusion_str.split(',')):
         entry = entry.strip()
         if not entry:
             continue
-        # Check if it looks like a domain (has letters) vs an IP (only digits, dots, colons)
-        if any(c.isalpha() for c in entry):
+        if entry.endswith('*'):
+            prefixes.append(entry[:-1])
+        elif any(c.isalpha() for c in entry):
             try:
-                # Resolve domain to IP(s)
                 ips = socket.gethostbyname_ex(entry)[2]
-                excluded.update(ips)
+                exact.update(ips)
             except socket.gaierror:
                 print(f"Warning: Could not resolve {entry}")
         else:
-            excluded.add(entry)
-    return excluded
+            exact.add(entry)
+    return exact, prefixes
 
-EXCLUDE_IPS = resolve_exclusions(os.environ.get('EXCLUDE_IPS', ''))
+_exact_ips, _prefix_ips = resolve_exclusions(os.environ.get('EXCLUDE_IPS', ''))
+
+def is_excluded(ip):
+    """Check if an IP matches any exclusion (exact or prefix)."""
+    return ip in _exact_ips or any(ip.startswith(p) for p in _prefix_ips)
 
 def get_visitors(days):
     """Get visitors from the last N days, excluding specified IPs."""
@@ -79,7 +86,7 @@ def get_visitors(days):
         ORDER BY MAX(timestamp) DESC
     """, (since,))
 
-    visitors = [dict(row) for row in cur.fetchall() if row['ip'] not in EXCLUDE_IPS]
+    visitors = [dict(row) for row in cur.fetchall() if not is_excluded(row['ip'])]
     conn.close()
     return visitors
 

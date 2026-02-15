@@ -1,12 +1,12 @@
 # Knock-Knock Dashboards
 
-A community list of live Knock-Knock dashboards. Add yours via pull request!
+A community list of live Knock-Knock dashboards. Add yours!
 
 ## How to Add Yours
 
-1. Fork this repo
-2. Add a row to the table below
-3. Open a pull request
+**Option 1 — Open an issue** (easiest): [Create an issue](https://github.com/djkurlander/knock-knock/issues/new?title=Add+my+dashboard&body=Name:%0AURL:%0ALocation:%0A) with your dashboard info and we'll add it.
+
+**Option 2 — Pull request**: Fork this repo, add a row to the table below, and open a PR.
 
 ## Live Dashboards
 

@@ -6,6 +6,7 @@ import csv
 import io
 import json
 import os
+import socket
 import sqlite3
 import sys
 import urllib.request
@@ -14,6 +15,46 @@ from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 DB_PATH = PROJECT_ROOT / os.environ.get('DB_DIR', 'data') / 'knock_knock.db'
+
+# --- Load .env file if it exists ---
+env_path = PROJECT_ROOT / '.env'
+if env_path.exists():
+    with open(env_path) as f:
+        for line in f:
+            line = line.strip()
+            if line and not line.startswith('#') and '=' in line:
+                key, value = line.split('=', 1)
+                os.environ.setdefault(key.strip(), value.strip())
+
+
+def resolve_exclusions(exclusion_str):
+    """Resolve a comma-separated list of IPs, domains, and prefixes to exclude."""
+    exact = set()
+    prefixes = []
+    for entry in filter(None, exclusion_str.split(',')):
+        entry = entry.strip()
+        if not entry:
+            continue
+        if entry.endswith('*'):
+            prefixes.append(entry[:-1])
+        elif any(c.isalpha() for c in entry):
+            try:
+                ips = socket.gethostbyname_ex(entry)[2]
+                exact.update(ips)
+            except socket.gaierror:
+                print(f"Warning: Could not resolve {entry}")
+        else:
+            exact.add(entry)
+    return exact, prefixes
+
+
+_exact_ips, _prefix_ips = resolve_exclusions(os.environ.get('EXCLUDE_IPS', ''))
+
+
+def is_excluded(ip):
+    """Check if an IP matches any exclusion (exact or prefix)."""
+    return ip in _exact_ips or any(ip.startswith(p) for p in _prefix_ips)
+
 
 API_URL = 'https://api.abuseipdb.com/api/v2/bulk-report'
 CATEGORIES = '18,22'  # Brute-Force, SSH
@@ -82,13 +123,16 @@ def main():
         print(f'Error: database not found at {DB_PATH}', file=sys.stderr)
         sys.exit(1)
 
-    rows = fetch_ips(args.hours)
+    all_rows = fetch_ips(args.hours)
+    rows = [(ip, hits, last_seen) for ip, hits, last_seen in all_rows if not is_excluded(ip)]
+    excluded = len(all_rows) - len(rows)
     if not rows:
         print(f'No IPs found in the last {args.hours} hours.')
         return
 
     csv_data = build_csv(rows)
-    print(f'Found {len(rows)} IPs from the last {args.hours} hours.')
+    print(f'Found {len(rows)} IPs from the last {args.hours} hours.' +
+          (f' ({excluded} excluded)' if excluded else ''))
 
     if args.dry_run:
         print()

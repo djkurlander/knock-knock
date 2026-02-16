@@ -164,7 +164,7 @@ def format_report(period_name, days):
     report.append("")
 
     # Limit details based on period
-    limit = 100 if days == 1 else 200 if days == 7 else 300
+    limit = 500
     for v in visitors[:limit]:
         loc = ", ".join(filter(None, [v['city'], v['region'], v['country']]))
         count_str = f"({v['visit_count']} connections)" if v['visit_count'] > 1 else "(1 connection)"

@@ -21,7 +21,7 @@ def generate(db_path, output_dir):
     for filename, days in REPORTS:
         cutoff = (datetime.now() - timedelta(days=days)).strftime('%Y-%m-%d %H:%M:%S')
         rows = conn.execute(
-            'SELECT ip FROM ip_intel WHERE last_seen >= ? ORDER BY hits DESC',
+            'SELECT ip FROM ip_intel WHERE last_seen >= ? ORDER BY last_seen DESC',
             (cutoff,),
         ).fetchall()
         out = output_dir / filename

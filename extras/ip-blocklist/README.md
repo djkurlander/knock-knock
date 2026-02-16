@@ -7,7 +7,7 @@ Generates plain-text IP blocklist files from honeypot data for public download.
 - `static/ip-blocklist-month.txt` — IPs seen in the last 30 days
 - `static/ip-blocklist-year.txt` — IPs seen in the last 365 days
 
-One IP per line, sorted by hit count (most active first).
+One IP per line, sorted by most recently seen first.
 
 ## Usage
 

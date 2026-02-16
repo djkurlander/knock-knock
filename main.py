@@ -30,7 +30,7 @@ if LOG_VISITORS:
     visitor_asn_reader = geoip2.database.Reader(GEOIP_ASN_PATH) if os.path.exists(GEOIP_ASN_PATH) else None
 
     def init_visitors_db():
-        conn = sqlite3.connect(VISITORS_DB_PATH)
+        conn = sqlite3.connect(VISITORS_DB_PATH, timeout=10)
         cur = conn.cursor()
         cur.execute("""CREATE TABLE IF NOT EXISTS visitors (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -70,7 +70,7 @@ if LOG_VISITORS:
         """Log a visitor to the separate visitors database."""
         try:
             geo = get_visitor_geo(ip)
-            conn = sqlite3.connect(VISITORS_DB_PATH)
+            conn = sqlite3.connect(VISITORS_DB_PATH, timeout=10)
             cur = conn.cursor()
             cur.execute("""INSERT INTO visitors (ip, city, region, country, iso_code, isp, asn, referrer, user_agent)
                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
@@ -128,7 +128,7 @@ class GlobalStatsCache:
 
     def _get_top_stats(self, stat_type):
         """Synchronous helper for the executor - uses indexed intel tables."""
-        conn = sqlite3.connect(DB_PATH)
+        conn = sqlite3.connect(DB_PATH, timeout=10)
         conn.row_factory = sqlite3.Row
         cur = conn.cursor()
         queries = {

@@ -33,7 +33,7 @@ def reset_all():
         print(f"   [!] Error clearing Redis: {e}")
 
 def init_db():
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, timeout=10)
     cur = conn.cursor()
     cur.execute("""CREATE TABLE IF NOT EXISTS knocks (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -59,7 +59,7 @@ def init_db():
 def heartbeat_worker(redis_conn):
     while True:
         try:
-            conn = sqlite3.connect(DB_PATH)
+            conn = sqlite3.connect(DB_PATH, timeout=10)
             cur = conn.cursor()
             cur.execute("INSERT INTO monitor_heartbeats DEFAULT VALUES")
             conn.commit()
@@ -70,7 +70,7 @@ def heartbeat_worker(redis_conn):
         time.sleep(60)
 
 def log_to_maximalist_db(data, save_knocks=True):
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, timeout=10)
     cur = conn.cursor()
     try:
         if save_knocks:
@@ -90,7 +90,7 @@ def log_to_maximalist_db(data, save_knocks=True):
 
 def get_intel_stats_before_update(data):
     """Get hit counts and last_seen BEFORE updating - so we get the previous values."""
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, timeout=10)
     cur = conn.cursor()
     stats = {}
     try:
@@ -146,7 +146,7 @@ def monitor(save_knocks=False):
 
     # Seed Redis totals from SQLite on startup to stay in sync
     try:
-        conn = sqlite3.connect(DB_PATH)
+        conn = sqlite3.connect(DB_PATH, timeout=10)
         total = conn.execute("SELECT SUM(hits) FROM ip_intel").fetchone()[0] or 0
         uptime = conn.execute("SELECT COUNT(*) FROM monitor_heartbeats").fetchone()[0] or 0
         conn.close()

@@ -44,7 +44,17 @@ alert() {
 }
 
 clear_alert() {
-  redis-cli DEL "knock:alerted:$1" > /dev/null 2>&1
+  local tag="$1"
+  local msg="$2"
+  local cooldown_key="knock:alerted:${tag}"
+  if [ -n "$(redis-cli GET "$cooldown_key" 2>/dev/null)" ]; then
+    curl -s -X POST "https://ntfy.sh/${NTFY_TOPIC}" \
+      -H "Title: Knock-Knock Recovered (${HOSTNAME})" \
+      -H "Priority: default" \
+      -H "Tags: white_check_mark" \
+      -d "$msg" > /dev/null 2>&1
+  fi
+  redis-cli DEL "$cooldown_key" > /dev/null 2>&1
 }
 
 # === LOCAL CHECKS ===
@@ -64,7 +74,7 @@ for svc in knock-monitor knock-web; do
   if ! systemctl is-active --quiet "$svc"; then
     alert "$svc" "${svc} is not running on ${HOSTNAME}"
   else
-    clear_alert "$svc"
+    clear_alert "$svc" "${svc} is back on ${HOSTNAME}"
   fi
 done
 
@@ -77,7 +87,7 @@ if [ -n "$last" ]; then
     mins=$(( age / 60 ))
     alert "stale" "No knocks for ${mins} min on ${HOSTNAME} (monitor may be stuck)"
   else
-    clear_alert "stale"
+    clear_alert "stale" "Knocks are flowing again on ${HOSTNAME}"
   fi
 fi
 
@@ -88,7 +98,7 @@ if [ "$CENTRAL_MODE" = "true" ]; then
     if ! curl -sf --max-time 10 "https://${server}/" > /dev/null 2>&1; then
       alert "down:${server}" "${server} is not responding (checked by ${HOSTNAME})"
     else
-      clear_alert "down:${server}"
+      clear_alert "down:${server}" "${server} is back online"
     fi
   done
 fi

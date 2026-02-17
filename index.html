@@ -623,8 +623,8 @@
         g.controls().enablePan = false;
         g.controls().autoRotate = false;
         g.pointOfView({ lat: 0, lng: 0, altitude: 1.4 });
-        // Delay pause until texture has loaded and rendered
-        setTimeout(() => g.pauseAnimation(), 5000);
+        // Pause after globe texture has loaded and rendered
+        g.onGlobeReady(() => setTimeout(() => g.pauseAnimation(), 500));
 
         // Resume on user interaction, pause when done
         g.controls().addEventListener('start', () => {
@@ -859,6 +859,11 @@
         globe.controls().autoRotate = false;
         if (which === 'desktop') paneGlobeDesktop = globe; else paneGlobeMobile = globe;
         globe.onGlobeReady(() => {
+            if (lastLat !== null) {
+                globe._pointData[0].lat = lastLat;
+                globe._pointData[0].lng = lastLng;
+                globe.pointsData(globe._pointData);
+            }
             globe.pointOfView(lastLat !== null ? { lat: lastLat, lng: lastLng, altitude: cfg.altitude } : { altitude: cfg.altitude });
             const cam = globe.camera();
             const globeEdge = Math.asin(1 / (cfg.altitude + 1)) / ((cam.fov / 2) * Math.PI / 180) * 100;
@@ -1702,6 +1707,12 @@
     // iOS Safari/Chrome tab restoration fix: force layout recalc on visibility change
     document.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'visible') {
+            // Resume all globes briefly so they render after being hidden
+            [mobileGlobe, desktopGlobe, paneGlobeDesktop, paneGlobeMobile].forEach(g => {
+                if (!g) return;
+                g.resumeAnimation();
+                setTimeout(() => g.pauseAnimation(), 2000);
+            });
             // Force layout recalculation by briefly changing height
             const ml = document.getElementById('mobile-layout');
             if (ml && window.innerWidth <= 800) {

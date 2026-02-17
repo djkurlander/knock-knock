@@ -6,7 +6,7 @@ services:
 
   ## Store every individual knock in SQLite (uses ~600 MB/year)
   # honeypot-monitor:
-  #   command: bash -c "python -u honeypot.py 2>&1 | python -u monitor.py --save-knocks"
+  #   command: python -u monitor.py --save-knocks
 
   ## HTTPS — uncomment the block below, then place certs in certs/
   # web:

@@ -5,7 +5,7 @@ After=network.target redis-server.service
 [Service]
 User=root
 WorkingDirectory=/root/knock-knock
-ExecStart=/bin/bash -c 'set -o pipefail; /root/knock-knock/.venv/bin/python -u honeypot.py 2>&1 | /root/knock-knock/.venv/bin/python -u monitor.py'
+ExecStart=/root/knock-knock/.venv/bin/python -u monitor.py
 # Add --save-knocks to store individual knock records in SQLite
 Restart=always
 RestartSec=5

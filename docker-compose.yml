@@ -8,7 +8,7 @@ services:
   honeypot-monitor:
     image: ghcr.io/djkurlander/knock-knock:latest
     build: .  # Used when running: docker compose up --build
-    command: bash -c "set -o pipefail; python -u honeypot.py 2>&1 | python -u monitor.py"
+    command: python -u monitor.py
     environment:
       - REDIS_HOST=redis
     ports:

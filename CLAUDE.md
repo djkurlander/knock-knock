@@ -32,9 +32,9 @@ source .venv/bin/activate
 # SSH honeypot (port 22)
 python honeypot.py
 
-# Log monitor + geo-enricher (add --save-knocks to store individual knocks in SQLite)
-# Pipe honeypot stdout directly to monitor (used by both systemd and Docker)
-python honeypot.py 2>&1 | python monitor.py
+# Log monitor + geo-enricher — spawns honeypot.py as a subprocess
+# Add --save-knocks to store individual knocks in SQLite
+python monitor.py
 
 # Web server (HTTP, port 80)
 python3 -m uvicorn main:app --host 0.0.0.0 --port 80 \
@@ -66,9 +66,9 @@ redis-cli ping
 ## Architecture
 
 ```
-SSH Attacker → honeypot.py (port 22) → stdout (piped)
+SSH Attacker → honeypot.py (port 22) → stdout
                                               ↓
-                                       monitor.py (parses output, GeoIP lookup)
+                                       monitor.py (spawns honeypot, parses output, GeoIP lookup)
                                               ↓
                                     SQLite DB (data/) + Redis pub/sub
                                               ↓
@@ -78,18 +78,18 @@ SSH Attacker → honeypot.py (port 22) → stdout (piped)
 ```
 
 **Two Services:**
-- `honeypot.py` + `monitor.py`: Combined into a single systemd unit via pipe. Honeypot accepts SSH connections and logs credentials to stdout; monitor reads stdin, performs GeoIP lookups, updates intel tables in SQLite, publishes to Redis. Individual knocks are only saved to SQLite with `--save-knocks`
+- `honeypot.py` + `monitor.py`: Combined into a single systemd unit. Monitor spawns honeypot as a subprocess and reads its stdout. Performs GeoIP lookups, updates intel tables in SQLite, publishes to Redis. Individual knocks are only saved to SQLite with `--save-knocks`
 - `main.py`: FastAPI server with WebSocket endpoint `/ws`, subscribes to Redis, broadcasts to all connected browsers
 
 **Data Flow:**
-- Honeypot stdout is piped to monitor stdin (both systemd and Docker)
+- Monitor spawns honeypot as a subprocess and reads its stdout (both systemd and Docker)
 - Inter-service communication via Redis pub/sub channel `radiation_stream`
 - Stats cached in memory (10-min refresh), periodic sync every 60 seconds
 - SQLite databases in `data/` directory for persistence
 
 **Deployment modes:**
-- **Docker:** `docker compose up -d` — honeypot stdout piped to monitor stdin
-- **Systemd:** Two unit files in `systemd/` — honeypot stdout piped to monitor stdin
+- **Docker:** `docker compose up -d` — monitor spawns honeypot internally
+- **Systemd:** Two unit files in `systemd/` — monitor spawns honeypot internally
 
 ## Key Files
 

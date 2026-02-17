@@ -1,4 +1,6 @@
 import sys
+import subprocess
+import signal
 import geoip2.database
 import redis
 import json
@@ -156,11 +158,27 @@ def monitor(save_knocks=False):
     except Exception as e:
         print(f"⚠️ Could not seed totals from SQLite: {e}")
 
+    # Spawn honeypot as a subprocess and read from its stdout
+    honeypot_proc = subprocess.Popen(
+        [sys.executable, "-u", "honeypot.py"],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True
+    )
+    input_stream = honeypot_proc.stdout
+
+    # If monitor is killed, take honeypot down too
+    def cleanup(signum, frame):
+        honeypot_proc.terminate()
+        sys.exit(0)
+    signal.signal(signal.SIGTERM, cleanup)
+    signal.signal(signal.SIGINT, cleanup)
+
     threading.Thread(target=heartbeat_worker, args=(r,), daemon=True).start()
 
     print("🚀 Maximalist Monitor Active...")
 
-    for line in sys.stdin:
+    for line in input_stream:
         try:
             knock = json.loads(line)
         except (json.JSONDecodeError, ValueError):
@@ -188,6 +206,11 @@ def monitor(save_knocks=False):
                 r.set("knock:last_lng", geo['lng'])
             r.publish("radiation_stream", json.dumps(package))
             print(f"📡 {geo['iso']} | {user}:{pw} via {geo['isp']}")
+
+    # Honeypot exited — log why and exit so systemd restarts us
+    exit_code = honeypot_proc.wait()
+    print(f"⚠️ Honeypot process exited (code {exit_code}), shutting down")
+    sys.exit(1)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Knock-Knock Monitor")

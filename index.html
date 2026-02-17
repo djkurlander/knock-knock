@@ -615,8 +615,10 @@
             .pointAltitude(0.01)
             .pointColor(() => '#ff0000')
             .pointRadius(1.5)
+            .pointsTransitionDuration(0)
             (container);
 
+        g._pointData = [{ lat: 0, lng: 0 }];
         g.controls().enableZoom = false;
         g.controls().enablePan = false;
         g.controls().autoRotate = false;
@@ -850,7 +852,9 @@
             .pointAltitude(0.01)
             .pointColor(() => '#ff0000')
             .pointRadius(1.5)
+            .pointsTransitionDuration(0)
             (pane);
+        globe._pointData = [{ lat: 0, lng: 0 }];
         globe.controls().enableZoom = false;
         globe.controls().autoRotate = false;
         if (which === 'desktop') paneGlobeDesktop = globe; else paneGlobeMobile = globe;
@@ -1006,7 +1010,6 @@
         if (lat === lastLat && lng === lastLng) return;
         lastLat = lat;
         lastLng = lng;
-        const point = [{ lat, lng }];
 
         animateGlobesOnKnock();
 
@@ -1016,7 +1019,9 @@
             { g: paneGlobeMobile, alt: 1.8 + (GLOBE_STYLES[paneGlobeStyleIdx].viewAlt || 0) },
         ].forEach(({ g, alt }) => {
             if (!g) return;
-            g.pointsData(point);
+            g._pointData[0].lat = lat;
+            g._pointData[0].lng = lng;
+            g.pointsData(g._pointData);
             g.pointOfView({ lat, lng, altitude: alt }, 1000);
         });
     }

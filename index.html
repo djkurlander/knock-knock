@@ -622,15 +622,20 @@
         g.controls().enableZoom = false;
         g.controls().enablePan = false;
         g.controls().autoRotate = false;
-        g.pointOfView(lastLat !== null ? { lat: lastLat, lng: lastLng, altitude: 1.4 } : { lat: 0, lng: 0, altitude: 1.4 });
+        g.pointOfView({ lat: lastLat || 0, lng: lastLng || 0, altitude: 1.4 });
         // Pause after globe texture has loaded and rendered
         g.onGlobeReady(() => {
             if (lastLat !== null) {
                 g._pointData[0].lat = lastLat;
                 g._pointData[0].lng = lastLng;
                 g.pointsData(g._pointData);
+                g.pointOfView({ lat: lastLat, lng: lastLng, altitude: 1.4 });
             }
-            setTimeout(() => g.pauseAnimation(), 500);
+            if (headerGlobePauseTimeout) clearTimeout(headerGlobePauseTimeout);
+            headerGlobePauseTimeout = setTimeout(() => {
+                g.pauseAnimation();
+                debugLog('Header globe paused (ready)');
+            }, 1100);
         });
 
         // Resume on user interaction, pause when done
@@ -990,7 +995,7 @@
                 paneGlobeMobile.pauseAnimation();
             }
             debugLog('Pane globes paused');
-        }, 3100); // 3s pulse animation + 100ms buffer
+        }, 1100); // 1s rotation + 100ms buffer
     }
 
     function pulseGlobeAtmosphere() {
@@ -1019,7 +1024,6 @@
 
     function rotateGlobeToLocation(lat, lng) {
         if (lat === null || lng === null) return;
-        if (lat === lastLat && lng === lastLng) return;
         lastLat = lat;
         lastLng = lng;
 

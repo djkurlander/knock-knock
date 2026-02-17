@@ -622,9 +622,16 @@
         g.controls().enableZoom = false;
         g.controls().enablePan = false;
         g.controls().autoRotate = false;
-        g.pointOfView({ lat: 0, lng: 0, altitude: 1.4 });
+        g.pointOfView(lastLat !== null ? { lat: lastLat, lng: lastLng, altitude: 1.4 } : { lat: 0, lng: 0, altitude: 1.4 });
         // Pause after globe texture has loaded and rendered
-        g.onGlobeReady(() => setTimeout(() => g.pauseAnimation(), 500));
+        g.onGlobeReady(() => {
+            if (lastLat !== null) {
+                g._pointData[0].lat = lastLat;
+                g._pointData[0].lng = lastLng;
+                g.pointsData(g._pointData);
+            }
+            setTimeout(() => g.pauseAnimation(), 500);
+        });
 
         // Resume on user interaction, pause when done
         g.controls().addEventListener('start', () => {

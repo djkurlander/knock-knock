@@ -497,6 +497,16 @@
         }, 30000);
     }
 
+    // Three.js resource counts every 60s (always active, console only)
+    setInterval(() => {
+        [paneGlobeDesktop, paneGlobeMobile, mobileGlobe, desktopGlobe].forEach(g => {
+            if (!g) return;
+            const r = g.renderer(), m = r.info.memory;
+            const which = g === paneGlobeDesktop ? 'pane-d' : g === paneGlobeMobile ? 'pane-m' : g === desktopGlobe ? 'hdr-d' : 'hdr-m';
+            console.log(`[GL:${which}] tex=${m.textures} geo=${m.geometries} prog=${r.info.programs?.length ?? '?'}`);
+        });
+    }, 60000);
+
     function updateSoundIcon() {
         const icon = soundEnabled ? '🔊' : '🔇';
         document.querySelectorAll('#d-header-sound, #m-header-sound').forEach(el => {
@@ -632,6 +642,8 @@
     let headerGlobePauseTimeout = null;
     let paneGlobeVisible = { desktop: false, mobile: false };
     let paneGlobePauseTimeout = null;
+    let paneGlobeObserver = null;
+    let paneGlobeControlHandlers = [];
 
     function animateGlobesOnKnock() {
         // Resume all globes for animation, then pause
@@ -703,7 +715,7 @@
 
     function applyGlobeStyle(globe, idx) {
         const style = GLOBE_STYLES[idx];
-        globe.globeImageUrl(style.img);
+        if (globe.globeImageUrl() !== style.img) globe.globeImageUrl(style.img);
         if (style.hex && countriesData) {
             globe.hexPolygonsData(countriesData);
             globe.hexPolygonResolution(3);
@@ -775,10 +787,14 @@
                 .labelResolution(2);
         }
         globe.polygonLabel(d => d.properties && d.properties.ADMIN ? `<span style="color:#00ff41">${d.properties.ADMIN}</span>` : '');
-        globe.renderer().domElement.addEventListener('mousemove', () => {
+        if (globe._paneMousemoveHandler) {
+            globe.renderer().domElement.removeEventListener('mousemove', globe._paneMousemoveHandler);
+        }
+        globe._paneMousemoveHandler = () => {
             globe.resumeAnimation();
             schedulePaneGlobePause();
-        });
+        };
+        globe.renderer().domElement.addEventListener('mousemove', globe._paneMousemoveHandler);
         globe.pointAltitude(style.extruded ? 0.15 : style.cities ? 0.025 : 0.01);
         globe.pointColor(() => style.extruded ? '#00fbff' : '#ff0000');
         const pov = globe.pointOfView();
@@ -896,6 +912,11 @@
     });
 
     function setupPaneGlobeVisibility() {
+        // Clean up previous observer and control listeners
+        if (paneGlobeObserver) paneGlobeObserver.disconnect();
+        paneGlobeControlHandlers.forEach(h => h.controls.removeEventListener(h.event, h.fn));
+        paneGlobeControlHandlers = [];
+
         const targets = [
             { el: document.getElementById('d-globe-pane'), globe: () => paneGlobeDesktop, key: 'desktop' },
             { el: document.getElementById('m-globe-pane'), globe: () => paneGlobeMobile, key: 'mobile' }
@@ -921,16 +942,24 @@
             });
         }, { threshold: 0.1 });
 
+        paneGlobeObserver = observer;
         targets.forEach(t => {
             observer.observe(t.el);
             // Add interaction handlers
             const globe = t.globe();
             if (globe) {
-                globe.controls().addEventListener('start', () => {
+                const controls = globe.controls();
+                const onStart = () => {
                     if (paneGlobePauseTimeout) clearTimeout(paneGlobePauseTimeout);
                     globe.resumeAnimation();
-                });
-                globe.controls().addEventListener('end', () => schedulePaneGlobePause());
+                };
+                const onEnd = () => schedulePaneGlobePause();
+                controls.addEventListener('start', onStart);
+                controls.addEventListener('end', onEnd);
+                paneGlobeControlHandlers.push(
+                    { controls, event: 'start', fn: onStart },
+                    { controls, event: 'end', fn: onEnd }
+                );
             }
         });
     }
@@ -1359,10 +1388,35 @@
                 leaderboards.providers = d.top_providers || [];
                 leaderboards.users = d.top_users || [];
                 leaderboards.ips = d.top_ips || [];
-                // Re-apply style if it depends on leaderboard data (e.g. Heat extrusions)
-                if (GLOBE_STYLES[paneGlobeStyleIdx].extruded || GLOBE_STYLES[paneGlobeStyleIdx].hex) {
-                    if (paneGlobeDesktop) applyGlobeStyle(paneGlobeDesktop, paneGlobeStyleIdx);
-                    if (paneGlobeMobile) applyGlobeStyle(paneGlobeMobile, paneGlobeStyleIdx);
+                // Refresh Heat extrusion colors/heights without re-setting image or polygon data
+                if (GLOBE_STYLES[paneGlobeStyleIdx].extruded) {
+                    const hitsMap = {};
+                    let maxHits = 1;
+                    leaderboards.loc.forEach(c => {
+                        hitsMap[c.iso] = c.count;
+                        if (c.count > maxHits) maxHits = c.count;
+                    });
+                    const logMax = Math.log(1 + maxHits);
+                    [paneGlobeDesktop, paneGlobeMobile].forEach(g => {
+                        if (!g) return;
+                        g.polygonCapColor(d => {
+                            const h = hitsMap[d.properties.ISO_A2] || 0;
+                            if (!h) return 'rgba(0, 255, 65, 0.05)';
+                            const t = Math.log(1 + h) / logMax;
+                            return `rgb(${Math.round(255 * t)}, ${Math.round(255 * (1 - t))}, 0)`;
+                        });
+                        g.polygonSideColor(d => {
+                            const h = hitsMap[d.properties.ISO_A2] || 0;
+                            if (!h) return 'rgba(0,0,0,0)';
+                            const t = Math.log(1 + h) / logMax;
+                            return `rgba(255, ${Math.round(200 * (1 - t))}, 0, 0.6)`;
+                        });
+                        g.polygonAltitude(d => {
+                            const h = hitsMap[d.properties.ISO_A2] || 0;
+                            if (!h) return 0.002;
+                            return 0.002 + 0.12 * Math.log(1 + h) / logMax;
+                        });
+                    });
                 }
 
                 const preScroll = vp.scrollLeft;

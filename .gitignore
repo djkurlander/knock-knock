@@ -11,6 +11,10 @@ data/*
 # Docker overrides
 docker-compose.override.yml
 
+# three-globe bug repro
+extras/three-globe-bug/
+static/three-globe-leak-repro.html
+
 # Python
 __pycache__/
 .venv/

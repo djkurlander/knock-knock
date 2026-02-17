@@ -31,13 +31,14 @@ REMOTE_SERVERS="${REMOTE_SERVERS:-knock-knock.net}"
 alert() {
   local tag="$1"
   local msg="$2"
+  local tags="${3:-warning}"
   local cooldown_key="knock:alerted:${tag}"
   local alerted=$(redis-cli GET "$cooldown_key" 2>/dev/null)
   if [ -z "$alerted" ]; then
     curl -s -X POST "https://ntfy.sh/${NTFY_TOPIC}" \
       -H "Title: Knock-Knock Alert (${HOSTNAME})" \
       -H "Priority: urgent" \
-      -H "Tags: warning" \
+      -H "Tags: ${tags}" \
       -d "$msg" > /dev/null 2>&1
     redis-cli SET "$cooldown_key" 1 EX "$ALERT_COOLDOWN" > /dev/null 2>&1
   fi
@@ -64,7 +65,7 @@ if ! redis-cli PING > /dev/null 2>&1; then
   curl -s -X POST "https://ntfy.sh/${NTFY_TOPIC}" \
     -H "Title: Knock-Knock Alert (${HOSTNAME})" \
     -H "Priority: urgent" \
-    -H "Tags: warning" \
+    -H "Tags: rotating_light" \
     -d "Redis is down on ${HOSTNAME}" > /dev/null 2>&1
   exit 1
 fi
@@ -72,7 +73,7 @@ fi
 # Check services
 for svc in knock-monitor knock-web; do
   if ! systemctl is-active --quiet "$svc"; then
-    alert "$svc" "${svc} is not running on ${HOSTNAME}"
+    alert "$svc" "${svc} is not running on ${HOSTNAME}" "rotating_light"
   else
     clear_alert "$svc" "${svc} is back on ${HOSTNAME}"
   fi
@@ -96,7 +97,7 @@ fi
 if [ "$CENTRAL_MODE" = "true" ]; then
   for server in $REMOTE_SERVERS; do
     if ! curl -sf --max-time 10 "https://${server}/" > /dev/null 2>&1; then
-      alert "down:${server}" "${server} is not responding (checked by ${HOSTNAME})"
+      alert "down:${server}" "${server} is not responding (checked by ${HOSTNAME})" "rotating_light"
     else
       clear_alert "down:${server}" "${server} is back online"
     fi

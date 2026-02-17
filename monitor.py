@@ -53,6 +53,7 @@ def init_db():
     cur.execute("CREATE INDEX IF NOT EXISTS idx_country_intel_hits ON country_intel(hits DESC)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_isp_intel_hits ON isp_intel(hits DESC)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_ip_intel_hits ON ip_intel(hits DESC)")
+    cur.execute("PRAGMA journal_mode=WAL")
     conn.commit()
     conn.close()
 
@@ -173,8 +174,11 @@ def monitor(save_knocks=False):
                 "iso": geo['iso'], "isp": geo['isp'], "asn": geo['asn'],
                 "lat": geo['lat'], "lng": geo['lng']
             }
-            package.update(get_intel_stats_before_update(package))
-            log_to_maximalist_db(package, save_knocks=save_knocks)
+            try:
+                package.update(get_intel_stats_before_update(package))
+                log_to_maximalist_db(package, save_knocks=save_knocks)
+            except Exception as e:
+                print(f"⚠️ DB error (knock skipped): {e}")
             r.lpush("knock:recent", json.dumps(package))
             r.ltrim("knock:recent", 0, 99)
             r.incr("knock:total_global")

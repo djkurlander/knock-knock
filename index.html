@@ -122,7 +122,10 @@
                 min-height: 0; /* Flexbox scroll fix */
                 scroll-snap-type: x proximity;
                 -webkit-overflow-scrolling: touch;
+                scrollbar-width: none;
+                -ms-overflow-style: none;
             }
+            .d-grid::-webkit-scrollbar { display: none; }
 
             .d-box {
                 flex: 0 0 250px;
@@ -425,6 +428,7 @@
     let debugDiv = null;
     let knockCount = 0;
     const DEBUG_STORAGE_KEY = 'knock_debug_log';
+    const MAX_PER_PANEL = 100;
 
     if (DEBUG) {
         debugDiv = document.createElement('div');
@@ -500,15 +504,6 @@
         }, 30000);
     }
 
-    // Three.js resource counts every 60s (always active, console only)
-    setInterval(() => {
-        [paneGlobeDesktop, paneGlobeMobile, mobileGlobe, desktopGlobe].forEach(g => {
-            if (!g) return;
-            const r = g.renderer(), m = r.info.memory;
-            const which = g === paneGlobeDesktop ? 'pane-d' : g === paneGlobeMobile ? 'pane-m' : g === desktopGlobe ? 'hdr-d' : 'hdr-m';
-            console.log(`[GL:${which}] tex=${m.textures} geo=${m.geometries} prog=${r.info.programs?.length ?? '?'}`);
-        });
-    }, 60000);
 
     function updateSoundIcon() {
         const icon = soundEnabled ? '🔊' : '🔇';
@@ -1166,9 +1161,10 @@
             rows.sort((a, b) => (parseInt(b.getAttribute('data-count')) || 0) - (parseInt(a.getAttribute('data-count')) || 0));
             const max = parseInt(rows[0].getAttribute('data-count')) || 1;
             rows.forEach(el => {
-                container.appendChild(el); 
+                container.appendChild(el);
                 el.querySelector('.bar-fill').style.width = ((parseInt(el.getAttribute('data-count')) || 0) / max * 100) + '%';
             });
+            if (prefix !== 'loc') while (container.children.length > MAX_PER_PANEL) container.lastChild.remove();
         });
     }
 
@@ -1213,7 +1209,7 @@
             div.innerHTML = html;
             if (isNew) el.prepend(div); else el.appendChild(div);
             twemoji.parse(div);
-            if (el.children.length > 100) el.lastChild.remove();
+            if (el.children.length > MAX_PER_PANEL) el.lastChild.remove();
         });
     }
 

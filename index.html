@@ -115,15 +115,18 @@
             #d-globe-container { width: 110px; height: 110px; cursor: pointer; }
             #d-globe-container canvas { width: 100% !important; height: 100% !important; }
 
-            .d-grid { 
+            .d-grid {
                 flex: 1;
-                display: flex; gap: 15px; width: 100%; 
-                overflow: hidden; margin-top: 25px;
+                display: flex; gap: 15px; width: 100%;
+                overflow-x: auto; overflow-y: hidden; margin-top: 25px;
                 min-height: 0; /* Flexbox scroll fix */
+                scroll-snap-type: x proximity;
+                -webkit-overflow-scrolling: touch;
             }
-            
+
             .d-box {
                 flex: 0 0 250px;
+                scroll-snap-align: start;
                 height: 100%;
                 border: 1px solid #333;
                 background: #0f0f0f;

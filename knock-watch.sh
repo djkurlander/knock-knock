@@ -31,7 +31,7 @@ REMOTE_SERVERS="${REMOTE_SERVERS:-knock-knock.net}"
 
 COMPOSE_PROJECT="${COMPOSE_PROJECT:-knock-knock}"
 
-if systemctl list-unit-files knock-monitor.service &>/dev/null | grep -q knock-monitor; then
+if systemctl cat knock-monitor.service &>/dev/null; then
     MODE=systemd
 elif docker compose ls 2>/dev/null | grep -q "$COMPOSE_PROJECT"; then
     MODE=docker

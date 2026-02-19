@@ -56,6 +56,8 @@ def init_db():
         cur.execute("DROP TABLE monitor_heartbeats")
         cur.execute("CREATE TABLE monitor_heartbeats (id INTEGER PRIMARY KEY, uptime_minutes INTEGER NOT NULL DEFAULT 0)")
         cur.execute("INSERT INTO monitor_heartbeats (id, uptime_minutes) VALUES (1, ?)", (old_count,))
+        conn.commit()
+        print(f"✅ Migrated monitor_heartbeats: {old_count} rows → uptime_minutes={old_count}")
     # Indexes for fast top-N queries
     cur.execute("CREATE INDEX IF NOT EXISTS idx_user_intel_hits ON user_intel(hits DESC)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_pass_intel_hits ON pass_intel(hits DESC)")

@@ -137,7 +137,12 @@ fi
 if [ "$CENTRAL_MODE" = "true" ]; then
     for server in $REMOTE_SERVERS; do
         if ! curl -sf --max-time 10 "https://${server}/" > /dev/null 2>&1; then
-            alert "down:${server}" "${server} is not responding (checked by ${HOSTNAME})" "rotating_light"
+            sleep 10
+            if ! curl -sf --max-time 10 "https://${server}/" > /dev/null 2>&1; then
+                alert "down:${server}" "${server} is not responding (checked by ${HOSTNAME})" "rotating_light"
+            else
+                clear_alert "down:${server}" "${server} is back online"
+            fi
         else
             clear_alert "down:${server}" "${server} is back online"
         fi

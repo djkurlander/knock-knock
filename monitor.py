@@ -162,7 +162,8 @@ def monitor(save_knocks=False):
         uptime = uptime[0] if uptime else 0
         conn.close()
         r.set("knock:total_global", total)
-        r.set("knock:uptime_minutes", uptime)
+        if not r.get("knock:uptime_minutes"):
+            r.set("knock:uptime_minutes", uptime)
     except Exception as e:
         print(f"⚠️ Could not seed totals from SQLite: {e}")
 

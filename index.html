@@ -98,7 +98,7 @@
             }
             .d-nav-item {
                 color: var(--ui-grey-dim); font-size: 1.6em; cursor: pointer;
-                display: flex; align-items: center; gap: 4px; transition: 0.3s;
+                display: flex; align-items: center; gap: 4px; transition: color 0.05s;
                 flex: 0 0 auto;
             }
             .d-nav-item span { font-size: 0.5em; font-weight: bold; letter-spacing: 1px; }
@@ -139,8 +139,7 @@
                 flex-direction: column;
                 cursor: pointer;
                 box-sizing: border-box;
-                /* SLOW-IN-SLOW-OUT TRANSITION */
-                transition: all 1.0s cubic-bezier(0.65, 0, 0.35, 1);
+                transition: all 0.2s;
             }
 
             #d-box-feed {
@@ -325,17 +324,17 @@
     </div>
     
     <div class="d-grid" id="d-slider-container">
-        <div class="d-box" id="d-box-feed" onclick="dJump(0)"><h2>LIVE FEED: LOGIN ATTEMPTS</h2><div id="d-feed" class="d-content"></div></div>
+        <div class="d-box" id="d-box-feed"><h2>LIVE FEED: LOGIN ATTEMPTS</h2><div id="d-feed" class="d-content"></div></div>
         <div class="d-box" id="d-box-globe"><h2>GLOBE VIEW</h2><div id="d-globe-location" style="text-align:center; margin-bottom:10px;"><div id="d-globe-loc-text" style="color:var(--neon-green);"></div><div id="d-globe-loc-isp" style="color:var(--data-blue); font-size:0.85em;"></div></div><div id="d-globe-pane" class="d-content globe-pane"></div></div>
-        <div class="d-box" onclick="dJump(2)"><h2>LOCATION</h2><div id="d-loc" class="d-content"></div></div>
-        <div class="d-box" onclick="dJump(3)"><h2>USERNAME</h2><div id="d-user" class="d-content"></div></div>
-        <div class="d-box" onclick="dJump(4)"><h2>PASSWORD</h2><div id="d-pass" class="d-content"></div></div>
-        <div class="d-box" onclick="dJump(5)"><h2>ISP</h2><div id="d-prov" class="d-content"></div></div>
-        <div class="d-box" onclick="dJump(6)"><h2>IP ADDRESS</h2><div id="d-ip" class="d-content"></div></div>
-        <div class="d-box" id="d-box-info" onclick="dJump(7)"><h2>STATS</h2><div id="d-details" class="d-content"></div></div>
-        <div class="d-box" id="d-box-trivia" onclick="dJump(8)"><h2>TRIVIA</h2><div id="d-trivia" class="d-content"></div></div>
-        <div class="d-box" id="d-box-jokes" onclick="dJump(9)"><h2>KNOCK-KNOCK JOKES</h2><div id="d-jokes" class="d-content" style="color:var(--neon-green); line-height:1.6;"></div></div>
-        <div class="d-box" onclick="dJump(10)"><h2>ABOUT</h2><div class="d-content" style="color:var(--neon-green); line-height:1.6;">
+        <div class="d-box"><h2>LOCATION</h2><div id="d-loc" class="d-content"></div></div>
+        <div class="d-box"><h2>USERNAME</h2><div id="d-user" class="d-content"></div></div>
+        <div class="d-box"><h2>PASSWORD</h2><div id="d-pass" class="d-content"></div></div>
+        <div class="d-box"><h2>ISP</h2><div id="d-prov" class="d-content"></div></div>
+        <div class="d-box"><h2>IP ADDRESS</h2><div id="d-ip" class="d-content"></div></div>
+        <div class="d-box" id="d-box-info"><h2>STATS</h2><div id="d-details" class="d-content"></div></div>
+        <div class="d-box" id="d-box-trivia"><h2>TRIVIA</h2><div id="d-trivia" class="d-content"></div></div>
+        <div class="d-box" id="d-box-jokes"><h2>KNOCK-KNOCK JOKES</h2><div id="d-jokes" class="d-content" style="color:var(--neon-green); line-height:1.6;"></div></div>
+        <div class="d-box"><h2>ABOUT</h2><div class="d-content" style="color:var(--neon-green); line-height:1.6;">
             <div style="font-size:1.4em; font-weight:bold; margin-bottom:20px;">KNOCK-KNOCK.NET</div>
 	    <p>Set up an unprotected server on the net, and the bots start swarming!</p><p> This site shows bots attempting (unsuccessfully) to break into an ordinary internet server.</p>
             <p>This constant chatter of bots knocking on the doors of machines on the net has been referred to as <em>"the background radiation of the Internet".</em></p>
@@ -1080,6 +1079,45 @@
     }
 
     // DESKTOP ROTATION LOGIC
+    (function() {
+        const slider = document.getElementById('d-slider-container');
+        let startX, startScrollLeft, isDragging = false, dragMoved = false;
+        slider.addEventListener('mousedown', e => {
+            if (e.button !== 0) return;
+            if (e.target.tagName === 'CANVAS') return;
+            isDragging = true; dragMoved = false;
+            startX = e.pageX; startScrollLeft = slider.scrollLeft;
+            slider.style.cursor = 'grabbing';
+            slider.style.scrollSnapType = 'none';
+            e.preventDefault();
+        });
+        window.addEventListener('mousemove', e => {
+            if (!isDragging) return;
+            const dx = e.pageX - startX;
+            if (Math.abs(dx) > 5) dragMoved = true;
+            slider.scrollLeft = startScrollLeft - dx;
+        });
+        window.addEventListener('mouseup', () => {
+            if (!isDragging) return;
+            isDragging = false;
+            slider.style.cursor = '';
+            const containerLeft = slider.getBoundingClientRect().left;
+            const boxes = Array.from(slider.children);
+            const nearest = boxes.reduce((best, box) => {
+                return Math.abs(box.getBoundingClientRect().left - containerLeft) <
+                       Math.abs(best.getBoundingClientRect().left - containerLeft) ? box : best;
+            });
+            const targetLeft = slider.scrollLeft + nearest.getBoundingClientRect().left - containerLeft - 1;
+            slider.scrollTo({ left: targetLeft, behavior: 'smooth' });
+        });
+        slider.addEventListener('click', e => {
+            if (dragMoved) { e.stopPropagation(); dragMoved = false; }
+        }, true);
+    })();
+
+    Array.from(document.getElementById('d-slider-container').children)
+        .forEach((box, i) => box.addEventListener('click', () => dJump(i)));
+
     function dJump(idx) {
         const container = document.getElementById('d-slider-container');
         const boxes = Array.from(container.children);
@@ -1090,7 +1128,13 @@
             box.style.order = '';
             box.classList.toggle('is-active', i === idx);
         });
-        container.scrollTo({ left: boxes[idx].offsetLeft - 4, behavior: 'smooth' });
+        const box = boxes[idx];
+        const boxRect = box.getBoundingClientRect();
+        const containerRect = container.getBoundingClientRect();
+        if (boxRect.left < containerRect.left || boxRect.right > containerRect.right) {
+            const targetLeft = container.scrollLeft + boxRect.left - containerRect.left - 1;
+            container.scrollTo({ left: targetLeft, behavior: 'smooth' });
+        }
     }
 
     const getFlag = (iso) => {

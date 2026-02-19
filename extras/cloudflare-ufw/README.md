@@ -80,7 +80,21 @@ Docker bypasses UFW by inserting its own iptables rules for published ports. Thi
 
 To fix this, bind Docker to localhost and put nginx in front:
 
-### 1. Lock the web port to localhost
+### 1. Remove any existing port 443 mapping
+
+If your `docker-compose.override.yml` has a `443:443` port mapping (e.g. from a previous HTTPS setup), remove it — nginx will own port 443 instead. Open the file and delete or comment out any line that looks like:
+
+```yaml
+      - "443:443"
+```
+
+If you're not sure whether you have one:
+
+```bash
+grep -r 443 docker-compose.override.yml 2>/dev/null
+```
+
+### 2. Lock the web port to localhost
 
 Create a `.env` file in the project directory:
 
@@ -90,7 +104,7 @@ WEB_LISTEN=127.0.0.1
 
 Then restart: `docker compose down && docker compose up -d`
 
-### 2. Install and configure nginx
+### 3. Install and configure nginx
 
 ```bash
 apt install -y nginx

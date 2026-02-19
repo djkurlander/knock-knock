@@ -121,6 +121,7 @@
                 overflow-x: auto; overflow-y: hidden; margin-top: 25px;
                 min-height: 0; /* Flexbox scroll fix */
                 scroll-snap-type: x proximity;
+                scroll-padding-left: 4px;
                 -webkit-overflow-scrolling: touch;
                 scrollbar-width: none;
                 -ms-overflow-style: none;
@@ -1085,12 +1086,11 @@
         const navItems = document.querySelectorAll('.d-nav-item');
 
         navItems.forEach((item, i) => item.classList.toggle('active', i === idx));
-
         boxes.forEach((box, i) => {
-            let newOrder = (i - idx + boxes.length) % boxes.length;
-            box.style.order = newOrder + 1;
+            box.style.order = '';
             box.classList.toggle('is-active', i === idx);
         });
+        container.scrollTo({ left: boxes[idx].offsetLeft - 4, behavior: 'smooth' });
     }
 
     const getFlag = (iso) => {

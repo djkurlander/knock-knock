@@ -48,7 +48,14 @@ def init_db():
     cur.execute("CREATE TABLE IF NOT EXISTS country_intel (iso_code TEXT PRIMARY KEY, country TEXT, hits INTEGER, last_seen DATETIME)")
     cur.execute("CREATE TABLE IF NOT EXISTS isp_intel (isp TEXT PRIMARY KEY, hits INTEGER, last_seen DATETIME, asn INTEGER)")
     cur.execute("CREATE TABLE IF NOT EXISTS ip_intel (ip TEXT PRIMARY KEY, hits INTEGER, last_seen DATETIME, lat REAL, lng REAL)")
-    cur.execute("CREATE TABLE IF NOT EXISTS monitor_heartbeats (id INTEGER PRIMARY KEY, timestamp DATETIME DEFAULT CURRENT_TIMESTAMP)")
+    cur.execute("CREATE TABLE IF NOT EXISTS monitor_heartbeats (id INTEGER PRIMARY KEY, uptime_minutes INTEGER NOT NULL DEFAULT 0)")
+    # Migrate old schema (many timestamp rows) to single uptime_minutes row
+    cols = [row[1] for row in cur.execute("PRAGMA table_info(monitor_heartbeats)").fetchall()]
+    if 'timestamp' in cols:
+        old_count = cur.execute("SELECT COUNT(*) FROM monitor_heartbeats").fetchone()[0]
+        cur.execute("DROP TABLE monitor_heartbeats")
+        cur.execute("CREATE TABLE monitor_heartbeats (id INTEGER PRIMARY KEY, uptime_minutes INTEGER NOT NULL DEFAULT 0)")
+        cur.execute("INSERT INTO monitor_heartbeats (id, uptime_minutes) VALUES (1, ?)", (old_count,))
     # Indexes for fast top-N queries
     cur.execute("CREATE INDEX IF NOT EXISTS idx_user_intel_hits ON user_intel(hits DESC)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_pass_intel_hits ON pass_intel(hits DESC)")
@@ -64,7 +71,7 @@ def heartbeat_worker(redis_conn):
         try:
             conn = sqlite3.connect(DB_PATH, timeout=10)
             cur = conn.cursor()
-            cur.execute("INSERT INTO monitor_heartbeats DEFAULT VALUES")
+            cur.execute("INSERT INTO monitor_heartbeats (id, uptime_minutes) VALUES (1, 1) ON CONFLICT(id) DO UPDATE SET uptime_minutes = uptime_minutes + 1")
             conn.commit()
             conn.close()
             redis_conn.incr("knock:uptime_minutes")
@@ -151,7 +158,8 @@ def monitor(save_knocks=False):
     try:
         conn = sqlite3.connect(DB_PATH, timeout=10)
         total = conn.execute("SELECT SUM(hits) FROM ip_intel").fetchone()[0] or 0
-        uptime = conn.execute("SELECT COUNT(*) FROM monitor_heartbeats").fetchone()[0] or 0
+        uptime = conn.execute("SELECT uptime_minutes FROM monitor_heartbeats WHERE id=1").fetchone()
+        uptime = uptime[0] if uptime else 0
         conn.close()
         r.set("knock:total_global", total)
         r.set("knock:uptime_minutes", uptime)

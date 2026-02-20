@@ -153,8 +153,15 @@ def get_geo_maximal(ip, city_reader, asn_reader):
 def monitor(save_knocks=False):
     init_db()
     r = redis.Redis(host=os.environ.get('REDIS_HOST', 'localhost'), port=6379, db=0, decode_responses=True)
-    c_reader = geoip2.database.Reader(GEOIP_CITY_PATH) if os.path.exists(GEOIP_CITY_PATH) else None
-    a_reader = geoip2.database.Reader(GEOIP_ASN_PATH) if os.path.exists(GEOIP_ASN_PATH) else None
+    while True:
+        try:
+            c_reader = geoip2.database.Reader(GEOIP_CITY_PATH)
+            a_reader = geoip2.database.Reader(GEOIP_ASN_PATH)
+            print("✅ GeoIP databases loaded")
+            break
+        except Exception as e:
+            print(f"⏳ Waiting for GeoIP databases... ({e})")
+            time.sleep(5)
 
     # Seed Redis totals from SQLite on startup to stay in sync
     try:

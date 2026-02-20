@@ -1218,7 +1218,7 @@
 
         if (!hasCity && !hasRegion) return `Somewhere in ${d.country}`;
         if (!hasCity && hasRegion) return `${d.region}, ${d.country}`;
-        if (hasCity && hasRegion) return `${d.city}, ${d.region}, ${d.country}`;
+        if (hasCity && hasRegion) return (d.iso === 'US' || d.iso === 'CA') ? `${d.city}, ${d.region}, ${d.country}` : `${d.city}, ${d.country}`;
         return `${d.city}, ${d.country}`;
     }
 

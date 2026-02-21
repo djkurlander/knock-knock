@@ -47,7 +47,7 @@ class SSHHoneypot(paramiko.ServerInterface):
         self.event = threading.Event()
 
     def check_auth_password(self, username, password):
-        print(json.dumps({"type": "KNOCK", "ip": self.client_ip, "user": username, "pass": password}), flush=True)
+        print(json.dumps({"type": "KNOCK", "proto": "SSH", "ip": self.client_ip, "user": username, "pass": password}), flush=True)
         return paramiko.AUTH_FAILED
 
     def get_allowed_auths(self, username):

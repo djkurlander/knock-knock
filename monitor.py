@@ -1,6 +1,7 @@
 import sys
 import subprocess
 import signal
+import queue
 import geoip2.database
 import redis
 import json
@@ -176,18 +177,30 @@ def monitor(save_knocks=False):
     except Exception as e:
         print(f"⚠️ Could not seed totals from SQLite: {e}")
 
-    # Spawn honeypot as a subprocess and read from its stdout
-    honeypot_proc = subprocess.Popen(
-        [sys.executable, "-u", "ssh_honeypot.py"],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        text=True
-    )
-    input_stream = honeypot_proc.stdout
+    # Spawn honeypots as subprocesses
+    honeypots = {
+        "SSH":  subprocess.Popen([sys.executable, "-u", "ssh_honeypot.py"],
+                                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True),
+        "TNET": subprocess.Popen([sys.executable, "-u", "telnet_honeypot.py"],
+                                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True),
+    }
 
-    # If monitor is killed, take honeypot down too
+    knock_queue = queue.Queue()
+
+    def pipe_reader(proc, name):
+        for line in proc.stdout:
+            knock_queue.put(line)
+        code = proc.wait()
+        print(f"⚠️ {name} honeypot exited (code {code}), shutting down")
+        knock_queue.put(None)  # sentinel — signals main loop to shut down
+
+    for name, proc in honeypots.items():
+        threading.Thread(target=pipe_reader, args=(proc, name), daemon=True).start()
+
+    # If monitor is killed, take all honeypots down too
     def cleanup(signum, frame):
-        honeypot_proc.terminate()
+        for proc in honeypots.values():
+            proc.terminate()
         sys.exit(0)
     signal.signal(signal.SIGTERM, cleanup)
     signal.signal(signal.SIGINT, cleanup)
@@ -196,7 +209,12 @@ def monitor(save_knocks=False):
 
     print("🚀 Maximalist Monitor Active...")
 
-    for line in input_stream:
+    while True:
+        line = knock_queue.get()
+        if line is None:  # a honeypot exited — terminate all and let systemd restart us
+            for proc in honeypots.values():
+                proc.terminate()
+            sys.exit(1)
         try:
             knock = json.loads(line)
         except (json.JSONDecodeError, ValueError):
@@ -206,6 +224,7 @@ def monitor(save_knocks=False):
             geo = get_geo_maximal(ip, c_reader, a_reader)
             package = {
                 "ip": ip, "user": user, "pass": pw,
+                "proto": knock.get("proto", "SSH"),
                 "city": geo['city'], "region": geo['region'], "country": geo['country'],
                 "iso": geo['iso'], "isp": geo['isp'], "asn": geo['asn'],
                 "lat": geo['lat'], "lng": geo['lng']
@@ -223,12 +242,7 @@ def monitor(save_knocks=False):
                 r.set("knock:last_lat", geo['lat'])
                 r.set("knock:last_lng", geo['lng'])
             r.publish("radiation_stream", json.dumps(package))
-            print(f"📡 {geo['iso']} | {user}:{pw} via {geo['isp']}")
-
-    # Honeypot exited — log why and exit so systemd restarts us
-    exit_code = honeypot_proc.wait()
-    print(f"⚠️ Honeypot process exited (code {exit_code}), shutting down")
-    sys.exit(1)
+            print(f"📡 {knock.get('proto', 'SSH')} {geo['iso']} | {user}:{pw} via {geo['isp']}")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Knock-Knock Monitor")

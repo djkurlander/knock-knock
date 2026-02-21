@@ -200,6 +200,7 @@ class ConnectionManager:
         last_lng_val = await r.get("knock:last_lng")
         current_kpm = await self.get_kpm()
 
+        history = await self.get_recent_knocks("knock:recent")
         proto_histories = {}
         for name in PROTO_NAME.values():
             proto_histories[name.lower()] = await self.get_recent_knocks(f"knock:recent:{name.lower()}")
@@ -217,6 +218,7 @@ class ConnectionManager:
             "top_ips": stats_cache.top_ips,
             "proto_stats": {str(k): v for k, v in stats_cache.proto_stats.items()},
             "proto_histories": proto_histories,
+            "history": history,
             "cache_ts": stats_cache.last_updated
         }
 
@@ -225,10 +227,10 @@ class ConnectionManager:
         # The 100ms breather we discussed for Cloudflare stability
         await asyncio.sleep(0.1)
         self.active_connections.append(websocket)
-        
+
         try:
             stats = await self.get_initial_data()
-            history = await self.get_recent_knocks(100)
+            history = stats.get("history", [])
 
             payload = {
                 "type": "init_stats",

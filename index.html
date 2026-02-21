@@ -713,9 +713,15 @@
                 if (!h) return 0.002;
                 return 0.002 + 0.12 * Math.log(1 + h) / logMax;
             });
-            // Re-set data to trigger globe.gl's digest and re-evaluate all accessors
-            if (countriesData) g.polygonsData(countriesData);
+            // Spread to new array reference — globe.gl skips its digest when the
+            // same array reference is passed again, so accessors never re-evaluate.
+            if (countriesData) g.polygonsData([...countriesData]);
         });
+        // The animation loop may be paused; resume briefly so the updated scene
+        // actually gets rendered, then re-schedule the pause as normal.
+        if (paneGlobeDesktop && paneGlobeVisible.desktop) paneGlobeDesktop.resumeAnimation();
+        if (paneGlobeMobile && paneGlobeVisible.mobile) paneGlobeMobile.resumeAnimation();
+        schedulePaneGlobePause();
     }
 
     function refreshFeed() {
@@ -1607,11 +1613,13 @@
                 renderKnock(d, true);
                 ['d-total', 'm-total'].forEach(id => document.getElementById(id).innerText = d.total_global.toLocaleString());
                 ['d-kpm', 'm-kpm'].forEach(id => document.getElementById(id).innerText = d.kpm);
-                incrementAndSort('loc', d.iso, d.country);
-                incrementAndSort('pass', d.pass);
-                incrementAndSort('prov', d.isp);
-                incrementAndSort('user', d.user);
-                incrementAndSort('ip', d.ip);
+                if (knockMatchesFilter(d)) {
+                    incrementAndSort('loc', d.iso, d.country);
+                    incrementAndSort('pass', d.pass);
+                    incrementAndSort('prov', d.isp);
+                    incrementAndSort('user', d.user);
+                    incrementAndSort('ip', d.ip);
+                }
                 currentKnock = d;
                 renderInfo(d);
                 scheduleTrivia(d);

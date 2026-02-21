@@ -680,7 +680,8 @@
     function hideGlobeDot() {
         [mobileGlobe, desktopGlobe, paneGlobeDesktop, paneGlobeMobile].forEach(g => {
             if (!g) return;
-            g.pointsData([]);
+            g._pointData[0]._hidden = true;
+            g.pointsData(g._pointData);
         });
     }
 
@@ -768,11 +769,11 @@
             .pointsData([])
             .pointAltitude(d => d.alt ?? 0.01)
             .pointColor(() => '#ff0000')
-            .pointRadius(1.5)
+            .pointRadius(d => d._hidden ? 0 : 1.5)
             .pointsTransitionDuration(0)
             (container);
 
-        g._pointData = [{ lat: 0, lng: 0, alt: 0.01 }];
+        g._pointData = [{ lat: 0, lng: 0, alt: 0.01, _hidden: true }];
         g.controls().enableZoom = false;
         g.controls().enablePan = false;
         g.controls().autoRotate = false;
@@ -782,6 +783,7 @@
             if (lastLat !== null) {
                 g._pointData[0].lat = lastLat;
                 g._pointData[0].lng = lastLng;
+                g._pointData[0]._hidden = false;
                 g.pointsData(g._pointData);
                 g.pointOfView({ lat: lastLat, lng: lastLng, altitude: 1.4 });
             }
@@ -1017,10 +1019,10 @@
             .pointsData([])
             .pointAltitude(d => d.alt ?? 0.01)
             .pointColor(() => '#ff0000')
-            .pointRadius(1.5)
+            .pointRadius(d => d._hidden ? 0 : 1.5)
             .pointsTransitionDuration(0)
             (pane);
-        globe._pointData = [{ lat: 0, lng: 0, alt: 0.01 }];
+        globe._pointData = [{ lat: 0, lng: 0, alt: 0.01, _hidden: true }];
         globe.controls().enableZoom = false;
         globe.controls().autoRotate = false;
         if (which === 'desktop') paneGlobeDesktop = globe; else paneGlobeMobile = globe;
@@ -1031,10 +1033,12 @@
                 globe._pointData[0].lat = topKnock.lat;
                 globe._pointData[0].lng = topKnock.lng;
                 globe._pointData[0].alt = 0.01;
+                globe._pointData[0]._hidden = false;
                 globe.pointsData(globe._pointData);
                 globe.pointOfView({ lat: topKnock.lat, lng: topKnock.lng, altitude: cfg.altitude });
             } else {
-                globe.pointsData([]);
+                globe._pointData[0]._hidden = true;
+                globe.pointsData(globe._pointData);
                 globe.pointOfView({ altitude: cfg.altitude });
             }
             const cam = globe.camera();
@@ -1198,6 +1202,7 @@
             g._pointData[0].lat = lat;
             g._pointData[0].lng = lng;
             g._pointData[0].alt = 0.01;
+            g._pointData[0]._hidden = false;
             g.pointsData(g._pointData);
             g.pointOfView({ lat, lng, altitude: alt }, 1000);
         });

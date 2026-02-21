@@ -713,6 +713,8 @@
                 if (!h) return 0.002;
                 return 0.002 + 0.12 * Math.log(1 + h) / logMax;
             });
+            // Re-set data to trigger globe.gl's digest and re-evaluate all accessors
+            if (countriesData) g.polygonsData(countriesData);
         });
     }
 

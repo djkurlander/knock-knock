@@ -17,6 +17,10 @@ GEOIP_CITY_PATH = '/usr/share/GeoIP/GeoLite2-City.mmdb'
 GEOIP_ASN_PATH = '/usr/share/GeoIP/GeoLite2-ASN.mmdb'
 DB_PATH = os.environ.get('DB_DIR', 'data') + '/knock_knock.db'
 
+# Protocol enum — stored as INTEGER in knocks table
+PROTO = {'SSH': 0, 'TNET': 1, 'SMTP': 2, 'RDP': 3}
+PROTO_NAME = {v: k for k, v in PROTO.items()}  # reverse lookup
+
 def reset_all():
     """Wipes the SQLite database and clears relevant Redis keys."""
     print("🧹 Resetting all data as requested...")
@@ -42,8 +46,13 @@ def init_db():
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
         ip_address TEXT, iso_code TEXT, city TEXT, region TEXT, country TEXT, isp TEXT, asn INTEGER,
-        username TEXT, password TEXT
+        username TEXT, password TEXT, proto INTEGER
     )""")
+    # Migrate: add proto column to existing databases
+    knock_cols = [row[1] for row in cur.execute("PRAGMA table_info(knocks)").fetchall()]
+    if 'proto' not in knock_cols:
+        cur.execute("ALTER TABLE knocks ADD COLUMN proto INTEGER")
+        print("✅ Migrated knocks: added proto column")
     cur.execute("CREATE TABLE IF NOT EXISTS user_intel (username TEXT PRIMARY KEY, hits INTEGER, last_seen DATETIME)")
     cur.execute("CREATE TABLE IF NOT EXISTS pass_intel (password TEXT PRIMARY KEY, hits INTEGER, last_seen DATETIME)")
     cur.execute("CREATE TABLE IF NOT EXISTS country_intel (iso_code TEXT PRIMARY KEY, country TEXT, hits INTEGER, last_seen DATETIME)")
@@ -87,9 +96,10 @@ def log_to_maximalist_db(data, save_knocks=True):
     cur = conn.cursor()
     try:
         if save_knocks:
-            cur.execute("""INSERT INTO knocks (ip_address, iso_code, city, region, country, isp, asn, username, password)
-                           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                        (data['ip'], data['iso'], data['city'], data.get('region'), data['country'], data['isp'], data.get('asn'), data['user'], data['pass']))
+            cur.execute("""INSERT INTO knocks (ip_address, iso_code, city, region, country, isp, asn, username, password, proto)
+                           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                        (data['ip'], data['iso'], data['city'], data.get('region'), data['country'], data['isp'], data.get('asn'), data['user'], data['pass'],
+                         PROTO.get(data.get('proto', 'SSH'), 0)))
         now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         cur.execute("INSERT INTO user_intel VALUES (?, 1, ?) ON CONFLICT(username) DO UPDATE SET hits=hits+1, last_seen=?", (data['user'], now, now))
         cur.execute("INSERT INTO pass_intel VALUES (?, 1, ?) ON CONFLICT(password) DO UPDATE SET hits=hits+1, last_seen=?", (data['pass'], now, now))

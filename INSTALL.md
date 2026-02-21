@@ -32,42 +32,13 @@ ssh -p 2222 user@your-server
 
 You must open up your firewall (if present) to expose ports 22, 80 or 443, and potentially your real SSH port. This is specific to your network configuration, so the exact steps are not presented here.
 
-### GeoIP Databases
+### MaxMind Account (GeoIP)
 
 Knock-Knock uses MaxMind GeoLite2 databases for IP geolocation. You need a free MaxMind account.
 
-1. Install geoipupdate:
-
-**Debian/Ubuntu:**
-```bash
-apt install -y geoipupdate
-```
-
-**RHEL/CentOS/Fedora:**
-```bash
-dnf install -y geoipupdate
-```
-
-2. Create a free account at https://www.maxmind.com/en/geolite2/signup
-3. Generate a license key in your account dashboard. Either download the config file and save it as `/etc/GeoIP.conf`, or edit the existing `/etc/GeoIP.conf` (created by the install) and add your `AccountID` and `LicenseKey`.
-
-Then download the databases:
-```bash
-geoipupdate
-
-# Ensure databases are at /usr/share/GeoIP (some distros use /var/lib/GeoIP)
-[ ! -e /usr/share/GeoIP ] && ln -s /var/lib/GeoIP /usr/share/GeoIP
-
-# Verify
-ls /usr/share/GeoIP/GeoLite2-*.mmdb
-```
-
-Set up weekly auto-updates:
-```bash
-crontab -e
-# Add line:
-0 3 * * 3 /usr/bin/geoipupdate
-```
+1. Register at https://www.maxmind.com/en/geolite2/signup
+2. In your account dashboard, generate a license key
+3. Note your **Account ID** and **License Key** — you'll need them below
 
 ### SSH Host Key (Systemd Only)
 
@@ -91,40 +62,43 @@ Complete the [Prerequisites](#prerequisites) above first (skip the SSH Host Key 
 curl -fsSL https://get.docker.com | sh
 ```
 
-### Using the Pre-built Image (Recommended)
-
-A multi-arch image (amd64 + arm64) is published to GitHub Container Registry. You only need the `docker-compose.yml` file:
+### Clone the Repository
 
 ```bash
 cd /root
 git clone https://github.com/djkurlander/knock-knock.git
 cd knock-knock
+```
 
+### Configure MaxMind Credentials
+
+```bash
+cp .env.example .env
+nano .env   # Fill in your Account ID and License Key
+```
+
+### Start
+
+```bash
 # Pull and start (uses pre-built image from ghcr.io)
 docker compose up -d
 ```
 
-### Building Locally
-
-If you prefer to build from source:
-
-```bash
-cd /root
-git clone https://github.com/djkurlander/knock-knock.git
-cd knock-knock
-
-# Build and start from Dockerfile
-docker compose up -d --build
-```
+The `geoipupdate` container downloads the GeoIP databases on first start and refreshes them weekly. The monitor waits until the databases are ready before processing knocks — you'll see `⏳ Waiting for GeoIP databases...` in the logs until the download completes.
 
 ### Verify
 
 ```bash
-docker compose logs honeypot-monitor   # Should show "Monitor Active"
-docker compose logs web                # Should show uvicorn startup
+docker compose logs -f honeypot-monitor
+# Should show:
+#   ⏳ Waiting for GeoIP databases...  (briefly, during first-time download)
+#   ✅ GeoIP databases loaded
+#   🚀 Maximalist Monitor Active...
+
+docker compose logs web   # Should show uvicorn startup
 ```
 
-That's it. Three containers (Redis, honeypot+monitor, web) start automatically and restart on failure.
+That's it. Four containers (Redis, geoipupdate, honeypot+monitor, web) start automatically and restart on failure.
 
 **Useful commands:**
 ```bash
@@ -141,6 +115,35 @@ See [Optional Configuration](#optional-configuration) for various site-specific 
 ## Option 2: Ubuntu/Debian
 
 Complete the [Prerequisites](#prerequisites) above first.
+
+### GeoIP Databases
+
+```bash
+apt install -y geoipupdate
+```
+
+Configure your MaxMind credentials in `/etc/GeoIP.conf`:
+```
+AccountID your_account_id
+LicenseKey your_license_key
+DatabaseDirectory /usr/share/GeoIP
+```
+
+Download the databases and set up weekly auto-updates (MaxMind updates databases every Tuesday):
+```bash
+geoipupdate
+
+# Ensure databases are at /usr/share/GeoIP (some distros use /var/lib/GeoIP)
+[ ! -e /usr/share/GeoIP ] && ln -s /var/lib/GeoIP /usr/share/GeoIP
+
+# Verify
+ls /usr/share/GeoIP/GeoLite2-*.mmdb
+
+# Weekly auto-update
+crontab -e
+# Add line:
+0 3 * * 3 /usr/bin/geoipupdate
+```
 
 ### System Dependencies
 
@@ -198,6 +201,32 @@ See [Optional Configuration](#optional-configuration) for various site-specific 
 ## Option 3: RHEL/CentOS/Fedora
 
 Complete the [Prerequisites](#prerequisites) above first.
+
+### GeoIP Databases
+
+```bash
+dnf install -y geoipupdate
+```
+
+Configure your MaxMind credentials in `/etc/GeoIP.conf`:
+```
+AccountID your_account_id
+LicenseKey your_license_key
+DatabaseDirectory /usr/share/GeoIP
+```
+
+Download the databases and set up weekly auto-updates (MaxMind updates databases every Tuesday):
+```bash
+geoipupdate
+
+# Verify
+ls /usr/share/GeoIP/GeoLite2-*.mmdb
+
+# Weekly auto-update
+crontab -e
+# Add line:
+0 3 * * 3 /usr/bin/geoipupdate
+```
 
 ### System Dependencies
 
@@ -311,7 +340,16 @@ ss -tlnp | grep :22
 # Make sure real SSH is moved to another port first
 ```
 
-### GeoIP lookups failing
+### GeoIP lookups returning Unknown (Docker)
+```bash
+docker compose logs honeypot-monitor | grep -i geoip
+# Should show "✅ GeoIP databases loaded"
+# If stuck on "⏳ Waiting...", check geoipupdate logs:
+docker compose logs geoipupdate
+# Verify credentials in .env are correct
+```
+
+### GeoIP lookups failing (Systemd)
 ```bash
 ls -la /usr/share/GeoIP/GeoLite2-*.mmdb
 # If missing, ensure /etc/GeoIP.conf includes: DatabaseDirectory /usr/share/GeoIP
@@ -343,7 +381,7 @@ sqlite3 /root/knock-knock/data/knock_knock.db "SELECT * FROM knocks ORDER BY id 
 # Reset all data (clear database and Redis)
 ./restart.sh --reset-all
 
-# Update GeoIP databases
+# Update GeoIP databases (systemd only — Docker handles this automatically)
 geoipupdate
 
 # Rotate SSL certs (if using Let's Encrypt)

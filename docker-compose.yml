@@ -5,6 +5,17 @@ services:
       - redis-data:/data
     restart: unless-stopped
 
+  geoipupdate:
+    image: ghcr.io/maxmind/geoipupdate
+    environment:
+      - GEOIPUPDATE_ACCOUNT_ID=${MAXMIND_ACCOUNT_ID}
+      - GEOIPUPDATE_LICENSE_KEY=${MAXMIND_LICENSE_KEY}
+      - 'GEOIPUPDATE_EDITION_IDS=GeoLite2-ASN GeoLite2-City'
+      - GEOIPUPDATE_FREQUENCY=168
+    volumes:
+      - geoip-data:/usr/share/GeoIP
+    restart: unless-stopped
+
   honeypot-monitor:
     image: ghcr.io/djkurlander/knock-knock:latest
     build: .  # Used when running: docker compose up --build
@@ -15,9 +26,10 @@ services:
       - "22:22"
     volumes:
       - ./data:/app/data
-      - /usr/share/GeoIP:/usr/share/GeoIP:ro
+      - geoip-data:/usr/share/GeoIP:ro
     depends_on:
       - redis
+      - geoipupdate
     restart: unless-stopped
 
   web:
@@ -41,10 +53,10 @@ services:
       - "${WEB_LISTEN:-0.0.0.0}:80:80"
     volumes:
       - ./data:/app/data
-      - /usr/share/GeoIP:/usr/share/GeoIP:ro
     depends_on:
       - redis
     restart: unless-stopped
 
 volumes:
   redis-data:
+  geoip-data:

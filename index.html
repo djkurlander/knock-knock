@@ -586,7 +586,9 @@
         document.querySelectorAll('#d-proto-btn, #m-proto-btn, #d-feed-proto-btn, #m-feed-proto-btn').forEach(el => {
             el.textContent = '⟳ ' + PROTO_MODES[protoModeIdx];
         });
-        renderLeaderboards(getActiveLeaderboards());
+        const active = getActiveLeaderboards();
+        renderLeaderboards(active);
+        refreshHeatGlobe(active.loc);
         refreshFeed();
     }
 
@@ -653,6 +655,37 @@
         if (feedData[proto]) feedData[proto].unshift(d);
         if (feedData.ALL.length > MAX_PER_PANEL) feedData.ALL.length = MAX_PER_PANEL;
         if (feedData[proto] && feedData[proto].length > MAX_PER_PANEL) feedData[proto].length = MAX_PER_PANEL;
+    }
+
+    function refreshHeatGlobe(locData) {
+        if (!GLOBE_STYLES[paneGlobeStyleIdx].extruded) return;
+        const hitsMap = {};
+        let maxHits = 1;
+        (locData || []).forEach(c => {
+            hitsMap[c.iso] = c.count;
+            if (c.count > maxHits) maxHits = c.count;
+        });
+        const logMax = Math.log(1 + maxHits);
+        [paneGlobeDesktop, paneGlobeMobile].forEach(g => {
+            if (!g) return;
+            g.polygonCapColor(d => {
+                const h = hitsMap[d.properties.ISO_A2] || 0;
+                if (!h) return 'rgba(0, 255, 65, 0.05)';
+                const t = Math.log(1 + h) / logMax;
+                return `rgb(${Math.round(255 * t)}, ${Math.round(255 * (1 - t))}, 0)`;
+            });
+            g.polygonSideColor(d => {
+                const h = hitsMap[d.properties.ISO_A2] || 0;
+                if (!h) return 'rgba(0,0,0,0)';
+                const t = Math.log(1 + h) / logMax;
+                return `rgba(255, ${Math.round(200 * (1 - t))}, 0, 0.6)`;
+            });
+            g.polygonAltitude(d => {
+                const h = hitsMap[d.properties.ISO_A2] || 0;
+                if (!h) return 0.002;
+                return 0.002 + 0.12 * Math.log(1 + h) / logMax;
+            });
+        });
     }
 
     function refreshFeed() {
@@ -1352,10 +1385,13 @@
         return div;
     }
 
-    function renderKnock(d, isNew = true) {
+    function knockMatchesFilter(d) {
         const mode = PROTO_MODES[protoModeIdx];
-        const proto = (d.proto || 'SSH').toUpperCase();
-        if (mode !== 'ALL' && proto !== mode) return;
+        return mode === 'ALL' || (d.proto || 'SSH').toUpperCase() === mode;
+    }
+
+    function renderKnock(d, isNew = true) {
+        if (!knockMatchesFilter(d)) return;
         ['d-feed', 'm-feed'].forEach(id => {
             const el = document.getElementById(id);
             const div = makeKnockEl(d, isNew);
@@ -1538,8 +1574,10 @@
                 currentKnock = d;
                 renderInfo(d);
                 scheduleTrivia(d);
-                updateGlobeLocation(d);
-                rotateGlobeToLocation(d.lat, d.lng);
+                if (knockMatchesFilter(d)) {
+                    updateGlobeLocation(d);
+                    rotateGlobeToLocation(d.lat, d.lng);
+                }
             }
             else if (msg.type === 'init_stats') {
                 debugLog(`init_stats received (total=${d.total})`);
@@ -1562,35 +1600,7 @@
                 leaderboards.ips = d.top_ips || [];
                 if (d.proto_stats) protoStatsCache = d.proto_stats;
                 // Refresh Heat extrusion colors/heights without re-setting image or polygon data
-                if (GLOBE_STYLES[paneGlobeStyleIdx].extruded) {
-                    const hitsMap = {};
-                    let maxHits = 1;
-                    leaderboards.loc.forEach(c => {
-                        hitsMap[c.iso] = c.count;
-                        if (c.count > maxHits) maxHits = c.count;
-                    });
-                    const logMax = Math.log(1 + maxHits);
-                    [paneGlobeDesktop, paneGlobeMobile].forEach(g => {
-                        if (!g) return;
-                        g.polygonCapColor(d => {
-                            const h = hitsMap[d.properties.ISO_A2] || 0;
-                            if (!h) return 'rgba(0, 255, 65, 0.05)';
-                            const t = Math.log(1 + h) / logMax;
-                            return `rgb(${Math.round(255 * t)}, ${Math.round(255 * (1 - t))}, 0)`;
-                        });
-                        g.polygonSideColor(d => {
-                            const h = hitsMap[d.properties.ISO_A2] || 0;
-                            if (!h) return 'rgba(0,0,0,0)';
-                            const t = Math.log(1 + h) / logMax;
-                            return `rgba(255, ${Math.round(200 * (1 - t))}, 0, 0.6)`;
-                        });
-                        g.polygonAltitude(d => {
-                            const h = hitsMap[d.properties.ISO_A2] || 0;
-                            if (!h) return 0.002;
-                            return 0.002 + 0.12 * Math.log(1 + h) / logMax;
-                        });
-                    });
-                }
+                refreshHeatGlobe(leaderboards.loc);
 
                 const preScroll = vp.scrollLeft;
                 renderLeaderboards(getActiveLeaderboards());

@@ -68,6 +68,9 @@ redis-cli ping
 redis-cli llen knock:recent:ssh
 redis-cli llen knock:recent:tnet
 redis-cli llen knock:recent:smtp
+
+# Watch for SMTP connections (even without AUTH — honeypot logs every connect)
+journalctl -u knock-monitor -f | grep SMTP
 ```
 
 ## Architecture
@@ -179,6 +182,18 @@ Each knock writes 10 upserts: 5 to ALL tables + 5 to `_proto` tables. ALL tables
 - `knock:recent:tnet` - Last 100 Telnet knocks
 - `knock:recent:smtp` - Last 100 SMTP knocks
 - `radiation_stream` - Pub/sub channel for real-time events
+
+## Globe Rendering Rules
+
+The pane globes are paused when idle (`pauseAnimation()`). **Any change to globe scene state (polygon data, point data, styles) will NOT be visible until the animation loop runs a frame.** Always follow scene changes with:
+```javascript
+if (paneGlobeDesktop && paneGlobeVisible.desktop) paneGlobeDesktop.resumeAnimation();
+if (paneGlobeMobile && paneGlobeVisible.mobile) paneGlobeMobile.resumeAnimation();
+schedulePaneGlobePause();
+```
+`refreshHeatGlobe()` and `applyGlobeStyle()` already do this. Any new function that modifies pane globe state must too.
+
+Additionally, `polygonsData(sameRef)` may be short-circuited by globe.gl — always pass `[...countriesData]` to guarantee the polygon digest runs and accessor functions are re-evaluated.
 
 ## Frontend Features
 

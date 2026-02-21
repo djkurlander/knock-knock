@@ -183,6 +183,8 @@ def monitor(save_knocks=False):
                                  stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True),
         "TNET": subprocess.Popen([sys.executable, "-u", "telnet_honeypot.py"],
                                  stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True),
+        "SMTP": subprocess.Popen([sys.executable, "-u", "smtp_honeypot.py"],
+                                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True),
     }
 
     knock_queue = queue.Queue()

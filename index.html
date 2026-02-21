@@ -553,7 +553,7 @@
         if (soundEnabled) { initAudio(); audioCtx.resume().then(() => playUIClick()); }
     }
 
-    const PROTO_MODES = ['ALL', 'SSH', 'TNET'];
+    const PROTO_MODES = ['ALL', 'SSH', 'TNET', 'SMTP'];
     let protoModeIdx = 0;
 
     function cycleProto(e) {

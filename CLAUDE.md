@@ -30,9 +30,9 @@ docker compose logs -f
 source .venv/bin/activate
 
 # SSH honeypot (port 22)
-python honeypot.py
+python ssh_honeypot.py
 
-# Log monitor + geo-enricher — spawns honeypot.py as a subprocess
+# Log monitor + geo-enricher — spawns ssh_honeypot.py as a subprocess
 # Add --save-knocks to store individual knocks in SQLite
 python monitor.py
 
@@ -66,7 +66,7 @@ redis-cli ping
 ## Architecture
 
 ```
-SSH Attacker → honeypot.py (port 22) → stdout
+SSH Attacker → ssh_honeypot.py (port 22) → stdout
                                               ↓
                                        monitor.py (spawns honeypot, parses output, GeoIP lookup)
                                               ↓
@@ -78,7 +78,7 @@ SSH Attacker → honeypot.py (port 22) → stdout
 ```
 
 **Two Services:**
-- `honeypot.py` + `monitor.py`: Combined into a single systemd unit. Monitor spawns honeypot as a subprocess and reads its stdout. Performs GeoIP lookups, updates intel tables in SQLite, publishes to Redis. Individual knocks are only saved to SQLite with `--save-knocks`
+- `ssh_honeypot.py` + `monitor.py`: Combined into a single systemd unit. Monitor spawns honeypot as a subprocess and reads its stdout. Performs GeoIP lookups, updates intel tables in SQLite, publishes to Redis. Individual knocks are only saved to SQLite with `--save-knocks`
 - `main.py`: FastAPI server with WebSocket endpoint `/ws`, subscribes to Redis, broadcasts to all connected browsers
 
 **Data Flow:**
@@ -95,7 +95,7 @@ SSH Attacker → honeypot.py (port 22) → stdout
 
 | File | Purpose |
 |------|---------|
-| `honeypot.py` | SSH honeypot with `SSHHoneypot` class |
+| `ssh_honeypot.py` | SSH honeypot with `SSHHoneypot` class |
 | `monitor.py` | Log parser, GeoIP enrichment, DB writes, Redis publish |
 | `main.py` | FastAPI server, `ConnectionManager`, `GlobalStatsCache`, WebSocket |
 | `index.html` | Single-page dashboard with WebSocket client |

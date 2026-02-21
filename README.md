@@ -63,7 +63,7 @@ Knock-Knock supports three different installation methods, with docker being the
 ```
 SSH Attacker
   ↓
-honeypot.py (port 22)
+ssh_honeypot.py (port 22)
   ↓
 monitor.py (GeoIP lookup)
   ↓

@@ -178,7 +178,7 @@ def monitor(save_knocks=False):
 
     # Spawn honeypot as a subprocess and read from its stdout
     honeypot_proc = subprocess.Popen(
-        [sys.executable, "-u", "honeypot.py"],
+        [sys.executable, "-u", "ssh_honeypot.py"],
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         text=True

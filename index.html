@@ -556,6 +556,29 @@
     const PROTO_MODES = ['ALL', 'SSH', 'TNET', 'SMTP'];
     let protoModeIdx = 0;
 
+    function renderLeaderboards(stats) {
+        renderBars('loc',  stats.loc,       'loc-fill', true);
+        renderBars('pass', stats.passwords, 'password-fill');
+        renderBars('prov', stats.providers, 'provider-fill');
+        renderBars('user', stats.users,     'user-fill');
+        renderBars('ip',   stats.ips,       'ip-fill');
+    }
+
+    function getActiveLeaderboards() {
+        const mode = PROTO_MODES[protoModeIdx];
+        if (mode === 'ALL') return leaderboards;
+        const pi = String(PROTO_INT[mode]);
+        const ps = protoStatsCache[pi];
+        if (!ps) return leaderboards;  // fallback to ALL if proto data not yet received
+        return {
+            loc:       ps.top_locations  || [],
+            passwords: ps.top_passwords  || [],
+            providers: ps.top_providers  || [],
+            users:     ps.top_users      || [],
+            ips:       ps.top_ips        || [],
+        };
+    }
+
     function cycleProto(e) {
         e.stopPropagation();  // don't trigger toggleSound() on the parent div
         playUIClick();
@@ -563,6 +586,7 @@
         document.querySelectorAll('#d-proto-btn, #m-proto-btn, #d-feed-proto-btn, #m-feed-proto-btn').forEach(el => {
             el.textContent = '⟳ ' + PROTO_MODES[protoModeIdx];
         });
+        renderLeaderboards(getActiveLeaderboards());
     }
 
     function initAudio() {
@@ -613,6 +637,11 @@
         providers: [],  // {label, count}
         ips: []         // {label, count}
     };
+
+    // Per-protocol leaderboard cache: keys are proto ints as strings ("0","1","2","3")
+    // Maps to same structure as leaderboards above
+    const PROTO_INT = { 'SSH': 0, 'TNET': 1, 'SMTP': 2, 'RDP': 3 };
+    let protoStatsCache = {};
 
     function getRank(list, value, key = 'label') {
         if (!list || !value) return null;
@@ -1503,6 +1532,7 @@
                 leaderboards.providers = d.top_providers || [];
                 leaderboards.users = d.top_users || [];
                 leaderboards.ips = d.top_ips || [];
+                if (d.proto_stats) protoStatsCache = d.proto_stats;
                 // Refresh Heat extrusion colors/heights without re-setting image or polygon data
                 if (GLOBE_STYLES[paneGlobeStyleIdx].extruded) {
                     const hitsMap = {};
@@ -1535,11 +1565,7 @@
                 }
 
                 const preScroll = vp.scrollLeft;
-                renderBars('loc', d.top_locations, 'loc-fill', true);
-                renderBars('pass', d.top_passwords, 'password-fill');
-                renderBars('prov', d.top_providers, 'provider-fill');
-                renderBars('user', d.top_users, 'user-fill');
-                renderBars('ip', d.top_ips, 'ip-fill');
+                renderLeaderboards(getActiveLeaderboards());
                 if (vp.scrollLeft !== preScroll) debugLog(`⚠️ SCROLL SHIFTED during init_stats: ${preScroll} → ${vp.scrollLeft}`);
                 if (d.history) {
                     ['d-feed', 'm-feed'].forEach(id => document.getElementById(id).innerHTML = '');

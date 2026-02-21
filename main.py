@@ -5,6 +5,7 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
 from datetime import datetime
 from fastapi.staticfiles import StaticFiles
+from constants import PROTO, PROTO_NAME
 
 app = FastAPI()
 
@@ -96,15 +97,27 @@ class GlobalStatsCache:
         self.top_providers = []
         self.top_users = []
         self.top_ips = []
+        self.proto_stats = {}  # keyed by proto int: {0: {top_locations, ...}, ...}
         self.last_updated = None
 
     async def _refresh_cache(self):
         loop = asyncio.get_event_loop()
-        self.top_locations = await loop.run_in_executor(None, self._get_top_stats, "location")
-        self.top_passwords = await loop.run_in_executor(None, self._get_top_stats, "password")
-        self.top_providers = await loop.run_in_executor(None, self._get_top_stats, "isp")
-        self.top_users = await loop.run_in_executor(None, self._get_top_stats, "username")
-        self.top_ips = await loop.run_in_executor(None, self._get_top_stats, "ip")
+        # ALL leaderboards (existing tables, index-driven)
+        self.top_locations = await loop.run_in_executor(None, self._get_top_stats, "location", None)
+        self.top_passwords = await loop.run_in_executor(None, self._get_top_stats, "password", None)
+        self.top_providers = await loop.run_in_executor(None, self._get_top_stats, "isp", None)
+        self.top_users = await loop.run_in_executor(None, self._get_top_stats, "username", None)
+        self.top_ips = await loop.run_in_executor(None, self._get_top_stats, "ip", None)
+        # Per-protocol leaderboards (_proto tables, composite index-driven)
+        self.proto_stats = {}
+        for proto_int in PROTO_NAME:
+            self.proto_stats[proto_int] = {
+                "top_locations": await loop.run_in_executor(None, self._get_top_stats, "location", proto_int),
+                "top_passwords": await loop.run_in_executor(None, self._get_top_stats, "password", proto_int),
+                "top_providers": await loop.run_in_executor(None, self._get_top_stats, "isp", proto_int),
+                "top_users":     await loop.run_in_executor(None, self._get_top_stats, "username", proto_int),
+                "top_ips":       await loop.run_in_executor(None, self._get_top_stats, "ip", proto_int),
+            }
         self.last_updated = datetime.now().strftime("%H:%M:%S")
 
     async def update_and_broadcast(self):
@@ -126,19 +139,29 @@ class GlobalStatsCache:
             except Exception as e:
                 print(f"❌ Cache Update Error: {e}")
 
-    def _get_top_stats(self, stat_type):
+    def _get_top_stats(self, stat_type, proto=None):
         """Synchronous helper for the executor - uses indexed intel tables."""
         conn = sqlite3.connect(DB_PATH, timeout=10)
         conn.row_factory = sqlite3.Row
         cur = conn.cursor()
-        queries = {
-            "location": "SELECT iso_code as iso, country, hits as count FROM country_intel ORDER BY hits DESC",
-            "password": "SELECT password as label, hits as count FROM pass_intel ORDER BY hits DESC LIMIT 100",
-            "username": "SELECT username as label, hits as count FROM user_intel ORDER BY hits DESC LIMIT 100",
-            "isp": "SELECT isp as label, hits as count FROM isp_intel ORDER BY hits DESC LIMIT 100",
-            "ip": "SELECT ip as label, hits as count FROM ip_intel ORDER BY hits DESC LIMIT 100",
-        }
-        cur.execute(queries[stat_type])
+        if proto is None:
+            queries = {
+                "location": "SELECT iso_code as iso, country, hits as count FROM country_intel ORDER BY hits DESC",
+                "password": "SELECT password as label, hits as count FROM pass_intel ORDER BY hits DESC LIMIT 100",
+                "username": "SELECT username as label, hits as count FROM user_intel ORDER BY hits DESC LIMIT 100",
+                "isp":      "SELECT isp as label, hits as count FROM isp_intel ORDER BY hits DESC LIMIT 100",
+                "ip":       "SELECT ip as label, hits as count FROM ip_intel ORDER BY hits DESC LIMIT 100",
+            }
+            cur.execute(queries[stat_type])
+        else:
+            queries = {
+                "location": "SELECT iso_code as iso, country, hits as count FROM country_intel_proto WHERE proto=? ORDER BY hits DESC",
+                "password": "SELECT password as label, hits as count FROM pass_intel_proto WHERE proto=? ORDER BY hits DESC LIMIT 100",
+                "username": "SELECT username as label, hits as count FROM user_intel_proto WHERE proto=? ORDER BY hits DESC LIMIT 100",
+                "isp":      "SELECT isp as label, hits as count FROM isp_intel_proto WHERE proto=? ORDER BY hits DESC LIMIT 100",
+                "ip":       "SELECT ip as label, hits as count FROM ip_intel_proto WHERE proto=? ORDER BY hits DESC LIMIT 100",
+            }
+            cur.execute(queries[stat_type], (proto,))
         rows = cur.fetchall()
         conn.close()
         return [dict(row) for row in rows]
@@ -188,6 +211,7 @@ class ConnectionManager:
             "top_providers": stats_cache.top_providers,
             "top_users": stats_cache.top_users,
             "top_ips": stats_cache.top_ips,
+            "proto_stats": {str(k): v for k, v in stats_cache.proto_stats.items()},
             "cache_ts": stats_cache.last_updated
         }
 
@@ -215,6 +239,7 @@ class ConnectionManager:
                     "top_providers": stats.get("top_providers", []),
                     "top_users": stats.get("top_users", []),
                     "top_ips": stats.get("top_ips", []),
+                    "proto_stats": stats.get("proto_stats", {}),
                     "cache_ts": stats.get("cache_ts"),
                     "last_knock_stats": history[0] if history else None
                 }

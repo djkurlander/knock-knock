@@ -569,7 +569,7 @@
         if (mode === 'ALL') return leaderboards;
         const pi = String(PROTO_INT[mode]);
         const ps = protoStatsCache[pi];
-        if (!ps) return leaderboards;  // fallback to ALL if proto data not yet received
+        if (!ps) return { loc: [], passwords: [], providers: [], users: [], ips: [] };
         return {
             loc:       ps.top_locations  || [],
             passwords: ps.top_passwords  || [],
@@ -680,8 +680,7 @@
     function hideGlobeDot() {
         [mobileGlobe, desktopGlobe, paneGlobeDesktop, paneGlobeMobile].forEach(g => {
             if (!g) return;
-            g._pointData[0].alt = -1.0;
-            g.pointsData(g._pointData);
+            g.pointsData([]);
         });
     }
 
@@ -1035,8 +1034,7 @@
                 globe.pointsData(globe._pointData);
                 globe.pointOfView({ lat: topKnock.lat, lng: topKnock.lng, altitude: cfg.altitude });
             } else {
-                globe._pointData[0].alt = -1.0;
-                globe.pointsData(globe._pointData);
+                globe.pointsData([]);
                 globe.pointOfView({ altitude: cfg.altitude });
             }
             const cam = globe.camera();
@@ -1594,7 +1592,7 @@
                 knockCount++;
                 debugLog(`Knock #${knockCount} from ${d.iso || '??'}`);
                 playClick();
-                pulseGlobeAtmosphere();
+                if (knockMatchesFilter(d)) pulseGlobeAtmosphere();
                 lastKnockTime = Math.floor(Date.now() / 1000);
                 document.getElementById('m-since').innerText = '0s';
                 document.getElementById('d-since').innerText = '0s';

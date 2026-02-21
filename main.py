@@ -185,12 +185,12 @@ class ConnectionManager:
         except Exception:
             return 0.0
 
-    async def get_recent_knocks(self, limit=10):
+    async def get_recent_knocks(self, key="knock:recent", limit=100):
         try:
-            raw = await r.lrange("knock:recent", 0, limit - 1)
+            raw = await r.lrange(key, 0, limit - 1)
             return [json.loads(item) for item in raw]
         except Exception as e:
-            print(f"Error fetching history: {e}")
+            print(f"Error fetching history ({key}): {e}")
             return []
 
     async def get_initial_data(self):
@@ -199,6 +199,10 @@ class ConnectionManager:
         last_lat_val = await r.get("knock:last_lat")
         last_lng_val = await r.get("knock:last_lng")
         current_kpm = await self.get_kpm()
+
+        proto_histories = {}
+        for name in PROTO_NAME.values():
+            proto_histories[name.lower()] = await self.get_recent_knocks(f"knock:recent:{name.lower()}")
 
         return {
             "top_locations": stats_cache.top_locations,
@@ -212,6 +216,7 @@ class ConnectionManager:
             "top_users": stats_cache.top_users,
             "top_ips": stats_cache.top_ips,
             "proto_stats": {str(k): v for k, v in stats_cache.proto_stats.items()},
+            "proto_histories": proto_histories,
             "cache_ts": stats_cache.last_updated
         }
 
@@ -240,6 +245,7 @@ class ConnectionManager:
                     "top_users": stats.get("top_users", []),
                     "top_ips": stats.get("top_ips", []),
                     "proto_stats": stats.get("proto_stats", {}),
+                    "proto_histories": stats.get("proto_histories", {}),
                     "cache_ts": stats.get("cache_ts"),
                     "last_knock_stats": history[0] if history else None
                 }

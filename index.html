@@ -587,6 +587,7 @@
             el.textContent = '⟳ ' + PROTO_MODES[protoModeIdx];
         });
         renderLeaderboards(getActiveLeaderboards());
+        refreshFeed();
     }
 
     function initAudio() {
@@ -642,6 +643,27 @@
     // Maps to same structure as leaderboards above
     const PROTO_INT = { 'SSH': 0, 'TNET': 1, 'SMTP': 2, 'RDP': 3 };
     let protoStatsCache = {};
+
+    // Per-protocol feed arrays (newest at index 0)
+    const feedData = { ALL: [], SSH: [], TNET: [], SMTP: [] };
+
+    function addToFeed(d) {
+        const proto = (d.proto || 'SSH').toUpperCase();
+        feedData.ALL.unshift(d);
+        if (feedData[proto]) feedData[proto].unshift(d);
+        if (feedData.ALL.length > MAX_PER_PANEL) feedData.ALL.length = MAX_PER_PANEL;
+        if (feedData[proto] && feedData[proto].length > MAX_PER_PANEL) feedData[proto].length = MAX_PER_PANEL;
+    }
+
+    function refreshFeed() {
+        const mode = PROTO_MODES[protoModeIdx];
+        const data = feedData[mode] || feedData.ALL;
+        ['d-feed', 'm-feed'].forEach(id => {
+            const el = document.getElementById(id);
+            el.innerHTML = '';
+            data.forEach(d => el.appendChild(makeKnockEl(d, false)));
+        });
+    }
 
     function getRank(list, value, key = 'label') {
         if (!list || !value) return null;
@@ -1316,23 +1338,28 @@
         return `<span class="proto-badge proto-${cls}"><span style="position:relative;top:0.1em">${label}</span></span>`;
     }
 
-    function renderKnock(d, isNew = true) {
+    function makeKnockEl(d, flash) {
         const loc = formatLocation(d);
-
-        const html = `
+        const div = document.createElement('div');
+        div.className = 'knock' + (flash ? ' new-knock-flash' : '');
+        div.innerHTML = `
             <div class="knock-location"><span style="display:flex;align-items:center;gap:0.3em"><strong>${getFlag(d.iso)}</strong> <strong>${loc}</strong></span>${getProtoBadge(d.proto)}</div>
             <span style="color:var(--ui-label)">user:</span> <span>${d.user}</span>
             <span style="color:var(--ui-label); margin-left:10px;">password:</span> <span class="knock-pass">${d.pass}</span><br>
             <span class="knock-meta"><span style="color:var(--ui-label)">ISP:</span> <span style="color:var(--data-blue)">${d.isp}</span> <span style="color:var(--ui-label); margin-left:10px;">IP:</span> <span style="color:var(--data-blue)">${formatIP(d.ip)}</span></span>
         `;
+        twemoji.parse(div);
+        return div;
+    }
 
+    function renderKnock(d, isNew = true) {
+        const mode = PROTO_MODES[protoModeIdx];
+        const proto = (d.proto || 'SSH').toUpperCase();
+        if (mode !== 'ALL' && proto !== mode) return;
         ['d-feed', 'm-feed'].forEach(id => {
             const el = document.getElementById(id);
-            const div = document.createElement('div');
-            div.className = 'knock' + (isNew ? ' new-knock-flash' : '');
-            div.innerHTML = html;
+            const div = makeKnockEl(d, isNew);
             if (isNew) el.prepend(div); else el.appendChild(div);
-            twemoji.parse(div);
             if (el.children.length > MAX_PER_PANEL) el.lastChild.remove();
         });
     }
@@ -1499,6 +1526,7 @@
                 lastKnockTime = Math.floor(Date.now() / 1000);
                 document.getElementById('m-since').innerText = '0s';
                 document.getElementById('d-since').innerText = '0s';
+                addToFeed(d);
                 renderKnock(d, true);
                 ['d-total', 'm-total'].forEach(id => document.getElementById(id).innerText = d.total_global.toLocaleString());
                 ['d-kpm', 'm-kpm'].forEach(id => document.getElementById(id).innerText = d.kpm);
@@ -1568,8 +1596,13 @@
                 renderLeaderboards(getActiveLeaderboards());
                 if (vp.scrollLeft !== preScroll) debugLog(`⚠️ SCROLL SHIFTED during init_stats: ${preScroll} → ${vp.scrollLeft}`);
                 if (d.history) {
-                    ['d-feed', 'm-feed'].forEach(id => document.getElementById(id).innerHTML = '');
-                    d.history.forEach(k => renderKnock(k, false));
+                    // Populate feed arrays from dedicated per-protocol Redis lists
+                    feedData.ALL = d.history.slice(0, MAX_PER_PANEL);
+                    const ph = d.proto_histories || {};
+                    feedData.SSH  = (ph.ssh  || []).slice(0, MAX_PER_PANEL);
+                    feedData.TNET = (ph.tnet || []).slice(0, MAX_PER_PANEL);
+                    feedData.SMTP = (ph.smtp || []).slice(0, MAX_PER_PANEL);
+                    refreshFeed();
                     if (d.history.length > 0) updateGlobeLocation(d.history[0]);
                 }
                 // Render Stats and Trivia panes with enriched last knock data

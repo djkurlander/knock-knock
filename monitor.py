@@ -30,7 +30,8 @@ def reset_all():
             print(f"   [!] Error deleting {DB_PATH}: {e}")
     try:
         r = redis.Redis(host=os.environ.get('REDIS_HOST', 'localhost'), port=6379, db=0, decode_responses=True)
-        keys_to_clear = ["knock:total_global", "knock:uptime_minutes", "knock:last_time", "knock:last_lat", "knock:last_lng", "knock:recent"]
+        keys_to_clear = ["knock:total_global", "knock:uptime_minutes", "knock:last_time", "knock:last_lat", "knock:last_lng", "knock:recent",
+                         "knock:recent:ssh", "knock:recent:tnet", "knock:recent:smtp", "knock:recent:rdp"]
         for key in keys_to_clear:
             r.delete(key)
         print("   [+] Cleared Redis keys")
@@ -264,6 +265,9 @@ def monitor(save_knocks=False):
                 print(f"⚠️ DB error (knock skipped): {e}")
             r.lpush("knock:recent", json.dumps(package))
             r.ltrim("knock:recent", 0, 99)
+            proto_key = "knock:recent:" + package['proto'].lower()
+            r.lpush(proto_key, json.dumps(package))
+            r.ltrim(proto_key, 0, 99)
             r.incr("knock:total_global")
             r.set("knock:last_time", int(time.time()))
             if geo['lat'] is not None:

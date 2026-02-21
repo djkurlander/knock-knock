@@ -308,6 +308,17 @@
             text-transform: uppercase;
         }
         @media (hover: hover) { .pane-globe-style-btn:hover { border-color: rgba(0,255,65,0.7); } }
+
+        .proto-cycle-btn {
+            display: inline-block; vertical-align: 0.2em;
+            color: var(--neon-green); font-size: 0.85em; cursor: pointer;
+            border: 1px solid rgba(0,255,65,0.85); border-radius: 3px;
+            padding: 2px 6px; font-family: monospace; letter-spacing: 1px;
+            text-transform: uppercase; font-style: normal;
+            user-select: none; transition: border-color 0.2s;
+            white-space: nowrap; margin-left: 8px;
+        }
+        @media (hover: hover) { .proto-cycle-btn:hover { border-color: rgba(0,255,65,0.7); } }
     </style>
 </head>
 <body>
@@ -331,7 +342,7 @@
         <div class="d-header-content">
             <div class="d-header-left" onclick="toggleSound()" style="cursor:pointer;">
                 <h1>BOTS ARE KNOCKING <span class="status-dot"></span></h1>
-                <div style="font-size: 1em; color: var(--neon-green); margin-top: -8px; margin-bottom: 12px; font-style: italic;">... BUT THEY CAN'T COME IN. &nbsp;<span id="d-header-sound" style="font-style:normal; cursor:pointer;">🔈</span></div>
+                <div style="font-size: 1em; color: var(--neon-green); margin-top: -8px; margin-bottom: 12px; font-style: italic;">... BUT THEY CAN'T COME IN. &nbsp;<span id="d-header-sound" style="font-style:normal; cursor:pointer;">🔈</span><span id="d-proto-btn" class="proto-cycle-btn" onclick="cycleProto(event)">⟳ ALL</span></div>
                 <div class="d-stats">
                     <span class="stat-label">Knocks:</span>&nbsp;<span id="d-total" class="stat-value">0</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="stat-label">Per Min:</span>&nbsp;<span id="d-kpm" class="stat-value">0.00</span>
                 </div>
@@ -377,7 +388,7 @@
         <div class="m-header-content">
             <div class="m-header-left" onclick="toggleSound()" style="cursor:pointer;">
                 <h1>BOTS ARE KNOCKING <span class="status-dot"></span></h1>
-                <div style="font-size: 0.85em; color: var(--neon-green); margin-top: -2px; margin-bottom: 8px; font-style: italic;">... BUT THEY CAN'T COME IN. &nbsp;<span id="m-header-sound" style="font-style:normal; cursor:pointer;">🔈</span></div>
+                <div style="font-size: 0.85em; color: var(--neon-green); margin-top: -2px; margin-bottom: 8px; font-style: italic;">... BUT THEY CAN'T COME IN. &nbsp;<span id="m-header-sound" style="font-style:normal; cursor:pointer;">🔈</span><span id="m-proto-btn" class="proto-cycle-btn" onclick="cycleProto(event)">⟳ ALL</span></div>
                 <div class="m-stat-row">
                     <span class="stat-label">Knocks:</span>&nbsp;<span id="m-total" class="stat-value">0</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="stat-label">Per Min:</span>&nbsp;<span id="m-kpm" class="stat-value">0.00</span>
                 </div>
@@ -540,6 +551,18 @@
         localStorage.setItem('soundEnabled', soundEnabled);
         updateSoundIcon();
         if (soundEnabled) { initAudio(); audioCtx.resume().then(() => playUIClick()); }
+    }
+
+    const PROTO_MODES = ['ALL', 'SSH', 'TNET'];
+    let protoModeIdx = 0;
+
+    function cycleProto(e) {
+        e.stopPropagation();  // don't trigger toggleSound() on the parent div
+        playUIClick();
+        protoModeIdx = (protoModeIdx + 1) % PROTO_MODES.length;
+        document.querySelectorAll('#d-proto-btn, #m-proto-btn').forEach(el => {
+            el.textContent = '⟳ ' + PROTO_MODES[protoModeIdx];
+        });
     }
 
     function initAudio() {

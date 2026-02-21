@@ -15,6 +15,9 @@ docker-compose.override.yml
 extras/three-globe-bug/
 static/three-globe-leak-repro.html
 
+# local analysis scripts
+extras/graphs/
+
 # Python
 __pycache__/
 .venv/

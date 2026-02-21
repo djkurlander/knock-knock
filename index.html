@@ -1600,7 +1600,7 @@
                 leaderboards.ips = d.top_ips || [];
                 if (d.proto_stats) protoStatsCache = d.proto_stats;
                 // Refresh Heat extrusion colors/heights without re-setting image or polygon data
-                refreshHeatGlobe(leaderboards.loc);
+                refreshHeatGlobe(getActiveLeaderboards().loc);
 
                 const preScroll = vp.scrollLeft;
                 renderLeaderboards(getActiveLeaderboards());

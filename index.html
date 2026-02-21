@@ -313,7 +313,7 @@
             display: inline-block; vertical-align: 0.2em;
             color: var(--neon-green); font-size: 0.85em; cursor: pointer;
             border: 1px solid rgba(0,255,65,0.85); border-radius: 3px;
-            padding: 2px 6px; font-family: monospace; letter-spacing: 1px;
+            padding: 1px 4px; font-family: monospace; letter-spacing: 1px;
             text-transform: uppercase; font-style: normal;
             user-select: none; transition: border-color 0.2s;
             white-space: nowrap; margin-left: 8px;
@@ -357,7 +357,7 @@
     </div>
     
     <div class="d-grid" id="d-slider-container">
-        <div class="d-box" id="d-box-feed"><h2>LIVE FEED: LOGIN ATTEMPTS</h2><div id="d-feed" class="d-content"></div></div>
+        <div class="d-box" id="d-box-feed"><h2 style="display:flex;justify-content:space-between;align-items:center;">LIVE FEED: LOGIN ATTEMPTS<span id="d-feed-proto-btn" class="proto-cycle-btn" onclick="cycleProto(event)" style="vertical-align:initial;">⟳ ALL</span></h2><div id="d-feed" class="d-content"></div></div>
         <div class="d-box" id="d-box-globe"><h2>GLOBE VIEW</h2><div id="d-globe-location" style="text-align:center; margin-bottom:10px;"><div id="d-globe-loc-text" style="color:var(--neon-green);"></div><div id="d-globe-loc-isp" style="color:var(--data-blue); font-size:0.85em;"></div></div><div id="d-globe-pane" class="d-content globe-pane"></div></div>
         <div class="d-box"><h2>LOCATION</h2><div id="d-loc" class="d-content"></div></div>
         <div class="d-box"><h2>USERNAME</h2><div id="d-user" class="d-content"></div></div>
@@ -403,7 +403,7 @@
     </div>
     <div class="m-progress-container"><div id="m-progress-bar"></div></div>
     <div class="m-viewport" id="m-viewport">
-        <div class="m-pane" id="m-pane-feed"><h2>LIVE FEED: LOGIN ATTEMPTS</h2><div id="m-feed" class="m-content"></div></div>
+        <div class="m-pane" id="m-pane-feed"><h2 style="display:flex;justify-content:space-between;align-items:center;">LIVE FEED: LOGIN ATTEMPTS<span id="m-feed-proto-btn" class="proto-cycle-btn" onclick="cycleProto(event)" style="vertical-align:initial;">⟳ ALL</span></h2><div id="m-feed" class="m-content"></div></div>
         <div class="m-pane" id="m-pane-globe"><h2>GLOBE VIEW</h2><div id="m-globe-location" style="text-align:center; margin-bottom:10px;"><div id="m-globe-loc-text" style="color:var(--neon-green);"></div><div id="m-globe-loc-isp" style="color:var(--data-blue); font-size:0.85em;"></div></div><div id="m-globe-pane" class="m-content globe-pane" style="display:flex; justify-content:center; align-items:center;"></div></div>
         <div class="m-pane" id="m-pane-loc"><h2>LOCATION</h2><div id="m-loc" class="m-content"></div></div>
         <div class="m-pane" id="m-pane-user"><h2>USERNAME</h2><div id="m-user" class="m-content"></div></div>
@@ -560,7 +560,7 @@
         e.stopPropagation();  // don't trigger toggleSound() on the parent div
         playUIClick();
         protoModeIdx = (protoModeIdx + 1) % PROTO_MODES.length;
-        document.querySelectorAll('#d-proto-btn, #m-proto-btn').forEach(el => {
+        document.querySelectorAll('#d-proto-btn, #m-proto-btn, #d-feed-proto-btn, #m-feed-proto-btn').forEach(el => {
             el.textContent = '⟳ ' + PROTO_MODES[protoModeIdx];
         });
     }

@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Knock-Knock is an SSH honeypot monitoring system that captures unauthorized SSH login attempts and displays real-time attack data through a live web dashboard. It can be deployed via Docker or as two coordinated systemd services.
+Knock-Knock is a multi-protocol honeypot monitoring system that captures unauthorized login attempts on SSH (port 22), Telnet (port 23), and SMTP (port 587), and displays real-time attack data through a live web dashboard. It can be deployed via Docker or as two coordinated systemd services.
 
 ## Commands
 
@@ -29,10 +29,12 @@ docker compose logs -f
 ```bash
 source .venv/bin/activate
 
-# SSH honeypot (port 22)
+# Individual honeypots (ports 22, 23, 587)
 python ssh_honeypot.py
+python telnet_honeypot.py
+python smtp_honeypot.py
 
-# Log monitor + geo-enricher — spawns ssh_honeypot.py as a subprocess
+# Log monitor + geo-enricher — spawns all three honeypots as subprocesses
 # Add --save-knocks to store individual knocks in SQLite
 python monitor.py
 
@@ -61,43 +63,52 @@ sqlite3 data/knock_knock.db "SELECT * FROM knocks ORDER BY id DESC LIMIT 10;"
 
 # Redis connectivity
 redis-cli ping
+
+# Check per-protocol feed lists
+redis-cli llen knock:recent:ssh
+redis-cli llen knock:recent:tnet
+redis-cli llen knock:recent:smtp
 ```
 
 ## Architecture
 
 ```
-SSH Attacker → ssh_honeypot.py (port 22) → stdout
-                                              ↓
-                                       monitor.py (spawns honeypot, parses output, GeoIP lookup)
-                                              ↓
-                                    SQLite DB (data/) + Redis pub/sub
-                                              ↓
-                                       main.py (FastAPI, port 80/443)
-                                              ↓
-                                    Browser WebSocket → Live Dashboard
+SSH Attacker  → ssh_honeypot.py  (port 22)  ─┐
+Telnet Attacker → telnet_honeypot.py (port 23) ─┼→ stdout → monitor.py
+SMTP Attacker → smtp_honeypot.py (port 587) ─┘        (GeoIP, DB, Redis)
+                                                              ↓
+                                                  SQLite DB (data/) + Redis pub/sub
+                                                              ↓
+                                                   main.py (FastAPI, port 80/443)
+                                                              ↓
+                                               Browser WebSocket → Live Dashboard
 ```
 
 **Two Services:**
-- `ssh_honeypot.py` + `monitor.py`: Combined into a single systemd unit. Monitor spawns honeypot as a subprocess and reads its stdout. Performs GeoIP lookups, updates intel tables in SQLite, publishes to Redis. Individual knocks are only saved to SQLite with `--save-knocks`
-- `main.py`: FastAPI server with WebSocket endpoint `/ws`, subscribes to Redis, broadcasts to all connected browsers
+- `monitor.py`: Spawns all three honeypots as subprocesses, merges their stdout via a shared `queue.Queue`, performs GeoIP lookups, updates SQLite intel tables, publishes to Redis. Individual knocks saved to SQLite only with `--save-knocks`.
+- `main.py`: FastAPI server with WebSocket endpoint `/ws`, subscribes to Redis, broadcasts to all connected browsers.
 
 **Data Flow:**
-- Monitor spawns honeypot as a subprocess and reads its stdout (both systemd and Docker)
+- Monitor spawns honeypots as subprocesses and reads their stdout (both systemd and Docker)
+- Each honeypot emits JSON: `{"type": "KNOCK", "proto": "SSH"|"TNET"|"SMTP", "ip": ..., "user": ..., "pass": ...}`
 - Inter-service communication via Redis pub/sub channel `radiation_stream`
-- Stats cached in memory (10-min refresh), periodic sync every 60 seconds
+- Stats cached in memory, refreshed every 60 seconds and broadcast to all clients
 - SQLite databases in `data/` directory for persistence
 
 **Deployment modes:**
-- **Docker:** `docker compose up -d` — monitor spawns honeypot internally
-- **Systemd:** Two unit files in `systemd/` — monitor spawns honeypot internally
+- **Docker:** `docker compose up -d` — monitor spawns all honeypots internally
+- **Systemd:** Two unit files in `systemd/` — monitor spawns all honeypots internally
 
 ## Key Files
 
 | File | Purpose |
 |------|---------|
-| `ssh_honeypot.py` | SSH honeypot with `SSHHoneypot` class |
-| `monitor.py` | Log parser, GeoIP enrichment, DB writes, Redis publish |
+| `ssh_honeypot.py` | SSH honeypot (port 22) using paramiko |
+| `telnet_honeypot.py` | Telnet honeypot (port 23), raw socket with IAC negotiation |
+| `smtp_honeypot.py` | SMTP honeypot (port 587), AUTH LOGIN + AUTH PLAIN |
+| `monitor.py` | Spawns honeypots, GeoIP enrichment, DB writes, Redis publish |
 | `main.py` | FastAPI server, `ConnectionManager`, `GlobalStatsCache`, WebSocket |
+| `constants.py` | Shared protocol enum: `PROTO` dict and `PROTO_NAME` reverse lookup |
 | `index.html` | Single-page dashboard with WebSocket client |
 | `restart.sh` | Service orchestration (systemd and Docker) |
 | `Dockerfile` | Single image for honeypot-monitor and web containers |
@@ -121,46 +132,60 @@ All persistent data lives in `data/`:
 | `ENABLE_SSL` | unset | Set to `true` in `docker-compose.yml` for HTTPS |
 | `LOG_VISITORS` | unset | Set to `true` to log dashboard visitors to `visitors.db` |
 
+## Protocol Enum
+
+Defined in `constants.py`, imported by both `monitor.py` and `main.py`:
+
+```python
+PROTO = {'SSH': 0, 'TNET': 1, 'SMTP': 2, 'RDP': 3}
+PROTO_NAME = {v: k for k, v in PROTO.items()}
+```
+
 ## Database Schema
 
 ```sql
 -- Main attack log (only populated with --save-knocks)
-knocks(id, timestamp, ip_address, iso_code, city, region, country, isp, asn, username, password)
+knocks(id, timestamp, ip_address, iso_code, city, region, country, isp, asn, username, password, proto INTEGER)
 
--- Intelligence tables (aggregated counts with indexed hits for fast top-N queries)
-user_intel(username PRIMARY KEY, hits, last_seen)     -- INDEX on hits DESC
-pass_intel(password PRIMARY KEY, hits, last_seen)     -- INDEX on hits DESC
-country_intel(iso_code PRIMARY KEY, country, hits, last_seen)  -- INDEX on hits DESC
-isp_intel(isp PRIMARY KEY, hits, last_seen, asn)       -- INDEX on hits DESC
-ip_intel(ip PRIMARY KEY, hits, last_seen, lat, lng)   -- INDEX on hits DESC, stores coordinates
+-- ALL intel tables (aggregated counts, indexed hits for fast top-N queries)
+user_intel(username PRIMARY KEY, hits, last_seen)               -- INDEX on hits DESC
+pass_intel(password PRIMARY KEY, hits, last_seen)               -- INDEX on hits DESC
+country_intel(iso_code PRIMARY KEY, country, hits, last_seen)   -- INDEX on hits DESC
+isp_intel(isp PRIMARY KEY, hits, last_seen, asn)                -- INDEX on hits DESC
+ip_intel(ip PRIMARY KEY, hits, last_seen, lat, lng)             -- INDEX on hits DESC
+
+-- Per-protocol intel tables (same structure, composite PK)
+user_intel_proto(username, proto INTEGER, hits, last_seen)      -- INDEX on (proto, hits DESC)
+pass_intel_proto(password, proto INTEGER, hits, last_seen)      -- INDEX on (proto, hits DESC)
+country_intel_proto(iso_code, proto INTEGER, country, hits, last_seen)
+isp_intel_proto(isp, proto INTEGER, hits, last_seen, asn)
+ip_intel_proto(ip, proto INTEGER, hits, last_seen, lat, lng)
 
 -- Uptime tracking for KPM calculation
-monitor_heartbeats(id, timestamp)
+monitor_heartbeats(id, uptime_minutes)
 ```
 
-Intel tables are updated on each knock via `INSERT ... ON CONFLICT DO UPDATE`. Top-N queries use the hits index (~100 rows) instead of GROUP BY on knocks (all rows).
-
-## External Dependencies
-
-- Redis server (localhost:6379 or via `REDIS_HOST` env var)
-- GeoIP databases at `/usr/share/GeoIP/GeoLite2-{City,ASN}.mmdb`
-- SSL certificates in `certs/` directory (optional, for HTTPS)
-- Python 3.12 with `uv` virtual environment (systemd) or Docker
+Each knock writes 10 upserts: 5 to ALL tables + 5 to `_proto` tables. ALL tables serve as fast rollup for the ALL leaderboard; `_proto` tables serve per-protocol leaderboards.
 
 ## Redis Keys
 
-- `knock:total_global` - Total attack count
+- `knock:total_global` - Total attack count (all protocols)
+- `knock:uptime_minutes` - Monitor uptime in minutes
 - `knock:last_time` - Unix timestamp of last knock
 - `knock:last_lat` - Latitude of last knock location
 - `knock:last_lng` - Longitude of last knock location
-- `knock:recent` - Last 100 knocks (JSON list, used for initial page load)
+- `knock:recent` - Last 100 knocks, all protocols (JSON list)
+- `knock:recent:ssh` - Last 100 SSH knocks
+- `knock:recent:tnet` - Last 100 Telnet knocks
+- `knock:recent:smtp` - Last 100 SMTP knocks
 - `radiation_stream` - Pub/sub channel for real-time events
 
 ## Frontend Features
 
-- **3D Globe** (globe.gl): Displays attack location, rotates on new knocks; includes heat map mode
-- **Live Feed**: Real-time attack log with username/password/location
-- **Leaderboards**: Top countries, usernames, passwords, ISPs, IPs
+- **3D Globe** (globe.gl): Displays attack location, rotates on new knocks; heat map mode extrudes countries by hit count
+- **Protocol Filter**: Cycles ALL → SSH → TNET → SMTP → ALL; filters live feed, leaderboards, globe rotation, and heat map
+- **Live Feed**: Real-time attack log with protocol badge, username/password/location
+- **Leaderboards**: Top countries, usernames, passwords, ISPs, IPs — per-protocol or ALL
 - **Trivia & Jokes**: Context about why usernames/passwords are chosen, plus knock-knock jokes
 - **Sound Effects**: Optional audio notifications for new knocks
 - **About**: Project info section

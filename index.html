@@ -597,6 +597,7 @@
             if (topKnock.lat != null) rotateGlobeToLocation(topKnock.lat, topKnock.lng);
         } else {
             hideGlobeDot();
+            clearGlobeLocation();
         }
     }
 
@@ -663,6 +664,17 @@
         if (feedData[proto]) feedData[proto].unshift(d);
         if (feedData.ALL.length > MAX_PER_PANEL) feedData.ALL.length = MAX_PER_PANEL;
         if (feedData[proto] && feedData[proto].length > MAX_PER_PANEL) feedData[proto].length = MAX_PER_PANEL;
+    }
+
+    function clearGlobeLocation() {
+        ['d-globe-loc-text', 'm-globe-loc-text'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.innerHTML = '';
+        });
+        ['d-globe-loc-isp', 'm-globe-loc-isp'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.innerText = '';
+        });
     }
 
     function hideGlobeDot() {
@@ -1014,12 +1026,19 @@
         globe.controls().autoRotate = false;
         if (which === 'desktop') paneGlobeDesktop = globe; else paneGlobeMobile = globe;
         globe.onGlobeReady(() => {
-            if (lastLat !== null) {
-                globe._pointData[0].lat = lastLat;
-                globe._pointData[0].lng = lastLng;
+            const activeMode = PROTO_MODES[protoModeIdx];
+            const topKnock = feedData[activeMode]?.[0];
+            if (topKnock?.lat != null) {
+                globe._pointData[0].lat = topKnock.lat;
+                globe._pointData[0].lng = topKnock.lng;
+                globe._pointData[0].alt = 0.01;
                 globe.pointsData(globe._pointData);
+                globe.pointOfView({ lat: topKnock.lat, lng: topKnock.lng, altitude: cfg.altitude });
+            } else {
+                globe._pointData[0].alt = -1.0;
+                globe.pointsData(globe._pointData);
+                globe.pointOfView({ altitude: cfg.altitude });
             }
-            globe.pointOfView(lastLat !== null ? { lat: lastLat, lng: lastLng, altitude: cfg.altitude } : { altitude: cfg.altitude });
             const cam = globe.camera();
             const globeEdge = Math.asin(1 / (cfg.altitude + 1)) / ((cam.fov / 2) * Math.PI / 180) * 100;
             const closestSide = Math.min(pane.clientWidth, pane.clientHeight) / 2;

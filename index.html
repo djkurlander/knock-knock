@@ -1589,9 +1589,6 @@
                     document.getElementById('m-since').innerText = secs;
                     document.getElementById('d-since').innerText = secs;
                 }
-                if (d.last_lat !== null && d.last_lng !== null) {
-                    rotateGlobeToLocation(d.last_lat, d.last_lng);
-                }
                 // Store leaderboards globally for ranking lookups
                 leaderboards.loc = d.top_locations || [];
                 leaderboards.passwords = d.top_passwords || [];
@@ -1613,7 +1610,12 @@
                     feedData.TNET = (ph.tnet || []).slice(0, MAX_PER_PANEL);
                     feedData.SMTP = (ph.smtp || []).slice(0, MAX_PER_PANEL);
                     refreshFeed();
-                    if (d.history.length > 0) updateGlobeLocation(d.history[0]);
+                    const activeMode = PROTO_MODES[protoModeIdx];
+                    const topKnock = (feedData[activeMode] || feedData.ALL)[0];
+                    if (topKnock) {
+                        updateGlobeLocation(topKnock);
+                        if (topKnock.lat != null) rotateGlobeToLocation(topKnock.lat, topKnock.lng);
+                    }
                 }
                 // Render Stats and Trivia panes with enriched last knock data
                 if (d.last_knock_stats) {

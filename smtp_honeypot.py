@@ -54,6 +54,7 @@ def b64decode(s):
 def handle_connection(client_sock, client_ip):
     try:
         client_sock.settimeout(30)
+        print(f"🔌 SMTP connect {client_ip}", flush=True)
 
         # Realistic Postfix banner
         client_sock.sendall(b"220 mail.example.com ESMTP Postfix (Ubuntu)\r\n")

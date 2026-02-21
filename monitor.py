@@ -247,6 +247,7 @@ def monitor(save_knocks=False):
         try:
             knock = json.loads(line)
         except (json.JSONDecodeError, ValueError):
+            print(line, end='', flush=True)  # pass through diagnostic output from honeypots
             continue
         if knock.get("type") == "KNOCK":
             ip, user, pw = knock["ip"], knock["user"], knock["pass"]

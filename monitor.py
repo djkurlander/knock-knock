@@ -31,7 +31,7 @@ def reset_all():
     try:
         r = redis.Redis(host=os.environ.get('REDIS_HOST', 'localhost'), port=6379, db=0, decode_responses=True)
         keys_to_clear = ["knock:total_global", "knock:uptime_minutes", "knock:last_time", "knock:last_lat", "knock:last_lng", "knock:recent",
-                         "knock:recent:ssh", "knock:recent:tnet", "knock:recent:smtp", "knock:recent:rdp"]
+                         "knock:recent:ssh", "knock:recent:tnet", "knock:recent:smtp", "knock:recent:rdp", "knock:recent:mail", "knock:recent:ftp"]
         for key in keys_to_clear:
             r.delete(key)
         print("   [+] Cleared Redis keys")
@@ -214,7 +214,9 @@ def monitor(save_knocks=False):
                                  stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True),
         "MAIL": subprocess.Popen([sys.executable, "-u", "smtp25_honeypot.py"],
                                  stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True),
-        "RDP":  subprocess.Popen([sys.executable, "-u", "stub_honeypot.py", "--port", "3389", "--proto", "RDP"],
+        "RDP":  subprocess.Popen([sys.executable, "-u", "rdp_honeypot.py"],
+                                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True),
+        "FTP":  subprocess.Popen([sys.executable, "-u", "ftp_honeypot.py"],
                                  stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True),
     }
 

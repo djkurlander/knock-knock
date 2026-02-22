@@ -4,10 +4,37 @@ import threading
 import json
 import os
 import time
+import random
+import string
 
 BLOCKLIST_FILE = os.environ.get('DB_DIR', 'data') + '/blocklist.txt'
 BLOCKLIST_RELOAD_INTERVAL = 60
 MAX_MESSAGES_PER_SESSION = 10
+
+def _get_smtp_hostname():
+    """Resolve our own reverse DNS for a realistic SMTP banner; fall back to IP."""
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(('8.8.8.8', 80))
+        ip = s.getsockname()[0]
+        s.close()
+        try:
+            return socket.gethostbyaddr(ip)[0]
+        except Exception:
+            return ip
+    except Exception:
+        return 'localhost'
+
+_SMTP_HOSTNAME = _get_smtp_hostname()
+_BANNER = f"220 {_SMTP_HOSTNAME} ESMTP Postfix\r\n".encode()
+_EHLO_RESP = (
+    f"250-{_SMTP_HOSTNAME}\r\n"
+    "250-SIZE 10240000\r\n"
+    "250-STARTTLS\r\n"
+    "250-ENHANCEDSTATUSCODES\r\n"
+    "250-8BITMIME\r\n"
+    "250 PIPELINING\r\n"
+).encode()
 
 _blocklist_cache = set()
 _blocklist_last_load = 0
@@ -60,7 +87,7 @@ def handle_connection(client_sock, client_ip):
         print(f"🔌 MAIL connect {client_ip}", flush=True)
 
         # Postfix-style banner
-        client_sock.sendall(b"220 mail.example.com ESMTP Postfix\r\n")
+        client_sock.sendall(_BANNER)
 
         while True:
             line = recv_line(client_sock)
@@ -69,20 +96,16 @@ def handle_connection(client_sock, client_ip):
             upper = line.upper()
 
             if upper.startswith('EHLO') or upper.startswith('HELO'):
-                client_sock.sendall(
-                    b"250-mail.example.com\r\n"
-                    b"250-SIZE 10240000\r\n"
-                    b"250 ENHANCEDSTATUSCODES\r\n"
-                )
+                client_sock.sendall(_EHLO_RESP)
 
             elif upper.startswith('MAIL FROM:'):
                 mail_from = extract_addr(line[10:])
-                client_sock.sendall(b"250 OK\r\n")
+                client_sock.sendall(b"250 2.1.0 Ok\r\n")
 
             elif upper.startswith('RCPT TO:'):
                 if rcpt_to is None:  # capture first recipient only
                     rcpt_to = extract_addr(line[8:])
-                client_sock.sendall(b"250 OK\r\n")
+                client_sock.sendall(b"250 2.1.5 Ok\r\n")
 
             elif upper == 'DATA':
                 if mail_from is None:
@@ -105,7 +128,8 @@ def handle_connection(client_sock, client_ip):
                     if body == '.' or not body:
                         break
 
-                client_sock.sendall(b"250 OK: Message queued\r\n")
+                queue_id = ''.join(random.choices(string.ascii_uppercase + string.digits, k=10))
+                client_sock.sendall(f"250 2.0.0 Ok: queued as {queue_id}\r\n".encode())
 
                 # Emit knock for this message, then reset for next MAIL FROM
                 knock = {"type": "KNOCK", "proto": "MAIL",

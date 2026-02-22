@@ -79,10 +79,13 @@
             box-sizing: content-box;
             opacity: 0.85;
         }
+        .proto-all  { color: var(--ui-label); }
         .proto-ssh  { color: var(--neon-green); }
         .proto-tnet { color: var(--data-blue); }
         .proto-smtp { color: var(--user-magenta); }
+        .proto-mail { color: #00ffaa; }
         .proto-rdp  { color: var(--hazard-red); }
+        .proto-ftp  { color: var(--ip-purple); }
         .bar-bg { background: #1a1a1a; height: 10px; border-radius: 5px; overflow: hidden; }
         .bar-fill { background: var(--neon-green); height: 100%; transition: width 1s; opacity: 0.7; }
         
@@ -311,14 +314,14 @@
 
         .proto-cycle-btn {
             display: inline-block; vertical-align: 0.2em;
-            color: var(--neon-green); font-size: 0.85em; cursor: pointer;
-            border: 1px solid rgba(0,255,65,0.85); border-radius: 3px;
+            color: var(--ui-label); font-size: 0.85em; cursor: pointer;
+            border: 1px solid rgba(255,204,0,0.85); border-radius: 3px;
             padding: 1px 4px; font-family: monospace; letter-spacing: 1px;
             text-transform: uppercase; font-style: normal;
             user-select: none; transition: border-color 0.2s;
             white-space: nowrap; margin-left: 8px;
         }
-        @media (hover: hover) { .proto-cycle-btn:hover { border-color: rgba(0,255,65,0.7); } }
+        @media (hover: hover) { .proto-cycle-btn:hover { opacity: 0.8; } }
     </style>
 </head>
 <body>
@@ -358,12 +361,12 @@
     
     <div class="d-grid" id="d-slider-container">
         <div class="d-box" id="d-box-feed"><h2 style="display:flex;justify-content:space-between;align-items:center;">LIVE FEED: LOGIN ATTEMPTS<span id="d-feed-proto-btn" class="proto-cycle-btn" onclick="cycleProto(event)" style="vertical-align:initial;">⟳ ALL</span></h2><div id="d-feed" class="d-content"></div></div>
-        <div class="d-box" id="d-box-globe"><h2>GLOBE VIEW</h2><div id="d-globe-location" style="text-align:center; margin-bottom:10px;"><div id="d-globe-loc-text" style="color:var(--neon-green);"></div><div id="d-globe-loc-isp" style="color:var(--data-blue); font-size:0.85em;"></div></div><div id="d-globe-pane" class="d-content globe-pane"></div></div>
-        <div class="d-box"><h2>LOCATION</h2><div id="d-loc" class="d-content"></div></div>
-        <div class="d-box"><h2>USERNAME</h2><div id="d-user" class="d-content"></div></div>
-        <div class="d-box"><h2>PASSWORD</h2><div id="d-pass" class="d-content"></div></div>
-        <div class="d-box"><h2>ISP</h2><div id="d-prov" class="d-content"></div></div>
-        <div class="d-box"><h2>IP ADDRESS</h2><div id="d-ip" class="d-content"></div></div>
+        <div class="d-box" id="d-box-globe"><h2 style="display:flex;justify-content:space-between;align-items:center;">GLOBE VIEW<span class="proto-cycle-btn" onclick="cycleProto(event)" style="vertical-align:initial;">⟳ ALL</span></h2><div id="d-globe-location" style="text-align:center; margin-bottom:10px;"><div id="d-globe-loc-text" style="color:var(--neon-green);"></div><div id="d-globe-loc-isp" style="color:var(--data-blue); font-size:0.85em;"></div></div><div id="d-globe-pane" class="d-content globe-pane"></div></div>
+        <div class="d-box"><h2 style="display:flex;justify-content:space-between;align-items:center;">LOCATION<span class="proto-cycle-btn" onclick="cycleProto(event)" style="vertical-align:initial;">⟳ ALL</span></h2><div id="d-loc" class="d-content"></div></div>
+        <div class="d-box"><h2 style="display:flex;justify-content:space-between;align-items:center;">USERNAME<span class="proto-cycle-btn" onclick="cycleProto(event)" style="vertical-align:initial;">⟳ ALL</span></h2><div id="d-user" class="d-content"></div></div>
+        <div class="d-box"><h2 style="display:flex;justify-content:space-between;align-items:center;">PASSWORD<span class="proto-cycle-btn" onclick="cycleProto(event)" style="vertical-align:initial;">⟳ ALL</span></h2><div id="d-pass" class="d-content"></div></div>
+        <div class="d-box"><h2 style="display:flex;justify-content:space-between;align-items:center;">ISP<span class="proto-cycle-btn" onclick="cycleProto(event)" style="vertical-align:initial;">⟳ ALL</span></h2><div id="d-prov" class="d-content"></div></div>
+        <div class="d-box"><h2 style="display:flex;justify-content:space-between;align-items:center;">IP ADDRESS<span class="proto-cycle-btn" onclick="cycleProto(event)" style="vertical-align:initial;">⟳ ALL</span></h2><div id="d-ip" class="d-content"></div></div>
         <div class="d-box" id="d-box-info"><h2>STATS</h2><div id="d-details" class="d-content"></div></div>
         <div class="d-box" id="d-box-trivia"><h2>TRIVIA</h2><div id="d-trivia" class="d-content"></div></div>
         <div class="d-box" id="d-box-jokes"><h2>KNOCK-KNOCK JOKES</h2><div id="d-jokes" class="d-content" style="color:var(--neon-green); line-height:1.6;"></div></div>
@@ -404,12 +407,12 @@
     <div class="m-progress-container"><div id="m-progress-bar"></div></div>
     <div class="m-viewport" id="m-viewport">
         <div class="m-pane" id="m-pane-feed"><h2 style="display:flex;justify-content:space-between;align-items:center;">LIVE FEED: LOGIN ATTEMPTS<span id="m-feed-proto-btn" class="proto-cycle-btn" onclick="cycleProto(event)" style="vertical-align:initial;">⟳ ALL</span></h2><div id="m-feed" class="m-content"></div></div>
-        <div class="m-pane" id="m-pane-globe"><h2>GLOBE VIEW</h2><div id="m-globe-location" style="text-align:center; margin-bottom:10px;"><div id="m-globe-loc-text" style="color:var(--neon-green);"></div><div id="m-globe-loc-isp" style="color:var(--data-blue); font-size:0.85em;"></div></div><div id="m-globe-pane" class="m-content globe-pane" style="display:flex; justify-content:center; align-items:center;"></div></div>
-        <div class="m-pane" id="m-pane-loc"><h2>LOCATION</h2><div id="m-loc" class="m-content"></div></div>
-        <div class="m-pane" id="m-pane-user"><h2>USERNAME</h2><div id="m-user" class="m-content"></div></div>
-        <div class="m-pane" id="m-pane-pass"><h2>PASSWORD</h2><div id="m-pass" class="m-content"></div></div>
-        <div class="m-pane" id="m-pane-prov"><h2>ISP</h2><div id="m-prov" class="m-content"></div></div>
-        <div class="m-pane" id="m-pane-ip"><h2>IP ADDRESS</h2><div id="m-ip" class="m-content"></div></div>
+        <div class="m-pane" id="m-pane-globe"><h2 style="display:flex;justify-content:space-between;align-items:center;">GLOBE VIEW<span class="proto-cycle-btn" onclick="cycleProto(event)" style="vertical-align:initial;">⟳ ALL</span></h2><div id="m-globe-location" style="text-align:center; margin-bottom:10px;"><div id="m-globe-loc-text" style="color:var(--neon-green);"></div><div id="m-globe-loc-isp" style="color:var(--data-blue); font-size:0.85em;"></div></div><div id="m-globe-pane" class="m-content globe-pane" style="display:flex; justify-content:center; align-items:center;"></div></div>
+        <div class="m-pane" id="m-pane-loc"><h2 style="display:flex;justify-content:space-between;align-items:center;">LOCATION<span class="proto-cycle-btn" onclick="cycleProto(event)" style="vertical-align:initial;">⟳ ALL</span></h2><div id="m-loc" class="m-content"></div></div>
+        <div class="m-pane" id="m-pane-user"><h2 style="display:flex;justify-content:space-between;align-items:center;">USERNAME<span class="proto-cycle-btn" onclick="cycleProto(event)" style="vertical-align:initial;">⟳ ALL</span></h2><div id="m-user" class="m-content"></div></div>
+        <div class="m-pane" id="m-pane-pass"><h2 style="display:flex;justify-content:space-between;align-items:center;">PASSWORD<span class="proto-cycle-btn" onclick="cycleProto(event)" style="vertical-align:initial;">⟳ ALL</span></h2><div id="m-pass" class="m-content"></div></div>
+        <div class="m-pane" id="m-pane-prov"><h2 style="display:flex;justify-content:space-between;align-items:center;">ISP<span class="proto-cycle-btn" onclick="cycleProto(event)" style="vertical-align:initial;">⟳ ALL</span></h2><div id="m-prov" class="m-content"></div></div>
+        <div class="m-pane" id="m-pane-ip"><h2 style="display:flex;justify-content:space-between;align-items:center;">IP ADDRESS<span class="proto-cycle-btn" onclick="cycleProto(event)" style="vertical-align:initial;">⟳ ALL</span></h2><div id="m-ip" class="m-content"></div></div>
         <div class="m-pane" id="m-pane-details"><h2>STATS</h2><div id="m-details" class="m-content"></div></div>
         <div class="m-pane" id="m-pane-trivia"><h2>TRIVIA</h2><div id="m-trivia" class="m-content"></div></div>
         <div class="m-pane" id="m-pane-jokes"><h2>KNOCK-KNOCK JOKES</h2><div id="m-jokes" class="m-content" style="color:var(--neon-green); line-height:1.6;"></div></div>
@@ -553,7 +556,16 @@
         if (soundEnabled) { initAudio(); audioCtx.resume().then(() => playUIClick()); }
     }
 
-    const PROTO_MODES = ['ALL', 'SSH', 'TNET', 'SMTP'];
+    const PROTO_MODES = ['ALL', 'SSH', 'TNET', 'SMTP', 'MAIL', 'RDP', 'FTP'];
+    const PROTO_COLORS = {
+        ALL:  '#ffcc00',
+        SSH:  '#00ff41',
+        TNET: '#00fbff',
+        SMTP: '#ff00ff',
+        MAIL: '#00ffaa',
+        RDP:  '#ff1a1a',
+        FTP:  '#9d00ff',
+    };
     let protoModeIdx = 0;
 
     function renderLeaderboards(stats) {
@@ -583,8 +595,12 @@
         e.stopPropagation();  // don't trigger toggleSound() on the parent div
         playUIClick();
         protoModeIdx = (protoModeIdx + 1) % PROTO_MODES.length;
-        document.querySelectorAll('#d-proto-btn, #m-proto-btn, #d-feed-proto-btn, #m-feed-proto-btn').forEach(el => {
-            el.textContent = '⟳ ' + PROTO_MODES[protoModeIdx];
+        const newMode = PROTO_MODES[protoModeIdx];
+        const modeColor = PROTO_COLORS[newMode];
+        document.querySelectorAll('.proto-cycle-btn').forEach(el => {
+            el.textContent = '⟳ ' + newMode;
+            el.style.color = modeColor;
+            el.style.borderColor = modeColor;
         });
         const active = getActiveLeaderboards();
         renderLeaderboards(active);
@@ -652,11 +668,11 @@
 
     // Per-protocol leaderboard cache: keys are proto ints as strings ("0","1","2","3")
     // Maps to same structure as leaderboards above
-    const PROTO_INT = { 'SSH': 0, 'TNET': 1, 'SMTP': 2, 'RDP': 3 };
+    const PROTO_INT = { 'SSH': 0, 'TNET': 1, 'SMTP': 2, 'RDP': 3, 'MAIL': 4, 'FTP': 5 };
     let protoStatsCache = {};
 
     // Per-protocol feed arrays (newest at index 0)
-    const feedData = { ALL: [], SSH: [], TNET: [], SMTP: [] };
+    const feedData = { ALL: [], SSH: [], TNET: [], SMTP: [], MAIL: [], RDP: [], FTP: [] };
 
     function addToFeed(d) {
         const proto = (d.proto || 'SSH').toUpperCase();
@@ -1658,6 +1674,9 @@
                     feedData.SSH  = (ph.ssh  || []).slice(0, MAX_PER_PANEL);
                     feedData.TNET = (ph.tnet || []).slice(0, MAX_PER_PANEL);
                     feedData.SMTP = (ph.smtp || []).slice(0, MAX_PER_PANEL);
+                    feedData.MAIL = (ph.mail || []).slice(0, MAX_PER_PANEL);
+                    feedData.RDP  = (ph.rdp  || []).slice(0, MAX_PER_PANEL);
+                    feedData.FTP  = (ph.ftp  || []).slice(0, MAX_PER_PANEL);
                     refreshFeed();
                     const activeMode = PROTO_MODES[protoModeIdx];
                     const topKnock = feedData[activeMode]?.[0];

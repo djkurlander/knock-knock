@@ -23,6 +23,7 @@ services:
     environment:
       - REDIS_HOST=redis
     ports:
+      - "21:21"
       - "22:22"
       - "23:23"
       - "25:25"

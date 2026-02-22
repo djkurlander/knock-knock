@@ -155,6 +155,7 @@
 
             .d-box {
                 flex: 0 0 250px;
+                min-width: 0;
                 scroll-snap-align: start;
                 height: 100%;
                 border: 1px solid #333;
@@ -202,10 +203,12 @@
                 box-shadow: inset 0 0 20px rgba(0, 255, 65, 0.05), 0 0 10px rgba(0, 255, 65, 0.1); 
             }
 
-            .d-content { flex: 1; overflow-y: auto; font-size: 0.75em; scrollbar-gutter: stable; margin-right: -10px; padding-right: 6px; }
+            .d-content { flex: 1; overflow-y: auto; overflow-x: hidden; font-size: 0.75em; scrollbar-gutter: stable; margin-right: -10px; padding-right: 6px; word-break: break-word; }
             .d-content .knock { margin-bottom: 4px; padding: 3px 0 7px 0; line-height: 1.3; }
             .d-content .bar-row { margin-bottom: 0; padding: 6px 0 10px 0; }
-            .d-content .bar-label { margin-bottom: 4px; }
+            .d-content .bar-label { margin-bottom: 4px; display: flex; justify-content: space-between; gap: 4px; }
+            .d-content .bar-label > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; flex: 1; }
+            .d-content .bar-label > span:last-child { flex-shrink: 0; }
             .d-box h2 { font-size: 1.1em; }
             .d-content::-webkit-scrollbar { width: 2px; background: transparent; }
             .d-content::-webkit-scrollbar-thumb { background: transparent !important; border-radius: 10px; transition: background 0.15s ease; }
@@ -345,7 +348,7 @@
         <div class="d-header-content">
             <div class="d-header-left" onclick="toggleSound()" style="cursor:pointer;">
                 <h1>BOTS ARE KNOCKING <span class="status-dot"></span></h1>
-                <div style="font-size: 1em; color: var(--neon-green); margin-top: -8px; margin-bottom: 12px; font-style: italic;">... BUT THEY CAN'T COME IN. &nbsp;<span id="d-header-sound" style="font-style:normal; cursor:pointer;">🔈</span><span id="d-proto-btn" class="proto-cycle-btn" onclick="cycleProto(event)">⟳ ALL</span></div>
+                <div style="font-size: 1em; color: var(--neon-green); margin-top: -8px; margin-bottom: 12px; font-style: italic;">... BUT THEY CAN'T COME IN. &nbsp;<span id="d-header-sound" style="font-style:normal; cursor:pointer;">🔈</span></div>
                 <div class="d-stats">
                     <span class="stat-label">Knocks:</span>&nbsp;<span id="d-total" class="stat-value">0</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="stat-label">Per Min:</span>&nbsp;<span id="d-kpm" class="stat-value">0.00</span>
                 </div>
@@ -367,8 +370,8 @@
         <div class="d-box"><h2 style="display:flex;justify-content:space-between;align-items:center;">PASSWORD<span class="proto-cycle-btn" onclick="cycleProto(event)" style="vertical-align:initial;">⟳ ALL</span></h2><div id="d-pass" class="d-content"></div></div>
         <div class="d-box"><h2 style="display:flex;justify-content:space-between;align-items:center;">ISP<span class="proto-cycle-btn" onclick="cycleProto(event)" style="vertical-align:initial;">⟳ ALL</span></h2><div id="d-prov" class="d-content"></div></div>
         <div class="d-box"><h2 style="display:flex;justify-content:space-between;align-items:center;">IP ADDRESS<span class="proto-cycle-btn" onclick="cycleProto(event)" style="vertical-align:initial;">⟳ ALL</span></h2><div id="d-ip" class="d-content"></div></div>
-        <div class="d-box" id="d-box-info"><h2>STATS</h2><div id="d-details" class="d-content"></div></div>
-        <div class="d-box" id="d-box-trivia"><h2>TRIVIA</h2><div id="d-trivia" class="d-content"></div></div>
+        <div class="d-box" id="d-box-info"><h2 style="display:flex;justify-content:space-between;align-items:center;">STATS<span class="proto-cycle-btn" onclick="cycleProto(event)" style="vertical-align:initial;">⟳ ALL</span></h2><div id="d-details" class="d-content"></div></div>
+        <div class="d-box" id="d-box-trivia"><h2 style="display:flex;justify-content:space-between;align-items:center;">TRIVIA<span class="proto-cycle-btn" onclick="cycleProto(event)" style="vertical-align:initial;">⟳ ALL</span></h2><div id="d-trivia" class="d-content"></div></div>
         <div class="d-box" id="d-box-jokes"><h2>KNOCK-KNOCK JOKES</h2><div id="d-jokes" class="d-content" style="color:var(--neon-green); line-height:1.6;"></div></div>
         <div class="d-box"><h2>ABOUT</h2><div class="d-content" style="color:var(--neon-green); line-height:1.6;">
             <div style="font-size:1.4em; font-weight:bold; margin-bottom:20px;">KNOCK-KNOCK.NET</div>
@@ -391,7 +394,7 @@
         <div class="m-header-content">
             <div class="m-header-left" onclick="toggleSound()" style="cursor:pointer;">
                 <h1>BOTS ARE KNOCKING <span class="status-dot"></span></h1>
-                <div style="font-size: 0.85em; color: var(--neon-green); margin-top: -2px; margin-bottom: 8px; font-style: italic;">... BUT THEY CAN'T COME IN. &nbsp;<span id="m-header-sound" style="font-style:normal; cursor:pointer;">🔈</span><span id="m-proto-btn" class="proto-cycle-btn" onclick="cycleProto(event)">⟳ ALL</span></div>
+                <div style="font-size: 0.85em; color: var(--neon-green); margin-top: -2px; margin-bottom: 8px; font-style: italic;">... BUT THEY CAN'T COME IN. &nbsp;<span id="m-header-sound" style="font-style:normal; cursor:pointer;">🔈</span></div>
                 <div class="m-stat-row">
                     <span class="stat-label">Knocks:</span>&nbsp;<span id="m-total" class="stat-value">0</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="stat-label">Per Min:</span>&nbsp;<span id="m-kpm" class="stat-value">0.00</span>
                 </div>
@@ -413,8 +416,8 @@
         <div class="m-pane" id="m-pane-pass"><h2 style="display:flex;justify-content:space-between;align-items:center;">PASSWORD<span class="proto-cycle-btn" onclick="cycleProto(event)" style="vertical-align:initial;">⟳ ALL</span></h2><div id="m-pass" class="m-content"></div></div>
         <div class="m-pane" id="m-pane-prov"><h2 style="display:flex;justify-content:space-between;align-items:center;">ISP<span class="proto-cycle-btn" onclick="cycleProto(event)" style="vertical-align:initial;">⟳ ALL</span></h2><div id="m-prov" class="m-content"></div></div>
         <div class="m-pane" id="m-pane-ip"><h2 style="display:flex;justify-content:space-between;align-items:center;">IP ADDRESS<span class="proto-cycle-btn" onclick="cycleProto(event)" style="vertical-align:initial;">⟳ ALL</span></h2><div id="m-ip" class="m-content"></div></div>
-        <div class="m-pane" id="m-pane-details"><h2>STATS</h2><div id="m-details" class="m-content"></div></div>
-        <div class="m-pane" id="m-pane-trivia"><h2>TRIVIA</h2><div id="m-trivia" class="m-content"></div></div>
+        <div class="m-pane" id="m-pane-details"><h2 style="display:flex;justify-content:space-between;align-items:center;">STATS<span class="proto-cycle-btn" onclick="cycleProto(event)" style="vertical-align:initial;">⟳ ALL</span></h2><div id="m-details" class="m-content"></div></div>
+        <div class="m-pane" id="m-pane-trivia"><h2 style="display:flex;justify-content:space-between;align-items:center;">TRIVIA<span class="proto-cycle-btn" onclick="cycleProto(event)" style="vertical-align:initial;">⟳ ALL</span></h2><div id="m-trivia" class="m-content"></div></div>
         <div class="m-pane" id="m-pane-jokes"><h2>KNOCK-KNOCK JOKES</h2><div id="m-jokes" class="m-content" style="color:var(--neon-green); line-height:1.6;"></div></div>
         <div class="m-pane" id="m-pane-about"><h2>ABOUT</h2><div class="m-content" style="color:var(--neon-green); line-height:1.6;">
             <div style="font-size:1.4em; font-weight:bold; margin-bottom:20px;">KNOCK-KNOCK.NET</div>
@@ -615,6 +618,7 @@
             hideGlobeDot();
             clearGlobeLocation();
         }
+        refreshStatsAndTrivia();
     }
 
     function initAudio() {
@@ -1486,11 +1490,12 @@
         const loc = formatLocation(d);
 
         // Get rankings from leaderboards
-        const countryRank = formatRank(getRank(leaderboards.loc, d.iso, 'iso'));
-        const userRank = formatRank(getRank(leaderboards.users, d.user));
-        const passRank = formatRank(getRank(leaderboards.passwords, d.pass));
-        const ispRank = formatRank(getRank(leaderboards.providers, d.isp));
-        const ipRank = formatRank(getRank(leaderboards.ips, d.ip));
+        const activeLB = getActiveLeaderboards();
+        const countryRank = formatRank(getRank(activeLB.loc, d.iso, 'iso'));
+        const userRank = formatRank(getRank(activeLB.users, d.user));
+        const passRank = formatRank(getRank(activeLB.passwords, d.pass));
+        const ispRank = formatRank(getRank(activeLB.providers, d.isp));
+        const ipRank = formatRank(getRank(activeLB.ips, d.ip));
 
         const html = `
             <div class="info-section" style="font-size:1.1em; margin-bottom:15px; padding-bottom:10px; border-bottom:1px solid #333;">
@@ -1636,9 +1641,7 @@
                     incrementAndSort('user', d.user);
                     incrementAndSort('ip', d.ip);
                 }
-                currentKnock = d;
-                renderInfo(d);
-                scheduleTrivia(d);
+                refreshStatsAndTrivia();
                 if (knockMatchesFilter(d)) {
                     updateGlobeLocation(d);
                     rotateGlobeToLocation(d.lat, d.lng);
@@ -1687,12 +1690,7 @@
                         hideGlobeDot();
                     }
                 }
-                // Render Stats and Trivia panes with enriched last knock data
-                if (d.last_knock_stats) {
-                    currentKnock = d.last_knock_stats;
-                    renderInfo(d.last_knock_stats);
-                    scheduleTrivia(d.last_knock_stats);
-                }
+                refreshStatsAndTrivia();
             }
         };
     }
@@ -1724,38 +1722,18 @@
     document.querySelectorAll('.m-pane').forEach(p => observer.observe(p));
 
     // --- TRIVIA PANE LOGIC ---
-    const TRIVIA_MIN_DISPLAY_SECONDS = 12;
     let triviaUserMap = {};      // user -> facts array
     let triviaPassMap = {};      // pass -> facts array
     let triviaCountryMap = {};   // country -> {facts: [...], index: n}
-    let triviaLastRenderTime = 0;
-    let triviaPendingKnock = null;
-    let triviaTimeout = null;
     let triviaLoaded = false;
 
-    function scheduleTrivia(d) {
-        const now = Date.now();
-        const elapsed = (now - triviaLastRenderTime) / 1000;
-
-        if (elapsed >= TRIVIA_MIN_DISPLAY_SECONDS) {
-            // Enough time has passed, render immediately
-            renderTrivia(d);
-            triviaLastRenderTime = now;
-            triviaPendingKnock = null;
-        } else {
-            // Too soon, queue this knock
-            triviaPendingKnock = d;
-            if (!triviaTimeout) {
-                const remaining = (TRIVIA_MIN_DISPLAY_SECONDS - elapsed) * 1000;
-                triviaTimeout = setTimeout(() => {
-                    triviaTimeout = null;
-                    if (triviaPendingKnock) {
-                        renderTrivia(triviaPendingKnock);
-                        triviaLastRenderTime = Date.now();
-                        triviaPendingKnock = null;
-                    }
-                }, remaining);
-            }
+    function refreshStatsAndTrivia() {
+        const mode = PROTO_MODES[protoModeIdx];
+        const topKnock = feedData[mode]?.[0] || null;
+        currentKnock = topKnock;
+        if (topKnock) {
+            renderInfo(topKnock);
+            renderTrivia(topKnock);
         }
     }
 
@@ -1826,7 +1804,7 @@
                 });
                 triviaLoaded = true;
                 // Re-render with current knock if available
-                if (currentKnock) renderTrivia(currentKnock);
+                if (currentKnock) refreshStatsAndTrivia();
             })
             .catch(err => console.error('Failed to load country trivia:', err));
     }

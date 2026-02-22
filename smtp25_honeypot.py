@@ -7,6 +7,7 @@ import time
 
 BLOCKLIST_FILE = os.environ.get('DB_DIR', 'data') + '/blocklist.txt'
 BLOCKLIST_RELOAD_INTERVAL = 60
+MAX_MESSAGES_PER_SESSION = 10
 
 _blocklist_cache = set()
 _blocklist_last_load = 0
@@ -53,6 +54,7 @@ def handle_connection(client_sock, client_ip):
     mail_from = None
     rcpt_to = None
     subject = None
+    messages = 0
     try:
         client_sock.settimeout(30)
         print(f"🔌 MAIL connect {client_ip}", flush=True)
@@ -112,6 +114,11 @@ def handle_connection(client_sock, client_ip):
                     knock["subject"] = subject
                 print(json.dumps(knock), flush=True)
                 mail_from = rcpt_to = subject = None  # ready for next message
+
+                messages += 1
+                if messages >= MAX_MESSAGES_PER_SESSION:
+                    client_sock.sendall(b"421 4.7.0 Try again later\r\n")
+                    break
 
             elif upper == 'QUIT':
                 client_sock.sendall(b"221 Bye\r\n")

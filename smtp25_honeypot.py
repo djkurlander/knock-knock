@@ -104,7 +104,14 @@ def handle_connection(client_sock, client_ip):
                         break
 
                 client_sock.sendall(b"250 OK: Message queued\r\n")
-                break  # done — emit knock in finally
+
+                # Emit knock for this message, then reset for next MAIL FROM
+                knock = {"type": "KNOCK", "proto": "MAIL",
+                         "ip": client_ip, "user": mail_from, "pass": rcpt_to or ''}
+                if subject:
+                    knock["subject"] = subject
+                print(json.dumps(knock), flush=True)
+                mail_from = rcpt_to = subject = None  # ready for next message
 
             elif upper == 'QUIT':
                 client_sock.sendall(b"221 Bye\r\n")
@@ -116,6 +123,7 @@ def handle_connection(client_sock, client_ip):
     except Exception:
         pass
     finally:
+        # Emit for incomplete sessions (MAIL FROM set but DATA never reached)
         if mail_from is not None:
             knock = {"type": "KNOCK", "proto": "MAIL",
                      "ip": client_ip, "user": mail_from, "pass": rcpt_to or ''}

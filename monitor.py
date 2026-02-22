@@ -212,6 +212,10 @@ def monitor(save_knocks=False):
                                  stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True),
         "SMTP": subprocess.Popen([sys.executable, "-u", "smtp_honeypot.py"],
                                  stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True),
+        "MAIL": subprocess.Popen([sys.executable, "-u", "smtp25_honeypot.py"],
+                                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True),
+        "RDP":  subprocess.Popen([sys.executable, "-u", "stub_honeypot.py", "--port", "3389", "--proto", "RDP"],
+                                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True),
     }
 
     knock_queue = queue.Queue()
@@ -259,6 +263,8 @@ def monitor(save_knocks=False):
                 "iso": geo['iso'], "isp": geo['isp'], "asn": geo['asn'],
                 "lat": geo['lat'], "lng": geo['lng']
             }
+            if knock.get("subject"):
+                package["subject"] = knock["subject"]
             try:
                 package.update(get_intel_stats_before_update(package))
                 log_to_maximalist_db(package, save_knocks=save_knocks)
@@ -275,7 +281,10 @@ def monitor(save_knocks=False):
                 r.set("knock:last_lat", geo['lat'])
                 r.set("knock:last_lng", geo['lng'])
             r.publish("radiation_stream", json.dumps(package))
-            print(f"📡 {knock.get('proto', 'SSH')} {geo['iso']} | {user}:{pw} via {geo['isp']}")
+            if package.get("subject"):
+                print(f"📧 MAIL {geo['iso']} | {user} → {pw} | {package['subject'][:60]} via {geo['isp']}")
+            else:
+                print(f"📡 {knock.get('proto', 'SSH')} {geo['iso']} | {user}:{pw} via {geo['isp']}")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Knock-Knock Monitor")

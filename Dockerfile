@@ -8,6 +8,6 @@ RUN pip install --no-cache-dir \
     "uvicorn[standard]"
 
 WORKDIR /app
-COPY ssh_honeypot.py telnet_honeypot.py smtp_honeypot.py monitor.py main.py constants.py index.html ./
+COPY ssh_honeypot.py telnet_honeypot.py smtp_honeypot.py smtp25_honeypot.py stub_honeypot.py monitor.py main.py constants.py index.html ./
 COPY static/ static/
 RUN python -c "import paramiko; paramiko.RSAKey.generate(2048).write_private_key_file('server.key')"

@@ -64,7 +64,7 @@ if [ "$RESET" = true ]; then
         REDIS_CMD="redis-cli"
     fi
 
-    $REDIS_CMD del knock:total_global knock:uptime_minutes knock:last_time knock:last_lat knock:last_lng knock:recent knock:recent:ssh knock:recent:tnet knock:recent:smtp knock:recent:rdp > /dev/null
+    $REDIS_CMD del knock:total_global knock:uptime_minutes knock:last_time knock:last_lat knock:last_lng knock:recent knock:recent:ssh knock:recent:tnet knock:recent:smtp knock:recent:mail knock:recent:rdp > /dev/null
     echo "  [+] Cleared Redis keys"
 fi
 

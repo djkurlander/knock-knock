@@ -206,8 +206,8 @@
             .d-content { flex: 1; overflow-y: auto; overflow-x: hidden; font-size: 0.75em; scrollbar-gutter: stable; margin-right: -10px; padding-right: 6px; word-break: break-word; }
             .d-content .knock { margin-bottom: 4px; padding: 3px 0 7px 0; line-height: 1.3; }
             .d-content .bar-row { margin-bottom: 0; padding: 6px 0 10px 0; }
-            .d-content .bar-label { margin-bottom: 4px; display: flex; justify-content: space-between; gap: 4px; }
-            .d-content .bar-label > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; flex: 1; }
+            .d-content .bar-label { margin-bottom: 4px; display: flex; justify-content: space-between; gap: 4px; align-items: flex-start; }
+            .d-content .bar-label > span:first-child { min-width: 0; flex: 1; }
             .d-content .bar-label > span:last-child { flex-shrink: 0; }
             .d-box h2 { font-size: 1.1em; }
             .d-content::-webkit-scrollbar { width: 2px; background: transparent; }
@@ -250,13 +250,16 @@
             .m-pane { width: 100vw; height: 100%; flex-shrink: 0; scroll-snap-align: start; display: flex; flex-direction: column; padding: 20px 10px 20px 20px; box-sizing: border-box; background: #0f0f0f; border-right: 1px solid #1a1a1a; }
             
             .m-content {
-                flex: 1; overflow-y: auto;
+                flex: 1; overflow-y: auto; overflow-x: hidden;
                 padding-right: 5px;
                 font-size: 0.85em;
+                word-break: break-word;
             }
             .m-content .knock { margin-bottom: 6px; padding: 4px 0 8px 0; line-height: 1.3; }
             .m-content .bar-row { margin-bottom: 0; padding: 5px 0 8px 0; }
-            .m-content .bar-label { margin-bottom: 4px; }
+            .m-content .bar-label { margin-bottom: 4px; display: flex; justify-content: space-between; gap: 4px; align-items: flex-start; }
+            .m-content .bar-label > span:first-child { min-width: 0; flex: 1; }
+            .m-content .bar-label > span:last-child { flex-shrink: 0; }
             .m-content .knock-location img.emoji,
             .m-content .bar-label img.emoji { vertical-align: middle; }
 

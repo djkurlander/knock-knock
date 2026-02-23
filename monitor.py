@@ -157,6 +157,13 @@ def get_intel_stats_before_update(data):
         conn.close()
     return stats
 
+def sanitize_credential(s):
+    if not s:
+        return s
+    if '\ufffd' in s or not s.isprintable():
+        return '<cryptic binary>'
+    return s
+
 def get_geo_maximal(ip, city_reader, asn_reader):
     geo = {"iso": "XX", "country": "Unknown", "city": "Unknown", "region": None, "isp": "Unknown", "asn": None, "lat": None, "lng": None}
     try:
@@ -257,6 +264,8 @@ def monitor(save_knocks=False):
             continue
         if knock.get("type") == "KNOCK":
             ip, user, pw = knock["ip"], knock["user"], knock["pass"]
+            user = sanitize_credential(user)
+            pw   = sanitize_credential(pw)
             geo = get_geo_maximal(ip, c_reader, a_reader)
             package = {
                 "ip": ip, "user": user, "pass": pw,

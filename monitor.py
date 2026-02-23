@@ -265,7 +265,7 @@ def monitor(save_knocks=False):
 
     threading.Thread(target=heartbeat_worker, args=(r,), daemon=True).start()
 
-    print("🚀 Maximalist Monitor Active...")
+    print("🚀 Knock-Knock Monitor Active...")
 
     while True:
         line = knock_queue.get()

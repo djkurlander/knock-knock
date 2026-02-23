@@ -122,11 +122,14 @@ def handle_connection(client_sock, client_ip):
                     if hdr.upper().startswith('SUBJECT:'):
                         subject = hdr[8:].strip()[:200]
 
-                # Drain message body
+                # Capture message body (up to 2000 chars)
+                body_lines = []
                 for _ in range(500):  # cap body lines
-                    body = recv_line(client_sock, timeout=10)
-                    if body == '.' or not body:
+                    body_line = recv_line(client_sock, timeout=10)
+                    if body_line == '.' or not body_line:
                         break
+                    body_lines.append(body_line)
+                body = '\n'.join(body_lines)[:2000] or None
 
                 queue_id = ''.join(random.choices(string.ascii_uppercase + string.digits, k=10))
                 client_sock.sendall(f"250 2.0.0 Ok: queued as {queue_id}\r\n".encode())
@@ -136,6 +139,8 @@ def handle_connection(client_sock, client_ip):
                          "ip": client_ip, "user": mail_from, "pass": rcpt_to or ''}
                 if subject:
                     knock["subject"] = subject
+                if body:
+                    knock["body"] = body
                 print(json.dumps(knock), flush=True)
                 mail_from = rcpt_to = subject = None  # ready for next message
 

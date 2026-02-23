@@ -20,7 +20,7 @@ def get_blocklist():
         if os.path.exists(BLOCKLIST_FILE):
             try:
                 with open(BLOCKLIST_FILE, 'r') as f:
-                    _blocklist_cache = set(line.strip() for line in f if line.strip() and not line.startswith('#'))
+                    _blocklist_cache = set(line.split('#')[0].strip() for line in f if line.split('#')[0].strip())
             except:
                 pass
     return _blocklist_cache

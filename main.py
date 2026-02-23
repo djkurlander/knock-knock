@@ -284,6 +284,7 @@ async def redis_listener():
 
 @app.on_event("startup")
 async def startup_event():
+    print("🚀 Knock-Knock Web Active...", flush=True)
     asyncio.create_task(redis_listener())
     asyncio.create_task(stats_cache.update_and_broadcast())
 

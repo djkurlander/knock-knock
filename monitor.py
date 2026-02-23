@@ -133,26 +133,42 @@ def get_intel_stats_before_update(data):
     conn = sqlite3.connect(DB_PATH, timeout=10)
     cur = conn.cursor()
     stats = {}
+    proto_int = PROTO.get(data.get('proto', 'SSH'), 0)
     try:
         cur.execute("SELECT hits, last_seen FROM country_intel WHERE iso_code=?", (data['iso'],))
         row = cur.fetchone()
         stats['country_hits'], stats['country_last'] = (row[0] + 1, row[1]) if row else (1, None)
+        cur.execute("SELECT hits, last_seen FROM country_intel_proto WHERE iso_code=? AND proto=?", (data['iso'], proto_int))
+        row = cur.fetchone()
+        stats['country_hits_proto'], stats['country_last_proto'] = (row[0] + 1, row[1]) if row else (1, None)
 
         cur.execute("SELECT hits, last_seen FROM user_intel WHERE username=?", (data['user'],))
         row = cur.fetchone()
         stats['user_hits'], stats['user_last'] = (row[0] + 1, row[1]) if row else (1, None)
+        cur.execute("SELECT hits, last_seen FROM user_intel_proto WHERE username=? AND proto=?", (data['user'], proto_int))
+        row = cur.fetchone()
+        stats['user_hits_proto'], stats['user_last_proto'] = (row[0] + 1, row[1]) if row else (1, None)
 
         cur.execute("SELECT hits, last_seen FROM pass_intel WHERE password=?", (data['pass'],))
         row = cur.fetchone()
         stats['pass_hits'], stats['pass_last'] = (row[0] + 1, row[1]) if row else (1, None)
+        cur.execute("SELECT hits, last_seen FROM pass_intel_proto WHERE password=? AND proto=?", (data['pass'], proto_int))
+        row = cur.fetchone()
+        stats['pass_hits_proto'], stats['pass_last_proto'] = (row[0] + 1, row[1]) if row else (1, None)
 
         cur.execute("SELECT hits, last_seen FROM isp_intel WHERE isp=?", (data['isp'],))
         row = cur.fetchone()
         stats['isp_hits'], stats['isp_last'] = (row[0] + 1, row[1]) if row else (1, None)
+        cur.execute("SELECT hits, last_seen FROM isp_intel_proto WHERE isp=? AND proto=?", (data['isp'], proto_int))
+        row = cur.fetchone()
+        stats['isp_hits_proto'], stats['isp_last_proto'] = (row[0] + 1, row[1]) if row else (1, None)
 
         cur.execute("SELECT hits, last_seen FROM ip_intel WHERE ip=?", (data['ip'],))
         row = cur.fetchone()
         stats['ip_hits'], stats['ip_last'] = (row[0] + 1, row[1]) if row else (1, None)
+        cur.execute("SELECT hits, last_seen FROM ip_intel_proto WHERE ip=? AND proto=?", (data['ip'], proto_int))
+        row = cur.fetchone()
+        stats['ip_hits_proto'], stats['ip_last_proto'] = (row[0] + 1, row[1]) if row else (1, None)
     finally:
         conn.close()
     return stats

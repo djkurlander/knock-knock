@@ -1509,6 +1509,19 @@
         const ispRank = formatRank(getRank(activeLB.providers, d.isp));
         const ipRank = formatRank(getRank(activeLB.ips, d.ip));
 
+        // Use per-protocol stats when a protocol filter is active
+        const filtered = PROTO_MODES[protoModeIdx] !== 'ALL';
+        const countryHits = filtered ? (d.country_hits_proto ?? d.country_hits) : d.country_hits;
+        const countryLast = filtered ? (d.country_last_proto ?? d.country_last) : d.country_last;
+        const userHits    = filtered ? (d.user_hits_proto    ?? d.user_hits)    : d.user_hits;
+        const userLast    = filtered ? (d.user_last_proto    ?? d.user_last)    : d.user_last;
+        const passHits    = filtered ? (d.pass_hits_proto    ?? d.pass_hits)    : d.pass_hits;
+        const passLast    = filtered ? (d.pass_last_proto    ?? d.pass_last)    : d.pass_last;
+        const ispHits     = filtered ? (d.isp_hits_proto     ?? d.isp_hits)     : d.isp_hits;
+        const ispLast     = filtered ? (d.isp_last_proto     ?? d.isp_last)     : d.isp_last;
+        const ipHits      = filtered ? (d.ip_hits_proto      ?? d.ip_hits)      : d.ip_hits;
+        const ipLast      = filtered ? (d.ip_last_proto      ?? d.ip_last)      : d.ip_last;
+
         const html = `
             <div class="info-section" style="font-size:1.1em; margin-bottom:15px; padding-bottom:10px; border-bottom:1px solid #333;">
                 <div class="knock-location"><span style="display:flex;align-items:center;gap:0.3em"><strong>${getFlag(d.iso)}</strong> <strong>${loc}</strong></span>${getProtoBadge(d.proto)}</div>
@@ -1518,28 +1531,28 @@
             </div>
             <div class="info-item" style="margin-bottom:12px;">
                 <div><span style="color:var(--ui-label)">country:</span> <span style="color:var(--neon-green)">${d.country}${countryRank}</span></div>
-                <div><span style="color:var(--ui-label)">count:</span> <span style="color:var(--neon-green)">${(d.country_hits || 0).toLocaleString()}</span></div>
-                <div><span style="color:var(--ui-label)">last seen:</span> <span style="color:var(--neon-green)">${formatTimeSince(d.country_last)}</span></div>
+                <div><span style="color:var(--ui-label)">count:</span> <span style="color:var(--neon-green)">${(countryHits || 0).toLocaleString()}</span></div>
+                <div><span style="color:var(--ui-label)">last seen:</span> <span style="color:var(--neon-green)">${formatTimeSince(countryLast)}</span></div>
             </div>
             <div class="info-item" style="margin-bottom:12px;">
                 <div><span style="color:var(--ui-label)">user:</span> <span style="color:var(--neon-green)">${d.user}${userRank}</span></div>
-                <div><span style="color:var(--ui-label)">count:</span> <span style="color:var(--neon-green)">${(d.user_hits || 0).toLocaleString()}</span></div>
-                <div><span style="color:var(--ui-label)">last seen:</span> <span style="color:var(--neon-green)">${formatTimeSince(d.user_last)}</span></div>
+                <div><span style="color:var(--ui-label)">count:</span> <span style="color:var(--neon-green)">${(userHits || 0).toLocaleString()}</span></div>
+                <div><span style="color:var(--ui-label)">last seen:</span> <span style="color:var(--neon-green)">${formatTimeSince(userLast)}</span></div>
             </div>
             <div class="info-item" style="margin-bottom:12px;">
                 <div><span style="color:var(--ui-label)">password:</span> <span style="color:var(--neon-green)">${d.pass}${passRank}</span></div>
-                <div><span style="color:var(--ui-label)">count:</span> <span style="color:var(--neon-green)">${(d.pass_hits || 0).toLocaleString()}</span></div>
-                <div><span style="color:var(--ui-label)">last seen:</span> <span style="color:var(--neon-green)">${formatTimeSince(d.pass_last)}</span></div>
+                <div><span style="color:var(--ui-label)">count:</span> <span style="color:var(--neon-green)">${(passHits || 0).toLocaleString()}</span></div>
+                <div><span style="color:var(--ui-label)">last seen:</span> <span style="color:var(--neon-green)">${formatTimeSince(passLast)}</span></div>
             </div>
             <div class="info-item" style="margin-bottom:12px;">
                 <div><span style="color:var(--ui-label)">ISP:</span> <span style="color:var(--neon-green)">${d.isp}${ispRank}</span></div>
-                <div><span style="color:var(--ui-label)">count:</span> <span style="color:var(--neon-green)">${(d.isp_hits || 0).toLocaleString()}</span></div>
-                <div><span style="color:var(--ui-label)">last seen:</span> <span style="color:var(--neon-green)">${formatTimeSince(d.isp_last)}</span></div>
+                <div><span style="color:var(--ui-label)">count:</span> <span style="color:var(--neon-green)">${(ispHits || 0).toLocaleString()}</span></div>
+                <div><span style="color:var(--ui-label)">last seen:</span> <span style="color:var(--neon-green)">${formatTimeSince(ispLast)}</span></div>
             </div>
             <div class="info-item" style="margin-bottom:12px;">
                 <div><span style="color:var(--ui-label)">IP:</span> <span style="color:var(--neon-green)">${formatIP(d.ip)}${ipRank}</span></div>
-                <div><span style="color:var(--ui-label)">count:</span> <span style="color:var(--neon-green)">${(d.ip_hits || 0).toLocaleString()}</span></div>
-                <div><span style="color:var(--ui-label)">last seen:</span> <span style="color:var(--neon-green)">${formatTimeSince(d.ip_last)}</span></div>
+                <div><span style="color:var(--ui-label)">count:</span> <span style="color:var(--neon-green)">${(ipHits || 0).toLocaleString()}</span></div>
+                <div><span style="color:var(--ui-label)">last seen:</span> <span style="color:var(--neon-green)">${formatTimeSince(ipLast)}</span></div>
             </div>
         `;
         ['d-details', 'm-details'].forEach(id => {

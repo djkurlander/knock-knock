@@ -93,24 +93,38 @@ def read_x224_packet(sock, timeout=10):
 
 def extract_cookie_username(data):
     """
-    Extract username from X.224 CR cookie.
-    Cookie: mstshvcookie: msts=DOMAIN\\username\\r\\n
+    Extract username from X.224 CR cookie. Two formats:
+      Standard:   Cookie: mstshash=username\\r\\n
+      TS Gateway: mstshvcookie: msts=DOMAIN\\username\\r\\n
     Returns (username, domain) or (None, None).
     """
     try:
         text = data.decode('ascii', errors='replace')
+
+        # Standard Windows RDP client cookie (most common)
+        marker = 'Cookie: mstshash='
+        if marker in text:
+            start = text.index(marker) + len(marker)
+            end = text.find('\r\n', start)
+            if end == -1:
+                end = start + 128
+            username = text[start:end].strip()
+            return (username, '') if username else (None, None)
+
+        # TS Gateway redirect token (domain\username)
         marker = 'mstshvcookie: msts='
-        if marker not in text:
-            return None, None
-        start = text.index(marker) + len(marker)
-        end = text.find('\r\n', start)
-        if end == -1:
-            end = start + 128
-        value = text[start:end].strip()
-        if '\\' in value:
-            domain, username = value.split('\\', 1)
-            return username, domain
-        return value, ''
+        if marker in text:
+            start = text.index(marker) + len(marker)
+            end = text.find('\r\n', start)
+            if end == -1:
+                end = start + 128
+            value = text[start:end].strip()
+            if '\\' in value:
+                domain, username = value.split('\\', 1)
+                return username, domain
+            return value, ''
+
+        return None, None
     except Exception:
         return None, None
 

@@ -13,8 +13,13 @@ import time
 import struct
 import subprocess
 import sys
+import random
+import string
 
 from impacket import ntlm
+
+# Randomised Windows 10-style computer name, generated once at startup
+_COMPUTER_NAME = 'DESKTOP-' + ''.join(random.choices(string.ascii_uppercase + string.digits, k=7))
 
 BLOCKLIST_FILE = os.environ.get('DB_DIR', 'data') + '/blocklist.txt'
 BLOCKLIST_RELOAD_INTERVAL = 60
@@ -163,40 +168,63 @@ def find_ntlmssp(data):
     idx = data.find(b'NTLMSSP\x00')
     return data[idx:] if idx >= 0 else None
 
+def build_tsrequest_error(ntstatus=0xC000006D, version=6):
+    """Build a CredSSP TSRequest conveying NLA auth failure (STATUS_LOGON_FAILURE)."""
+    ver   = asn1_ctx(0, asn1_int(version))
+    # NTSTATUS as 4-byte big-endian; high bit set means negative in DER — correct for 0xC*
+    err   = b'\x02\x04' + struct.pack('>I', ntstatus)
+    error = asn1_ctx(4, err)
+    return asn1_seq(ver + error)
+
 # --- NTLM challenge (Type 2) builder ---
 
 def build_ntlm_challenge():
-    """Build a minimal NTLMSSP CHALLENGE (Type 2) message manually."""
-    domain = 'WORKGROUP'.encode('utf-16-le')
+    """Build a realistic NTLMSSP CHALLENGE (Type 2) message matching Windows 10."""
+    domain   = 'WORKGROUP'.encode('utf-16-le')
+    computer = _COMPUTER_NAME.encode('utf-16-le')
 
-    # TargetInfo AV pairs: MsvAvNbDomainName (id=2) + MsvAvEOL (id=0)
-    target_info  = struct.pack('<HH', 2, len(domain)) + domain
-    target_info += struct.pack('<HH', 0, 0)
+    def av(av_id, value):
+        return struct.pack('<HH', av_id, len(value)) + value
+
+    # Windows FILETIME: 100-nanosecond intervals since 1601-01-01
+    filetime = int((time.time() + 11644473600) * 10_000_000)
+
+    target_info  = av(1, computer)                           # MsvAvNbComputerName
+    target_info += av(2, domain)                             # MsvAvNbDomainName
+    target_info += av(3, computer)                           # MsvAvDnsComputerName
+    target_info += av(4, domain)                             # MsvAvDnsDomainName
+    target_info += av(7, struct.pack('<Q', filetime))        # MsvAvTimestamp
+    target_info += struct.pack('<HH', 0, 0)                  # MsvAvEOL
 
     flags = (
         0x00000001 |  # NTLMSSP_NEGOTIATE_UNICODE
         0x00000004 |  # NTLMSSP_REQUEST_TARGET
         0x00000200 |  # NTLMSSP_NEGOTIATE_NTLM
         0x00008000 |  # NTLMSSP_NEGOTIATE_ALWAYS_SIGN
-        0x00020000 |  # NTLMSSP_TARGET_TYPE_DOMAIN
-        0x00200000 |  # NTLMSSP_NEGOTIATE_EXTENDED_SESSIONSECURITY
+        0x00010000 |  # NTLMSSP_TARGET_TYPE_SERVER (standalone/workgroup)
+        0x00080000 |  # NTLMSSP_NEGOTIATE_EXTENDED_SESSIONSECURITY
         0x00800000 |  # NTLMSSP_NEGOTIATE_TARGET_INFO
+        0x02000000 |  # NTLMSSP_NEGOTIATE_VERSION
         0x20000000 |  # NTLMSSP_NEGOTIATE_128
+        0x40000000 |  # NTLMSSP_NEGOTIATE_KEY_EXCH
         0x80000000    # NTLMSSP_NEGOTIATE_56
     )
 
-    # Fixed header without version = 48 bytes
-    domain_offset      = 48
+    # With version field, header is 56 bytes (48 fixed + 8 version)
+    domain_offset      = 56
     target_info_offset = domain_offset + len(domain)
 
-    msg  = b'NTLMSSP\x00'                                              # Signature
-    msg += struct.pack('<I', 2)                                        # MessageType=2
-    msg += struct.pack('<HHI', len(domain), len(domain), domain_offset)  # TargetNameFields
-    msg += struct.pack('<I', flags)                                    # NegotiateFlags
+    # Version: Windows 10.0, build 19041, NTLM revision 15
+    version = struct.pack('<BBH', 10, 0, 19041) + b'\x00\x00\x00\x0f'
+
+    msg  = b'NTLMSSP\x00'
+    msg += struct.pack('<I', 2)
+    msg += struct.pack('<HHI', len(domain), len(domain), domain_offset)
+    msg += struct.pack('<I', flags)
     msg += os.urandom(8)                                               # ServerChallenge
     msg += b'\x00' * 8                                                 # Reserved
-    msg += struct.pack('<HHI',
-                       len(target_info), len(target_info), target_info_offset)  # TargetInfoFields
+    msg += struct.pack('<HHI', len(target_info), len(target_info), target_info_offset)
+    msg += version
     msg += domain
     msg += target_info
     return msg
@@ -255,7 +283,15 @@ def do_nla(raw_sock):
         if not ntlm_auth:
             return None, None
 
-        return parse_ntlm_authenticate(ntlm_auth)
+        username, domain = parse_ntlm_authenticate(ntlm_auth)
+
+        # Step 4: send STATUS_LOGON_FAILURE — real Windows does this; silent close is a fingerprint
+        try:
+            tls.sendall(build_tsrequest_error())
+        except Exception:
+            pass
+
+        return username, domain
 
     except Exception:
         return None, None

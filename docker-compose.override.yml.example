@@ -8,6 +8,11 @@ services:
   # honeypot-monitor:
   #   command: python -u monitor.py --save-knocks
 
+  ## Auto-add IPs to blocklist.txt after N total hits (disabled by default)
+  ## Note: counts all-time hits, so existing high-hit IPs will be blocked on their next knock
+  # honeypot-monitor:
+  #   command: python -u monitor.py --max-knocks 5000
+
   ## HTTPS — uncomment the block below, then place certs in certs/
   # web:
   #   environment:

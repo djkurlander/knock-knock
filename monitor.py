@@ -15,6 +15,7 @@ from datetime import datetime
 GEOIP_CITY_PATH = '/usr/share/GeoIP/GeoLite2-City.mmdb'
 GEOIP_ASN_PATH = '/usr/share/GeoIP/GeoLite2-ASN.mmdb'
 DB_PATH = os.environ.get('DB_DIR', 'data') + '/knock_knock.db'
+BLOCKLIST_FILE = os.environ.get('DB_DIR', 'data') + '/blocklist.txt'
 
 def reset_all():
     """Wipes the SQLite database and clears relevant Redis keys."""
@@ -150,7 +151,16 @@ def get_geo_maximal(ip, city_reader, asn_reader):
         pass
     return geo
 
-def monitor(save_knocks=False):
+def add_to_blocklist(ip):
+    """Append ip to blocklist.txt with a timestamp comment."""
+    try:
+        with open(BLOCKLIST_FILE, 'a') as f:
+            f.write(f"{ip}  # auto-blocked {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+        print(f"🚫 Auto-blocked {ip}", flush=True)
+    except Exception as e:
+        print(f"⚠️ Could not write blocklist: {e}")
+
+def monitor(save_knocks=False, max_knocks=None):
     init_db()
     r = redis.Redis(host=os.environ.get('REDIS_HOST', 'localhost'), port=6379, db=0, decode_responses=True)
     while True:
@@ -162,6 +172,16 @@ def monitor(save_knocks=False):
         except Exception as e:
             print(f"⏳ Waiting for GeoIP databases... ({e})")
             time.sleep(5)
+
+    # Seed blocked_ips set from existing blocklist to avoid duplicate writes
+    blocked_ips = set()
+    if max_knocks and os.path.exists(BLOCKLIST_FILE):
+        try:
+            with open(BLOCKLIST_FILE) as f:
+                blocked_ips = {line.split()[0] for line in f if line.strip() and not line.startswith('#')}
+            print(f"🚫 Loaded {len(blocked_ips)} blocked IPs from blocklist")
+        except Exception as e:
+            print(f"⚠️ Could not load blocklist: {e}")
 
     # Seed Redis totals from SQLite on startup to stay in sync
     try:
@@ -224,6 +244,9 @@ def monitor(save_knocks=False):
                 r.set("knock:last_lng", geo['lng'])
             r.publish("radiation_stream", json.dumps(package))
             print(f"📡 {geo['iso']} | {user}:{pw} via {geo['isp']}")
+            if max_knocks and package.get('ip_hits', 0) >= max_knocks and ip not in blocked_ips:
+                blocked_ips.add(ip)
+                add_to_blocklist(ip)
 
     # Honeypot exited — log why and exit so systemd restarts us
     exit_code = honeypot_proc.wait()
@@ -234,6 +257,10 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Knock-Knock Monitor")
     parser.add_argument("--reset-all", action="store_true", help="Delete DB and clear Redis")
     parser.add_argument("--save-knocks", action="store_true", help="Save individual knocks to SQLite (off by default)")
+    parser.add_argument("--max-knocks", type=int, default=None, metavar="N",
+                        help="Auto-add IP to blocklist after N knocks (default: disabled). "
+                             "Counts against all-time ip_intel hits, so existing high-hit IPs "
+                             "will be blocked on their next knock.")
     args = parser.parse_args()
     if args.reset_all: reset_all()
-    monitor(save_knocks=args.save_knocks)
+    monitor(save_knocks=args.save_knocks, max_knocks=args.max_knocks)

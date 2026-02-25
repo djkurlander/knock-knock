@@ -18,7 +18,8 @@ DB_PATH = os.environ.get('DB_DIR', 'data') + '/knock_knock.db'
 BLOCKLIST_FILE = os.environ.get('DB_DIR', 'data') + '/blocklist.txt'
 
 def reset_all():
-    """Wipes the SQLite database and clears relevant Redis keys."""
+    """Wipes the SQLite database and clears relevant Redis keys.
+    NOTE: blocklist.txt and knock:blocked are intentionally preserved — use --reset-blocklist to clear them."""
     print("🧹 Resetting all data as requested...")
     if os.path.exists(DB_PATH):
         try:
@@ -32,6 +33,25 @@ def reset_all():
         for key in keys_to_clear:
             r.delete(key)
         print("   [+] Cleared Redis keys")
+        print("   [i] Blocklist preserved (use --reset-blocklist to clear)")
+    except Exception as e:
+        print(f"   [!] Error clearing Redis: {e}")
+
+def reset_blocklist():
+    """Deletes blocklist.txt and clears knock:blocked from Redis."""
+    print("🧹 Resetting blocklist...")
+    if os.path.exists(BLOCKLIST_FILE):
+        try:
+            os.remove(BLOCKLIST_FILE)
+            print(f"   [+] Deleted {BLOCKLIST_FILE}")
+        except Exception as e:
+            print(f"   [!] Error deleting {BLOCKLIST_FILE}: {e}")
+    else:
+        print(f"   [i] {BLOCKLIST_FILE} does not exist, skipping")
+    try:
+        r = redis.Redis(host=os.environ.get('REDIS_HOST', 'localhost'), port=6379, db=0, decode_responses=True)
+        r.delete("knock:blocked")
+        print("   [+] Cleared knock:blocked from Redis")
     except Exception as e:
         print(f"   [!] Error clearing Redis: {e}")
 
@@ -151,11 +171,12 @@ def get_geo_maximal(ip, city_reader, asn_reader):
         pass
     return geo
 
-def add_to_blocklist(ip):
-    """Append ip to blocklist.txt with a timestamp comment."""
+def add_to_blocklist(ip, r):
+    """Append ip to blocklist.txt and add to Redis knock:blocked set."""
     try:
         with open(BLOCKLIST_FILE, 'a') as f:
             f.write(f"{ip}  # auto-blocked {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+        r.sadd("knock:blocked", ip)
         print(f"🚫 Auto-blocked {ip}", flush=True)
     except Exception as e:
         print(f"⚠️ Could not write blocklist: {e}")
@@ -173,13 +194,14 @@ def monitor(save_knocks=False, max_knocks=None):
             print(f"⏳ Waiting for GeoIP databases... ({e})")
             time.sleep(5)
 
-    # Seed blocked_ips set from existing blocklist to avoid duplicate writes
-    blocked_ips = set()
-    if max_knocks and os.path.exists(BLOCKLIST_FILE):
+    # Seed knock:blocked Redis set from blocklist file
+    if os.path.exists(BLOCKLIST_FILE):
         try:
             with open(BLOCKLIST_FILE) as f:
-                blocked_ips = {line.split()[0] for line in f if line.strip() and not line.startswith('#')}
-            print(f"🚫 Loaded {len(blocked_ips)} blocked IPs from blocklist")
+                ips = [line.split('#')[0].strip() for line in f if line.split('#')[0].strip()]
+            if ips:
+                r.sadd("knock:blocked", *ips)
+            print(f"🚫 Loaded {len(ips)} blocked IP(s) into Redis (knock:blocked)")
         except Exception as e:
             print(f"⚠️ Could not load blocklist: {e}")
 
@@ -244,9 +266,8 @@ def monitor(save_knocks=False, max_knocks=None):
                 r.set("knock:last_lng", geo['lng'])
             r.publish("radiation_stream", json.dumps(package))
             print(f"📡 {geo['iso']} | {user}:{pw} via {geo['isp']}")
-            if max_knocks and package.get('ip_hits', 0) >= max_knocks and ip not in blocked_ips:
-                blocked_ips.add(ip)
-                add_to_blocklist(ip)
+            if max_knocks and package.get('ip_hits', 0) >= max_knocks and not r.sismember("knock:blocked", ip):
+                add_to_blocklist(ip, r)
 
     # Honeypot exited — log why and exit so systemd restarts us
     exit_code = honeypot_proc.wait()
@@ -255,7 +276,8 @@ def monitor(save_knocks=False, max_knocks=None):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Knock-Knock Monitor")
-    parser.add_argument("--reset-all", action="store_true", help="Delete DB and clear Redis")
+    parser.add_argument("--reset-all", action="store_true", help="Delete DB and clear Redis (blocklist is preserved; use --reset-blocklist to clear it)")
+    parser.add_argument("--reset-blocklist", action="store_true", help="Delete blocklist.txt and clear knock:blocked from Redis")
     parser.add_argument("--save-knocks", action="store_true", help="Save individual knocks to SQLite (off by default)")
     parser.add_argument("--max-knocks", type=int, default=None, metavar="N",
                         help="Auto-add IP to blocklist after N knocks (default: disabled). "
@@ -263,4 +285,5 @@ if __name__ == "__main__":
                              "will be blocked on their next knock.")
     args = parser.parse_args()
     if args.reset_all: reset_all()
+    if args.reset_blocklist: reset_blocklist()
     monitor(save_knocks=args.save_knocks, max_knocks=args.max_knocks)

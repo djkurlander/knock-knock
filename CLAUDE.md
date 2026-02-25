@@ -13,8 +13,11 @@ Knock-Knock is an SSH honeypot monitoring system that captures unauthorized SSH 
 # Restart all services
 ./restart.sh
 
-# Reset all data and restart
+# Reset all data and restart (blocklist is preserved)
 ./restart.sh --reset-all
+
+# Reset blocklist only (deletes blocklist.txt + clears knock:blocked in Redis)
+python monitor.py --reset-blocklist
 
 # Individual service control
 systemctl start|stop|restart|status knock-monitor knock-web
@@ -78,7 +81,7 @@ SSH Attacker → honeypot.py (port 22) → stdout
 ```
 
 **Two Services:**
-- `honeypot.py` + `monitor.py`: Combined into a single systemd unit. Monitor spawns honeypot as a subprocess and reads its stdout. Performs GeoIP lookups, updates intel tables in SQLite, publishes to Redis. Individual knocks are only saved to SQLite with `--save-knocks`
+- `honeypot.py` + `monitor.py`: Combined into a single systemd unit. Monitor spawns honeypot as a subprocess and reads its stdout. Performs GeoIP lookups, updates intel tables in SQLite, publishes to Redis. Individual knocks are only saved to SQLite with `--save-knocks`. Honeypot checks `knock:blocked` Redis set on each connection to reject blocked IPs instantly.
 - `main.py`: FastAPI server with WebSocket endpoint `/ws`, subscribes to Redis, broadcasts to all connected browsers
 
 **Data Flow:**
@@ -110,7 +113,9 @@ SSH Attacker → honeypot.py (port 22) → stdout
 All persistent data lives in `data/`:
 - `data/knock_knock.db` — main attack database
 - `data/visitors.db` — dashboard visitor tracking
-- `data/blocklist.txt` — IPs to reject immediately
+- `data/blocklist.txt` — IPs to reject immediately (durable source of truth; seeded into Redis on startup)
+
+**Note:** `blocklist.txt` and `knock:blocked` survive `--reset-all` intentionally. Use `--reset-blocklist` to clear them.
 
 ## Environment Variables
 
@@ -154,6 +159,7 @@ Intel tables are updated on each knock via `INSERT ... ON CONFLICT DO UPDATE`. T
 - `knock:last_lat` - Latitude of last knock location
 - `knock:last_lng` - Longitude of last knock location
 - `knock:recent` - Last 100 knocks (JSON list, used for initial page load)
+- `knock:blocked` - Set of blocked IPs (seeded from `blocklist.txt` on startup; checked by honeypot on each connection)
 - `radiation_stream` - Pub/sub channel for real-time events
 
 ## Frontend Features

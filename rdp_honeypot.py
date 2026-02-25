@@ -15,35 +15,23 @@ import subprocess
 import sys
 import random
 import string
+import redis
 
 from impacket import ntlm
 
 # Randomised Windows 10-style computer name, generated once at startup
 _COMPUTER_NAME = 'DESKTOP-' + ''.join(random.choices(string.ascii_uppercase + string.digits, k=7))
 
-BLOCKLIST_FILE = os.environ.get('DB_DIR', 'data') + '/blocklist.txt'
-BLOCKLIST_RELOAD_INTERVAL = 60
 CERT_FILE = os.environ.get('DB_DIR', 'data') + '/rdp.crt'
 KEY_FILE  = os.environ.get('DB_DIR', 'data') + '/rdp.key'
 
-_blocklist_cache = set()
-_blocklist_last_load = 0
+_r = redis.Redis(host=os.environ.get('REDIS_HOST', 'localhost'), port=6379, db=0, decode_responses=True)
 
-def get_blocklist():
-    global _blocklist_cache, _blocklist_last_load
-    now = time.time()
-    if now - _blocklist_last_load > BLOCKLIST_RELOAD_INTERVAL:
-        _blocklist_last_load = now
-        if os.path.exists(BLOCKLIST_FILE):
-            try:
-                with open(BLOCKLIST_FILE, 'r') as f:
-                    _blocklist_cache = set(
-                        line.split('#')[0].strip() for line in f
-                        if line.split('#')[0].strip()
-                    )
-            except Exception:
-                pass
-    return _blocklist_cache
+def is_blocked(ip):
+    try:
+        return _r.sismember("knock:blocked", ip)
+    except Exception:
+        return False
 
 def ensure_cert():
     """Generate a self-signed cert for TLS if not already present."""
@@ -362,7 +350,7 @@ def start_honeypot():
     while True:
         client, addr = sock.accept()
         client_ip = normalize_ip(addr[0])
-        if client_ip in get_blocklist():
+        if is_blocked(client_ip):
             client.close()
             continue
         threading.Thread(target=handle_connection, args=(client, client_ip), daemon=True).start()

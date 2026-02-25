@@ -202,11 +202,12 @@ def get_geo_maximal(ip, city_reader, asn_reader):
         pass
     return geo
 
-def add_to_blocklist(ip):
-    """Append ip to blocklist.txt with a timestamp comment."""
+def add_to_blocklist(ip, r):
+    """Append ip to blocklist.txt and add to Redis knock:blocked set."""
     try:
         with open(BLOCKLIST_FILE, 'a') as f:
             f.write(f"{ip}  # auto-blocked {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+        r.sadd("knock:blocked", ip)
         print(f"🚫 Auto-blocked {ip}", flush=True)
     except Exception as e:
         print(f"⚠️ Could not write blocklist: {e}")
@@ -224,13 +225,14 @@ def monitor(save_knocks=False, max_knocks=None):
             print(f"⏳ Waiting for GeoIP databases... ({e})")
             time.sleep(5)
 
-    # Seed blocked_ips set from existing blocklist to avoid duplicate writes
-    blocked_ips = set()
-    if max_knocks and os.path.exists(BLOCKLIST_FILE):
+    # Seed knock:blocked Redis set from blocklist file BEFORE spawning honeypots
+    if os.path.exists(BLOCKLIST_FILE):
         try:
             with open(BLOCKLIST_FILE) as f:
-                blocked_ips = {line.split()[0] for line in f if line.strip() and not line.startswith('#')}
-            print(f"🚫 Loaded {len(blocked_ips)} blocked IPs from blocklist")
+                ips = [line.split('#')[0].strip() for line in f if line.split('#')[0].strip()]
+            if ips:
+                r.sadd("knock:blocked", *ips)
+            print(f"🚫 Loaded {len(ips)} blocked IP(s) into Redis (knock:blocked)")
         except Exception as e:
             print(f"⚠️ Could not load blocklist: {e}")
 
@@ -332,9 +334,8 @@ def monitor(save_knocks=False, max_knocks=None):
                 print(f"📧 MAIL {geo['iso']} | {user} → {pw} | {package['subject'][:60]} via {geo['isp']}")
             else:
                 print(f"📡 {knock.get('proto', 'SSH')} {geo['iso']} | {user}:{pw} via {geo['isp']}")
-            if max_knocks and package.get('ip_hits', 0) >= max_knocks and ip not in blocked_ips:
-                blocked_ips.add(ip)
-                add_to_blocklist(ip)
+            if max_knocks and package.get('ip_hits', 0) >= max_knocks and not r.sismember("knock:blocked", ip):
+                add_to_blocklist(ip, r)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Knock-Knock Monitor")

@@ -2,27 +2,16 @@
 import socket
 import threading
 import os
-import time
 import argparse
+import redis
 
-BLOCKLIST_FILE = os.environ.get('DB_DIR', 'data') + '/blocklist.txt'
-BLOCKLIST_RELOAD_INTERVAL = 60
+_r = redis.Redis(host=os.environ.get('REDIS_HOST', 'localhost'), port=6379, db=0, decode_responses=True)
 
-_blocklist_cache = set()
-_blocklist_last_load = 0
-
-def get_blocklist():
-    global _blocklist_cache, _blocklist_last_load
-    now = time.time()
-    if now - _blocklist_last_load > BLOCKLIST_RELOAD_INTERVAL:
-        _blocklist_last_load = now
-        if os.path.exists(BLOCKLIST_FILE):
-            try:
-                with open(BLOCKLIST_FILE, 'r') as f:
-                    _blocklist_cache = set(line.split('#')[0].strip() for line in f if line.split('#')[0].strip())
-            except:
-                pass
-    return _blocklist_cache
+def is_blocked(ip):
+    try:
+        return _r.sismember("knock:blocked", ip)
+    except Exception:
+        return False
 
 def normalize_ip(ip):
     if ip.startswith('::ffff:'):
@@ -50,7 +39,7 @@ def start_honeypot(port, proto):
     while True:
         client, addr = sock.accept()
         client_ip = normalize_ip(addr[0])
-        if client_ip in get_blocklist():
+        if is_blocked(client_ip):
             client.close()
             continue
         threading.Thread(target=handle_connection, args=(client, client_ip, proto), daemon=True).start()

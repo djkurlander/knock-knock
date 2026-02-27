@@ -15,6 +15,7 @@ import subprocess
 import sys
 import random
 import string
+import uuid
 import redis
 
 from impacket import ntlm
@@ -26,6 +27,55 @@ CERT_FILE = os.environ.get('DB_DIR', 'data') + '/rdp.crt'
 KEY_FILE  = os.environ.get('DB_DIR', 'data') + '/rdp.key'
 
 _r = redis.Redis(host=os.environ.get('REDIS_HOST', 'localhost'), port=6379, db=0, decode_responses=True)
+TRACE_ENABLED = os.environ.get('RDP_TRACE', '1').lower() not in ('0', 'false', 'no')
+TRACE_IP = os.environ.get('RDP_TRACE_IP', '').strip()
+TLS_MIN_VERSION = os.environ.get('RDP_TLS_MIN', '1.0').strip()
+TLS_CIPHERS = os.environ.get('RDP_TLS_CIPHERS', 'ALL:@SECLEVEL=0').strip()
+CERT_DIGEST = os.environ.get('RDP_CERT_DIGEST', 'sha1').strip().lower()
+MAX_NLA_ATTEMPTS = max(1, int(os.environ.get('RDP_MAX_NLA_ATTEMPTS', '3')))
+
+def trace(session_id, client_ip, stage, **fields):
+    """Emit structured, grep-friendly stage logs for RDP sessions."""
+    if not TRACE_ENABLED:
+        return
+    if TRACE_IP and client_ip != TRACE_IP:
+        return
+    suffix = ' '.join(f'{k}={v!r}' for k, v in fields.items())
+    base = f"RDPTRACE sid={session_id} ip={client_ip} stage={stage}"
+    print(f"{base} {suffix}".rstrip(), flush=True)
+
+def classify_socket_error(exc):
+    """Normalize common socket/TLS errors to stable labels for summaries."""
+    if isinstance(exc, ConnectionResetError):
+        return 'peer_reset'
+    if isinstance(exc, BrokenPipeError):
+        return 'broken_pipe'
+    if isinstance(exc, (TimeoutError, socket.timeout)):
+        return 'timeout'
+    if isinstance(exc, ssl.SSLEOFError):
+        return 'tls_eof'
+    if isinstance(exc, OSError):
+        if exc.errno in (9,):
+            return 'local_bad_fd'
+        if exc.errno in (32,):
+            return 'broken_pipe'
+        if exc.errno in (104, 54):
+            return 'peer_reset'
+        if exc.errno in (110, 60):
+            return 'timeout'
+    return type(exc).__name__
+
+def resolve_min_tls_version():
+    v = TLS_MIN_VERSION.lower()
+    if v in ('1.0', 'tls1.0', 'tls1'):
+        return ssl.TLSVersion.TLSv1
+    if v in ('1.1', 'tls1.1'):
+        return ssl.TLSVersion.TLSv1_1
+    if v in ('1.2', 'tls1.2'):
+        return ssl.TLSVersion.TLSv1_2
+    if v in ('1.3', 'tls1.3'):
+        return ssl.TLSVersion.TLSv1_3
+    return ssl.TLSVersion.TLSv1
 
 def is_blocked(ip):
     try:
@@ -37,8 +87,10 @@ def ensure_cert():
     """Generate a self-signed cert for TLS if not already present."""
     if os.path.exists(CERT_FILE) and os.path.exists(KEY_FILE):
         return
+    digest_flag = '-sha1' if CERT_DIGEST == 'sha1' else '-sha256'
     subprocess.run([
         'openssl', 'req', '-newkey', 'rsa:2048', '-nodes',
+        digest_flag,
         '-keyout', KEY_FILE, '-x509', '-days', '3650',
         '-out', CERT_FILE,
         '-subj', '/CN=DESKTOP-RDP/O=Microsoft/C=US'
@@ -46,7 +98,7 @@ def ensure_cert():
 
 # --- X.224 / TPKT helpers ---
 
-# X.224 Connection Confirm with SSL (PROTOCOL_SSL = 0x00000001) selected
+# X.224 Connection Confirm with NLA/CredSSP (PROTOCOL_HYBRID = 0x00000002) selected
 X224_CC_SSL = bytes([
     0x03, 0x00, 0x00, 0x13,   # TPKT: version=3, length=19
     0x0E,                      # LI=14
@@ -57,7 +109,7 @@ X224_CC_SSL = bytes([
     0x02,                      # RDP_NEG_RSP
     0x00,                      # flags
     0x08, 0x00,                # length=8
-    0x01, 0x00, 0x00, 0x00,   # selectedProtocol=PROTOCOL_SSL
+    0x02, 0x00, 0x00, 0x00,   # selectedProtocol=PROTOCOL_HYBRID (NLA/CredSSP)
 ])
 
 def recv_exact(sock, n):
@@ -81,6 +133,28 @@ def read_x224_packet(sock, timeout=10):
         return hdr + body
     except Exception:
         return b''
+
+# --- RDP_NEG_REQ parser ---
+
+def parse_req_protocols(data):
+    """
+    Extract requestedProtocols from X.224 CR RDP_NEG_REQ.
+    Variable data starts at byte 11 (4-byte TPKT + 7-byte X.224 fixed header).
+    Optional cookie (Cookie: mstshash=...\\r\\n) precedes RDP_NEG_REQ.
+    RDP_NEG_REQ structure: type(1) + flags(1) + length(2) + requestedProtocols(4)
+    """
+    try:
+        var = data[11:]
+        # Skip cookie if present
+        crlf = var.find(b'\r\n')
+        if crlf >= 0:
+            var = var[crlf + 2:]
+        # Expect RDP_NEG_REQ: type=0x01, length=8
+        if len(var) >= 8 and var[0] == 0x01:
+            return struct.unpack_from('<I', var, 4)[0]
+    except Exception:
+        pass
+    return 0
 
 # --- Cookie (old-style) username extraction ---
 
@@ -239,100 +313,195 @@ def parse_ntlm_authenticate(data):
 
 # --- NLA handshake ---
 
-def do_nla(raw_sock):
+def do_nla(raw_sock, client_ip, session_id='-'):
     """
     Complete the NLA/CredSSP handshake and return (username, domain).
     Returns (None, None) if handshake fails or no credentials captured.
     """
     ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
     ctx.load_cert_chain(certfile=CERT_FILE, keyfile=KEY_FILE)
-    ctx.minimum_version = ssl.TLSVersion.TLSv1_2
+    ctx.minimum_version = resolve_min_tls_version()
+    ctx.maximum_version = ssl.TLSVersion.TLSv1_2
+    if hasattr(ssl, 'OP_LEGACY_SERVER_CONNECT'):
+        ctx.options |= ssl.OP_LEGACY_SERVER_CONNECT
+    try:
+        ctx.set_ciphers(TLS_CIPHERS)
+    except Exception:
+        pass
 
+    tls = None
     try:
         tls = ctx.wrap_socket(raw_sock, server_side=True)
-    except ssl.SSLError:
-        return None, None
+        trace(session_id, client_ip, 'tls_handshake_ok')
+    except Exception as e:
+        reason = classify_socket_error(e)
+        trace(session_id, client_ip, 'tls_handshake_fail', error=type(e).__name__, reason=reason, detail=str(e))
+        print(f"🔍 RDP {client_ip} TLS failed: {e}", flush=True)
+        return None, None, f'tls_handshake_fail:{reason}'
 
     try:
         tls.settimeout(15)
+        captures = []
+        for attempt in range(1, MAX_NLA_ATTEMPTS + 1):
+            # Step 1: receive TSRequest with NTLM NEGOTIATE (Type 1)
+            try:
+                data = tls.recv(4096)
+            except socket.timeout:
+                if attempt == 1:
+                    return [], 'nla_timeout_waiting_step1'
+                return captures, f'nla_attempts:{len(captures)}'
 
-        # Step 1: receive TSRequest with NTLM NEGOTIATE (Type 1)
-        data = tls.recv(4096)
-        if not find_ntlmssp(data):
-            return None, None
+            ntlm_step1 = find_ntlmssp(data)
+            trace(session_id, client_ip, 'nla_step1_recv', attempt=attempt, bytes=len(data), ntlm_found=bool(ntlm_step1))
+            if not ntlm_step1:
+                print(f"🔍 RDP NLA: no NTLMSSP in step 1 ({len(data)} bytes: {data[:32].hex()})", flush=True)
+                if attempt == 1:
+                    return [], 'nla_no_ntlm_step1'
+                return captures, f'nla_attempts:{len(captures)}'
 
-        # Step 2: send TSRequest with NTLM CHALLENGE (Type 2)
-        challenge_bytes = build_ntlm_challenge()
-        tls.sendall(build_tsrequest(challenge_bytes))
+            # Step 2: send TSRequest with NTLM CHALLENGE (Type 2)
+            challenge_bytes = build_ntlm_challenge()
+            tls.sendall(build_tsrequest(challenge_bytes))
+            trace(session_id, client_ip, 'nla_step2_challenge_sent', attempt=attempt, bytes=len(challenge_bytes))
 
-        # Step 3: receive TSRequest with NTLM AUTHENTICATE (Type 3)
-        data = tls.recv(4096)
-        ntlm_auth = find_ntlmssp(data)
-        if not ntlm_auth:
-            return None, None
+            # Step 3: receive TSRequest with NTLM AUTHENTICATE (Type 3)
+            data = tls.recv(4096)
+            ntlm_auth = find_ntlmssp(data)
+            trace(session_id, client_ip, 'nla_step3_recv', attempt=attempt, bytes=len(data), ntlm_found=bool(ntlm_auth))
+            if not ntlm_auth:
+                if attempt == 1:
+                    return [], 'nla_no_ntlm_step3'
+                return captures, f'nla_attempts:{len(captures)}'
 
-        username, domain = parse_ntlm_authenticate(ntlm_auth)
+            username, domain = parse_ntlm_authenticate(ntlm_auth)
+            trace(session_id, client_ip, 'nla_step3_parsed', attempt=attempt, user=username, domain=domain)
+            if username:
+                captures.append((username, domain))
 
-        # Step 4: send STATUS_LOGON_FAILURE — real Windows does this; silent close is a fingerprint
-        try:
-            tls.sendall(build_tsrequest_error())
-        except Exception:
-            pass
+            # Step 4: send STATUS_LOGON_FAILURE
+            try:
+                tls.sendall(build_tsrequest_error())
+                trace(session_id, client_ip, 'nla_step4_logon_failure_sent', attempt=attempt)
+            except Exception as e:
+                reason = classify_socket_error(e)
+                trace(session_id, client_ip, 'nla_step4_logon_failure_send_failed', attempt=attempt, error=type(e).__name__, reason=reason)
+                return captures, f'nla_logon_failure_send_failed:{reason}'
 
-        return username, domain
+            # After first round, use shorter timeout for possible retry attempts.
+            tls.settimeout(3)
 
-    except Exception:
-        return None, None
+        return captures, f'nla_attempts:{len(captures)}'
+
+    except Exception as e:
+        reason = classify_socket_error(e)
+        trace(session_id, client_ip, 'nla_exception', error=type(e).__name__, reason=reason, detail=str(e))
+        return [], f'nla_error:{reason}'
     finally:
-        try:
-            tls.shutdown(socket.SHUT_RDWR)
-        except Exception:
-            pass
+        if tls is not None:
+            try:
+                tls.shutdown(socket.SHUT_RDWR)
+            except Exception:
+                pass
 
 # --- Connection handler ---
 
 def handle_connection(client_sock, client_ip):
+    session_id = uuid.uuid4().hex[:8]
+    started_at = time.time()
+    final_stage = 'unknown'
+    creds_captured = False
     try:
+        trace(session_id, client_ip, 'connect')
         print(f"🔌 RDP connect {client_ip}", flush=True)
 
         # Read X.224 Connection Request
         data = read_x224_packet(client_sock)
         if not data:
+            final_stage = 'x224_empty'
+            trace(session_id, client_ip, 'x224_empty')
             return
+        trace(session_id, client_ip, 'x224_recv', bytes=len(data))
 
-        # Fast path: cookie-based username (older clients)
+        # Extract cookie username if present — but don't return, fall through to NLA
         cookie_user, cookie_domain = extract_cookie_username(data)
-        if cookie_user:
+        trace(session_id, client_ip, 'cookie_parsed', user=cookie_user, domain=cookie_domain)
+
+        # Check if client requested SSL/TLS or NLA/CredSSP
+        # 0x01=PROTOCOL_SSL, 0x02=PROTOCOL_HYBRID (NLA/CredSSP)
+        req_protocols = parse_req_protocols(data)
+        trace(session_id, client_ip, 'req_protocols', value=f'0x{req_protocols:08x}')
+        print(f"🔍 RDP {client_ip} req_protocols=0x{req_protocols:08x} cookie={cookie_user!r}", flush=True)
+        if not (req_protocols & 0x03):
+                # Client doesn't want SSL — emit cookie knock if we have one, then done
+                if cookie_user:
+                    trace(session_id, client_ip, 'emit_cookie_knock')
+                    knock = {"type": "KNOCK", "proto": "RDP",
+                             "ip": client_ip, "user": cookie_user, "pass": cookie_domain or ''}
+                    print(json.dumps(knock), flush=True)
+                    final_stage = 'cookie_knock_emitted_non_ssl'
+                else:
+                    trace(session_id, client_ip, 'non_ssl_no_cookie')
+                    final_stage = 'non_ssl_no_cookie'
+                return
+
+        # Try NLA — if sendall or handshake fails, fall back to cookie
+        captures, nla_status = [], None
+        try:
+            client_sock.sendall(X224_CC_SSL)
+            trace(session_id, client_ip, 'x224_cc_ssl_sent')
+            print(f"🔍 RDP {client_ip} sent X224_CC_SSL, starting NLA", flush=True)
+            captures, nla_status = do_nla(client_sock, client_ip, session_id=session_id)
+            if captures:
+                print(f"🔍 RDP {client_ip} NLA result: captures={captures!r}", flush=True)
+            else:
+                print(f"🔍 RDP {client_ip} NLA result: captures=[]", flush=True)
+            final_stage = nla_status or 'nla_completed'
+        except Exception as e:
+            reason = classify_socket_error(e)
+            trace(session_id, client_ip, 'nla_outer_exception', error=type(e).__name__, reason=reason, detail=str(e))
+            print(f"🔍 RDP {client_ip} NLA outer exception: {type(e).__name__}: {e}", flush=True)
+            final_stage = f'nla_outer_exception:{reason}'
+
+        if captures:
+            for i, (username, domain) in enumerate(captures, start=1):
+                trace(session_id, client_ip, 'emit_nla_knock', attempt=i, user=username, domain=domain)
+                knock = {"type": "KNOCK", "proto": "RDP",
+                         "ip": client_ip, "user": username, "pass": domain or ''}
+                print(json.dumps(knock), flush=True)
+            final_stage = f'nla_knocks_emitted:{len(captures)}'
+            creds_captured = True
+        elif cookie_user:
+            trace(session_id, client_ip, 'emit_cookie_fallback_knock')
             knock = {"type": "KNOCK", "proto": "RDP",
                      "ip": client_ip, "user": cookie_user, "pass": cookie_domain or ''}
             print(json.dumps(knock), flush=True)
-            return
+            if nla_status:
+                final_stage = f'cookie_fallback_after:{nla_status}'
+            else:
+                final_stage = 'cookie_fallback_knock_emitted'
+        else:
+            trace(session_id, client_ip, 'no_credentials_captured')
+            if final_stage == 'nla_completed':
+                final_stage = 'nla_no_credentials'
 
-        # Check if client requested SSL/TLS (NLA bots always do)
-        # RDP_NEG_REQ is at byte offset 11 in X.224 CR (after TPKT+X.224 header)
-        # requestedProtocols at offset 15, bit 0 = PROTOCOL_SSL
-        if len(data) >= 19:
-            req_protocols = struct.unpack_from('<I', data, 15)[0] if len(data) >= 19 else 0
-            if not (req_protocols & 0x01):
-                return  # client doesn't want SSL, nothing more we can do
-
-        # Send X.224 CC selecting SSL
-        client_sock.sendall(X224_CC_SSL)
-
-        # NLA handshake
-        username, domain = do_nla(client_sock)
-        if username:
-            knock = {"type": "KNOCK", "proto": "RDP",
-                     "ip": client_ip, "user": username, "pass": domain or ''}
-            print(json.dumps(knock), flush=True)
-
-    except Exception:
-        pass
+    except Exception as e:
+        trace(session_id, client_ip, 'handler_exception', error=type(e).__name__, detail=str(e))
+        final_stage = f'handler_exception:{type(e).__name__}'
     finally:
         try:
             client_sock.close()
+            trace(session_id, client_ip, 'socket_closed')
         except Exception:
             pass
+        duration_ms = int((time.time() - started_at) * 1000)
+        trace(
+            session_id,
+            client_ip,
+            'session_summary',
+            duration_ms=duration_ms,
+            final_stage=final_stage,
+            creds_captured=creds_captured,
+        )
 
 def normalize_ip(ip):
     if ip.startswith('::ffff:'):

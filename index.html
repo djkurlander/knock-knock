@@ -4,6 +4,7 @@
     <title>Knock-Knock | Live Intruder Map</title>
     <link rel="icon" type="image/png" href="static/robot1.png">
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0">
+    <meta name="format-detection" content="telephone=no,email=no,address=no">
     <meta property="og:title" content="Knock-Knock | Live Intruder Map">
     <meta property="og:description" content="A real-time 3D globe showing bots trying to break into my server via SSH">
     <meta property="og:image" content="https://knock-knock.net/static/og-image.jpg">
@@ -66,9 +67,8 @@
             font-family: 'Courier New', Courier, monospace;
             font-size: 0.75em;
             font-weight: bold;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
+            display: inline-grid;
+            place-items: center;
             width: 4ch;
             height: 1.3em;
             padding: 0 2px;
@@ -78,6 +78,11 @@
             line-height: 1;
             box-sizing: content-box;
             opacity: 0.85;
+        }
+        .proto-badge-label {
+            display: block;
+            line-height: 1;
+            transform: translateY(0.06em);
         }
         .proto-all  { color: var(--ui-label); }
         .proto-ssh  { color: var(--neon-green); }
@@ -319,13 +324,19 @@
         @media (hover: hover) { .pane-globe-style-btn:hover { border-color: rgba(0,255,65,0.7); } }
 
         .proto-cycle-btn {
-            display: inline-block; vertical-align: 0.2em;
+            display: inline-grid; place-items: center; vertical-align: 0.2em;
             color: var(--ui-label); font-size: 0.85em; cursor: pointer;
-            border: 1px solid rgba(255,204,0,0.85); border-radius: 3px;
+            border: 1px solid rgba(255,204,0,0.85); border-radius: 0;
             padding: 1px 4px; font-family: monospace; letter-spacing: 1px;
             text-transform: uppercase; font-style: normal;
             user-select: none; transition: border-color 0.2s;
             white-space: nowrap; margin-left: 8px;
+            line-height: 1;
+        }
+        .proto-cycle-btn-label {
+            display: block;
+            line-height: 1;
+            transform: translateY(0.06em);
         }
         @media (hover: hover) { .proto-cycle-btn:hover { box-shadow: 0 0 4px 2px var(--btn-glow, rgba(255,204,0,0.7)); } }
     </style>
@@ -612,7 +623,7 @@
         const modeColor = PROTO_COLORS[newMode];
         const glowColor = hexToRgba(modeColor, 0.7);
         document.querySelectorAll('.proto-cycle-btn').forEach(el => {
-            el.textContent = '⟳ ' + newMode;
+            el.innerHTML = `<span class="proto-cycle-btn-label">⟳ ${newMode}</span>`;
             el.style.color = modeColor;
             el.style.borderColor = modeColor;
             el.style.setProperty('--btn-glow', glowColor);
@@ -632,6 +643,13 @@
         }
         refreshStatsAndTrivia();
     }
+
+    // Ensure initial protocol cycle buttons use the same optical-centering wrapper.
+    document.querySelectorAll('.proto-cycle-btn').forEach(el => {
+        const txt = (el.textContent || '').trim();
+        const mode = (txt.split(/\s+/).pop() || 'ALL').toUpperCase();
+        el.innerHTML = `<span class="proto-cycle-btn-label">⟳ ${mode}</span>`;
+    });
 
     function initAudio() {
         if (!audioCtx) {
@@ -1430,35 +1448,49 @@
         return `${d.city}, ${d.country}`;
     }
 
+    function escapeHtml(v) {
+        return String(v ?? '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
     function formatIP(ip) {
         if (!ip) return '';
+        const safeIp = escapeHtml(ip);
         // IPv6 addresses contain colons; IPv4 don't
         if (ip.includes(':')) {
             // Truncate IPv6: show first 2 and last 2 segments
             const parts = ip.split(':');
             if (parts.length > 4) {
                 const truncated = `${parts[0]}:${parts[1]}:…:${parts[parts.length - 1]}`;
-                return `<span title="${ip}" style="cursor:help">${truncated}</span>`;
+                return `<span title="${safeIp}" style="cursor:help">${escapeHtml(truncated)}</span>`;
             }
         }
-        return ip;
+        return safeIp;
     }
 
     function getProtoBadge(proto) {
         const label = (proto || 'SSH').toUpperCase().slice(0, 4);
         const cls = label.toLowerCase().replace(/[^a-z]/g, '');
-        return `<span class="proto-badge proto-${cls}"><span style="position:relative;top:0.1em">${label}</span></span>`;
+        return `<span class="proto-badge proto-${cls}"><span class="proto-badge-label">${label}</span></span>`;
     }
 
     function makeKnockEl(d, flash) {
         const loc = formatLocation(d);
+        const safeLoc = escapeHtml(loc);
+        const safeUser = escapeHtml(d.user);
+        const safePass = escapeHtml(d.pass);
+        const safeIsp = escapeHtml(d.isp);
         const div = document.createElement('div');
         div.className = 'knock' + (flash ? ' new-knock-flash' : '');
         div.innerHTML = `
-            <div class="knock-location"><span style="display:flex;align-items:center;gap:0.3em"><strong>${getFlag(d.iso)}</strong> <strong>${loc}</strong></span>${getProtoBadge(d.proto)}</div>
-            <span style="color:var(--ui-label)">user:</span> <span>${d.user}</span>
-            <span style="color:var(--ui-label); margin-left:10px;">password:</span> <span class="knock-pass">${d.pass}</span><br>
-            <span class="knock-meta"><span style="color:var(--ui-label)">ISP:</span> <span style="color:var(--data-blue)">${d.isp}</span> <span style="color:var(--ui-label); margin-left:10px;">IP:</span> <span style="color:var(--data-blue)">${formatIP(d.ip)}</span></span>
+            <div class="knock-location"><span style="display:flex;align-items:center;gap:0.3em"><strong>${getFlag(d.iso)}</strong> <strong>${safeLoc}</strong></span>${getProtoBadge(d.proto)}</div>
+            <span style="color:var(--ui-label)">user:</span> <span>${safeUser}</span>
+            <span style="color:var(--ui-label); margin-left:10px;">password:</span> <span class="knock-pass">${safePass}</span><br>
+            <span class="knock-meta"><span style="color:var(--ui-label)">ISP:</span> <span style="color:var(--data-blue)">${safeIsp}</span> <span style="color:var(--ui-label); margin-left:10px;">IP:</span> <span style="color:var(--data-blue)">${formatIP(d.ip)}</span></span>
         `;
         twemoji.parse(div);
         return div;
@@ -1500,6 +1532,11 @@
 
     function renderInfo(d) {
         const loc = formatLocation(d);
+        const safeLoc = escapeHtml(loc);
+        const safeCountry = escapeHtml(d.country);
+        const safeUser = escapeHtml(d.user);
+        const safePass = escapeHtml(d.pass);
+        const safeIsp = escapeHtml(d.isp);
 
         // Get rankings from leaderboards
         const activeLB = getActiveLeaderboards();
@@ -1524,28 +1561,28 @@
 
         const html = `
             <div class="info-section" style="font-size:1.1em; margin-bottom:15px; padding-bottom:10px; border-bottom:1px solid #333;">
-                <div class="knock-location"><span style="display:flex;align-items:center;gap:0.3em"><strong>${getFlag(d.iso)}</strong> <strong>${loc}</strong></span>${getProtoBadge(d.proto)}</div>
-                <span style="color:var(--ui-label)">user:</span> <span>${d.user}</span>
-                <span style="color:var(--ui-label); margin-left:10px;">password:</span> <span class="knock-pass">${d.pass}</span><br>
-                <span class="knock-meta"><span style="color:var(--ui-label)">ISP:</span> <span style="color:var(--data-blue)">${d.isp}</span> <span style="color:var(--ui-label); margin-left:10px;">IP:</span> <span style="color:var(--data-blue)">${formatIP(d.ip)}</span></span>
+                <div class="knock-location"><span style="display:flex;align-items:center;gap:0.3em"><strong>${getFlag(d.iso)}</strong> <strong>${safeLoc}</strong></span>${getProtoBadge(d.proto)}</div>
+                <span style="color:var(--ui-label)">user:</span> <span>${safeUser}</span>
+                <span style="color:var(--ui-label); margin-left:10px;">password:</span> <span class="knock-pass">${safePass}</span><br>
+                <span class="knock-meta"><span style="color:var(--ui-label)">ISP:</span> <span style="color:var(--data-blue)">${safeIsp}</span> <span style="color:var(--ui-label); margin-left:10px;">IP:</span> <span style="color:var(--data-blue)">${formatIP(d.ip)}</span></span>
             </div>
             <div class="info-item" style="margin-bottom:12px;">
-                <div><span style="color:var(--ui-label)">country:</span> <span style="color:var(--neon-green)">${d.country}${countryRank}</span></div>
+                <div><span style="color:var(--ui-label)">country:</span> <span style="color:var(--neon-green)">${safeCountry}${countryRank}</span></div>
                 <div><span style="color:var(--ui-label)">count:</span> <span style="color:var(--neon-green)">${(countryHits || 0).toLocaleString()}</span></div>
                 <div><span style="color:var(--ui-label)">last seen:</span> <span style="color:var(--neon-green)">${formatTimeSince(countryLast)}</span></div>
             </div>
             <div class="info-item" style="margin-bottom:12px;">
-                <div><span style="color:var(--ui-label)">user:</span> <span style="color:var(--neon-green)">${d.user}${userRank}</span></div>
+                <div><span style="color:var(--ui-label)">user:</span> <span style="color:var(--neon-green)">${safeUser}${userRank}</span></div>
                 <div><span style="color:var(--ui-label)">count:</span> <span style="color:var(--neon-green)">${(userHits || 0).toLocaleString()}</span></div>
                 <div><span style="color:var(--ui-label)">last seen:</span> <span style="color:var(--neon-green)">${formatTimeSince(userLast)}</span></div>
             </div>
             <div class="info-item" style="margin-bottom:12px;">
-                <div><span style="color:var(--ui-label)">password:</span> <span style="color:var(--neon-green)">${d.pass}${passRank}</span></div>
+                <div><span style="color:var(--ui-label)">password:</span> <span style="color:var(--neon-green)">${safePass}${passRank}</span></div>
                 <div><span style="color:var(--ui-label)">count:</span> <span style="color:var(--neon-green)">${(passHits || 0).toLocaleString()}</span></div>
                 <div><span style="color:var(--ui-label)">last seen:</span> <span style="color:var(--neon-green)">${formatTimeSince(passLast)}</span></div>
             </div>
             <div class="info-item" style="margin-bottom:12px;">
-                <div><span style="color:var(--ui-label)">ISP:</span> <span style="color:var(--neon-green)">${d.isp}${ispRank}</span></div>
+                <div><span style="color:var(--ui-label)">ISP:</span> <span style="color:var(--neon-green)">${safeIsp}${ispRank}</span></div>
                 <div><span style="color:var(--ui-label)">count:</span> <span style="color:var(--neon-green)">${(ispHits || 0).toLocaleString()}</span></div>
                 <div><span style="color:var(--ui-label)">last seen:</span> <span style="color:var(--neon-green)">${formatTimeSince(ispLast)}</span></div>
             </div>
@@ -1565,6 +1602,10 @@
     function renderTrivia(d) {
         if (!d) return;
         const loc = formatLocation(d);
+        const safeLoc = escapeHtml(loc);
+        const safeUser = escapeHtml(d.user);
+        const safePass = escapeHtml(d.pass);
+        const safeIsp = escapeHtml(d.isp);
 
         // Build trivia content
         let triviaItems = [];
@@ -1614,10 +1655,10 @@
 
         const html = `
             <div class="info-section" style="font-size:1.1em; margin-bottom:15px; padding-bottom:10px; border-bottom:1px solid #333;">
-                <div class="knock-location"><span style="display:flex;align-items:center;gap:0.3em"><strong>${getFlag(d.iso)}</strong> <strong>${loc}</strong></span>${getProtoBadge(d.proto)}</div>
-                <span style="color:var(--ui-label)">user:</span> <span>${d.user}</span>
-                <span style="color:var(--ui-label); margin-left:10px;">password:</span> <span class="knock-pass">${d.pass}</span><br>
-                <span class="knock-meta"><span style="color:var(--ui-label)">ISP:</span> <span style="color:var(--data-blue)">${d.isp}</span> <span style="color:var(--ui-label); margin-left:10px;">IP:</span> <span style="color:var(--data-blue)">${formatIP(d.ip)}</span></span>
+                <div class="knock-location"><span style="display:flex;align-items:center;gap:0.3em"><strong>${getFlag(d.iso)}</strong> <strong>${safeLoc}</strong></span>${getProtoBadge(d.proto)}</div>
+                <span style="color:var(--ui-label)">user:</span> <span>${safeUser}</span>
+                <span style="color:var(--ui-label); margin-left:10px;">password:</span> <span class="knock-pass">${safePass}</span><br>
+                <span class="knock-meta"><span style="color:var(--ui-label)">ISP:</span> <span style="color:var(--data-blue)">${safeIsp}</span> <span style="color:var(--ui-label); margin-left:10px;">IP:</span> <span style="color:var(--data-blue)">${formatIP(d.ip)}</span></span>
             </div>
             <div style="line-height:1.6;">
                 ${triviaContent}

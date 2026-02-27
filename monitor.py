@@ -181,6 +181,16 @@ def sanitize_credential(s):
         return '<cryptic binary>'
     return s
 
+def sanitize_body(s, max_len=2000):
+    """Preserve readable multiline text while stripping non-printable control chars."""
+    if not s:
+        return s
+    out = []
+    for ch in s:
+        if ch in ('\n', '\r', '\t') or ch.isprintable():
+            out.append(ch)
+    return ''.join(out)[:max_len]
+
 def get_geo_maximal(ip, city_reader, asn_reader):
     geo = {"iso": "XX", "country": "Unknown", "city": "Unknown", "region": None, "isp": "Unknown", "asn": None, "lat": None, "lng": None}
     try:
@@ -314,6 +324,8 @@ def monitor(save_knocks=False, max_knocks=None):
             }
             if knock.get("subject"):
                 package["subject"] = knock["subject"]
+            if knock.get("body"):
+                package["body"] = sanitize_body(knock.get("body"))
             try:
                 package.update(get_intel_stats_before_update(package))
                 log_to_maximalist_db(package, save_knocks=save_knocks)

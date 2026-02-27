@@ -1377,10 +1377,12 @@
             const max = data[0].count;
             data.forEach(item => {
                 const pct = (item.count / max) * 100;
-                let label = useFlags ? `${getFlag(item.iso)} ${item.country}` : (item.label || item.country);
+                let label = useFlags ? `${getFlag(item.iso)} ${item.country}` : (item.label ?? item.country ?? '');
+                if (prefix === 'pass' && label === '') label = '<blank>';
                 // Format IPv6 addresses in IP leaderboard
                 if (prefix === 'ip' && label) label = formatIP(label);
-                const rawId = useFlags ? item.iso : (item.label || item.country || item.isp);
+                else if (!useFlags) label = escapeHtml(label);
+                const rawId = useFlags ? item.iso : (item.label ?? item.country ?? item.isp ?? '');
                 const div = document.createElement('div');
                 div.className = 'bar-row';
                 div.setAttribute('data-id', `${prefix}-${rawId}`);
@@ -1406,6 +1408,8 @@
                 let label = id;
                 if (prefix === 'loc') label = `${getFlag(id)} ${displayName || id}`;
                 else if (prefix === 'ip') label = formatIP(id);
+                else if (prefix === 'pass' && label === '') label = '<blank>';
+                if (prefix !== 'loc' && prefix !== 'ip') label = escapeHtml(label);
                 row = document.createElement('div');
                 row.className = 'bar-row';
                 row.setAttribute('data-id', uniqueId);
@@ -1457,6 +1461,11 @@
             .replace(/'/g, '&#39;');
     }
 
+    function displayPassword(v) {
+        const s = escapeHtml(v);
+        return s === '' ? '&lt;blank&gt;' : s;
+    }
+
     function formatIP(ip) {
         if (!ip) return '';
         const safeIp = escapeHtml(ip);
@@ -1482,7 +1491,7 @@
         const loc = formatLocation(d);
         const safeLoc = escapeHtml(loc);
         const safeUser = escapeHtml(d.user);
-        const safePass = escapeHtml(d.pass);
+        const safePass = displayPassword(d.pass);
         const safeIsp = escapeHtml(d.isp);
         const div = document.createElement('div');
         div.className = 'knock' + (flash ? ' new-knock-flash' : '');
@@ -1535,7 +1544,7 @@
         const safeLoc = escapeHtml(loc);
         const safeCountry = escapeHtml(d.country);
         const safeUser = escapeHtml(d.user);
-        const safePass = escapeHtml(d.pass);
+        const safePass = displayPassword(d.pass);
         const safeIsp = escapeHtml(d.isp);
 
         // Get rankings from leaderboards
@@ -1604,7 +1613,7 @@
         const loc = formatLocation(d);
         const safeLoc = escapeHtml(loc);
         const safeUser = escapeHtml(d.user);
-        const safePass = escapeHtml(d.pass);
+        const safePass = displayPassword(d.pass);
         const safeIsp = escapeHtml(d.isp);
 
         // Build trivia content

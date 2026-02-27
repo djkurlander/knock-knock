@@ -337,7 +337,7 @@ def do_nla(raw_sock, client_ip, session_id='-'):
         reason = classify_socket_error(e)
         trace(session_id, client_ip, 'tls_handshake_fail', error=type(e).__name__, reason=reason, detail=str(e))
         print(f"🔍 RDP {client_ip} TLS failed: {e}", flush=True)
-        return None, None, f'tls_handshake_fail:{reason}'
+        return [], f'tls_handshake_fail:{reason}'
 
     try:
         tls.settimeout(15)

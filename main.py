@@ -147,7 +147,7 @@ class GlobalStatsCache:
         if proto is None:
             queries = {
                 "location": "SELECT iso_code as iso, country, hits as count FROM country_intel ORDER BY hits DESC",
-                "password": "SELECT password as label, hits as count FROM pass_intel WHERE password != '<hashed>' ORDER BY hits DESC LIMIT 100",
+                "password": "SELECT password as label, hits as count FROM pass_intel ORDER BY hits DESC LIMIT 100",
                 "username": "SELECT username as label, hits as count FROM user_intel ORDER BY hits DESC LIMIT 100",
                 "isp":      "SELECT isp as label, hits as count FROM isp_intel ORDER BY hits DESC LIMIT 100",
                 "ip":       "SELECT ip as label, hits as count FROM ip_intel ORDER BY hits DESC LIMIT 100",

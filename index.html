@@ -1391,6 +1391,9 @@
                 container.appendChild(div);
                 if (useFlags) twemoji.parse(div);
             });
+            // Pin <hashed> to bottom regardless of count
+            const hashedRow = container.querySelector('.bar-row[data-id="pass-<hashed>"]');
+            if (hashedRow) container.appendChild(hashedRow);
         });
     }
 
@@ -1439,6 +1442,9 @@
                 el.querySelector('.bar-fill').style.width = ((parseInt(el.getAttribute('data-count')) || 0) / max * 100) + '%';
             });
             if (prefix !== 'loc') while (container.children.length > MAX_PER_PANEL) container.lastChild.remove();
+            // Pin <hashed> to bottom regardless of count
+            const hashedRow = container.querySelector('.bar-row[data-id="pass-<hashed>"]');
+            if (hashedRow) container.appendChild(hashedRow);
         });
     }
 

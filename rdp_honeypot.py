@@ -466,7 +466,9 @@ def handle_connection(client_sock, client_ip):
             for i, (username, domain) in enumerate(captures, start=1):
                 trace(session_id, client_ip, 'emit_nla_knock', attempt=i, user=username, domain=domain)
                 knock = {"type": "KNOCK", "proto": "RDP",
-                         "ip": client_ip, "user": username, "pass": domain or ''}
+                         "ip": client_ip, "user": username, "pass": "<hashed>"}
+                if domain:
+                    knock["domain"] = domain
                 print(json.dumps(knock), flush=True)
             final_stage = f'nla_knocks_emitted:{len(captures)}'
             creds_captured = True

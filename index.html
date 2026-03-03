@@ -1235,7 +1235,7 @@
     function updateGlobeLocation(d) {
         if (!d) return;
         const loc = formatLocation(d);
-        const locHtml = `${getFlag(d.iso)} ${loc}`;
+        const locHtml = `${getFlag(d.iso)} ${escapeHtml(loc)}`;
         ['d-globe-loc-text', 'm-globe-loc-text'].forEach(id => {
             const el = document.getElementById(id);
             if (el) { el.innerHTML = locHtml; twemoji.parse(el); }
@@ -1403,7 +1403,9 @@
             const max = data[0].count;
             data.forEach(item => {
                 const pct = (item.count / max) * 100;
-                let label = useFlags ? `${getFlag(item.iso)} ${item.country}` : (item.label ?? item.country ?? '');
+                let label = useFlags
+                    ? `${getFlag(item.iso)} ${escapeHtml(item.country ?? '')}`
+                    : (item.label ?? item.country ?? '');
                 if ((prefix === 'pass' || prefix === 'user') && label === '') label = '<blank>';
                 // Format IPv6 addresses in IP leaderboard
                 if (prefix === 'ip' && label) label = formatIP(label);
@@ -1437,7 +1439,7 @@
 
             if (!row) {
                 let label = id;
-                if (prefix === 'loc') label = `${getFlag(id)} ${displayName || id}`;
+                if (prefix === 'loc') label = `${getFlag(id)} ${escapeHtml(displayName || id)}`;
                 else if (prefix === 'ip') label = formatIP(id);
                 else if ((prefix === 'pass' || prefix === 'user') && label === '') label = '<blank>';
                 if (prefix !== 'loc' && prefix !== 'ip') label = escapeHtml(label);
@@ -1525,7 +1527,7 @@
     function getProtoBadge(proto) {
         const label = (proto || 'SSH').toUpperCase().slice(0, 4);
         const cls = label.toLowerCase().replace(/[^a-z]/g, '');
-        return `<span class="proto-badge proto-${cls}"><span class="proto-badge-label">${label}</span></span>`;
+        return `<span class="proto-badge proto-${cls}"><span class="proto-badge-label">${escapeHtml(label)}</span></span>`;
     }
 
     function makeKnockEl(d, flash) {
@@ -1862,7 +1864,7 @@
     }
 
     function greenText(text) {
-        return `<span style="color:var(--neon-green)">${text}</span>`;
+        return `<span style="color:var(--neon-green)">${escapeHtml(text)}</span>`;
     }
 
     // Computed trivia rules - each returns HTML string or null

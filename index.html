@@ -1142,6 +1142,11 @@
         return iso.toUpperCase().replace(/./g, char => String.fromCodePoint(char.charCodeAt(0) + 127397));
     };
 
+    function escapeHtml(s) {
+        if (s == null) return '';
+        return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+
     function renderBars(prefix, data, colorClass = '', useFlags = false) {
         ['d-', 'm-'].forEach(layout => {
             const container = document.getElementById(layout + prefix);
@@ -1151,9 +1156,9 @@
             const max = data[0].count;
             data.forEach(item => {
                 const pct = (item.count / max) * 100;
-                let label = useFlags ? `${getFlag(item.iso)} ${item.country}` : (item.label || item.country);
+                let label = useFlags ? `${getFlag(item.iso)} ${escapeHtml(item.country)}` : escapeHtml(item.label || item.country);
                 // Format IPv6 addresses in IP leaderboard
-                if (prefix === 'ip' && label) label = formatIP(label);
+                if (prefix === 'ip' && label) label = formatIP(item.label || item.country);
                 const rawId = useFlags ? item.iso : (item.label || item.country || item.isp);
                 const div = document.createElement('div');
                 div.className = 'bar-row';
@@ -1177,8 +1182,8 @@
             let newCount;
 
             if (!row) {
-                let label = id;
-                if (prefix === 'loc') label = `${getFlag(id)} ${displayName || id}`;
+                let label = escapeHtml(id);
+                if (prefix === 'loc') label = `${getFlag(id)} ${escapeHtml(displayName || id)}`;
                 else if (prefix === 'ip') label = formatIP(id);
                 row = document.createElement('div');
                 row.className = 'bar-row';
@@ -1213,13 +1218,16 @@
     }
 
     function formatLocation(d) {
+        const city = escapeHtml(d.city);
+        const region = escapeHtml(d.region);
+        const country = escapeHtml(d.country);
         const hasCity = d.city && d.city !== 'Unknown';
         const hasRegion = d.region && d.region !== 'Unknown';
 
-        if (!hasCity && !hasRegion) return `Somewhere in ${d.country}`;
-        if (!hasCity && hasRegion) return `${d.region}, ${d.country}`;
-        if (hasCity && hasRegion) return (d.iso === 'US' || d.iso === 'CA') ? `${d.city}, ${d.region}, ${d.country}` : `${d.city}, ${d.country}`;
-        return `${d.city}, ${d.country}`;
+        if (!hasCity && !hasRegion) return `Somewhere in ${country}`;
+        if (!hasCity && hasRegion) return `${region}, ${country}`;
+        if (hasCity && hasRegion) return (d.iso === 'US' || d.iso === 'CA') ? `${city}, ${region}, ${country}` : `${city}, ${country}`;
+        return `${city}, ${country}`;
     }
 
     function formatIP(ip) {
@@ -1229,11 +1237,11 @@
             // Truncate IPv6: show first 2 and last 2 segments
             const parts = ip.split(':');
             if (parts.length > 4) {
-                const truncated = `${parts[0]}:${parts[1]}:…:${parts[parts.length - 1]}`;
-                return `<span title="${ip}" style="cursor:help">${truncated}</span>`;
+                const truncated = `${escapeHtml(parts[0])}:${escapeHtml(parts[1])}:…:${escapeHtml(parts[parts.length - 1])}`;
+                return `<span title="${escapeHtml(ip)}" style="cursor:help">${truncated}</span>`;
             }
         }
-        return ip;
+        return escapeHtml(ip);
     }
 
     function renderKnock(d, isNew = true) {
@@ -1241,9 +1249,9 @@
         
         const html = `
             <div class="knock-location"><strong>${getFlag(d.iso)}</strong> <strong>${loc}</strong></div>
-            <span style="color:var(--ui-label)">user:</span> <span>${d.user}</span>
-            <span style="color:var(--ui-label); margin-left:10px;">password:</span> <span class="knock-pass">${d.pass}</span><br>
-            <span class="knock-meta"><span style="color:var(--ui-label)">ISP:</span> <span style="color:var(--data-blue)">${d.isp}</span> <span style="color:var(--ui-label); margin-left:10px;">IP:</span> <span style="color:var(--data-blue)">${formatIP(d.ip)}</span></span>
+            <span style="color:var(--ui-label)">user:</span> <span>${escapeHtml(d.user)}</span>
+            <span style="color:var(--ui-label); margin-left:10px;">password:</span> <span class="knock-pass">${escapeHtml(d.pass)}</span><br>
+            <span class="knock-meta"><span style="color:var(--ui-label)">ISP:</span> <span style="color:var(--data-blue)">${escapeHtml(d.isp)}</span> <span style="color:var(--ui-label); margin-left:10px;">IP:</span> <span style="color:var(--data-blue)">${formatIP(d.ip)}</span></span>
         `;
 
         ['d-feed', 'm-feed'].forEach(id => {
@@ -1289,27 +1297,27 @@
         const html = `
             <div class="info-section" style="font-size:1.1em; margin-bottom:15px; padding-bottom:10px; border-bottom:1px solid #333;">
                 <div class="knock-location"><strong>${getFlag(d.iso)}</strong> <strong>${loc}</strong></div>
-                <span style="color:var(--ui-label)">user:</span> <span>${d.user}</span>
-                <span style="color:var(--ui-label); margin-left:10px;">password:</span> <span class="knock-pass">${d.pass}</span><br>
-                <span class="knock-meta"><span style="color:var(--ui-label)">ISP:</span> <span style="color:var(--data-blue)">${d.isp}</span> <span style="color:var(--ui-label); margin-left:10px;">IP:</span> <span style="color:var(--data-blue)">${formatIP(d.ip)}</span></span>
+                <span style="color:var(--ui-label)">user:</span> <span>${escapeHtml(d.user)}</span>
+                <span style="color:var(--ui-label); margin-left:10px;">password:</span> <span class="knock-pass">${escapeHtml(d.pass)}</span><br>
+                <span class="knock-meta"><span style="color:var(--ui-label)">ISP:</span> <span style="color:var(--data-blue)">${escapeHtml(d.isp)}</span> <span style="color:var(--ui-label); margin-left:10px;">IP:</span> <span style="color:var(--data-blue)">${formatIP(d.ip)}</span></span>
             </div>
             <div class="info-item" style="margin-bottom:12px;">
-                <div><span style="color:var(--ui-label)">country:</span> <span style="color:var(--neon-green)">${d.country}${countryRank}</span></div>
+                <div><span style="color:var(--ui-label)">country:</span> <span style="color:var(--neon-green)">${escapeHtml(d.country)}${countryRank}</span></div>
                 <div><span style="color:var(--ui-label)">count:</span> <span style="color:var(--neon-green)">${(d.country_hits || 0).toLocaleString()}</span></div>
                 <div><span style="color:var(--ui-label)">last seen:</span> <span style="color:var(--neon-green)">${formatTimeSince(d.country_last)}</span></div>
             </div>
             <div class="info-item" style="margin-bottom:12px;">
-                <div><span style="color:var(--ui-label)">user:</span> <span style="color:var(--neon-green)">${d.user}${userRank}</span></div>
+                <div><span style="color:var(--ui-label)">user:</span> <span style="color:var(--neon-green)">${escapeHtml(d.user)}${userRank}</span></div>
                 <div><span style="color:var(--ui-label)">count:</span> <span style="color:var(--neon-green)">${(d.user_hits || 0).toLocaleString()}</span></div>
                 <div><span style="color:var(--ui-label)">last seen:</span> <span style="color:var(--neon-green)">${formatTimeSince(d.user_last)}</span></div>
             </div>
             <div class="info-item" style="margin-bottom:12px;">
-                <div><span style="color:var(--ui-label)">password:</span> <span style="color:var(--neon-green)">${d.pass}${passRank}</span></div>
+                <div><span style="color:var(--ui-label)">password:</span> <span style="color:var(--neon-green)">${escapeHtml(d.pass)}${passRank}</span></div>
                 <div><span style="color:var(--ui-label)">count:</span> <span style="color:var(--neon-green)">${(d.pass_hits || 0).toLocaleString()}</span></div>
                 <div><span style="color:var(--ui-label)">last seen:</span> <span style="color:var(--neon-green)">${formatTimeSince(d.pass_last)}</span></div>
             </div>
             <div class="info-item" style="margin-bottom:12px;">
-                <div><span style="color:var(--ui-label)">ISP:</span> <span style="color:var(--neon-green)">${d.isp}${ispRank}</span></div>
+                <div><span style="color:var(--ui-label)">ISP:</span> <span style="color:var(--neon-green)">${escapeHtml(d.isp)}${ispRank}</span></div>
                 <div><span style="color:var(--ui-label)">count:</span> <span style="color:var(--neon-green)">${(d.isp_hits || 0).toLocaleString()}</span></div>
                 <div><span style="color:var(--ui-label)">last seen:</span> <span style="color:var(--neon-green)">${formatTimeSince(d.isp_last)}</span></div>
             </div>
@@ -1379,9 +1387,9 @@
         const html = `
             <div class="info-section" style="font-size:1.1em; margin-bottom:15px; padding-bottom:10px; border-bottom:1px solid #333;">
                 <div class="knock-location"><strong>${getFlag(d.iso)}</strong> <strong>${loc}</strong></div>
-                <span style="color:var(--ui-label)">user:</span> <span>${d.user}</span>
-                <span style="color:var(--ui-label); margin-left:10px;">password:</span> <span class="knock-pass">${d.pass}</span><br>
-                <span class="knock-meta"><span style="color:var(--ui-label)">ISP:</span> <span style="color:var(--data-blue)">${d.isp}</span> <span style="color:var(--ui-label); margin-left:10px;">IP:</span> <span style="color:var(--data-blue)">${formatIP(d.ip)}</span></span>
+                <span style="color:var(--ui-label)">user:</span> <span>${escapeHtml(d.user)}</span>
+                <span style="color:var(--ui-label); margin-left:10px;">password:</span> <span class="knock-pass">${escapeHtml(d.pass)}</span><br>
+                <span class="knock-meta"><span style="color:var(--ui-label)">ISP:</span> <span style="color:var(--data-blue)">${escapeHtml(d.isp)}</span> <span style="color:var(--ui-label); margin-left:10px;">IP:</span> <span style="color:var(--data-blue)">${formatIP(d.ip)}</span></span>
             </div>
             <div style="line-height:1.6;">
                 ${triviaContent}
@@ -1583,7 +1591,7 @@
         // Rule: Username equals password
         (d) => {
             if (d.user === d.pass) {
-                return `The user and password are both ${greenText(d.pass)}. Pro tip: Don't double up.`;
+                return `The user and password are both ${greenText(escapeHtml(d.pass))}. Pro tip: Don't double up.`;
             }
             return null;
         },
@@ -1591,7 +1599,7 @@
         (d) => {
             if (d.pass.startsWith(d.user) && d.pass.length > d.user.length) {
                 const suffix = d.pass.slice(d.user.length);
-                return `This password is simply the user with a suffix added: ${greenText(d.user + ' + ' + suffix)}. Don't be simple.`;
+                return `This password is simply the user with a suffix added: ${greenText(escapeHtml(d.user) + ' + ' + escapeHtml(suffix))}. Don't be simple.`;
             }
             return null;
         }

@@ -257,12 +257,8 @@ def process_sip_request(req, client_ip):
         return 403, 'Forbidden', None
 
     if scheme == 'digest' and auth.get('username') is not None:
-        response = auth.get('response')
-        if response:
-            # Store a concise digest fingerprint in pass field.
-            hashed_marker = f'<digest:{response}>'
-        else:
-            hashed_marker = '<digest>'
+        # SIP Digest auth does not expose plaintext passwords.
+        hashed_marker = '<digest response>'
         emit_knock(
             client_ip,
             auth.get('username'),

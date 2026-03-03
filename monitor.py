@@ -32,7 +32,8 @@ def reset_all():
     try:
         r = redis.Redis(host=os.environ.get('REDIS_HOST', 'localhost'), port=6379, db=0, decode_responses=True)
         keys_to_clear = ["knock:total_global", "knock:uptime_minutes", "knock:last_time", "knock:last_lat", "knock:last_lng", "knock:recent",
-                         "knock:recent:ssh", "knock:recent:tnet", "knock:recent:smtp", "knock:recent:rdp", "knock:recent:mail", "knock:recent:ftp"]
+                         "knock:recent:ssh", "knock:recent:tnet", "knock:recent:smtp", "knock:recent:rdp", "knock:recent:mail", "knock:recent:ftp",
+                         "knock:recent:sip"]
         for key in keys_to_clear:
             r.delete(key)
         print("   [+] Cleared Redis keys")
@@ -273,6 +274,8 @@ def monitor(save_knocks=False, max_knocks=None):
                                  stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True),
         "FTP":  subprocess.Popen([sys.executable, "-u", "ftp_honeypot.py"],
                                  stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True),
+        "SIP":  subprocess.Popen([sys.executable, "-u", "sip_honeypot.py"],
+                                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True),
     }
 
     knock_queue = queue.Queue()
@@ -326,6 +329,17 @@ def monitor(save_knocks=False, max_knocks=None):
                 package["subject"] = knock["subject"]
             if knock.get("body"):
                 package["body"] = sanitize_body(knock.get("body"))
+            # Pass through SIP-only extended telemetry into Redis/websocket payloads.
+            # This is intentionally not persisted in SQLite.
+            for k, v in knock.items():
+                if not isinstance(k, str) or not k.startswith("sip_"):
+                    continue
+                if isinstance(v, str):
+                    package[k] = sanitize_credential(v)
+                elif isinstance(v, (int, float, bool)) or v is None:
+                    package[k] = v
+                else:
+                    package[k] = sanitize_credential(str(v))
             try:
                 package.update(get_intel_stats_before_update(package))
                 log_to_maximalist_db(package, save_knocks=save_knocks)

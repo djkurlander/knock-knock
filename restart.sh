@@ -64,7 +64,7 @@ if [ "$RESET" = true ]; then
         REDIS_CMD="redis-cli"
     fi
 
-    $REDIS_CMD del knock:total_global knock:uptime_minutes knock:last_time knock:last_lat knock:last_lng knock:recent knock:recent:ssh knock:recent:tnet knock:recent:smtp knock:recent:mail knock:recent:rdp knock:recent:ftp > /dev/null
+    $REDIS_CMD del knock:total_global knock:uptime_minutes knock:last_time knock:last_lat knock:last_lng knock:recent knock:recent:ssh knock:recent:tnet knock:recent:smtp knock:recent:mail knock:recent:rdp knock:recent:ftp knock:recent:sip > /dev/null
     echo "  [+] Cleared Redis keys"
 fi
 
@@ -83,7 +83,7 @@ else
     systemctl daemon-reload
 
     systemctl start knock-monitor
-    echo "  [+] Honeypot + Monitor online (ports 22/SSH 23/Telnet 587/SMTP, log parsing active)"
+    echo "  [+] Honeypot + Monitor online (ports 21/FTP 22/SSH 23/Telnet 25/MAIL 587/SMTP 3389/RDP 5060/SIP, log parsing active)"
 
     systemctl start knock-web
     echo "  [+] Web server online (WebSockets active)"

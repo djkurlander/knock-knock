@@ -29,10 +29,28 @@ KEY_FILE  = os.environ.get('DB_DIR', 'data') + '/rdp.key'
 _r = redis.Redis(host=os.environ.get('REDIS_HOST', 'localhost'), port=6379, db=0, decode_responses=True)
 TRACE_ENABLED = os.environ.get('RDP_TRACE', '1').lower() not in ('0', 'false', 'no')
 TRACE_IP = os.environ.get('RDP_TRACE_IP', '').strip()
-TLS_MIN_VERSION = os.environ.get('RDP_TLS_MIN', '1.0').strip()
-TLS_CIPHERS = os.environ.get('RDP_TLS_CIPHERS', 'ALL:@SECLEVEL=0').strip()
-CERT_DIGEST = os.environ.get('RDP_CERT_DIGEST', 'sha1').strip().lower()
+# Compatibility-first TLS policy for honeypot capture fidelity.
+TLS_MIN_VERSION = '1.0'
+TLS_CIPHERS = 'ALL:@SECLEVEL=0'
+CERT_DIGEST = 'sha1'
 MAX_NLA_ATTEMPTS = max(1, int(os.environ.get('RDP_MAX_NLA_ATTEMPTS', '3')))
+NLA_STEP1_EXTRA_READS = max(0, int(os.environ.get('RDP_NLA_STEP1_EXTRA_READS', '2')))
+NLA_STEP1_EXTRA_TIMEOUT = max(0.1, float(os.environ.get('RDP_NLA_STEP1_EXTRA_TIMEOUT', '0.6')))
+NLA_STEP3_EXTRA_READS = max(0, int(os.environ.get('RDP_NLA_STEP3_EXTRA_READS', '2')))
+NLA_STEP3_EXTRA_TIMEOUT = max(0.1, float(os.environ.get('RDP_NLA_STEP3_EXTRA_TIMEOUT', '0.6')))
+RDP_CLASSIC_CAPTURE = os.environ.get('RDP_CLASSIC_CAPTURE', '0').lower() in ('1', 'true', 'yes', 'on')
+# Targeted experiment: for IPs with repeated NLA parse failures, force classic
+# on subsequent attempts to probe for plaintext credential flows.
+RDP_FORCE_CLASSIC_EXPERIMENT = True
+RDP_FORCE_CLASSIC_TTL_SEC = 1800
+RDP_FORCE_CLASSIC_FAILS_THRESHOLD = 2
+
+_classic_import_error = None
+if RDP_CLASSIC_CAPTURE:
+    try:
+        from rdp_classic_security import do_classic_rdp_security, X224_CC_RDP
+    except Exception as e:
+        _classic_import_error = str(e)
 
 def trace(session_id, client_ip, stage, **fields):
     """Emit structured, grep-friendly stage logs for RDP sessions."""
@@ -82,6 +100,54 @@ def is_blocked(ip):
         return _r.sismember("knock:blocked", ip)
     except Exception:
         return False
+
+def _force_classic_key(ip):
+    return f"rdp:force_classic:{ip}"
+
+def _nla_fail_key(ip):
+    return f"rdp:nla_parse_fail:{ip}"
+
+def should_force_classic(ip):
+    if not RDP_FORCE_CLASSIC_EXPERIMENT:
+        return False
+    try:
+        return bool(_r.exists(_force_classic_key(ip)))
+    except Exception:
+        return False
+
+def clear_force_classic(ip):
+    try:
+        _r.delete(_force_classic_key(ip))
+        _r.delete(_nla_fail_key(ip))
+    except Exception:
+        pass
+
+def note_nla_parse_failure(ip, nla_status):
+    """
+    Track NLA failures likely caused by parse/handshake incompleteness and
+    enable temporary classic forcing for that IP after repeated failures.
+    Returns (fail_count, forced_enabled).
+    """
+    if not RDP_FORCE_CLASSIC_EXPERIMENT:
+        return 0, False
+    if not nla_status:
+        return 0, False
+    interesting = (
+        nla_status in ('nla_no_ntlm_step1', 'nla_no_ntlm_step3') or
+        nla_status.startswith('nla_attempts:0')
+    )
+    if not interesting:
+        return 0, False
+    try:
+        count = int(_r.incr(_nla_fail_key(ip)))
+        _r.expire(_nla_fail_key(ip), RDP_FORCE_CLASSIC_TTL_SEC)
+        forced = False
+        if count >= RDP_FORCE_CLASSIC_FAILS_THRESHOLD:
+            _r.setex(_force_classic_key(ip), RDP_FORCE_CLASSIC_TTL_SEC, '1')
+            forced = True
+        return count, forced
+    except Exception:
+        return 0, False
 
 def ensure_cert():
     """Generate a self-signed cert for TLS if not already present."""
@@ -298,6 +364,28 @@ def parse_ntlm_authenticate(data):
     Parse NTLM AUTHENTICATE (Type 3) message using impacket.
     Returns (username, domain) strings, or (None, None) on failure.
     """
+    def _read_secbuf(buf, off):
+        if len(buf) < off + 8:
+            return None
+        length = struct.unpack_from('<H', buf, off)[0]
+        # max_length = struct.unpack_from('<H', buf, off + 2)[0]
+        offset = struct.unpack_from('<I', buf, off + 4)[0]
+        if length <= 0:
+            return b''
+        if offset < 0 or offset + length > len(buf):
+            return None
+        return buf[offset:offset + length]
+
+    def _decode_ntlm_text(raw, flags):
+        if raw is None:
+            return None
+        if not raw:
+            return ''
+        # NTLMSSP_NEGOTIATE_UNICODE
+        if flags & 0x00000001:
+            return raw.decode('utf-16-le', errors='replace').strip('\x00')
+        return raw.decode('latin-1', errors='replace').strip('\x00')
+
     try:
         resp = ntlm.NTLMAuthChallengeResponse()
         resp.fromString(data)
@@ -307,6 +395,26 @@ def parse_ntlm_authenticate(data):
             username = username.decode('utf-16-le', errors='replace').strip('\x00')
         if isinstance(domain, bytes):
             domain = domain.decode('utf-16-le', errors='replace').strip('\x00')
+        username = username or None
+        domain = domain or None
+        if username:
+            return username, domain
+    except Exception:
+        pass
+
+    # Fallback parser for Type-3 variants impacket doesn't decode cleanly.
+    # AUTH message layout: secbuf(domain @28), secbuf(user @36), flags @60.
+    try:
+        if len(data) < 64 or not data.startswith(b'NTLMSSP\x00'):
+            return None, None
+        msg_type = struct.unpack_from('<I', data, 8)[0]
+        if msg_type != 3:
+            return None, None
+        flags = struct.unpack_from('<I', data, 60)[0]
+        domain_raw = _read_secbuf(data, 28)
+        user_raw = _read_secbuf(data, 36)
+        username = _decode_ntlm_text(user_raw, flags)
+        domain = _decode_ntlm_text(domain_raw, flags)
         return username or None, domain or None
     except Exception:
         return None, None
@@ -352,9 +460,39 @@ def do_nla(raw_sock, client_ip, session_id='-'):
                 return captures, f'nla_attempts:{len(captures)}'
 
             ntlm_step1 = find_ntlmssp(data)
-            trace(session_id, client_ip, 'nla_step1_recv', attempt=attempt, bytes=len(data), ntlm_found=bool(ntlm_step1))
+            total_bytes = len(data)
+            extra_reads = 0
+            if not ntlm_step1 and data:
+                # Some clients split TSRequest/NTLMSSP across multiple TLS records.
+                original_timeout = tls.gettimeout()
+                tls.settimeout(NLA_STEP1_EXTRA_TIMEOUT)
+                try:
+                    for _ in range(NLA_STEP1_EXTRA_READS):
+                        more = tls.recv(4096)
+                        if not more:
+                            break
+                        extra_reads += 1
+                        total_bytes += len(more)
+                        data += more
+                        ntlm_step1 = find_ntlmssp(data)
+                        if ntlm_step1:
+                            break
+                except (socket.timeout, TimeoutError):
+                    pass
+                finally:
+                    tls.settimeout(original_timeout)
+
+            trace(
+                session_id,
+                client_ip,
+                'nla_step1_recv',
+                attempt=attempt,
+                bytes=total_bytes,
+                ntlm_found=bool(ntlm_step1),
+                extra_reads=extra_reads,
+            )
             if not ntlm_step1:
-                print(f"🔍 RDP NLA: no NTLMSSP in step 1 ({len(data)} bytes: {data[:32].hex()})", flush=True)
+                print(f"🔍 RDP NLA: no NTLMSSP in step 1 ({total_bytes} bytes: {data[:32].hex()})", flush=True)
                 if attempt == 1:
                     return [], 'nla_no_ntlm_step1'
                 return captures, f'nla_attempts:{len(captures)}'
@@ -367,13 +505,63 @@ def do_nla(raw_sock, client_ip, session_id='-'):
             # Step 3: receive TSRequest with NTLM AUTHENTICATE (Type 3)
             data = tls.recv(4096)
             ntlm_auth = find_ntlmssp(data)
-            trace(session_id, client_ip, 'nla_step3_recv', attempt=attempt, bytes=len(data), ntlm_found=bool(ntlm_auth))
+            total_step3_bytes = len(data)
+            step3_extra_reads = 0
+            if not ntlm_auth and data:
+                original_timeout = tls.gettimeout()
+                tls.settimeout(NLA_STEP3_EXTRA_TIMEOUT)
+                try:
+                    for _ in range(NLA_STEP3_EXTRA_READS):
+                        more = tls.recv(4096)
+                        if not more:
+                            break
+                        step3_extra_reads += 1
+                        total_step3_bytes += len(more)
+                        data += more
+                        ntlm_auth = find_ntlmssp(data)
+                        if ntlm_auth:
+                            break
+                except (socket.timeout, TimeoutError):
+                    pass
+                finally:
+                    tls.settimeout(original_timeout)
+            trace(
+                session_id,
+                client_ip,
+                'nla_step3_recv',
+                attempt=attempt,
+                bytes=total_step3_bytes,
+                ntlm_found=bool(ntlm_auth),
+                extra_reads=step3_extra_reads,
+            )
             if not ntlm_auth:
                 if attempt == 1:
                     return [], 'nla_no_ntlm_step3'
                 return captures, f'nla_attempts:{len(captures)}'
 
             username, domain = parse_ntlm_authenticate(ntlm_auth)
+            if not username and data:
+                # Some clients deliver fragmented/auth-variant payloads.
+                original_timeout = tls.gettimeout()
+                tls.settimeout(NLA_STEP3_EXTRA_TIMEOUT)
+                try:
+                    for _ in range(NLA_STEP3_EXTRA_READS):
+                        more = tls.recv(4096)
+                        if not more:
+                            break
+                        step3_extra_reads += 1
+                        total_step3_bytes += len(more)
+                        data += more
+                        ntlm_auth = find_ntlmssp(data)
+                        if not ntlm_auth:
+                            continue
+                        username, domain = parse_ntlm_authenticate(ntlm_auth)
+                        if username:
+                            break
+                except (socket.timeout, TimeoutError):
+                    pass
+                finally:
+                    tls.settimeout(original_timeout)
             trace(session_id, client_ip, 'nla_step3_parsed', attempt=attempt, user=username, domain=domain)
             if username:
                 captures.append((username, domain))
@@ -411,6 +599,51 @@ def handle_connection(client_sock, client_ip):
     final_stage = 'unknown'
     creds_captured = False
     try:
+        def try_classic_path(path_reason):
+            nonlocal final_stage, creds_captured
+            if not (RDP_CLASSIC_CAPTURE and _classic_import_error is None):
+                if RDP_CLASSIC_CAPTURE and _classic_import_error is not None:
+                    trace(session_id, client_ip, 'classic_unavailable', error=_classic_import_error)
+                else:
+                    trace(session_id, client_ip, 'classic_disabled_non_ssl')
+                return False
+            trace(session_id, client_ip, 'classic_security_path', reason=path_reason)
+            try:
+                client_sock.sendall(X224_CC_RDP)
+                trace(session_id, client_ip, 'x224_cc_rdp_sent')
+                username, password, domain, classic_status = do_classic_rdp_security(
+                    client_sock,
+                    client_ip,
+                    trace_fn=trace,
+                    session_id=session_id,
+                )
+                final_stage = classic_status
+                if username:
+                    knock = {"type": "KNOCK", "proto": "RDP",
+                             "ip": client_ip, "user": username, "pass": password or ''}
+                    if domain:
+                        knock["domain"] = domain
+                    print(json.dumps(knock), flush=True)
+                    trace(session_id, client_ip, 'emit_classic_knock',
+                          user=username, has_password=bool(password), domain=domain)
+                    final_stage = 'classic_knock_emitted'
+                    creds_captured = True
+                    clear_force_classic(client_ip)
+                    return True
+                if cookie_user:
+                    trace(session_id, client_ip, 'emit_cookie_fallback_classic')
+                    knock = {"type": "KNOCK", "proto": "RDP",
+                             "ip": client_ip, "user": cookie_user, "pass": cookie_domain or ''}
+                    print(json.dumps(knock), flush=True)
+                    final_stage = f'cookie_fallback_after_classic:{classic_status}'
+                    return True
+            except Exception as e:
+                reason = classify_socket_error(e)
+                trace(session_id, client_ip, 'classic_outer_exception',
+                      error=type(e).__name__, reason=reason, detail=str(e))
+                final_stage = f'classic_outer_exception:{reason}'
+            return False
+
         trace(session_id, client_ip, 'connect')
         print(f"🔌 RDP connect {client_ip}", flush=True)
 
@@ -429,19 +662,44 @@ def handle_connection(client_sock, client_ip):
         # Check if client requested SSL/TLS or NLA/CredSSP
         # 0x01=PROTOCOL_SSL, 0x02=PROTOCOL_HYBRID (NLA/CredSSP)
         req_protocols = parse_req_protocols(data)
+        force_classic = should_force_classic(client_ip)
         trace(session_id, client_ip, 'req_protocols', value=f'0x{req_protocols:08x}')
+        trace(session_id, client_ip, 'force_classic_check', enabled=force_classic)
         print(f"🔍 RDP {client_ip} req_protocols=0x{req_protocols:08x} cookie={cookie_user!r}", flush=True)
+        if force_classic and RDP_CLASSIC_CAPTURE and _classic_import_error is None:
+            if try_classic_path('forced_after_nla_failures'):
+                return
+            # Don't attempt NLA after having already emitted classic confirm on this socket.
+            if cookie_user:
+                trace(session_id, client_ip, 'emit_cookie_knock_after_forced_classic')
+                knock = {"type": "KNOCK", "proto": "RDP",
+                         "ip": client_ip, "user": cookie_user, "pass": cookie_domain or ''}
+                print(json.dumps(knock), flush=True)
+                final_stage = f'{final_stage}|cookie_knock_after_forced_classic'
+            else:
+                final_stage = f'{final_stage}|forced_classic_no_credentials'
+            return
+
         if not (req_protocols & 0x03):
+                if try_classic_path('client_non_ssl'):
+                    return
+
                 # Client doesn't want SSL — emit cookie knock if we have one, then done
                 if cookie_user:
                     trace(session_id, client_ip, 'emit_cookie_knock')
                     knock = {"type": "KNOCK", "proto": "RDP",
                              "ip": client_ip, "user": cookie_user, "pass": cookie_domain or ''}
                     print(json.dumps(knock), flush=True)
-                    final_stage = 'cookie_knock_emitted_non_ssl'
+                    if final_stage.startswith('classic_'):
+                        final_stage = f'{final_stage}|cookie_knock_emitted_non_ssl'
+                    else:
+                        final_stage = 'cookie_knock_emitted_non_ssl'
                 else:
                     trace(session_id, client_ip, 'non_ssl_no_cookie')
-                    final_stage = 'non_ssl_no_cookie'
+                    if final_stage.startswith('classic_'):
+                        final_stage = f'{final_stage}|non_ssl_no_cookie'
+                    else:
+                        final_stage = 'non_ssl_no_cookie'
                 return
 
         # Try NLA — if sendall or handshake fails, fall back to cookie
@@ -472,7 +730,13 @@ def handle_connection(client_sock, client_ip):
                 print(json.dumps(knock), flush=True)
             final_stage = f'nla_knocks_emitted:{len(captures)}'
             creds_captured = True
-        elif cookie_user:
+            clear_force_classic(client_ip)
+        else:
+            fail_count, forced = note_nla_parse_failure(client_ip, nla_status or '')
+            if fail_count:
+                trace(session_id, client_ip, 'nla_parse_failure_recorded',
+                      count=fail_count, force_classic_enabled=forced, status=nla_status)
+        if (not captures) and cookie_user:
             trace(session_id, client_ip, 'emit_cookie_fallback_knock')
             knock = {"type": "KNOCK", "proto": "RDP",
                      "ip": client_ip, "user": cookie_user, "pass": cookie_domain or ''}
@@ -512,6 +776,13 @@ def normalize_ip(ip):
 
 def start_honeypot():
     ensure_cert()
+    if RDP_CLASSIC_CAPTURE:
+        if _classic_import_error is None:
+            print("🧪 RDP classic capture enabled (RDP_CLASSIC_CAPTURE=1)", flush=True)
+        else:
+            print(f"⚠️ RDP classic capture enabled but unavailable: {_classic_import_error}", flush=True)
+    else:
+        print("🧪 RDP classic capture disabled (set RDP_CLASSIC_CAPTURE=1 to enable)", flush=True)
     sock = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     sock.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 0)

@@ -29,6 +29,8 @@ services:
       - "25:25"
       - "587:587"
       - "3389:3389"
+      - "5060:5060"
+      - "5060:5060/udp"
     volumes:
       - ./data:/app/data
       - geoip-data:/usr/share/GeoIP:ro

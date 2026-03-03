@@ -90,7 +90,8 @@
         .proto-smtp { color: var(--user-magenta); }
         .proto-mail { color: #00ffaa; }
         .proto-rdp  { color: var(--hazard-red); }
-        .proto-ftp  { color: var(--ip-purple); }
+        .proto-ftp  { color: #c77dff; }
+        .proto-sip  { color: #ff7a00; }
         .bar-bg { background: #1a1a1a; height: 10px; border-radius: 5px; overflow: hidden; }
         .bar-fill { background: var(--neon-green); height: 100%; transition: width 1s; opacity: 0.7; }
         
@@ -573,7 +574,7 @@
         if (soundEnabled) { initAudio(); audioCtx.resume().then(() => playUIClick()); }
     }
 
-    const PROTO_MODES = ['ALL', 'SSH', 'TNET', 'SMTP', 'MAIL', 'RDP', 'FTP'];
+    const PROTO_MODES = ['ALL', 'SSH', 'TNET', 'SMTP', 'MAIL', 'RDP', 'FTP', 'SIP'];
     const PROTO_COLORS = {
         ALL:  '#ffcc00',
         SSH:  '#00ff41',
@@ -581,7 +582,8 @@
         SMTP: '#ff00ff',
         MAIL: '#00ffaa',
         RDP:  '#ff1a1a',
-        FTP:  '#9d00ff',
+        FTP:  '#c77dff',
+        SIP:  '#ff7a00',
     };
     let protoModeIdx = 0;
 
@@ -702,11 +704,11 @@
 
     // Per-protocol leaderboard cache: keys are proto ints as strings ("0","1","2","3")
     // Maps to same structure as leaderboards above
-    const PROTO_INT = { 'SSH': 0, 'TNET': 1, 'SMTP': 2, 'RDP': 3, 'MAIL': 4, 'FTP': 5 };
+    const PROTO_INT = { 'SSH': 0, 'TNET': 1, 'SMTP': 2, 'RDP': 3, 'MAIL': 4, 'FTP': 5, 'SIP': 6 };
     let protoStatsCache = {};
 
     // Per-protocol feed arrays (newest at index 0)
-    const feedData = { ALL: [], SSH: [], TNET: [], SMTP: [], MAIL: [], RDP: [], FTP: [] };
+    const feedData = { ALL: [], SSH: [], TNET: [], SMTP: [], MAIL: [], RDP: [], FTP: [], SIP: [] };
 
     function addToFeed(d) {
         const proto = (d.proto || 'SSH').toUpperCase();
@@ -1363,6 +1365,30 @@
         }
     }
 
+    function installPanelHeaderScrollToTop() {
+        const targets = [
+            { selector: '.d-box h2', contentSelector: '.d-content' },
+            { selector: '.m-pane h2', contentSelector: '.m-content' },
+        ];
+
+        targets.forEach(({ selector, contentSelector }) => {
+            document.querySelectorAll(selector).forEach((header) => {
+                header.addEventListener('click', (e) => {
+                    // Keep protocol button behavior untouched.
+                    if (e.target.closest('.proto-cycle-btn')) return;
+                    const panel = header.parentElement;
+                    if (!panel) return;
+                    const content = panel.querySelector(contentSelector);
+                    if (!content) return;
+                    if (content.scrollTop === 0) return;
+                    content.scrollTo({ top: 0, behavior: 'smooth' });
+                });
+            });
+        });
+    }
+
+    installPanelHeaderScrollToTop();
+
     const getFlag = (iso) => {
         if (iso === 'XX' || !iso) return '🏴‍☠️';
         return iso.toUpperCase().replace(/./g, char => String.fromCodePoint(char.charCodeAt(0) + 127397));
@@ -1378,7 +1404,7 @@
             data.forEach(item => {
                 const pct = (item.count / max) * 100;
                 let label = useFlags ? `${getFlag(item.iso)} ${item.country}` : (item.label ?? item.country ?? '');
-                if (prefix === 'pass' && label === '') label = '<blank>';
+                if ((prefix === 'pass' || prefix === 'user') && label === '') label = '<blank>';
                 // Format IPv6 addresses in IP leaderboard
                 if (prefix === 'ip' && label) label = formatIP(label);
                 else if (!useFlags) label = escapeHtml(label);
@@ -1413,7 +1439,7 @@
                 let label = id;
                 if (prefix === 'loc') label = `${getFlag(id)} ${displayName || id}`;
                 else if (prefix === 'ip') label = formatIP(id);
-                else if (prefix === 'pass' && label === '') label = '<blank>';
+                else if ((prefix === 'pass' || prefix === 'user') && label === '') label = '<blank>';
                 if (prefix !== 'loc' && prefix !== 'ip') label = escapeHtml(label);
                 row = document.createElement('div');
                 row.className = 'bar-row';
@@ -1476,6 +1502,11 @@
         return s === '' ? '&lt;blank&gt;' : s;
     }
 
+    function displayUsername(v) {
+        const s = escapeHtml(v);
+        return s === '' ? '&lt;blank&gt;' : s;
+    }
+
     function formatIP(ip) {
         if (!ip) return '';
         const safeIp = escapeHtml(ip);
@@ -1500,7 +1531,7 @@
     function makeKnockEl(d, flash) {
         const loc = formatLocation(d);
         const safeLoc = escapeHtml(loc);
-        const safeUser = escapeHtml(d.user);
+        const safeUser = displayUsername(d.user);
         const safePass = displayPassword(d.pass);
         const safeIsp = escapeHtml(d.isp);
         const div = document.createElement('div');
@@ -1553,7 +1584,7 @@
         const loc = formatLocation(d);
         const safeLoc = escapeHtml(loc);
         const safeCountry = escapeHtml(d.country);
-        const safeUser = escapeHtml(d.user);
+        const safeUser = displayUsername(d.user);
         const safePass = displayPassword(d.pass);
         const safeIsp = escapeHtml(d.isp);
 
@@ -1622,7 +1653,7 @@
         if (!d) return;
         const loc = formatLocation(d);
         const safeLoc = escapeHtml(loc);
-        const safeUser = escapeHtml(d.user);
+        const safeUser = displayUsername(d.user);
         const safePass = displayPassword(d.pass);
         const safeIsp = escapeHtml(d.isp);
 
@@ -1765,6 +1796,7 @@
                     feedData.MAIL = (ph.mail || []).slice(0, MAX_PER_PANEL);
                     feedData.RDP  = (ph.rdp  || []).slice(0, MAX_PER_PANEL);
                     feedData.FTP  = (ph.ftp  || []).slice(0, MAX_PER_PANEL);
+                    feedData.SIP  = (ph.sip  || []).slice(0, MAX_PER_PANEL);
                     refreshFeed();
                     const activeMode = PROTO_MODES[protoModeIdx];
                     const topKnock = feedData[activeMode]?.[0];

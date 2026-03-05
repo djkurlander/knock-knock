@@ -21,6 +21,7 @@ SIP_CONN_TIMEOUT = max(2.0, float(os.environ.get('SIP_CONN_TIMEOUT', '20')))
 TRACE_ENABLED = os.environ.get('SIP_TRACE', '1').lower() not in ('0', 'false', 'no')
 TRACE_IP = os.environ.get('SIP_TRACE_IP', '').strip()
 SIP_AUTH_CHALLENGE_MODE = os.environ.get('SIP_AUTH_CHALLENGE_MODE', 'mixed').strip().lower()
+NOT_PROVIDED_PASSWORD = '<not provided>'
 
 
 def is_blocked(ip):
@@ -112,11 +113,30 @@ def parse_sip_message(raw_bytes):
 def extract_user_pass_from_sip_uri(value):
     if not value:
         return None, None
-    v = value.strip().strip('<>')
-    m = re.search(r'sips?:([^@;>\s]+)@', v, re.IGNORECASE)
+
+    raw = value.strip()
+    if not raw:
+        return None, None
+
+    # SIP headers often embed the URI in angle brackets after a display name.
+    if '<' in raw and '>' in raw:
+        start = raw.find('<')
+        end = raw.find('>', start + 1)
+        if end > start:
+            raw = raw[start + 1:end].strip()
+    else:
+        raw = raw.strip('<>')
+
+    m = re.match(r'(?i)^sips?:', raw)
     if not m:
         return None, None
-    userinfo = m.group(1)
+
+    remainder = raw[m.end():]
+    at_idx = remainder.find('@')
+    if at_idx <= 0:
+        return None, None
+
+    userinfo = remainder[:at_idx]
     if ':' in userinfo:
         user, password = userinfo.split(':', 1)
         return user or None, password or None
@@ -212,7 +232,7 @@ def emit_knock(client_ip, username, password, extra=None):
         'proto': 'SIP',
         'ip': client_ip,
         'user': username or '',
-        'pass': password or '',
+        'pass': password or NOT_PROVIDED_PASSWORD,
     }
     if extra:
         knock.update(extra)
@@ -231,7 +251,7 @@ def process_sip_request(req, client_ip):
     auth_h = _header_first(headers, 'authorization') or _header_first(headers, 'proxy-authorization')
     scheme, auth = parse_auth_header(auth_h)
 
-    # Capture leaked credentials embedded in SIP URIs (rare but valuable).
+    # Capture URI userinfo separately from auth credentials.
     for field_name, candidate in [
         ('request_uri', req.get('uri')),
         ('from', _header_first(headers, 'from')),
@@ -240,7 +260,18 @@ def process_sip_request(req, client_ip):
     ]:
         u, p = extract_user_pass_from_sip_uri(candidate)
         if u and p:
-            emit_knock(client_ip, u, p, extra={**common, 'sip_cred_source': f'uri:{field_name}'})
+            emit_knock(
+                client_ip,
+                u,
+                '',
+                extra={
+                    **common,
+                    'sip_cred_source': f'uri:{field_name}',
+                    'sip_uri_user': u,
+                    'sip_uri_password': p,
+                    'sip_uri_userinfo': f'{u}:{p}',
+                },
+            )
 
     if scheme == 'basic' and auth.get('username') is not None:
         emit_knock(
@@ -251,6 +282,7 @@ def process_sip_request(req, client_ip):
                 **common,
                 'sip_auth_scheme': 'basic',
                 'sip_auth_user': auth.get('username', ''),
+                'sip_auth_password': auth.get('password', ''),
                 'sip_cred_source': 'authorization',
             },
         )
@@ -258,15 +290,15 @@ def process_sip_request(req, client_ip):
 
     if scheme == 'digest' and auth.get('username') is not None:
         # SIP Digest auth does not expose plaintext passwords.
-        hashed_marker = '<digest response>'
         emit_knock(
             client_ip,
             auth.get('username'),
-            hashed_marker,
+            NOT_PROVIDED_PASSWORD,
             extra={
                 **common,
                 'sip_auth_scheme': 'digest',
                 'sip_auth_user': auth.get('username', ''),
+                'sip_auth_password': '',
                 'sip_digest_username': auth.get('username', ''),
                 'sip_digest_realm': auth.get('realm', ''),
                 'sip_digest_nonce': auth.get('nonce', ''),
@@ -377,6 +409,12 @@ def handle_tcp_client(client_sock, client_ip):
     trace(session_id, client_ip, 'tcp_connect')
     try:
         for _ in range(SIP_MAX_MESSAGES_PER_CONN):
+            # SIP TCP sessions can carry multiple requests; enforce blocklist
+            # on each loop so newly blocked IPs are cut off immediately.
+            if is_blocked(client_ip):
+                stop_reason = 'blocked_mid_session'
+                trace(session_id, client_ip, 'tcp_blocked_mid_session', message_count=message_count)
+                break
             raw, recv_status, recv_bytes = recv_one_sip_message(client_sock, SIP_CONN_TIMEOUT)
             if not raw:
                 stop_reason = recv_status
@@ -427,6 +465,7 @@ def tcp_loop(sock):
         client, addr = sock.accept()
         client_ip = normalize_ip(addr[0])
         if is_blocked(client_ip):
+            trace(f"t{uuid.uuid4().hex[:8]}", client_ip, 'tcp_blocked_accept')
             try:
                 client.close()
             except Exception:

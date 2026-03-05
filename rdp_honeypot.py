@@ -39,6 +39,7 @@ NLA_STEP1_EXTRA_TIMEOUT = max(0.1, float(os.environ.get('RDP_NLA_STEP1_EXTRA_TIM
 NLA_STEP3_EXTRA_READS = max(0, int(os.environ.get('RDP_NLA_STEP3_EXTRA_READS', '2')))
 NLA_STEP3_EXTRA_TIMEOUT = max(0.1, float(os.environ.get('RDP_NLA_STEP3_EXTRA_TIMEOUT', '0.6')))
 RDP_CLASSIC_CAPTURE = os.environ.get('RDP_CLASSIC_CAPTURE', '0').lower() in ('1', 'true', 'yes', 'on')
+NOT_PROVIDED_PASSWORD = '<not provided>'
 # Targeted experiment: for IPs with repeated NLA parse failures, force classic
 # on subsequent attempts to probe for plaintext credential flows.
 RDP_FORCE_CLASSIC_EXPERIMENT = True
@@ -620,7 +621,7 @@ def handle_connection(client_sock, client_ip):
                 final_stage = classic_status
                 if username:
                     knock = {"type": "KNOCK", "proto": "RDP",
-                             "ip": client_ip, "user": username, "pass": password or ''}
+                             "ip": client_ip, "user": username, "pass": password or NOT_PROVIDED_PASSWORD}
                     if domain:
                         knock["domain"] = domain
                     print(json.dumps(knock), flush=True)
@@ -633,7 +634,9 @@ def handle_connection(client_sock, client_ip):
                 if cookie_user:
                     trace(session_id, client_ip, 'emit_cookie_fallback_classic')
                     knock = {"type": "KNOCK", "proto": "RDP",
-                             "ip": client_ip, "user": cookie_user, "pass": cookie_domain or ''}
+                             "ip": client_ip, "user": cookie_user, "pass": NOT_PROVIDED_PASSWORD}
+                    if cookie_domain:
+                        knock["domain"] = cookie_domain
                     print(json.dumps(knock), flush=True)
                     final_stage = f'cookie_fallback_after_classic:{classic_status}'
                     return True
@@ -673,7 +676,9 @@ def handle_connection(client_sock, client_ip):
             if cookie_user:
                 trace(session_id, client_ip, 'emit_cookie_knock_after_forced_classic')
                 knock = {"type": "KNOCK", "proto": "RDP",
-                         "ip": client_ip, "user": cookie_user, "pass": cookie_domain or ''}
+                         "ip": client_ip, "user": cookie_user, "pass": NOT_PROVIDED_PASSWORD}
+                if cookie_domain:
+                    knock["domain"] = cookie_domain
                 print(json.dumps(knock), flush=True)
                 final_stage = f'{final_stage}|cookie_knock_after_forced_classic'
             else:
@@ -688,7 +693,9 @@ def handle_connection(client_sock, client_ip):
                 if cookie_user:
                     trace(session_id, client_ip, 'emit_cookie_knock')
                     knock = {"type": "KNOCK", "proto": "RDP",
-                             "ip": client_ip, "user": cookie_user, "pass": cookie_domain or ''}
+                             "ip": client_ip, "user": cookie_user, "pass": NOT_PROVIDED_PASSWORD}
+                    if cookie_domain:
+                        knock["domain"] = cookie_domain
                     print(json.dumps(knock), flush=True)
                     if final_stage.startswith('classic_'):
                         final_stage = f'{final_stage}|cookie_knock_emitted_non_ssl'
@@ -724,7 +731,7 @@ def handle_connection(client_sock, client_ip):
             for i, (username, domain) in enumerate(captures, start=1):
                 trace(session_id, client_ip, 'emit_nla_knock', attempt=i, user=username, domain=domain)
                 knock = {"type": "KNOCK", "proto": "RDP",
-                         "ip": client_ip, "user": username, "pass": "<hashed>"}
+                         "ip": client_ip, "user": username, "pass": NOT_PROVIDED_PASSWORD}
                 if domain:
                     knock["domain"] = domain
                 print(json.dumps(knock), flush=True)
@@ -739,7 +746,9 @@ def handle_connection(client_sock, client_ip):
         if (not captures) and cookie_user:
             trace(session_id, client_ip, 'emit_cookie_fallback_knock')
             knock = {"type": "KNOCK", "proto": "RDP",
-                     "ip": client_ip, "user": cookie_user, "pass": cookie_domain or ''}
+                     "ip": client_ip, "user": cookie_user, "pass": NOT_PROVIDED_PASSWORD}
+            if cookie_domain:
+                knock["domain"] = cookie_domain
             print(json.dumps(knock), flush=True)
             if nla_status:
                 final_stage = f'cookie_fallback_after:{nla_status}'

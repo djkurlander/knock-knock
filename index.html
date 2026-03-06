@@ -354,10 +354,11 @@
             <div class="d-nav-item" onclick="dJump(4)">🔑<span>PASS</span></div>
             <div class="d-nav-item" onclick="dJump(5)">🔌<span>ISP</span></div>
             <div class="d-nav-item" onclick="dJump(6)">🔢<span>IP</span></div>
-            <div class="d-nav-item" onclick="dJump(7)">📋<span>STATS</span></div>
-            <div class="d-nav-item" onclick="dJump(8)">🎲<span>TRIVIA</span></div>
-            <div class="d-nav-item" onclick="dJump(9)">😂<span>JOKES</span></div>
-            <div class="d-nav-item" onclick="dJump(10)">ℹ️<span>ABOUT</span></div>
+            <div class="d-nav-item" onclick="dJump(7)">📋<span>LAST</span></div>
+            <div class="d-nav-item" onclick="dJump(8)">📊<span>PROTO</span></div>
+            <div class="d-nav-item" onclick="dJump(9)">🎲<span>TRIVIA</span></div>
+            <div class="d-nav-item" onclick="dJump(10)">😂<span>JOKES</span></div>
+            <div class="d-nav-item" onclick="dJump(11)">ℹ️<span>ABOUT</span></div>
         </nav>
 
         <div class="d-header-content">
@@ -381,11 +382,12 @@
         <div class="d-box" id="d-box-feed"><h2 style="display:flex;justify-content:space-between;align-items:center;">LIVE FEED: LOGIN ATTEMPTS<span id="d-feed-proto-btn" class="proto-cycle-btn" onclick="cycleProto(event)" style="vertical-align:initial;">⟳ ALL</span></h2><div id="d-feed" class="d-content"></div></div>
         <div class="d-box" id="d-box-globe"><h2 style="display:flex;justify-content:space-between;align-items:center;">GLOBE VIEW<span class="proto-cycle-btn" onclick="cycleProto(event)" style="vertical-align:initial;">⟳ ALL</span></h2><div id="d-globe-location" style="text-align:center; margin-bottom:10px;"><div id="d-globe-loc-text" style="color:var(--neon-green);"></div><div id="d-globe-loc-isp" style="color:var(--data-blue); font-size:0.85em;"></div></div><div id="d-globe-pane" class="d-content globe-pane"></div></div>
         <div class="d-box"><h2 style="display:flex;justify-content:space-between;align-items:center;">LOCATION<span class="proto-cycle-btn" onclick="cycleProto(event)" style="vertical-align:initial;">⟳ ALL</span></h2><div id="d-loc" class="d-content"></div></div>
-        <div class="d-box"><h2 style="display:flex;justify-content:space-between;align-items:center;">USERNAME<span class="proto-cycle-btn" onclick="cycleProto(event)" style="vertical-align:initial;">⟳ ALL</span></h2><div id="d-user" class="d-content"></div></div>
-        <div class="d-box"><h2 style="display:flex;justify-content:space-between;align-items:center;">PASSWORD<span class="proto-cycle-btn" onclick="cycleProto(event)" style="vertical-align:initial;">⟳ ALL</span></h2><div id="d-pass" class="d-content"></div></div>
+        <div class="d-box" id="d-box-user"><h2 style="display:flex;justify-content:space-between;align-items:center;">USERNAME<span class="proto-cycle-btn" onclick="cycleProto(event)" style="vertical-align:initial;">⟳ ALL</span></h2><div id="d-user" class="d-content"></div></div>
+        <div class="d-box" id="d-box-pass"><h2 style="display:flex;justify-content:space-between;align-items:center;">PASSWORD<span class="proto-cycle-btn" onclick="cycleProto(event)" style="vertical-align:initial;">⟳ ALL</span></h2><div id="d-pass" class="d-content"></div></div>
         <div class="d-box"><h2 style="display:flex;justify-content:space-between;align-items:center;">ISP<span class="proto-cycle-btn" onclick="cycleProto(event)" style="vertical-align:initial;">⟳ ALL</span></h2><div id="d-prov" class="d-content"></div></div>
         <div class="d-box"><h2 style="display:flex;justify-content:space-between;align-items:center;">IP ADDRESS<span class="proto-cycle-btn" onclick="cycleProto(event)" style="vertical-align:initial;">⟳ ALL</span></h2><div id="d-ip" class="d-content"></div></div>
-        <div class="d-box" id="d-box-info"><h2 style="display:flex;justify-content:space-between;align-items:center;">STATS<span class="proto-cycle-btn" onclick="cycleProto(event)" style="vertical-align:initial;">⟳ ALL</span></h2><div id="d-details" class="d-content"></div></div>
+        <div class="d-box" id="d-box-info"><h2 style="display:flex;justify-content:space-between;align-items:center;">LAST KNOCK<span class="proto-cycle-btn" onclick="cycleProto(event)" style="vertical-align:initial;">⟳ ALL</span></h2><div id="d-details" class="d-content"></div></div>
+        <div class="d-box" id="d-box-proto"><h2>PROTO STATS</h2><div id="d-proto-stats" class="d-content"></div></div>
         <div class="d-box" id="d-box-trivia"><h2 style="display:flex;justify-content:space-between;align-items:center;">TRIVIA<span class="proto-cycle-btn" onclick="cycleProto(event)" style="vertical-align:initial;">⟳ ALL</span></h2><div id="d-trivia" class="d-content"></div></div>
         <div class="d-box" id="d-box-jokes"><h2>KNOCK-KNOCK JOKES</h2><div id="d-jokes" class="d-content" style="color:var(--neon-green); line-height:1.6;"></div></div>
         <div class="d-box"><h2>ABOUT</h2><div class="d-content" style="color:var(--neon-green); line-height:1.6;">
@@ -431,7 +433,8 @@
         <div class="m-pane" id="m-pane-pass"><h2 style="display:flex;justify-content:space-between;align-items:center;">PASSWORD<span class="proto-cycle-btn" onclick="cycleProto(event)" style="vertical-align:initial;">⟳ ALL</span></h2><div id="m-pass" class="m-content"></div></div>
         <div class="m-pane" id="m-pane-prov"><h2 style="display:flex;justify-content:space-between;align-items:center;">ISP<span class="proto-cycle-btn" onclick="cycleProto(event)" style="vertical-align:initial;">⟳ ALL</span></h2><div id="m-prov" class="m-content"></div></div>
         <div class="m-pane" id="m-pane-ip"><h2 style="display:flex;justify-content:space-between;align-items:center;">IP ADDRESS<span class="proto-cycle-btn" onclick="cycleProto(event)" style="vertical-align:initial;">⟳ ALL</span></h2><div id="m-ip" class="m-content"></div></div>
-        <div class="m-pane" id="m-pane-details"><h2 style="display:flex;justify-content:space-between;align-items:center;">STATS<span class="proto-cycle-btn" onclick="cycleProto(event)" style="vertical-align:initial;">⟳ ALL</span></h2><div id="m-details" class="m-content"></div></div>
+        <div class="m-pane" id="m-pane-details"><h2 style="display:flex;justify-content:space-between;align-items:center;">LAST KNOCK<span class="proto-cycle-btn" onclick="cycleProto(event)" style="vertical-align:initial;">⟳ ALL</span></h2><div id="m-details" class="m-content"></div></div>
+        <div class="m-pane" id="m-pane-proto"><h2>PROTO STATS</h2><div id="m-proto-stats" class="m-content"></div></div>
         <div class="m-pane" id="m-pane-trivia"><h2 style="display:flex;justify-content:space-between;align-items:center;">TRIVIA<span class="proto-cycle-btn" onclick="cycleProto(event)" style="vertical-align:initial;">⟳ ALL</span></h2><div id="m-trivia" class="m-content"></div></div>
         <div class="m-pane" id="m-pane-jokes"><h2>KNOCK-KNOCK JOKES</h2><div id="m-jokes" class="m-content" style="color:var(--neon-green); line-height:1.6;"></div></div>
         <div class="m-pane" id="m-pane-about"><h2>ABOUT</h2><div class="m-content" style="color:var(--neon-green); line-height:1.6;">
@@ -450,7 +453,7 @@
     </div>
     <div class="m-footer">
         <div class="m-dots">
-            <div class="dot active" onclick="jump(0)"></div><div class="dot" onclick="jump(1)"></div><div class="dot" onclick="jump(2)"></div><div class="dot" onclick="jump(3)"></div><div class="dot" onclick="jump(4)"></div><div class="dot" onclick="jump(5)"></div><div class="dot" onclick="jump(6)"></div><div class="dot" onclick="jump(7)"></div><div class="dot" onclick="jump(8)"></div><div class="dot" onclick="jump(9)"></div><div class="dot" onclick="jump(10)"></div>
+            <div class="dot active" onclick="jump(0)"></div><div class="dot" onclick="jump(1)"></div><div class="dot" onclick="jump(2)"></div><div class="dot" onclick="jump(3)"></div><div class="dot" onclick="jump(4)"></div><div class="dot" onclick="jump(5)"></div><div class="dot" onclick="jump(6)"></div><div class="dot" onclick="jump(7)"></div><div class="dot" onclick="jump(8)"></div><div class="dot" onclick="jump(9)"></div><div class="dot" onclick="jump(10)"></div><div class="dot" onclick="jump(11)"></div>
         </div>
         <div class="m-nav-container">
         <nav class="m-nav">
@@ -461,10 +464,11 @@
             <div class="nav-item" onclick="jump(4)">🔑<span>PASS</span></div>
             <div class="nav-item" onclick="jump(5)">🔌<span>ISP</span></div>
             <div class="nav-item" onclick="jump(6)">🔢<span>IP</span></div>
-            <div class="nav-item" onclick="jump(7)">📋<span>STATS</span></div>
-            <div class="nav-item" onclick="jump(8)">🎲<span>TRIVIA</span></div>
-            <div class="nav-item" onclick="jump(9)">😂<span>JOKES</span></div>
-            <div class="nav-item" onclick="jump(10)">ℹ️<span>ABOUT</span></div>
+            <div class="nav-item" onclick="jump(7)">📋<span>LAST</span></div>
+            <div class="nav-item" onclick="jump(8)">📊<span>PROTO</span></div>
+            <div class="nav-item" onclick="jump(9)">🎲<span>TRIVIA</span></div>
+            <div class="nav-item" onclick="jump(10)">😂<span>JOKES</span></div>
+            <div class="nav-item" onclick="jump(11)">ℹ️<span>ABOUT</span></div>
         </nav>
         </div>
     </div>
@@ -575,6 +579,9 @@
     }
 
     const PROTO_MODES = ['ALL', 'SSH', 'TNET', 'SMTP', 'MAIL', 'RDP', 'FTP', 'SIP'];
+    const TRACKED_PROTOCOLS = PROTO_MODES.filter(p => p !== 'ALL');
+    const USERNAME_PROTOCOLS = new Set(['SSH', 'TNET', 'FTP', 'RDP', 'SMTP']);
+    const PASSWORD_PROTOCOLS = new Set(['SSH', 'TNET', 'FTP', 'SMTP']);
     const PROTO_COLORS = {
         ALL:  '#ffcc00',
         SSH:  '#00ff41',
@@ -586,6 +593,117 @@
         SIP:  '#ff7a00',
     };
     let protoModeIdx = 0;
+    const USER_PANEL_INDEX = 3;
+    const PASS_PANEL_INDEX = 4;
+
+    function hasUserField(d) {
+        return d && d.user !== undefined && d.user !== null;
+    }
+
+    function hasPassField(d) {
+        return d && d.pass !== undefined && d.pass !== null;
+    }
+
+    function isUserPanelRelevant(mode) {
+        return mode === 'ALL' || USERNAME_PROTOCOLS.has(mode);
+    }
+
+    function isPassPanelRelevant(mode) {
+        return mode === 'ALL' || PASSWORD_PROTOCOLS.has(mode);
+    }
+
+    function setVisible(el, visible, displayValue = '') {
+        if (!el) return;
+        el.style.display = visible ? displayValue : 'none';
+    }
+
+    function nearestVisibleIndex(targetIdx, visibleIdxs) {
+        if (!visibleIdxs.length) return 0;
+        if (visibleIdxs.includes(targetIdx)) return targetIdx;
+        const right = visibleIdxs.filter(i => i > targetIdx);
+        if (right.length) return right[0];
+        return visibleIdxs[visibleIdxs.length - 1];
+    }
+
+    function getMobileCurrentOriginalIndex() {
+        const visible = getMobileVisiblePanes();
+        if (!visible.length) return 0;
+        const visibleIdx = Math.round(vp.scrollLeft / vp.clientWidth);
+        const clamped = Math.max(0, Math.min(visible.length - 1, visibleIdx));
+        const pane = visible[clamped];
+        const idx = mobilePaneOriginalIndex(pane);
+        return idx >= 0 ? idx : 0;
+    }
+
+    function setMobileViewportOffsetInstant(offset) {
+        const prev = vp.style.scrollBehavior;
+        vp.style.scrollBehavior = 'auto';
+        vp.scrollLeft = offset * vp.clientWidth;
+        requestAnimationFrame(() => {
+            vp.style.scrollBehavior = prev || '';
+        });
+    }
+
+    function getDesktopCurrentIndex() {
+        const container = document.getElementById('d-slider-container');
+        const boxes = Array.from(container.children);
+        if (!boxes.length) return 0;
+        const containerLeft = container.getBoundingClientRect().left;
+        let bestIdx = 0;
+        let bestDist = Infinity;
+        boxes.forEach((box, idx) => {
+            const dist = Math.abs(box.getBoundingClientRect().left - containerLeft);
+            if (dist < bestDist) {
+                bestDist = dist;
+                bestIdx = idx;
+            }
+        });
+        return bestIdx;
+    }
+
+    function applyProtocolPanelVisibility() {
+        const desktopCurrentIdx = getDesktopCurrentIndex();
+        const mobileCurrentIdx = getMobileCurrentOriginalIndex();
+        const mode = PROTO_MODES[protoModeIdx];
+        const showUser = isUserPanelRelevant(mode);
+        const showPass = isPassPanelRelevant(mode);
+
+        setVisible(document.getElementById('d-box-user'), showUser, 'flex');
+        setVisible(document.getElementById('d-box-pass'), showPass, 'flex');
+        setVisible(document.getElementById('m-pane-user'), showUser, 'flex');
+        setVisible(document.getElementById('m-pane-pass'), showPass, 'flex');
+
+        const dNavItems = document.querySelectorAll('.d-nav-item');
+        setVisible(dNavItems[USER_PANEL_INDEX], showUser, 'flex');
+        setVisible(dNavItems[PASS_PANEL_INDEX], showPass, 'flex');
+
+        const mNavItems = document.querySelectorAll('.m-nav .nav-item');
+        setVisible(mNavItems[USER_PANEL_INDEX], showUser, 'flex');
+        setVisible(mNavItems[PASS_PANEL_INDEX], showPass, 'flex');
+
+        const dots = document.querySelectorAll('.m-dots .dot');
+        setVisible(dots[USER_PANEL_INDEX], showUser, 'block');
+        setVisible(dots[PASS_PANEL_INDEX], showPass, 'block');
+
+        const mobilePanes = getMobilePanes();
+        const visibleMobileIdxs = mobilePanes
+            .map((pane, idx) => ({ pane, idx }))
+            .filter(({ pane }) => getComputedStyle(pane).display !== 'none')
+            .map(({ idx }) => idx);
+        const mobileTargetIdx = nearestVisibleIndex(mobileCurrentIdx, visibleMobileIdxs);
+        const mobileTargetOffset = Math.max(0, visibleMobileIdxs.indexOf(mobileTargetIdx));
+        setMobileViewportOffsetInstant(mobileTargetOffset);
+        lastPaneIdx = mobileTargetIdx;
+
+        const desktopContainer = document.getElementById('d-slider-container');
+        const boxes = Array.from(desktopContainer.children);
+        const visibleDesktopIdxs = boxes
+            .map((box, idx) => ({ box, idx }))
+            .filter(({ box }) => getComputedStyle(box).display !== 'none')
+            .map(({ idx }) => idx);
+        const desktopTargetIdx = nearestVisibleIndex(desktopCurrentIdx, visibleDesktopIdxs);
+        dJump(desktopTargetIdx);
+    }
 
     function renderLeaderboards(stats) {
         renderBars('loc',  stats.loc,       'loc-fill', true);
@@ -635,6 +753,7 @@
         refreshHeatGlobe(active.loc);
         refreshFeed();
         const mode = PROTO_MODES[protoModeIdx];
+        applyProtocolPanelVisibility();
         const topKnock = feedData[mode]?.[0];
         if (topKnock) {
             updateGlobeLocation(topKnock);
@@ -706,9 +825,78 @@
     // Maps to same structure as leaderboards above
     const PROTO_INT = { 'SSH': 0, 'TNET': 1, 'SMTP': 2, 'RDP': 3, 'MAIL': 4, 'FTP': 5, 'SIP': 6 };
     let protoStatsCache = {};
+    let protoBreakdownCache = {};
+    let uptimeMinutesCache = 0;
 
     // Per-protocol feed arrays (newest at index 0)
     const feedData = { ALL: [], SSH: [], TNET: [], SMTP: [], MAIL: [], RDP: [], FTP: [], SIP: [] };
+
+    function normalizeProtoBreakdown(rawBreakdown, totalGlobal = null) {
+        const out = {};
+        TRACKED_PROTOCOLS.forEach(proto => {
+            const row = rawBreakdown?.[proto] || {};
+            const countRaw = Number(row.count);
+            const count = Number.isFinite(countRaw) ? Math.max(0, Math.floor(countRaw)) : 0;
+            let pctRaw = Number(row.pct);
+            let pct = Number.isFinite(pctRaw) ? pctRaw : 0;
+            if (totalGlobal !== null && totalGlobal > 0) {
+                pct = Number(((count * 100) / totalGlobal).toFixed(2));
+            }
+            out[proto] = { count, pct };
+        });
+        return out;
+    }
+
+    function bumpProtoBreakdownWithKnock(d) {
+        const proto = (d?.proto || '').toUpperCase();
+        if (!TRACKED_PROTOCOLS.includes(proto)) return;
+        if (!protoBreakdownCache[proto]) {
+            protoBreakdownCache[proto] = { count: 0, pct: 0 };
+        }
+        protoBreakdownCache[proto].count += 1;
+        const total = Number(d?.total_global);
+        if (Number.isFinite(total) && total > 0) {
+            TRACKED_PROTOCOLS.forEach(name => {
+                const count = Number(protoBreakdownCache[name]?.count || 0);
+                protoBreakdownCache[name] = {
+                    count,
+                    pct: Number(((count * 100) / total).toFixed(2))
+                };
+            });
+        }
+    }
+
+    function renderProtoStats() {
+        const uptimeMinutes = Number(uptimeMinutesCache) || 0;
+        const rows = TRACKED_PROTOCOLS.map(proto => {
+            const count = Number(protoBreakdownCache?.[proto]?.count || 0);
+            const pct = Number(protoBreakdownCache?.[proto]?.pct || 0);
+            const kpm = uptimeMinutes > 0 ? (count / uptimeMinutes) : 0;
+            return { proto, count, pct, kpm };
+        })
+            .sort((a, b) => (b.kpm - a.kpm) || (b.count - a.count) || a.proto.localeCompare(b.proto));
+
+        const header = `
+            <div style="display:grid;grid-template-columns:1fr 0.9fr 1.25fr 0.85fr;gap:8px;margin-bottom:8px;color:var(--ui-label);font-weight:bold;">
+                <span>PROTO</span><span>%</span><span>KNOCKS</span><span>/MIN</span>
+            </div>
+        `;
+        const body = rows.map(r => `
+            <div style="display:grid;grid-template-columns:1fr 0.9fr 1.25fr 0.85fr;gap:8px;padding:4px 0;border-bottom:1px solid #222;">
+                <span class="proto-${r.proto.toLowerCase()}" style="font-weight:bold;">${escapeHtml(r.proto)}</span>
+                <span style="color:var(--neon-green)">${r.pct.toFixed(1)}%</span>
+                <span style="color:var(--data-blue)">${r.count.toLocaleString()}</span>
+                <span style="color:var(--neon-green)">${r.kpm.toFixed(1)}</span>
+            </div>
+        `).join('');
+
+        const footer = `<div style="margin-top:8px;color:var(--ui-grey-dim);font-size:0.9em;">Uptime basis: ${uptimeMinutes.toLocaleString()} min</div>`;
+        const html = header + body + footer;
+        ['d-proto-stats', 'm-proto-stats'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.innerHTML = html;
+        });
+    }
 
     function addToFeed(d) {
         const proto = (d.proto || 'SSH').toUpperCase();
@@ -1301,9 +1489,30 @@
     }, 1000);
 
     // MOBILE NAVIGATION
+    function getMobilePanes() {
+        return Array.from(document.querySelectorAll('#m-viewport .m-pane'));
+    }
+
+    function getMobileVisiblePanes() {
+        return getMobilePanes().filter(p => getComputedStyle(p).display !== 'none');
+    }
+
+    function mobilePaneOriginalIndex(pane) {
+        return Number(pane?.dataset?.paneIndex ?? -1);
+    }
+
     function jump(idx) {
         const vp = document.getElementById('m-viewport');
-        vp.scrollTo({ left: idx * vp.clientWidth, behavior: 'smooth' });
+        const panes = getMobilePanes();
+        const visible = getMobileVisiblePanes();
+        let target = panes[idx];
+        if (!target || getComputedStyle(target).display === 'none') {
+            target = visible[0];
+        }
+        if (!target) return;
+        const visibleIdx = visible.indexOf(target);
+        if (visibleIdx < 0) return;
+        vp.scrollTo({ left: visibleIdx * vp.clientWidth, behavior: 'smooth' });
     }
 
     // DESKTOP ROTATION LOGIC
@@ -1349,15 +1558,21 @@
     function dJump(idx) {
         const container = document.getElementById('d-slider-container');
         const boxes = Array.from(container.children);
+        const visibleBoxes = boxes.filter(box => getComputedStyle(box).display !== 'none');
         const navItems = document.querySelectorAll('.d-nav-item');
+        let targetBox = boxes[idx];
+        if (!targetBox || getComputedStyle(targetBox).display === 'none') {
+            targetBox = visibleBoxes[0];
+        }
+        if (!targetBox) return;
+        const targetIdx = boxes.indexOf(targetBox);
 
-        navItems.forEach((item, i) => item.classList.toggle('active', i === idx));
+        navItems.forEach((item, i) => item.classList.toggle('active', i === targetIdx));
         boxes.forEach((box, i) => {
             box.style.order = '';
-            box.classList.toggle('is-active', i === idx);
+            box.classList.toggle('is-active', i === targetIdx);
         });
-        const box = boxes[idx];
-        const boxRect = box.getBoundingClientRect();
+        const boxRect = targetBox.getBoundingClientRect();
         const containerRect = container.getBoundingClientRect();
         if (boxRect.left < containerRect.left || boxRect.right > containerRect.right) {
             const targetLeft = container.scrollLeft + boxRect.left - containerRect.left - 1;
@@ -1530,18 +1745,86 @@
         return `<span class="proto-badge proto-${cls}"><span class="proto-badge-label">${escapeHtml(label)}</span></span>`;
     }
 
+    function sipUriUser(uri) {
+        if (!uri) return null;
+        const m = String(uri).match(/^\s*sips?:([^@;>\s]+)/i);
+        if (!m) return null;
+        const userInfo = m[1];
+        if (!userInfo) return null;
+        const colon = userInfo.indexOf(':');
+        return colon >= 0 ? userInfo.slice(0, colon) : userInfo;
+    }
+
+    function oneLinePreview(v, maxLen = 140) {
+        const s = String(v ?? '').replace(/\s+/g, ' ').trim();
+        if (s.length <= maxLen) return s;
+        return s.slice(0, maxLen) + '...';
+    }
+
+    function emailFeedExtraLines(d) {
+        const lines = [];
+        if (d.subject) {
+            lines.push(`<span style="color:var(--ui-label)">subject:</span> <span style="color:var(--neon-green)">${escapeHtml(d.subject)}</span>`);
+        }
+        if (d.body) {
+            lines.push(`<span style="color:var(--ui-label)">body:</span> <span style="color:var(--neon-green)">${escapeHtml(oneLinePreview(d.body))}</span>`);
+        }
+        return lines;
+    }
+
+    function protocolFeedFields(d) {
+        const proto = (d?.proto || '').toUpperCase();
+        if (proto === 'SIP') {
+            const uriUser = sipUriUser(d.sip_request_uri);
+            const ext = d.sip_extension || d.sip_auth_user || d.sip_uri_user || uriUser || null;
+            const account = ext ? displayUsername(ext) : '<span style="color:var(--ui-grey-dim)">n/a</span>';
+            return `<span style="color:var(--ui-label)">account:</span> <span>${account}</span>`;
+        }
+
+        if (proto === 'MAIL') {
+            const mf = d.mail_from ? escapeHtml(d.mail_from) : '<span style="color:var(--ui-grey-dim)">n/a</span>';
+            const mt = d.mail_to ? escapeHtml(d.mail_to) : '<span style="color:var(--ui-grey-dim)">n/a</span>';
+            const lines = [
+                `<span style="color:var(--ui-label)">from:</span> <span style="color:var(--neon-green)">${mf}</span> <span style="color:var(--ui-label); margin-left:10px;">to:</span> <span style="color:var(--neon-green)">${mt}</span>`,
+                ...emailFeedExtraLines(d),
+            ];
+            return lines.join('<br>');
+        }
+
+        if (proto === 'RDP') {
+            const u = hasUserField(d) ? displayUsername(d.user) : '<span style="color:var(--ui-grey-dim)">n/a</span>';
+            return `<span style="color:var(--ui-label)">username:</span> <span>${u}</span>`;
+        }
+
+        if (proto === 'SMTP') {
+            const stage = d.smtp_stage || '';
+            if (stage === 'preauth_envelope' || stage === 'postauth_envelope' || stage === 'preauth_message') {
+                const mf = d.smtp_mail_from ? escapeHtml(d.smtp_mail_from) : '<span style="color:var(--ui-grey-dim)">n/a</span>';
+                const mt = d.smtp_rcpt_to ? escapeHtml(d.smtp_rcpt_to) : '<span style="color:var(--ui-grey-dim)">n/a</span>';
+                const lines = [
+                    `<span style="color:var(--ui-label)">from:</span> <span style="color:var(--neon-green)">${mf}</span> <span style="color:var(--ui-label); margin-left:10px;">to:</span> <span style="color:var(--neon-green)">${mt}</span>`,
+                    ...emailFeedExtraLines(d),
+                ];
+                return lines.join('<br>');
+            }
+        }
+
+        const safeUser = hasUserField(d) ? displayUsername(d.user) : '<span style="color:var(--ui-grey-dim)">n/a</span>';
+        const safePass = hasPassField(d) ? displayPassword(d.pass) : '<span style="color:var(--ui-grey-dim)">n/a</span>';
+        return `<span style="color:var(--ui-label)">user:</span> <span>${safeUser}</span>
+            <span style="color:var(--ui-label); margin-left:10px;">password:</span> <span class="knock-pass">${safePass}</span>`;
+    }
+
     function makeKnockEl(d, flash) {
         const loc = formatLocation(d);
         const safeLoc = escapeHtml(loc);
-        const safeUser = displayUsername(d.user);
-        const safePass = displayPassword(d.pass);
         const safeIsp = escapeHtml(d.isp);
+        const protoLine = protocolFeedFields(d);
         const div = document.createElement('div');
         div.className = 'knock' + (flash ? ' new-knock-flash' : '');
         div.innerHTML = `
             <div class="knock-location"><span style="display:flex;align-items:center;gap:0.3em"><strong>${getFlag(d.iso)}</strong> <strong>${safeLoc}</strong></span>${getProtoBadge(d.proto)}</div>
-            <span style="color:var(--ui-label)">user:</span> <span>${safeUser}</span>
-            <span style="color:var(--ui-label); margin-left:10px;">password:</span> <span class="knock-pass">${safePass}</span><br>
+            ${protoLine}<br>
             <span class="knock-meta"><span style="color:var(--ui-label)">ISP:</span> <span style="color:var(--data-blue)">${safeIsp}</span> <span style="color:var(--ui-label); margin-left:10px;">IP:</span> <span style="color:var(--data-blue)">${formatIP(d.ip)}</span></span>
         `;
         twemoji.parse(div);
@@ -1589,6 +1872,10 @@
         const safeUser = displayUsername(d.user);
         const safePass = displayPassword(d.pass);
         const safeIsp = escapeHtml(d.isp);
+        const protoLine = protocolFeedFields(d);
+        const modeProto = (d.proto || '').toUpperCase();
+        const showUserStats = hasUserField(d) && isUserPanelRelevant(modeProto);
+        const showPassStats = hasPassField(d) && isPassPanelRelevant(modeProto);
 
         // Get rankings from leaderboards
         const activeLB = getActiveLeaderboards();
@@ -1611,11 +1898,26 @@
         const ipHits      = filtered ? (d.ip_hits_proto      ?? d.ip_hits)      : d.ip_hits;
         const ipLast      = filtered ? (d.ip_last_proto      ?? d.ip_last)      : d.ip_last;
 
+        const userSection = showUserStats ? `
+            <div class="info-item" style="margin-bottom:12px;">
+                <div><span style="color:var(--ui-label)">user:</span> <span style="color:var(--neon-green)">${safeUser}${userRank}</span></div>
+                <div><span style="color:var(--ui-label)">count:</span> <span style="color:var(--neon-green)">${(userHits || 0).toLocaleString()}</span></div>
+                <div><span style="color:var(--ui-label)">last seen:</span> <span style="color:var(--neon-green)">${formatTimeSince(userLast)}</span></div>
+            </div>
+        ` : '';
+
+        const passSection = showPassStats ? `
+            <div class="info-item" style="margin-bottom:12px;">
+                <div><span style="color:var(--ui-label)">password:</span> <span style="color:var(--neon-green)">${safePass}${passRank}</span></div>
+                <div><span style="color:var(--ui-label)">count:</span> <span style="color:var(--neon-green)">${(passHits || 0).toLocaleString()}</span></div>
+                <div><span style="color:var(--ui-label)">last seen:</span> <span style="color:var(--neon-green)">${formatTimeSince(passLast)}</span></div>
+            </div>
+        ` : '';
+
         const html = `
             <div class="info-section" style="font-size:1.1em; margin-bottom:15px; padding-bottom:10px; border-bottom:1px solid #333;">
                 <div class="knock-location"><span style="display:flex;align-items:center;gap:0.3em"><strong>${getFlag(d.iso)}</strong> <strong>${safeLoc}</strong></span>${getProtoBadge(d.proto)}</div>
-                <span style="color:var(--ui-label)">user:</span> <span>${safeUser}</span>
-                <span style="color:var(--ui-label); margin-left:10px;">password:</span> <span class="knock-pass">${safePass}</span><br>
+                ${protoLine}<br>
                 <span class="knock-meta"><span style="color:var(--ui-label)">ISP:</span> <span style="color:var(--data-blue)">${safeIsp}</span> <span style="color:var(--ui-label); margin-left:10px;">IP:</span> <span style="color:var(--data-blue)">${formatIP(d.ip)}</span></span>
             </div>
             <div class="info-item" style="margin-bottom:12px;">
@@ -1623,16 +1925,8 @@
                 <div><span style="color:var(--ui-label)">count:</span> <span style="color:var(--neon-green)">${(countryHits || 0).toLocaleString()}</span></div>
                 <div><span style="color:var(--ui-label)">last seen:</span> <span style="color:var(--neon-green)">${formatTimeSince(countryLast)}</span></div>
             </div>
-            <div class="info-item" style="margin-bottom:12px;">
-                <div><span style="color:var(--ui-label)">user:</span> <span style="color:var(--neon-green)">${safeUser}${userRank}</span></div>
-                <div><span style="color:var(--ui-label)">count:</span> <span style="color:var(--neon-green)">${(userHits || 0).toLocaleString()}</span></div>
-                <div><span style="color:var(--ui-label)">last seen:</span> <span style="color:var(--neon-green)">${formatTimeSince(userLast)}</span></div>
-            </div>
-            <div class="info-item" style="margin-bottom:12px;">
-                <div><span style="color:var(--ui-label)">password:</span> <span style="color:var(--neon-green)">${safePass}${passRank}</span></div>
-                <div><span style="color:var(--ui-label)">count:</span> <span style="color:var(--neon-green)">${(passHits || 0).toLocaleString()}</span></div>
-                <div><span style="color:var(--ui-label)">last seen:</span> <span style="color:var(--neon-green)">${formatTimeSince(passLast)}</span></div>
-            </div>
+            ${userSection}
+            ${passSection}
             <div class="info-item" style="margin-bottom:12px;">
                 <div><span style="color:var(--ui-label)">ISP:</span> <span style="color:var(--neon-green)">${safeIsp}${ispRank}</span></div>
                 <div><span style="color:var(--ui-label)">count:</span> <span style="color:var(--neon-green)">${(ispHits || 0).toLocaleString()}</span></div>
@@ -1655,26 +1949,28 @@
         if (!d) return;
         const loc = formatLocation(d);
         const safeLoc = escapeHtml(loc);
-        const safeUser = displayUsername(d.user);
-        const safePass = displayPassword(d.pass);
+        const modeProto = (d.proto || '').toUpperCase();
+        const showUserTrivia = hasUserField(d) && isUserPanelRelevant(modeProto);
+        const showPassTrivia = hasPassField(d) && isPassPanelRelevant(modeProto);
         const safeIsp = escapeHtml(d.isp);
+        const protoLine = protocolFeedFields(d);
 
         // Build trivia content
         let triviaItems = [];
 
         // User trivia (blue)
-        const userFacts = triviaUserMap[d.user];
+        const userFacts = showUserTrivia ? triviaUserMap[d.user] : null;
         if (userFacts && userFacts.length > 0) {
             const fact = userFacts[Math.floor(Math.random() * userFacts.length)];
             triviaItems.push(`<p style="margin-bottom:12px;"><span style="color:var(--ui-label)">User trivia:</span> <span style="color:var(--data-blue)">${fact}</span></p>`);
         }
 
         // Password trivia (blue) - from JSON or computed
-        const passFacts = triviaPassMap[d.pass];
+        const passFacts = showPassTrivia ? triviaPassMap[d.pass] : null;
         if (passFacts && passFacts.length > 0) {
             const fact = passFacts[Math.floor(Math.random() * passFacts.length)];
             triviaItems.push(`<p style="margin-bottom:12px;"><span style="color:var(--ui-label)">Password trivia:</span> <span style="color:var(--data-blue)">${fact}</span></p>`);
-        } else {
+        } else if (showPassTrivia) {
             // Try computed trivia rules
             const computed = getComputedPassTrivia(d);
             if (computed) {
@@ -1708,8 +2004,7 @@
         const html = `
             <div class="info-section" style="font-size:1.1em; margin-bottom:15px; padding-bottom:10px; border-bottom:1px solid #333;">
                 <div class="knock-location"><span style="display:flex;align-items:center;gap:0.3em"><strong>${getFlag(d.iso)}</strong> <strong>${safeLoc}</strong></span>${getProtoBadge(d.proto)}</div>
-                <span style="color:var(--ui-label)">user:</span> <span>${safeUser}</span>
-                <span style="color:var(--ui-label); margin-left:10px;">password:</span> <span class="knock-pass">${safePass}</span><br>
+                ${protoLine}<br>
                 <span class="knock-meta"><span style="color:var(--ui-label)">ISP:</span> <span style="color:var(--data-blue)">${safeIsp}</span> <span style="color:var(--ui-label); margin-left:10px;">IP:</span> <span style="color:var(--data-blue)">${formatIP(d.ip)}</span></span>
             </div>
             <div style="line-height:1.6;">
@@ -1752,11 +2047,14 @@
                 renderKnock(d, true);
                 ['d-total', 'm-total'].forEach(id => document.getElementById(id).innerText = d.total_global.toLocaleString());
                 ['d-kpm', 'm-kpm'].forEach(id => document.getElementById(id).innerText = d.kpm);
+                if (Number.isFinite(Number(d.uptime_minutes))) uptimeMinutesCache = Number(d.uptime_minutes);
+                bumpProtoBreakdownWithKnock(d);
+                renderProtoStats();
                 if (knockMatchesFilter(d)) {
                     incrementAndSort('loc', d.iso, d.country);
-                    incrementAndSort('pass', d.pass);
+                    if (hasPassField(d)) incrementAndSort('pass', d.pass);
                     incrementAndSort('prov', d.isp);
-                    incrementAndSort('user', d.user);
+                    if (hasUserField(d)) incrementAndSort('user', d.user);
                     incrementAndSort('ip', d.ip);
                 }
                 refreshStatsAndTrivia();
@@ -1769,6 +2067,7 @@
                 debugLog(`init_stats received (total=${d.total})`);
                 ['d-total', 'm-total'].forEach(id => document.getElementById(id).innerText = (d.total || 0).toLocaleString());
                 ['d-kpm', 'm-kpm'].forEach(id => document.getElementById(id).innerText = d.kpm || '0.00');
+                uptimeMinutesCache = Number(d.uptime_minutes || 0);
                 if (d.last_knock_time) {
                     lastKnockTime = d.last_knock_time;
                     const secs = Math.floor(Date.now() / 1000 - lastKnockTime) + 's';
@@ -1782,6 +2081,8 @@
                 leaderboards.users = d.top_users || [];
                 leaderboards.ips = d.top_ips || [];
                 if (d.proto_stats) protoStatsCache = d.proto_stats;
+                protoBreakdownCache = normalizeProtoBreakdown(d.proto_breakdown || {}, d.total || 0);
+                renderProtoStats();
                 // Refresh Heat extrusion colors/heights without re-setting image or polygon data
                 refreshHeatGlobe(getActiveLeaderboards().loc);
 
@@ -1815,12 +2116,16 @@
     }
 
     const vp = document.getElementById('m-viewport');
+    getMobilePanes().forEach((pane, idx) => pane.dataset.paneIndex = String(idx));
     let lastPaneIdx = 0;
     vp.addEventListener('scroll', () => {
         const scrolled = (vp.scrollLeft / (vp.scrollWidth - vp.clientWidth)) * 100;
         document.getElementById('m-progress-bar').style.width = scrolled + '%';
-        const currentIdx = Math.round(vp.scrollLeft / vp.clientWidth);
-        if (currentIdx !== lastPaneIdx) {
+        const visible = getMobileVisiblePanes();
+        const visibleIdx = Math.round(vp.scrollLeft / vp.clientWidth);
+        const currentPane = visible[visibleIdx];
+        const currentIdx = mobilePaneOriginalIndex(currentPane);
+        if (currentIdx >= 0 && currentIdx !== lastPaneIdx) {
             debugLog(`PANE CHANGE: ${lastPaneIdx} → ${currentIdx}`);
             lastPaneIdx = currentIdx;
         }
@@ -1829,7 +2134,8 @@
     const observer = new IntersectionObserver((entries) => {
         entries.forEach(entry => {
             if (entry.isIntersecting) {
-                const idx = Array.from(entry.target.parentNode.children).indexOf(entry.target);
+                const idx = mobilePaneOriginalIndex(entry.target);
+                if (idx < 0) return;
                 document.querySelectorAll('.dot').forEach((d, i) => d.classList.toggle('active', i === idx));
                 document.querySelectorAll('.nav-item').forEach((n, i) => {
                     n.classList.toggle('active', i === idx);
@@ -1871,6 +2177,7 @@
     const computedPassRules = [
         // Rule: Username equals password
         (d) => {
+            if (!hasUserField(d) || !hasPassField(d)) return null;
             if (d.user === d.pass) {
                 return `The user and password are both ${greenText(d.pass)}. Pro tip: Don't double up.`;
             }
@@ -1878,6 +2185,7 @@
         },
         // Rule: Username is prefix of password
         (d) => {
+            if (!hasUserField(d) || !hasPassField(d)) return null;
             if (d.pass.startsWith(d.user) && d.pass.length > d.user.length) {
                 const suffix = d.pass.slice(d.user.length);
                 return `This password is simply the user with a suffix added: ${greenText(d.user + ' + ' + suffix)}. Don't be simple.`;
@@ -2071,6 +2379,7 @@
 
     window.addEventListener('load', () => {
         dJump(0);
+        applyProtocolPanelVisibility();
         initGlobes();
         initPaneGlobes();
         setupJokesObserver();

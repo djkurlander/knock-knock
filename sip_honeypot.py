@@ -21,7 +21,16 @@ SIP_CONN_TIMEOUT = max(2.0, float(os.environ.get('SIP_CONN_TIMEOUT', '20')))
 TRACE_ENABLED = os.environ.get('SIP_TRACE', '1').lower() not in ('0', 'false', 'no')
 TRACE_IP = os.environ.get('SIP_TRACE_IP', '').strip()
 SIP_AUTH_CHALLENGE_MODE = os.environ.get('SIP_AUTH_CHALLENGE_MODE', 'mixed').strip().lower()
-NOT_PROVIDED_PASSWORD = '<not provided>'
+SIP_THROTTLE_PER_SEC = 10
+SIP_DEDUP_WINDOW_SEC = int(os.environ.get('SIP_DEDUP_WINDOW_SEC', '60'))
+
+_emit_lock = threading.Lock()
+_emit_window_sec = int(time.time())
+_emit_window_counts = {}
+_dedup_lock = threading.Lock()
+_dedup_seen = {}
+_ack_lock = threading.Lock()
+_ack_seen = {}
 
 
 def is_blocked(ip):
@@ -45,6 +54,81 @@ def trace(session_id, client_ip, stage, **fields):
     suffix = ' '.join(f'{k}={v!r}' for k, v in fields.items())
     base = f"SIPTRACE sid={session_id} ip={client_ip} stage={stage}"
     print(f"{base} {suffix}".rstrip(), flush=True)
+
+
+def should_emit_knock(client_ip):
+    """
+    Per-IP drop throttle: at most SIP_THROTTLE_PER_SEC knock events per second
+    for each source IP. Applies across UDP and all TCP worker threads.
+    """
+    global _emit_window_sec, _emit_window_counts
+    if SIP_THROTTLE_PER_SEC <= 0:
+        return True
+    now = int(time.time())
+    with _emit_lock:
+        if now != _emit_window_sec:
+            _emit_window_sec = now
+            _emit_window_counts = {}
+        current = _emit_window_counts.get(client_ip, 0)
+        if current >= SIP_THROTTLE_PER_SEC:
+            return False
+        _emit_window_counts[client_ip] = current + 1
+        return True
+
+
+def _dedup_key(client_ip, req):
+    headers = req.get('headers', {})
+    call_id = _header_first(headers, 'call-id') or ''
+    method = req.get('method', 'UNKNOWN')
+    uri = req.get('uri', '')
+    return (client_ip, call_id, method, uri)
+
+
+def should_emit_dedup(dedup_key):
+    global _dedup_seen
+    if SIP_DEDUP_WINDOW_SEC <= 0:
+        return True
+    now = time.time()
+    with _dedup_lock:
+        cutoff = now - SIP_DEDUP_WINDOW_SEC
+        stale = [k for k, ts in _dedup_seen.items() if ts < cutoff]
+        for k in stale:
+            _dedup_seen.pop(k, None)
+        ts = _dedup_seen.get(dedup_key)
+        if ts is not None and (now - ts) < SIP_DEDUP_WINDOW_SEC:
+            return False
+        _dedup_seen[dedup_key] = now
+        return True
+
+
+def _ack_key(client_ip, req):
+    headers = req.get('headers', {})
+    call_id = _header_first(headers, 'call-id') or ''
+    uri = req.get('uri', '')
+    return (client_ip, call_id, uri)
+
+
+def mark_ack_seen(client_ip, req):
+    key = _ack_key(client_ip, req)
+    now = time.time()
+    with _ack_lock:
+        # Keep only recent ACK markers to avoid unbounded growth.
+        cutoff = now - 120
+        stale = [k for k, ts in _ack_seen.items() if ts < cutoff]
+        for k in stale:
+            _ack_seen.pop(k, None)
+        _ack_seen[key] = now
+
+
+def get_ack_state(client_ip, req):
+    key = _ack_key(client_ip, req)
+    now = time.time()
+    with _ack_lock:
+        ts = _ack_seen.get(key)
+    if ts is None:
+        return False, None
+    age_ms = int((now - ts) * 1000)
+    return True, max(0, age_ms)
 
 
 def _nonce(size=24):
@@ -226,13 +310,15 @@ def build_response(req, code, reason, extra_headers=None):
     return ('\r\n'.join(lines) + '\r\n\r\n').encode()
 
 
-def emit_knock(client_ip, username, password, extra=None):
+def emit_knock(client_ip, extra=None, dedup_key=None):
+    if not should_emit_knock(client_ip):
+        return
+    if dedup_key is not None and not should_emit_dedup(dedup_key):
+        return
     knock = {
         'type': 'KNOCK',
         'proto': 'SIP',
         'ip': client_ip,
-        'user': username or '',
-        'pass': password or NOT_PROVIDED_PASSWORD,
     }
     if extra:
         knock.update(extra)
@@ -243,48 +329,50 @@ def process_sip_request(req, client_ip):
     headers = req.get('headers', {})
     method = req.get('method', 'UNKNOWN')
     uri = req.get('uri', '')
+    if method == 'ACK':
+        # ACK is SIP transaction bookkeeping; do not count as a knock.
+        mark_ack_seen(client_ip, req)
+        return 200, 'OK', None
+    dedup_key = _dedup_key(client_ip, req)
+    ack_seen, ack_age_ms = get_ack_state(client_ip, req)
     common = {
         'sip_method': method,
         'sip_request_uri': uri,
+        'sip_call_id': _header_first(headers, 'call-id') or '',
+        'sip_cseq': _header_first(headers, 'cseq') or '',
+        'sip_ack_seen': ack_seen,
     }
+    if ack_age_ms is not None:
+        common['sip_ack_age_ms'] = ack_age_ms
 
     auth_h = _header_first(headers, 'authorization') or _header_first(headers, 'proxy-authorization')
     scheme, auth = parse_auth_header(auth_h)
 
-    # Capture URI userinfo separately from auth credentials.
+    # Capture URI userinfo candidates for fallback identity extraction.
+    uri_candidates = []
     for field_name, candidate in [
         ('request_uri', req.get('uri')),
         ('from', _header_first(headers, 'from')),
-        ('to', _header_first(headers, 'to')),
         ('contact', _header_first(headers, 'contact')),
+        ('to', _header_first(headers, 'to')),
     ]:
         u, p = extract_user_pass_from_sip_uri(candidate)
-        if u and p:
-            emit_knock(
-                client_ip,
-                u,
-                '',
-                extra={
-                    **common,
-                    'sip_cred_source': f'uri:{field_name}',
-                    'sip_uri_user': u,
-                    'sip_uri_password': p,
-                    'sip_uri_userinfo': f'{u}:{p}',
-                },
-            )
+        if u:
+            uri_candidates.append((field_name, u, p))
 
     if scheme == 'basic' and auth.get('username') is not None:
         emit_knock(
             client_ip,
-            auth.get('username'),
-            auth.get('password', ''),
             extra={
                 **common,
+                'sip_stage': 'auth',
                 'sip_auth_scheme': 'basic',
                 'sip_auth_user': auth.get('username', ''),
                 'sip_auth_password': auth.get('password', ''),
                 'sip_cred_source': 'authorization',
+                'sip_extension': auth.get('username', ''),
             },
+            dedup_key=dedup_key,
         )
         return 403, 'Forbidden', None
 
@@ -292,10 +380,9 @@ def process_sip_request(req, client_ip):
         # SIP Digest auth does not expose plaintext passwords.
         emit_knock(
             client_ip,
-            auth.get('username'),
-            NOT_PROVIDED_PASSWORD,
             extra={
                 **common,
+                'sip_stage': 'auth',
                 'sip_auth_scheme': 'digest',
                 'sip_auth_user': auth.get('username', ''),
                 'sip_auth_password': '',
@@ -309,7 +396,9 @@ def process_sip_request(req, client_ip):
                 'sip_digest_nc': auth.get('nc', ''),
                 'sip_digest_cnonce': auth.get('cnonce', ''),
                 'sip_cred_source': 'authorization',
+                'sip_extension': auth.get('username', ''),
             },
+            dedup_key=dedup_key,
         )
         return 403, 'Forbidden', None
 
@@ -324,15 +413,44 @@ def process_sip_request(req, client_ip):
         if u:
             emit_knock(
                 client_ip,
-                u,
-                '',
                 extra={
                     **common,
+                    'sip_stage': 'hint',
                     'sip_cred_source': 'username_hint',
+                    'sip_extension': u,
                     'sip_challenge_mode': str(status_code),
                 },
+                dedup_key=dedup_key,
             )
+        elif uri_candidates:
+            field_name, uri_user, uri_pass = uri_candidates[0]
+            extra = {
+                **common,
+                'sip_stage': 'uri',
+                'sip_cred_source': f'uri:{field_name}',
+                'sip_uri_user': uri_user,
+                'sip_extension': uri_user,
+                'sip_challenge_mode': str(status_code),
+            }
+            if uri_pass:
+                extra['sip_uri_password'] = uri_pass
+                extra['sip_uri_userinfo'] = f'{uri_user}:{uri_pass}'
+            emit_knock(client_ip, extra=extra, dedup_key=dedup_key)
         return status_code, status_reason, [f'{auth_header_name}: {challenge}']
+
+    if uri_candidates:
+        field_name, uri_user, uri_pass = uri_candidates[0]
+        extra = {
+            **common,
+            'sip_stage': 'uri',
+            'sip_cred_source': f'uri:{field_name}',
+            'sip_uri_user': uri_user,
+            'sip_extension': uri_user,
+        }
+        if uri_pass:
+            extra['sip_uri_password'] = uri_pass
+            extra['sip_uri_userinfo'] = f'{uri_user}:{uri_pass}'
+        emit_knock(client_ip, extra=extra, dedup_key=dedup_key)
 
     return 200, 'OK', None
 

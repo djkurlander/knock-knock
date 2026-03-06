@@ -6,6 +6,9 @@ import os
 import base64
 import random
 import string
+import time
+import uuid
+import ssl
 import redis
 
 _r = redis.Redis(host=os.environ.get('REDIS_HOST', 'localhost'), port=6379, db=0, decode_responses=True)
@@ -45,26 +48,54 @@ _EHLO_RESP = (
     "250-8BITMIME\r\n"
     "250 DSN\r\n"
 ).encode()
+_EHLO_RESP_TLS = (
+    f"250-{_SMTP_HOSTNAME}\r\n"
+    "250-PIPELINING\r\n"
+    "250-SIZE 10240000\r\n"
+    "250-VRFY\r\n"
+    "250-ETRN\r\n"
+    "250-AUTH LOGIN PLAIN\r\n"
+    "250-AUTH=LOGIN PLAIN\r\n"
+    "250-ENHANCEDSTATUSCODES\r\n"
+    "250-8BITMIME\r\n"
+    "250 DSN\r\n"
+).encode()
 
 MAX_MESSAGES_PER_SESSION = 10
+SMTP587_REQUIRE_AUTH = os.environ.get('SMTP587_REQUIRE_AUTH', '0').lower() in ('1', 'true', 'yes', 'on')
+SMTP_TRACE_ENABLED = os.environ.get('SMTP_TRACE', '1').lower() not in ('0', 'false', 'no')
+SMTP_TRACE_IP = os.environ.get('SMTP_TRACE_IP', '').strip()
+SMTP_TLS_CERT_PATH = os.environ.get('SMTP_TLS_CERT_PATH', 'data/rdp.crt')
+SMTP_TLS_KEY_PATH = os.environ.get('SMTP_TLS_KEY_PATH', 'data/rdp.key')
 
 def recv_line(sock, timeout=30):
-    """Read one SMTP line terminated by \\r\\n or \\n."""
+    """Read one SMTP line terminated by \\r\\n or \\n, with status."""
     sock.settimeout(timeout)
     buf = b''
-    try:
-        while True:
+    while True:
+        try:
             ch = sock.recv(1)
-            if not ch:
-                break
-            if ch == b'\n':
-                break
-            if ch == b'\r':
-                continue
-            buf += ch
-    except (socket.timeout, ConnectionResetError, BrokenPipeError, OSError):
-        pass
-    return buf.decode('utf-8', errors='replace').strip()
+        except socket.timeout:
+            return '', 'timeout'
+        except (ConnectionResetError, BrokenPipeError, OSError) as e:
+            return '', f"recv_error:{type(e).__name__}"
+        if not ch:
+            line = buf.decode('utf-8', errors='replace').strip()
+            return line, ('peer_closed' if not line else 'ok')
+        if ch == b'\n':
+            return buf.decode('utf-8', errors='replace').strip(), 'ok'
+        if ch == b'\r':
+            continue
+        buf += ch
+
+def trace(session_id, client_ip, stage, **fields):
+    if not SMTP_TRACE_ENABLED:
+        return
+    if SMTP_TRACE_IP and client_ip != SMTP_TRACE_IP:
+        return
+    suffix = ' '.join(f'{k}={v!r}' for k, v in fields.items())
+    base = f"SMTPTRACE sid={session_id} ip={client_ip} stage={stage}"
+    print(f"{base} {suffix}".rstrip(), flush=True)
 
 def b64decode(s):
     """Decode a base64 string, returning '' on any error."""
@@ -77,36 +108,128 @@ def extract_addr(raw):
     """Pull address out of 'MAIL FROM:<addr>' or 'RCPT TO:<addr>' line."""
     raw = raw.strip()
     if '<' in raw and '>' in raw:
-        return raw[raw.index('<') + 1:raw.index('>')]
+        addr = raw[raw.index('<') + 1:raw.index('>')]
+        return '<none>' if addr == '' else addr
     return raw
 
+def emit_smtp_knock(
+    client_ip,
+    *,
+    stage,
+    username=None,
+    password=None,
+    mail_from=None,
+    rcpt_to=None,
+    subject=None,
+    body=None,
+):
+    knock = {"type": "KNOCK", "proto": "SMTP", "ip": client_ip, "smtp_stage": stage}
+    if username is not None:
+        knock["user"] = username
+    if password is not None:
+        knock["pass"] = password
+    if mail_from:
+        knock["smtp_mail_from"] = mail_from
+    if rcpt_to:
+        knock["smtp_rcpt_to"] = rcpt_to
+    if subject:
+        knock["subject"] = subject
+    if body:
+        knock["body"] = body
+    print(json.dumps(knock), flush=True)
+
 def handle_connection(client_sock, client_ip):
+    session_id = uuid.uuid4().hex[:8]
+    started_at = time.time()
+    stop_reason = 'unknown'
+    commands_seen = 0
+    knocks_emitted = 0
+    last_cmd = ''
     username = None
     password = None
     authed = False
+    auth_emitted = False
     mail_from = None
     rcpt_to = None
     subject = None
     messages = 0
 
+    preauth_emitted = False
+    tls_active = False
+
+    def emit_knock(stage, **kwargs):
+        nonlocal knocks_emitted
+        emit_smtp_knock(client_ip, stage=stage, **kwargs)
+        knocks_emitted += 1
+        trace(
+            session_id,
+            client_ip,
+            'emit',
+            knock_stage=stage,
+            knock_count=knocks_emitted,
+            authed=authed,
+            have_from=bool(mail_from),
+            have_to=bool(rcpt_to),
+        )
+
+    def maybe_emit_preauth_envelope(force=False):
+        nonlocal preauth_emitted
+        if preauth_emitted:
+            return
+        have_from = bool(mail_from)
+        have_to = bool(rcpt_to)
+        if (have_from and have_to) or (force and (have_from or have_to)):
+            emit_knock(
+                'preauth_envelope',
+                mail_from=mail_from,
+                rcpt_to=rcpt_to,
+            )
+            preauth_emitted = True
+
     try:
         client_sock.settimeout(30)
         print(f"🔌 SMTP connect {client_ip}", flush=True)
+        trace(session_id, client_ip, 'connect', require_auth=SMTP587_REQUIRE_AUTH)
         client_sock.sendall(_BANNER)
 
         while True:
-            line = recv_line(client_sock)
+            line, recv_status = recv_line(client_sock)
+            if recv_status != 'ok':
+                stop_reason = f"recv_{recv_status}"
+                trace(session_id, client_ip, 'recv_end', reason=stop_reason, commands_seen=commands_seen, knocks_emitted=knocks_emitted)
+                break
             if not line:
+                stop_reason = 'empty_line'
+                trace(session_id, client_ip, 'recv_empty', commands_seen=commands_seen)
                 break
 
             cmd = line.upper()
+            cmd_word = cmd.split(' ', 1)[0]
+            last_cmd = cmd_word
+            commands_seen += 1
+            trace(session_id, client_ip, 'command', cmd=cmd_word, idx=commands_seen)
 
             if cmd.startswith('EHLO') or cmd.startswith('HELO'):
-                client_sock.sendall(_EHLO_RESP)
+                client_sock.sendall(_EHLO_RESP_TLS if tls_active else _EHLO_RESP)
 
             elif cmd == 'STARTTLS':
-                # Advertise STARTTLS but report unavailable — bots fall back to plain AUTH
-                client_sock.sendall(b"454 4.7.0 TLS not available due to local problem\r\n")
+                if tls_active:
+                    client_sock.sendall(b"503 5.5.1 TLS already active\r\n")
+                    continue
+                try:
+                    client_sock.sendall(b"220 2.0.0 Ready to start TLS\r\n")
+                    tls_ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+                    tls_ctx.load_cert_chain(certfile=SMTP_TLS_CERT_PATH, keyfile=SMTP_TLS_KEY_PATH)
+                    client_sock = tls_ctx.wrap_socket(client_sock, server_side=True)
+                    client_sock.settimeout(30)
+                    tls_active = True
+                    trace(session_id, client_ip, 'tls_started', cert=SMTP_TLS_CERT_PATH, key=SMTP_TLS_KEY_PATH)
+                    # RFC-wise client should issue EHLO again after STARTTLS.
+                    continue
+                except Exception as e:
+                    stop_reason = f"starttls_failed:{type(e).__name__}"
+                    trace(session_id, client_ip, 'tls_failed', error=type(e).__name__, detail=str(e))
+                    break
 
             elif cmd.startswith('AUTH PLAIN'):
                 parts = line.split(' ', 2)
@@ -114,7 +237,12 @@ def handle_connection(client_sock, client_ip):
                     decoded = b64decode(parts[2])
                 else:
                     client_sock.sendall(b"334 \r\n")
-                    decoded = b64decode(recv_line(client_sock))
+                    auth_line, auth_status = recv_line(client_sock)
+                    if auth_status != 'ok':
+                        stop_reason = f"auth_plain_{auth_status}"
+                        trace(session_id, client_ip, 'auth_plain_recv_end', reason=stop_reason)
+                        break
+                    decoded = b64decode(auth_line)
                 fields = decoded.split('\x00')
                 if len(fields) >= 3:
                     username, password = fields[1], fields[2]
@@ -123,33 +251,65 @@ def handle_connection(client_sock, client_ip):
                 else:
                     username, password = decoded, ''
                 authed = True
+                emit_knock(
+                    'auth',
+                    username=username,
+                    password=password or '',
+                )
+                auth_emitted = True
                 client_sock.sendall(b"235 2.7.0 Authentication successful\r\n")
 
             elif cmd.startswith('AUTH LOGIN'):
                 client_sock.sendall(b"334 VXNlcm5hbWU6\r\n")  # "Username:"
-                username = b64decode(recv_line(client_sock))
+                user_line, user_status = recv_line(client_sock)
+                if user_status != 'ok':
+                    stop_reason = f"auth_login_user_{user_status}"
+                    trace(session_id, client_ip, 'auth_login_user_recv_end', reason=stop_reason)
+                    break
+                username = b64decode(user_line)
                 client_sock.sendall(b"334 UGFzc3dvcmQ6\r\n")  # "Password:"
-                password = b64decode(recv_line(client_sock))
+                pass_line, pass_status = recv_line(client_sock)
+                if pass_status != 'ok':
+                    stop_reason = f"auth_login_pass_{pass_status}"
+                    trace(session_id, client_ip, 'auth_login_pass_recv_end', reason=stop_reason)
+                    break
+                password = b64decode(pass_line)
                 authed = True
+                emit_knock(
+                    'auth',
+                    username=username,
+                    password=password or '',
+                )
+                auth_emitted = True
                 client_sock.sendall(b"235 2.7.0 Authentication successful\r\n")
 
             elif cmd.startswith('MAIL FROM:'):
-                if not authed:
+                # New envelope transaction starts here.
+                mail_from = extract_addr(line[10:])
+                rcpt_to = None
+                subject = None
+                preauth_emitted = False
+                if not authed and not SMTP587_REQUIRE_AUTH:
+                    maybe_emit_preauth_envelope(force=False)
+                if SMTP587_REQUIRE_AUTH and not authed:
                     client_sock.sendall(b"530 5.5.1 Authentication required\r\n")
                 else:
-                    mail_from = extract_addr(line[10:])
                     client_sock.sendall(b"250 2.1.0 Ok\r\n")
 
             elif cmd.startswith('RCPT TO:'):
-                if not authed:
+                if rcpt_to is None:
+                    rcpt_to = extract_addr(line[8:])
+                if not authed and not SMTP587_REQUIRE_AUTH:
+                    maybe_emit_preauth_envelope(force=False)
+                if SMTP587_REQUIRE_AUTH and not authed:
                     client_sock.sendall(b"530 5.5.1 Authentication required\r\n")
                 else:
-                    if rcpt_to is None:
-                        rcpt_to = extract_addr(line[8:])
                     client_sock.sendall(b"250 2.1.5 Ok\r\n")
 
             elif cmd == 'DATA':
-                if not authed or mail_from is None:
+                if mail_from is None:
+                    client_sock.sendall(b"503 5.5.1 Error: need MAIL command\r\n")
+                elif SMTP587_REQUIRE_AUTH and not authed:
                     client_sock.sendall(b"530 5.5.1 Authentication required\r\n")
                 else:
                     client_sock.sendall(b"354 End data with <CR><LF>.<CR><LF>\r\n")
@@ -157,7 +317,10 @@ def handle_connection(client_sock, client_ip):
                     # Read headers, capture Subject
                     client_sock.settimeout(15)
                     for _ in range(200):
-                        hdr = recv_line(client_sock, timeout=15)
+                        hdr, hdr_status = recv_line(client_sock, timeout=15)
+                        if hdr_status != 'ok':
+                            trace(session_id, client_ip, 'data_header_recv_end', status=hdr_status)
+                            break
                         if not hdr or hdr == '.':
                             break
                         if hdr.upper().startswith('SUBJECT:'):
@@ -166,7 +329,10 @@ def handle_connection(client_sock, client_ip):
                     # Capture message body (up to 2000 chars)
                     body_lines = []
                     for _ in range(500):
-                        body_line = recv_line(client_sock, timeout=10)
+                        body_line, body_status = recv_line(client_sock, timeout=10)
+                        if body_status != 'ok':
+                            trace(session_id, client_ip, 'data_body_recv_end', status=body_status, lines=len(body_lines))
+                            break
                         if body_line == '.' or not body_line:
                             break
                         body_lines.append(body_line)
@@ -175,24 +341,22 @@ def handle_connection(client_sock, client_ip):
                     queue_id = ''.join(random.choices(string.ascii_uppercase + string.digits, k=10))
                     client_sock.sendall(f"250 2.0.0 Ok: queued as {queue_id}\r\n".encode())
 
-                    # Emit knock with full context
-                    knock = {"type": "KNOCK", "proto": "SMTP",
-                             "ip": client_ip, "user": username, "pass": password or ''}
-                    if subject:
-                        knock["subject"] = subject
-                    if body:
-                        knock["body"] = body
-                    if mail_from:
-                        knock["mail_from"] = mail_from
-                    if rcpt_to:
-                        knock["rcpt_to"] = rcpt_to
-                    print(json.dumps(knock), flush=True)
+                    # Post-auth message envelope/content event (no creds here; creds are emitted at AUTH stage).
+                    emit_knock(
+                        'postauth_envelope' if authed else 'preauth_message',
+                        mail_from=mail_from,
+                        rcpt_to=rcpt_to,
+                        subject=subject,
+                        body=body,
+                    )
 
                     # Reset for next message in same session
                     mail_from = rcpt_to = subject = None
                     messages += 1
                     if messages >= MAX_MESSAGES_PER_SESSION:
                         client_sock.sendall(b"421 4.7.0 Try again later\r\n")
+                        stop_reason = 'max_messages_reached'
+                        trace(session_id, client_ip, 'session_limit', max_messages=MAX_MESSAGES_PER_SESSION)
                         break
 
             elif cmd == 'NOOP':
@@ -200,30 +364,55 @@ def handle_connection(client_sock, client_ip):
 
             elif cmd == 'RSET':
                 mail_from = rcpt_to = subject = None
+                preauth_emitted = False
                 client_sock.sendall(b"250 2.0.0 Ok\r\n")
 
             elif cmd.startswith('VRFY'):
                 client_sock.sendall(b"252 2.0.0 Send some mail, I'll try my best\r\n")
 
             elif cmd == 'QUIT':
+                if not authed:
+                    maybe_emit_preauth_envelope(force=True)
                 client_sock.sendall(b"221 Bye\r\n")
+                stop_reason = 'quit'
                 break
 
             else:
                 client_sock.sendall(b"502 5.5.2 Error: command not recognized\r\n")
+                trace(session_id, client_ip, 'command_unrecognized', cmd=cmd_word)
 
-    except Exception:
-        pass
+    except Exception as e:
+        stop_reason = f"exception:{type(e).__name__}"
+        trace(session_id, client_ip, 'handler_exception', error=type(e).__name__, detail=str(e))
     finally:
-        # Emit for sessions where auth succeeded but DATA never completed
-        if authed and username is not None and messages == 0:
-            knock = {"type": "KNOCK", "proto": "SMTP",
-                     "ip": client_ip, "user": username, "pass": password or ''}
-            if mail_from:
-                knock["mail_from"] = mail_from
-            if rcpt_to:
-                knock["rcpt_to"] = rcpt_to
-            print(json.dumps(knock), flush=True)
+        if not authed:
+            maybe_emit_preauth_envelope(force=True)
+        # Backstop: if auth succeeded but event emission was skipped for any reason.
+        if authed and username is not None and not auth_emitted:
+            emit_knock(
+                'auth',
+                username=username,
+                password=password or '',
+                mail_from=mail_from,
+                rcpt_to=rcpt_to,
+            )
+        duration_ms = int((time.time() - started_at) * 1000)
+        trace(
+            session_id,
+            client_ip,
+            'session_summary',
+            duration_ms=duration_ms,
+            stop_reason=stop_reason,
+            commands_seen=commands_seen,
+            messages=messages,
+            knocks_emitted=knocks_emitted,
+            tls_active=tls_active,
+            authed=authed,
+            auth_emitted=auth_emitted,
+            last_cmd=last_cmd,
+            have_from=bool(mail_from),
+            have_to=bool(rcpt_to),
+        )
         try:
             client_sock.close()
         except:
@@ -247,6 +436,7 @@ def start_honeypot():
         client, addr = sock.accept()
         client_ip = normalize_ip(addr[0])
         if is_blocked(client_ip):
+            trace(f"b{uuid.uuid4().hex[:8]}", client_ip, 'blocked_accept')
             client.close()
             continue
         threading.Thread(target=handle_connection, args=(client, client_ip), daemon=True).start()

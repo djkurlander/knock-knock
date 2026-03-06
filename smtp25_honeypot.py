@@ -65,7 +65,8 @@ def extract_addr(raw):
     """Pull address out of 'MAIL FROM:<addr>' or 'RCPT TO:<addr>' line."""
     raw = raw.strip()
     if '<' in raw and '>' in raw:
-        return raw[raw.index('<') + 1:raw.index('>')]
+        addr = raw[raw.index('<') + 1:raw.index('>')]
+        return '<none>' if addr == '' else addr
     return raw
 
 def handle_connection(client_sock, client_ip):
@@ -126,8 +127,11 @@ def handle_connection(client_sock, client_ip):
                 client_sock.sendall(f"250 2.0.0 Ok: queued as {queue_id}\r\n".encode())
 
                 # Emit knock for this message, then reset for next MAIL FROM
-                knock = {"type": "KNOCK", "proto": "MAIL",
-                         "ip": client_ip, "user": mail_from, "pass": rcpt_to or ''}
+                knock = {"type": "KNOCK", "proto": "MAIL", "ip": client_ip}
+                if mail_from is not None:
+                    knock["mail_from"] = mail_from
+                if rcpt_to is not None:
+                    knock["mail_to"] = rcpt_to
                 if subject:
                     knock["subject"] = subject
                 if body:
@@ -152,8 +156,9 @@ def handle_connection(client_sock, client_ip):
     finally:
         # Emit for incomplete sessions (MAIL FROM set but DATA never reached)
         if mail_from is not None:
-            knock = {"type": "KNOCK", "proto": "MAIL",
-                     "ip": client_ip, "user": mail_from, "pass": rcpt_to or ''}
+            knock = {"type": "KNOCK", "proto": "MAIL", "ip": client_ip, "mail_from": mail_from}
+            if rcpt_to is not None:
+                knock["mail_to"] = rcpt_to
             if subject:
                 knock["subject"] = subject
             print(json.dumps(knock), flush=True)

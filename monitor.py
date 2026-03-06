@@ -20,6 +20,9 @@ BLOCKLIST_FILE = os.environ.get('DB_DIR', 'data') + '/blocklist.txt'
 
 from constants import PROTO, PROTO_NAME
 
+USER_PANEL_PROTOCOLS = {'SSH', 'TNET', 'FTP', 'RDP', 'SMTP'}
+PASS_PANEL_PROTOCOLS = {'SSH', 'TNET', 'FTP', 'SMTP'}
+
 def reset_all():
     """Wipes the SQLite database and clears relevant Redis keys."""
     print("🧹 Resetting all data as requested...")
@@ -31,7 +34,7 @@ def reset_all():
             print(f"   [!] Error deleting {DB_PATH}: {e}")
     try:
         r = redis.Redis(host=os.environ.get('REDIS_HOST', 'localhost'), port=6379, db=0, decode_responses=True)
-        keys_to_clear = ["knock:total_global", "knock:uptime_minutes", "knock:last_time", "knock:last_lat", "knock:last_lng", "knock:recent",
+        keys_to_clear = ["knock:total_global", "knock:proto_counts", "knock:uptime_minutes", "knock:last_time", "knock:last_lat", "knock:last_lng", "knock:recent",
                          "knock:recent:ssh", "knock:recent:tnet", "knock:recent:smtp", "knock:recent:rdp", "knock:recent:mail", "knock:recent:ftp",
                          "knock:recent:sip"]
         for key in keys_to_clear:
@@ -110,18 +113,20 @@ def log_to_maximalist_db(data, save_knocks=True):
         if save_knocks:
             cur.execute("""INSERT INTO knocks (ip_address, iso_code, city, region, country, isp, asn, username, password, proto)
                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                        (data['ip'], data['iso'], data['city'], data.get('region'), data['country'], data['isp'], data.get('asn'), data['user'], data['pass'],
+                        (data['ip'], data['iso'], data['city'], data.get('region'), data['country'], data['isp'], data.get('asn'), data.get('user'), data.get('pass'),
                          PROTO.get(data.get('proto', 'SSH'), 0)))
         now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         proto_int = PROTO.get(data.get('proto', 'SSH'), 0)
-        cur.execute("INSERT INTO user_intel VALUES (?, 1, ?) ON CONFLICT(username) DO UPDATE SET hits=hits+1, last_seen=?", (data['user'], now, now))
-        cur.execute("INSERT INTO pass_intel VALUES (?, 1, ?) ON CONFLICT(password) DO UPDATE SET hits=hits+1, last_seen=?", (data['pass'], now, now))
+        if data.get('user') is not None:
+            cur.execute("INSERT INTO user_intel VALUES (?, 1, ?) ON CONFLICT(username) DO UPDATE SET hits=hits+1, last_seen=?", (data['user'], now, now))
+            cur.execute("INSERT INTO user_intel_proto VALUES (?, ?, 1, ?) ON CONFLICT(username, proto) DO UPDATE SET hits=hits+1, last_seen=?", (data['user'], proto_int, now, now))
+        if data.get('pass') is not None:
+            cur.execute("INSERT INTO pass_intel VALUES (?, 1, ?) ON CONFLICT(password) DO UPDATE SET hits=hits+1, last_seen=?", (data['pass'], now, now))
+            cur.execute("INSERT INTO pass_intel_proto VALUES (?, ?, 1, ?) ON CONFLICT(password, proto) DO UPDATE SET hits=hits+1, last_seen=?", (data['pass'], proto_int, now, now))
         cur.execute("INSERT INTO country_intel VALUES (?, ?, 1, ?) ON CONFLICT(iso_code) DO UPDATE SET hits=hits+1, last_seen=?, country=?", (data['iso'], data['country'], now, now, data['country']))
         cur.execute("INSERT INTO isp_intel VALUES (?, 1, ?, ?) ON CONFLICT(isp) DO UPDATE SET hits=hits+1, last_seen=?, asn=?", (data['isp'], now, data.get('asn'), now, data.get('asn')))
         cur.execute("INSERT INTO ip_intel VALUES (?, 1, ?, ?, ?) ON CONFLICT(ip) DO UPDATE SET hits=hits+1, last_seen=?, lat=?, lng=?",
                     (data['ip'], now, data.get('lat'), data.get('lng'), now, data.get('lat'), data.get('lng')))
-        cur.execute("INSERT INTO user_intel_proto VALUES (?, ?, 1, ?) ON CONFLICT(username, proto) DO UPDATE SET hits=hits+1, last_seen=?", (data['user'], proto_int, now, now))
-        cur.execute("INSERT INTO pass_intel_proto VALUES (?, ?, 1, ?) ON CONFLICT(password, proto) DO UPDATE SET hits=hits+1, last_seen=?", (data['pass'], proto_int, now, now))
         cur.execute("INSERT INTO country_intel_proto VALUES (?, ?, ?, 1, ?) ON CONFLICT(iso_code, proto) DO UPDATE SET hits=hits+1, last_seen=?, country=?", (data['iso'], proto_int, data['country'], now, now, data['country']))
         cur.execute("INSERT INTO isp_intel_proto VALUES (?, ?, 1, ?, ?) ON CONFLICT(isp, proto) DO UPDATE SET hits=hits+1, last_seen=?, asn=?", (data['isp'], proto_int, now, data.get('asn'), now, data.get('asn')))
         cur.execute("INSERT INTO ip_intel_proto VALUES (?, ?, 1, ?, ?, ?) ON CONFLICT(ip, proto) DO UPDATE SET hits=hits+1, last_seen=?, lat=?, lng=?",
@@ -144,19 +149,21 @@ def get_intel_stats_before_update(data):
         row = cur.fetchone()
         stats['country_hits_proto'], stats['country_last_proto'] = (row[0] + 1, row[1]) if row else (1, None)
 
-        cur.execute("SELECT hits, last_seen FROM user_intel WHERE username=?", (data['user'],))
-        row = cur.fetchone()
-        stats['user_hits'], stats['user_last'] = (row[0] + 1, row[1]) if row else (1, None)
-        cur.execute("SELECT hits, last_seen FROM user_intel_proto WHERE username=? AND proto=?", (data['user'], proto_int))
-        row = cur.fetchone()
-        stats['user_hits_proto'], stats['user_last_proto'] = (row[0] + 1, row[1]) if row else (1, None)
+        if data.get('user') is not None:
+            cur.execute("SELECT hits, last_seen FROM user_intel WHERE username=?", (data['user'],))
+            row = cur.fetchone()
+            stats['user_hits'], stats['user_last'] = (row[0] + 1, row[1]) if row else (1, None)
+            cur.execute("SELECT hits, last_seen FROM user_intel_proto WHERE username=? AND proto=?", (data['user'], proto_int))
+            row = cur.fetchone()
+            stats['user_hits_proto'], stats['user_last_proto'] = (row[0] + 1, row[1]) if row else (1, None)
 
-        cur.execute("SELECT hits, last_seen FROM pass_intel WHERE password=?", (data['pass'],))
-        row = cur.fetchone()
-        stats['pass_hits'], stats['pass_last'] = (row[0] + 1, row[1]) if row else (1, None)
-        cur.execute("SELECT hits, last_seen FROM pass_intel_proto WHERE password=? AND proto=?", (data['pass'], proto_int))
-        row = cur.fetchone()
-        stats['pass_hits_proto'], stats['pass_last_proto'] = (row[0] + 1, row[1]) if row else (1, None)
+        if data.get('pass') is not None:
+            cur.execute("SELECT hits, last_seen FROM pass_intel WHERE password=?", (data['pass'],))
+            row = cur.fetchone()
+            stats['pass_hits'], stats['pass_last'] = (row[0] + 1, row[1]) if row else (1, None)
+            cur.execute("SELECT hits, last_seen FROM pass_intel_proto WHERE password=? AND proto=?", (data['pass'], proto_int))
+            row = cur.fetchone()
+            stats['pass_hits_proto'], stats['pass_last_proto'] = (row[0] + 1, row[1]) if row else (1, None)
 
         cur.execute("SELECT hits, last_seen FROM isp_intel WHERE isp=?", (data['isp'],))
         row = cur.fetchone()
@@ -253,8 +260,17 @@ def monitor(save_knocks=False, max_knocks=None):
         total = conn.execute("SELECT SUM(hits) FROM ip_intel").fetchone()[0] or 0
         uptime = conn.execute("SELECT uptime_minutes FROM monitor_heartbeats WHERE id=1").fetchone()
         uptime = uptime[0] if uptime else 0
+        proto_rows = conn.execute("SELECT proto, SUM(hits) AS c FROM ip_intel_proto GROUP BY proto").fetchall()
         conn.close()
         r.set("knock:total_global", total)
+        r.delete("knock:proto_counts")
+        for proto_int, count in proto_rows:
+            proto_name = PROTO_NAME.get(proto_int)
+            if proto_name:
+                r.hset("knock:proto_counts", proto_name, int(count))
+        for proto_name in PROTO.keys():
+            if not r.hexists("knock:proto_counts", proto_name):
+                r.hset("knock:proto_counts", proto_name, 0)
         if not r.get("knock:uptime_minutes"):
             r.set("knock:uptime_minutes", uptime)
     except Exception as e:
@@ -314,17 +330,24 @@ def monitor(save_knocks=False, max_knocks=None):
             print(line, end='', flush=True)  # pass through diagnostic output from honeypots
             continue
         if knock.get("type") == "KNOCK":
-            ip, user, pw = knock["ip"], knock["user"], knock["pass"]
-            user = sanitize_credential(user)
-            pw   = sanitize_credential(pw)
+            proto = str(knock.get("proto", "SSH")).upper()
+            ip = knock["ip"]
+            raw_user = knock.get("user")
+            raw_pass = knock.get("pass")
+            user = sanitize_credential(raw_user if isinstance(raw_user, str) else str(raw_user)) if proto in USER_PANEL_PROTOCOLS and raw_user is not None else None
+            pw = sanitize_credential(raw_pass if isinstance(raw_pass, str) else str(raw_pass)) if proto in PASS_PANEL_PROTOCOLS and raw_pass is not None else None
             geo = get_geo_maximal(ip, c_reader, a_reader)
             package = {
                 "ip": ip, "user": user, "pass": pw,
-                "proto": knock.get("proto", "SSH"),
+                "proto": proto,
                 "city": geo['city'], "region": geo['region'], "country": geo['country'],
                 "iso": geo['iso'], "isp": geo['isp'], "asn": geo['asn'],
                 "lat": geo['lat'], "lng": geo['lng']
             }
+            if user is None:
+                package.pop("user")
+            if pw is None:
+                package.pop("pass")
             if knock.get("subject"):
                 package["subject"] = knock["subject"]
             if knock.get("body"):
@@ -332,7 +355,7 @@ def monitor(save_knocks=False, max_knocks=None):
             # Pass through SIP-only extended telemetry into Redis/websocket payloads.
             # This is intentionally not persisted in SQLite.
             for k, v in knock.items():
-                if not isinstance(k, str) or not k.startswith("sip_"):
+                if not isinstance(k, str) or not k.startswith(("sip_", "smtp_", "mail_")):
                     continue
                 if isinstance(v, str):
                     package[k] = sanitize_credential(v)
@@ -351,15 +374,26 @@ def monitor(save_knocks=False, max_knocks=None):
             r.lpush(proto_key, json.dumps(package))
             r.ltrim(proto_key, 0, 99)
             r.incr("knock:total_global")
+            r.hincrby("knock:proto_counts", package['proto'], 1)
             r.set("knock:last_time", int(time.time()))
             if geo['lat'] is not None:
                 r.set("knock:last_lat", geo['lat'])
                 r.set("knock:last_lng", geo['lng'])
             r.publish("radiation_stream", json.dumps(package))
             if package.get("subject"):
-                print(f"📧 MAIL {geo['iso']} | {user} → {pw} | {package['subject'][:60]} via {geo['isp']}")
+                left = user if user is not None else package.get("mail_from", package.get("smtp_mail_from", "<none>"))
+                right = pw if pw is not None else package.get("mail_to", package.get("smtp_rcpt_to", "<none>"))
+                print(f"📧 MAIL {geo['iso']} | {left} → {right} | {package['subject'][:60]} via {geo['isp']}")
             else:
-                print(f"📡 {knock.get('proto', 'SSH')} {geo['iso']} | {user}:{pw} via {geo['isp']}")
+                if user is not None and pw is not None:
+                    cred = f"{user}:{pw}"
+                elif user is not None:
+                    cred = f"user={user}"
+                elif pw is not None:
+                    cred = f"pass={pw}"
+                else:
+                    cred = "no-credentials"
+                print(f"📡 {proto} {geo['iso']} | {cred} via {geo['isp']}")
             if max_knocks and package.get('ip_hits', 0) >= max_knocks and not r.sismember("knock:blocked", ip):
                 add_to_blocklist(ip, r)
 

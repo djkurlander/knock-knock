@@ -882,7 +882,7 @@
             </div>
         `;
         const body = rows.map(r => `
-            <div style="display:grid;grid-template-columns:1fr 0.9fr 1.25fr 0.85fr;gap:8px;padding:4px 0;border-bottom:1px solid #222;">
+            <div class="proto-stats-row" data-proto="${escapeHtml(r.proto)}" style="display:grid;grid-template-columns:1fr 0.9fr 1.25fr 0.85fr;gap:8px;padding:4px 0;border-bottom:1px solid #222;">
                 <span class="proto-${r.proto.toLowerCase()}" style="font-weight:bold;">${escapeHtml(r.proto)}</span>
                 <span style="color:var(--neon-green)">${r.pct.toFixed(1)}%</span>
                 <span style="color:var(--data-blue)">${r.count.toLocaleString()}</span>
@@ -895,6 +895,22 @@
         ['d-proto-stats', 'm-proto-stats'].forEach(id => {
             const el = document.getElementById(id);
             if (el) el.innerHTML = html;
+        });
+    }
+
+    function pulseProtoStatsRow(proto) {
+        const p = (proto || '').toUpperCase();
+        if (!TRACKED_PROTOCOLS.includes(p)) return;
+        ['d-proto-stats', 'm-proto-stats'].forEach(id => {
+            const container = document.getElementById(id);
+            if (!container) return;
+            const row = container.querySelector(`.proto-stats-row[data-proto="${CSS.escape(p)}"]`);
+            if (!row) return;
+            if (row.highlightAnimation) row.highlightAnimation.cancel();
+            row.highlightAnimation = row.animate([
+                { background: 'rgba(0, 255, 65, 0.4)' },
+                { background: 'transparent' }
+            ], { duration: 3000, easing: 'ease' });
         });
     }
 
@@ -2050,6 +2066,7 @@
                 if (Number.isFinite(Number(d.uptime_minutes))) uptimeMinutesCache = Number(d.uptime_minutes);
                 bumpProtoBreakdownWithKnock(d);
                 renderProtoStats();
+                pulseProtoStatsRow(d.proto);
                 if (knockMatchesFilter(d)) {
                     incrementAndSort('loc', d.iso, d.country);
                     if (hasPassField(d)) incrementAndSort('pass', d.pass);

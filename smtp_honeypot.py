@@ -34,32 +34,60 @@ def _get_smtp_hostname():
         return 'localhost'
 
 _SMTP_HOSTNAME = _get_smtp_hostname()
-_BANNER = f"220 {_SMTP_HOSTNAME} ESMTP Postfix\r\n".encode()
-_EHLO_RESP = (
-    f"250-{_SMTP_HOSTNAME}\r\n"
-    "250-PIPELINING\r\n"
-    "250-SIZE 10240000\r\n"
-    "250-VRFY\r\n"
-    "250-ETRN\r\n"
-    "250-STARTTLS\r\n"
-    "250-AUTH LOGIN PLAIN\r\n"
-    "250-AUTH=LOGIN PLAIN\r\n"
-    "250-ENHANCEDSTATUSCODES\r\n"
-    "250-8BITMIME\r\n"
-    "250 DSN\r\n"
-).encode()
-_EHLO_RESP_TLS = (
-    f"250-{_SMTP_HOSTNAME}\r\n"
-    "250-PIPELINING\r\n"
-    "250-SIZE 10240000\r\n"
-    "250-VRFY\r\n"
-    "250-ETRN\r\n"
-    "250-AUTH LOGIN PLAIN\r\n"
-    "250-AUTH=LOGIN PLAIN\r\n"
-    "250-ENHANCEDSTATUSCODES\r\n"
-    "250-8BITMIME\r\n"
-    "250 DSN\r\n"
-).encode()
+
+def build_ehlo_response(hostname, caps):
+    if not caps:
+        return f"250 {hostname}\r\n".encode()
+    lines = [f"250-{hostname}"]
+    for cap in caps[:-1]:
+        lines.append(f"250-{cap}")
+    lines.append(f"250 {caps[-1]}")
+    return ("\r\n".join(lines) + "\r\n").encode()
+
+SMTP_FINGERPRINT = os.environ.get('SMTP_FINGERPRINT', 'postfix').strip().lower()
+SMTP_FINGERPRINTS = {
+    'postfix': {
+        'banner': 'ESMTP Postfix',
+        'ehlo_plain': [
+            'PIPELINING', 'SIZE 10240000', 'VRFY', 'ETRN',
+            'STARTTLS', 'AUTH LOGIN PLAIN', 'AUTH=LOGIN PLAIN',
+            'ENHANCEDSTATUSCODES', '8BITMIME', 'DSN',
+        ],
+        'ehlo_tls': [
+            'PIPELINING', 'SIZE 10240000', 'VRFY', 'ETRN',
+            'AUTH LOGIN PLAIN', 'AUTH=LOGIN PLAIN',
+            'ENHANCEDSTATUSCODES', '8BITMIME', 'DSN',
+        ],
+    },
+    'exim': {
+        'banner': 'ESMTP Exim 4.97',
+        'ehlo_plain': [
+            'PIPELINING', 'SIZE 52428800', '8BITMIME',
+            'STARTTLS', 'AUTH PLAIN LOGIN',
+        ],
+        'ehlo_tls': [
+            'PIPELINING', 'SIZE 52428800', '8BITMIME',
+            'AUTH PLAIN LOGIN',
+        ],
+    },
+    'exchange': {
+        'banner': 'Microsoft ESMTP MAIL Service ready',
+        'ehlo_plain': [
+            'SIZE 37748736', 'PIPELINING', 'DSN',
+            'ENHANCEDSTATUSCODES', 'STARTTLS', 'AUTH LOGIN',
+        ],
+        'ehlo_tls': [
+            'SIZE 37748736', 'PIPELINING', 'DSN',
+            'ENHANCEDSTATUSCODES', 'AUTH LOGIN',
+        ],
+    },
+}
+if SMTP_FINGERPRINT not in SMTP_FINGERPRINTS:
+    SMTP_FINGERPRINT = 'postfix'
+_FP = SMTP_FINGERPRINTS[SMTP_FINGERPRINT]
+_BANNER = f"220 {_SMTP_HOSTNAME} {_FP['banner']}\r\n".encode()
+_EHLO_RESP = build_ehlo_response(_SMTP_HOSTNAME, _FP['ehlo_plain'])
+_EHLO_RESP_TLS = build_ehlo_response(_SMTP_HOSTNAME, _FP['ehlo_tls'])
 
 MAX_MESSAGES_PER_SESSION = 10
 SMTP587_REQUIRE_AUTH = os.environ.get('SMTP587_REQUIRE_AUTH', '0').lower() in ('1', 'true', 'yes', 'on')
@@ -67,6 +95,14 @@ SMTP_TRACE_ENABLED = os.environ.get('SMTP_TRACE', '1').lower() not in ('0', 'fal
 SMTP_TRACE_IP = os.environ.get('SMTP_TRACE_IP', '').strip()
 SMTP_TLS_CERT_PATH = os.environ.get('SMTP_TLS_CERT_PATH', 'data/rdp.crt')
 SMTP_TLS_KEY_PATH = os.environ.get('SMTP_TLS_KEY_PATH', 'data/rdp.key')
+
+def queue_ok_reply(queue_id):
+    if SMTP_FINGERPRINT == 'exim':
+        return f"250 OK id={queue_id}\r\n"
+    if SMTP_FINGERPRINT == 'exchange':
+        internal_id = random.randint(100000, 999999)
+        return f"250 2.6.0 <{queue_id}> [InternalId={internal_id}] Queued mail for delivery\r\n"
+    return f"250 2.0.0 Ok: queued as {queue_id}\r\n"
 
 def recv_line(sock, timeout=30):
     """Read one SMTP line terminated by \\r\\n or \\n, with status."""
@@ -189,7 +225,7 @@ def handle_connection(client_sock, client_ip):
     try:
         client_sock.settimeout(30)
         print(f"🔌 SMTP connect {client_ip}", flush=True)
-        trace(session_id, client_ip, 'connect', require_auth=SMTP587_REQUIRE_AUTH)
+        trace(session_id, client_ip, 'connect', require_auth=SMTP587_REQUIRE_AUTH, fingerprint=SMTP_FINGERPRINT)
         client_sock.sendall(_BANNER)
 
         while True:
@@ -339,7 +375,7 @@ def handle_connection(client_sock, client_ip):
                     body = '\n'.join(body_lines)[:2000] or None
 
                     queue_id = ''.join(random.choices(string.ascii_uppercase + string.digits, k=10))
-                    client_sock.sendall(f"250 2.0.0 Ok: queued as {queue_id}\r\n".encode())
+                    client_sock.sendall(queue_ok_reply(queue_id).encode())
 
                     # Post-auth message envelope/content event (no creds here; creds are emitted at AUTH stage).
                     emit_knock(
@@ -430,7 +466,7 @@ def start_honeypot():
     sock.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 0)
     sock.bind(('::', 587))
     sock.listen(100)
-    print("🚀 SMTP Honeypot Active on Port 587 (IPv4+IPv6). Collecting radiation...", flush=True)
+    print(f"🚀 SMTP Honeypot Active on Port 587 (IPv4+IPv6) [{SMTP_FINGERPRINT}]. Collecting radiation...", flush=True)
 
     while True:
         client, addr = sock.accept()

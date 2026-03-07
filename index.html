@@ -661,8 +661,38 @@
         return bestIdx;
     }
 
-    function applyProtocolPanelVisibility() {
-        const desktopCurrentIdx = getDesktopCurrentIndex();
+    function getDesktopActiveIndex() {
+        const navItems = Array.from(document.querySelectorAll('.d-nav-item'));
+        const navIdx = navItems.findIndex(item => item.classList.contains('active'));
+        if (navIdx >= 0) return navIdx;
+        const boxes = Array.from(document.querySelectorAll('#d-slider-container .d-box'));
+        const boxIdx = boxes.findIndex(box => box.classList.contains('is-active'));
+        if (boxIdx >= 0) return boxIdx;
+        return getDesktopCurrentIndex();
+    }
+
+    function getPanelIndexFromTarget(target) {
+        const desktopContainer = document.getElementById('d-slider-container');
+        const dBox = target?.closest?.('.d-box');
+        if (desktopContainer && dBox) {
+            const boxes = Array.from(desktopContainer.children);
+            const idx = boxes.indexOf(dBox);
+            if (idx >= 0) return idx;
+        }
+        const mPane = target?.closest?.('.m-pane');
+        if (mPane) {
+            const idx = mobilePaneOriginalIndex(mPane);
+            if (idx >= 0) return idx;
+        }
+        return null;
+    }
+
+    function applyProtocolPanelVisibility(preferredIdx = null) {
+        const desktopContainer = document.getElementById('d-slider-container');
+        const desktopBoxesBefore = Array.from(desktopContainer.children);
+        const desktopCurrentIdx = Number.isInteger(preferredIdx) ? preferredIdx : getDesktopActiveIndex();
+        const desktopAnchorBefore = desktopBoxesBefore[desktopCurrentIdx] || null;
+        const desktopAnchorLeftBefore = desktopAnchorBefore ? desktopAnchorBefore.getBoundingClientRect().left : null;
         const mobileCurrentIdx = getMobileCurrentOriginalIndex();
         const mode = PROTO_MODES[protoModeIdx];
         const showUser = isUserPanelRelevant(mode);
@@ -695,14 +725,30 @@
         setMobileViewportOffsetInstant(mobileTargetOffset);
         lastPaneIdx = mobileTargetIdx;
 
-        const desktopContainer = document.getElementById('d-slider-container');
         const boxes = Array.from(desktopContainer.children);
         const visibleDesktopIdxs = boxes
             .map((box, idx) => ({ box, idx }))
             .filter(({ box }) => getComputedStyle(box).display !== 'none')
             .map(({ idx }) => idx);
         const desktopTargetIdx = nearestVisibleIndex(desktopCurrentIdx, visibleDesktopIdxs);
-        dJump(desktopTargetIdx);
+        const desktopCurrentStillVisible = visibleDesktopIdxs.includes(desktopCurrentIdx);
+        if (desktopCurrentStillVisible && desktopTargetIdx === desktopCurrentIdx) {
+            const desktopAnchorAfter = boxes[desktopCurrentIdx] || null;
+            if (desktopAnchorAfter && desktopAnchorLeftBefore !== null) {
+                const desktopAnchorLeftAfter = desktopAnchorAfter.getBoundingClientRect().left;
+                const delta = desktopAnchorLeftAfter - desktopAnchorLeftBefore;
+                if (Math.abs(delta) > 0.5) {
+                    const prev = desktopContainer.style.scrollBehavior;
+                    desktopContainer.style.scrollBehavior = 'auto';
+                    desktopContainer.scrollLeft += delta;
+                    requestAnimationFrame(() => {
+                        desktopContainer.style.scrollBehavior = prev || '';
+                    });
+                }
+            }
+        } else {
+            dJump(desktopTargetIdx);
+        }
     }
 
     function renderLeaderboards(stats) {
@@ -738,6 +784,7 @@
     function cycleProto(e) {
         e.stopPropagation();  // don't trigger toggleSound() on the parent div
         playUIClick();
+        const preferredIdx = getPanelIndexFromTarget(e.target);
         protoModeIdx = (protoModeIdx + 1) % PROTO_MODES.length;
         const newMode = PROTO_MODES[protoModeIdx];
         const modeColor = PROTO_COLORS[newMode];
@@ -753,7 +800,7 @@
         refreshHeatGlobe(active.loc);
         refreshFeed();
         const mode = PROTO_MODES[protoModeIdx];
-        applyProtocolPanelVisibility();
+        applyProtocolPanelVisibility(preferredIdx);
         const topKnock = feedData[mode]?.[0];
         if (topKnock) {
             updateGlobeLocation(topKnock);
@@ -1637,10 +1684,10 @@
                 let label = useFlags
                     ? `${getFlag(item.iso)} ${escapeHtml(item.country ?? '')}`
                     : (item.label ?? item.country ?? '');
-                if ((prefix === 'pass' || prefix === 'user') && label === '') label = '<blank>';
+                if (prefix === 'pass' || prefix === 'user') label = displayCredential(label);
                 // Format IPv6 addresses in IP leaderboard
                 if (prefix === 'ip' && label) label = formatIP(label);
-                else if (!useFlags) label = escapeHtml(label);
+                else if (!useFlags && prefix !== 'pass' && prefix !== 'user') label = escapeHtml(label);
                 const rawId = useFlags ? item.iso : (item.label ?? item.country ?? item.isp ?? '');
                 const div = document.createElement('div');
                 div.className = 'bar-row';
@@ -1672,8 +1719,8 @@
                 let label = id;
                 if (prefix === 'loc') label = `${getFlag(id)} ${escapeHtml(displayName || id)}`;
                 else if (prefix === 'ip') label = formatIP(id);
-                else if ((prefix === 'pass' || prefix === 'user') && label === '') label = '<blank>';
-                if (prefix !== 'loc' && prefix !== 'ip') label = escapeHtml(label);
+                else if (prefix === 'pass' || prefix === 'user') label = displayCredential(label);
+                if (prefix !== 'loc' && prefix !== 'ip' && prefix !== 'pass' && prefix !== 'user') label = escapeHtml(label);
                 row = document.createElement('div');
                 row.className = 'bar-row';
                 row.setAttribute('data-id', uniqueId);
@@ -1730,14 +1777,22 @@
             .replace(/'/g, '&#39;');
     }
 
+    function displayCredential(v) {
+        const raw = String(v ?? '');
+        if (raw === '') return '&lt;blank&gt;';
+        if (raw.trim() === '') {
+            const n = raw.length;
+            return n === 1 ? '&lt;space&gt;' : `&lt;spaces x${n}&gt;`;
+        }
+        return escapeHtml(raw);
+    }
+
     function displayPassword(v) {
-        const s = escapeHtml(v);
-        return s === '' ? '&lt;blank&gt;' : s;
+        return displayCredential(v);
     }
 
     function displayUsername(v) {
-        const s = escapeHtml(v);
-        return s === '' ? '&lt;blank&gt;' : s;
+        return displayCredential(v);
     }
 
     function formatIP(ip) {

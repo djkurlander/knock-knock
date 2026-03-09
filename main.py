@@ -5,7 +5,7 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
 from datetime import datetime
 from fastapi.staticfiles import StaticFiles
-from constants import PROTO, PROTO_NAME
+from constants import PROTO, PROTO_NAME, PROTOCOL_META, DEFAULT_ENABLED_PROTOCOLS
 
 app = FastAPI()
 
@@ -90,6 +90,33 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 r = redis.from_url(f"redis://{os.environ.get('REDIS_HOST', 'localhost')}", decode_responses=True)
 DB_PATH = os.environ.get('DB_DIR', 'data') + '/knock_knock.db'
 
+async def load_protocol_runtime_config():
+    enabled_protocols_raw = await r.get("knock:config:enabled_protocols")
+    protocol_meta_raw = await r.get("knock:config:protocol_meta")
+    try:
+        enabled_protocols = json.loads(enabled_protocols_raw) if enabled_protocols_raw else list(DEFAULT_ENABLED_PROTOCOLS)
+    except Exception:
+        enabled_protocols = list(DEFAULT_ENABLED_PROTOCOLS)
+    enabled_protocols = [p for p in enabled_protocols if p in PROTO]
+    if not enabled_protocols:
+        enabled_protocols = list(DEFAULT_ENABLED_PROTOCOLS)
+
+    default_protocol_meta = {
+        name: {
+            "proto_int": PROTO.get(name),
+            "enabled": name in enabled_protocols,
+            "supports_user_panel": bool(PROTOCOL_META.get(name, {}).get("supports_user_panel", False)),
+            "supports_pass_panel": bool(PROTOCOL_META.get(name, {}).get("supports_pass_panel", False)),
+            "color": PROTOCOL_META.get(name, {}).get("color", "#ffcc00"),
+        }
+        for name in PROTO.keys()
+    }
+    try:
+        protocol_meta = json.loads(protocol_meta_raw) if protocol_meta_raw else default_protocol_meta
+    except Exception:
+        protocol_meta = default_protocol_meta
+    return enabled_protocols, protocol_meta
+
 class GlobalStatsCache:
     def __init__(self):
         self.top_locations = []
@@ -135,6 +162,9 @@ class GlobalStatsCache:
                 print(f"📊 Stats Cache Updated: {self.last_updated}")
 
                 payload = await manager.get_initial_data()
+                # Protocol config is bootstrap-only; avoid resending every 60s.
+                payload.pop("enabled_protocols", None)
+                payload.pop("protocol_meta", None)
                 await manager.broadcast(json.dumps({"type": "init_stats", "data": payload}))
             except Exception as e:
                 print(f"❌ Cache Update Error: {e}")
@@ -201,6 +231,7 @@ class ConnectionManager:
         last_lng_val = await r.get("knock:last_lng")
         current_kpm = await self.get_kpm()
         proto_counts_raw = await r.hgetall("knock:proto_counts")
+        enabled_protocols, protocol_meta = await load_protocol_runtime_config()
         total_count = int(total_val) if total_val else 0
         proto_breakdown = {}
         for name in PROTO.keys():
@@ -227,6 +258,8 @@ class ConnectionManager:
             "top_ips": stats_cache.top_ips,
             "proto_stats": {str(k): v for k, v in stats_cache.proto_stats.items()},
             "proto_breakdown": proto_breakdown,
+            "enabled_protocols": enabled_protocols,
+            "protocol_meta": protocol_meta,
             "proto_histories": proto_histories,
             "history": history,
             "cache_ts": stats_cache.last_updated
@@ -259,6 +292,8 @@ class ConnectionManager:
                     "top_ips": stats.get("top_ips", []),
                     "proto_stats": stats.get("proto_stats", {}),
                     "proto_breakdown": stats.get("proto_breakdown", {}),
+                    "enabled_protocols": stats.get("enabled_protocols", []),
+                    "protocol_meta": stats.get("protocol_meta", {}),
                     "proto_histories": stats.get("proto_histories", {}),
                     "cache_ts": stats.get("cache_ts"),
                     "last_knock_stats": history[0] if history else None

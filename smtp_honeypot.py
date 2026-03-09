@@ -174,6 +174,37 @@ def emit_smtp_knock(
         knock["body"] = body
     print(json.dumps(knock), flush=True)
 
+def emit_smtp_diag(client_ip, session_id, **fields):
+    payload = {
+        "type": "SMTP_DIAG",
+        "proto": "SMTP",
+        "ip": client_ip,
+        "session_id": session_id,
+    }
+    payload.update(fields)
+    print(json.dumps(payload), flush=True)
+
+def classify_no_knock_reason(*, commands_seen, stop_reason, tls_active, authed, saw_starttls, saw_auth, saw_mail, saw_rcpt, saw_data, saw_unrecognized):
+    if authed or saw_auth:
+        return "auth_without_emit", "AUTH seen but no auth knock emitted"
+    if commands_seen == 0:
+        if stop_reason.startswith('exception:') or stop_reason.startswith('recv_recv_error:'):
+            return "connect_reset", "connection reset or socket error before SMTP commands"
+        if stop_reason == 'empty_line':
+            return "connect_empty", "client sent blank line then disconnected"
+        return "connect_only", "client connected and disconnected without SMTP commands"
+    if saw_starttls and not saw_mail and not saw_rcpt and not saw_data:
+        return "starttls_only", "client negotiated STARTTLS but did not continue into envelope/auth"
+    if saw_mail or saw_rcpt:
+        return "envelope_partial", "partial envelope only (MAIL/RCPT without knockable message/auth path)"
+    if saw_data:
+        return "data_without_envelope", "DATA attempted without valid envelope state"
+    if saw_unrecognized:
+        return "non_smtp_probe", "non-SMTP probe payload or unrecognized command sequence"
+    if tls_active and stop_reason in ('recv_peer_closed', 'empty_line'):
+        return "tls_drop_after_upgrade", "client dropped after TLS upgrade before knockable commands"
+    return "no_knock_path", "session did not reach AUTH or envelope/message knock emission path"
+
 def handle_connection(client_sock, client_ip):
     session_id = uuid.uuid4().hex[:8]
     started_at = time.time()
@@ -189,8 +220,13 @@ def handle_connection(client_sock, client_ip):
     rcpt_to = None
     subject = None
     messages = 0
+    saw_starttls = False
+    saw_auth = False
+    saw_mail = False
+    saw_rcpt = False
+    saw_data = False
+    saw_unrecognized = False
 
-    preauth_emitted = False
     tls_active = False
 
     def emit_knock(stage, **kwargs):
@@ -207,20 +243,6 @@ def handle_connection(client_sock, client_ip):
             have_from=bool(mail_from),
             have_to=bool(rcpt_to),
         )
-
-    def maybe_emit_preauth_envelope(force=False):
-        nonlocal preauth_emitted
-        if preauth_emitted:
-            return
-        have_from = bool(mail_from)
-        have_to = bool(rcpt_to)
-        if (have_from and have_to) or (force and (have_from or have_to)):
-            emit_knock(
-                'preauth_envelope',
-                mail_from=mail_from,
-                rcpt_to=rcpt_to,
-            )
-            preauth_emitted = True
 
     try:
         client_sock.settimeout(30)
@@ -249,6 +271,7 @@ def handle_connection(client_sock, client_ip):
                 client_sock.sendall(_EHLO_RESP_TLS if tls_active else _EHLO_RESP)
 
             elif cmd == 'STARTTLS':
+                saw_starttls = True
                 if tls_active:
                     client_sock.sendall(b"503 5.5.1 TLS already active\r\n")
                     continue
@@ -268,6 +291,7 @@ def handle_connection(client_sock, client_ip):
                     break
 
             elif cmd.startswith('AUTH PLAIN'):
+                saw_auth = True
                 parts = line.split(' ', 2)
                 if len(parts) == 3 and parts[2].strip():
                     decoded = b64decode(parts[2])
@@ -296,6 +320,7 @@ def handle_connection(client_sock, client_ip):
                 client_sock.sendall(b"235 2.7.0 Authentication successful\r\n")
 
             elif cmd.startswith('AUTH LOGIN'):
+                saw_auth = True
                 client_sock.sendall(b"334 VXNlcm5hbWU6\r\n")  # "Username:"
                 user_line, user_status = recv_line(client_sock)
                 if user_status != 'ok':
@@ -320,29 +345,27 @@ def handle_connection(client_sock, client_ip):
                 client_sock.sendall(b"235 2.7.0 Authentication successful\r\n")
 
             elif cmd.startswith('MAIL FROM:'):
+                saw_mail = True
                 # New envelope transaction starts here.
                 mail_from = extract_addr(line[10:])
                 rcpt_to = None
                 subject = None
-                preauth_emitted = False
-                if not authed and not SMTP587_REQUIRE_AUTH:
-                    maybe_emit_preauth_envelope(force=False)
                 if SMTP587_REQUIRE_AUTH and not authed:
                     client_sock.sendall(b"530 5.5.1 Authentication required\r\n")
                 else:
                     client_sock.sendall(b"250 2.1.0 Ok\r\n")
 
             elif cmd.startswith('RCPT TO:'):
+                saw_rcpt = True
                 if rcpt_to is None:
                     rcpt_to = extract_addr(line[8:])
-                if not authed and not SMTP587_REQUIRE_AUTH:
-                    maybe_emit_preauth_envelope(force=False)
                 if SMTP587_REQUIRE_AUTH and not authed:
                     client_sock.sendall(b"530 5.5.1 Authentication required\r\n")
                 else:
                     client_sock.sendall(b"250 2.1.5 Ok\r\n")
 
             elif cmd == 'DATA':
+                saw_data = True
                 if mail_from is None:
                     client_sock.sendall(b"503 5.5.1 Error: need MAIL command\r\n")
                 elif SMTP587_REQUIRE_AUTH and not authed:
@@ -400,20 +423,18 @@ def handle_connection(client_sock, client_ip):
 
             elif cmd == 'RSET':
                 mail_from = rcpt_to = subject = None
-                preauth_emitted = False
                 client_sock.sendall(b"250 2.0.0 Ok\r\n")
 
             elif cmd.startswith('VRFY'):
                 client_sock.sendall(b"252 2.0.0 Send some mail, I'll try my best\r\n")
 
             elif cmd == 'QUIT':
-                if not authed:
-                    maybe_emit_preauth_envelope(force=True)
                 client_sock.sendall(b"221 Bye\r\n")
                 stop_reason = 'quit'
                 break
 
             else:
+                saw_unrecognized = True
                 client_sock.sendall(b"502 5.5.2 Error: command not recognized\r\n")
                 trace(session_id, client_ip, 'command_unrecognized', cmd=cmd_word)
 
@@ -421,8 +442,6 @@ def handle_connection(client_sock, client_ip):
         stop_reason = f"exception:{type(e).__name__}"
         trace(session_id, client_ip, 'handler_exception', error=type(e).__name__, detail=str(e))
     finally:
-        if not authed:
-            maybe_emit_preauth_envelope(force=True)
         # Backstop: if auth succeeded but event emission was skipped for any reason.
         if authed and username is not None and not auth_emitted:
             emit_knock(
@@ -433,6 +452,21 @@ def handle_connection(client_sock, client_ip):
                 rcpt_to=rcpt_to,
             )
         duration_ms = int((time.time() - started_at) * 1000)
+        no_knock_reason = None
+        no_knock_detail = None
+        if knocks_emitted == 0:
+            no_knock_reason, no_knock_detail = classify_no_knock_reason(
+                commands_seen=commands_seen,
+                stop_reason=stop_reason,
+                tls_active=tls_active,
+                authed=authed,
+                saw_starttls=saw_starttls,
+                saw_auth=saw_auth,
+                saw_mail=saw_mail,
+                saw_rcpt=saw_rcpt,
+                saw_data=saw_data,
+                saw_unrecognized=saw_unrecognized,
+            )
         trace(
             session_id,
             client_ip,
@@ -448,7 +482,33 @@ def handle_connection(client_sock, client_ip):
             last_cmd=last_cmd,
             have_from=bool(mail_from),
             have_to=bool(rcpt_to),
+            no_knock_reason=no_knock_reason,
+            no_knock_detail=no_knock_detail,
+            saw_starttls=saw_starttls,
+            saw_auth=saw_auth,
+            saw_mail=saw_mail,
+            saw_rcpt=saw_rcpt,
+            saw_data=saw_data,
         )
+        if no_knock_reason is not None:
+            emit_smtp_diag(
+                client_ip,
+                session_id,
+                event='no_knock',
+                duration_ms=duration_ms,
+                commands_seen=commands_seen,
+                stop_reason=stop_reason,
+                no_knock_reason=no_knock_reason,
+                no_knock_detail=no_knock_detail,
+                tls_active=tls_active,
+                authed=authed,
+                last_cmd=last_cmd,
+                saw_starttls=saw_starttls,
+                saw_auth=saw_auth,
+                saw_mail=saw_mail,
+                saw_rcpt=saw_rcpt,
+                saw_data=saw_data,
+            )
         try:
             client_sock.close()
         except:

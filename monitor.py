@@ -10,6 +10,8 @@ import os
 import threading
 import time
 import argparse
+import re
+import socket
 from datetime import datetime
 
 # --- Configuration ---
@@ -18,10 +20,142 @@ GEOIP_ASN_PATH = '/usr/share/GeoIP/GeoLite2-ASN.mmdb'
 DB_PATH = os.environ.get('DB_DIR', 'data') + '/knock_knock.db'
 BLOCKLIST_FILE = os.environ.get('DB_DIR', 'data') + '/blocklist.txt'
 
-from constants import PROTO, PROTO_NAME
+from constants import PROTO, PROTO_NAME, PROTOCOL_META, DEFAULT_ENABLED_PROTOCOLS
 
-USER_PANEL_PROTOCOLS = {'SSH', 'TNET', 'FTP', 'RDP', 'SMTP'}
-PASS_PANEL_PROTOCOLS = {'SSH', 'TNET', 'FTP', 'SMTP'}
+USER_PANEL_PROTOCOLS = {name for name, meta in PROTOCOL_META.items() if meta.get('supports_user_panel')}
+PASS_PANEL_PROTOCOLS = {name for name, meta in PROTOCOL_META.items() if meta.get('supports_pass_panel')}
+MAIL_FORENSICS_MAX = int(os.environ.get("MAIL_FORENSICS_MAX", "100"))
+
+def parse_enabled_protocols():
+    raw = os.environ.get("ENABLED_PROTOCOLS", "").strip()
+    if not raw:
+        return list(DEFAULT_ENABLED_PROTOCOLS)
+    enabled = []
+    for token in raw.split(','):
+        name = token.strip().upper()
+        if not name:
+            continue
+        if name not in PROTO:
+            print(f"⚠️ Ignoring unknown protocol in ENABLED_PROTOCOLS: {name}", flush=True)
+            continue
+        if name not in enabled:
+            enabled.append(name)
+    if not enabled:
+        print("⚠️ ENABLED_PROTOCOLS resolved to empty set; using defaults", flush=True)
+        return list(DEFAULT_ENABLED_PROTOCOLS)
+    return enabled
+
+def publish_protocol_config(redis_conn, enabled_protocols):
+    enabled = [p for p in enabled_protocols if p in PROTO]
+    meta = {}
+    for name in PROTO.keys():
+        base = PROTOCOL_META.get(name, {})
+        meta[name] = {
+            "proto_int": PROTO.get(name),
+            "enabled": name in enabled,
+            "supports_user_panel": bool(base.get("supports_user_panel", False)),
+            "supports_pass_panel": bool(base.get("supports_pass_panel", False)),
+            "color": base.get("color", "#ffcc00"),
+        }
+    redis_conn.set("knock:config:enabled_protocols", json.dumps(enabled))
+    redis_conn.set("knock:config:protocol_meta", json.dumps(meta))
+
+def _discover_self_identifiers():
+    ips = set()
+    hosts = set()
+    host_suffixes = set()
+
+    # Explicit operator-provided aliases are always honored.
+    for key in ('REDACT_SELF_IPS', 'SERVER_IP', 'PUBLIC_IP', 'HOST_IP', 'HONEYPOT_IP'):
+        for v in os.environ.get(key, '').split(','):
+            v = v.strip()
+            if v:
+                ips.add(v)
+    for key in ('REDACT_SELF_HOSTS', 'SERVER_HOST', 'PUBLIC_HOST', 'HOST_FQDN', 'HONEYPOT_HOST'):
+        for v in os.environ.get(key, '').split(','):
+            v = v.strip().lower()
+            if v:
+                hosts.add(v)
+    for v in os.environ.get('REDACT_SELF_HOST_SUFFIXES', '').split(','):
+        v = v.strip().lower().lstrip('.')
+        if v:
+            host_suffixes.add(v)
+
+    # Auto-discover local hostnames.
+    try:
+        hn = socket.gethostname().strip().lower()
+        if hn:
+            hosts.add(hn)
+    except Exception:
+        pass
+    try:
+        fqn = socket.getfqdn().strip().lower()
+        if fqn:
+            hosts.add(fqn)
+    except Exception:
+        pass
+
+    # Auto-discover primary outbound IPv4 used by this host.
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+        s.close()
+        if ip:
+            ips.add(ip)
+    except Exception:
+        pass
+
+    # Auto-discover IPv4s bound/resolved to this hostname.
+    try:
+        for family, _, _, _, sockaddr in socket.getaddrinfo(socket.gethostname(), None):
+            if family == socket.AF_INET and sockaddr and sockaddr[0]:
+                ips.add(sockaddr[0])
+    except Exception:
+        pass
+    try:
+        for family, _, _, _, sockaddr in socket.getaddrinfo(socket.getfqdn(), None):
+            if family == socket.AF_INET and sockaddr and sockaddr[0]:
+                ips.add(sockaddr[0])
+    except Exception:
+        pass
+    try:
+        out = subprocess.check_output(["hostname", "-I"], text=True, stderr=subprocess.DEVNULL).strip()
+        for tok in out.split():
+            if re.fullmatch(r"(?:\d{1,3}\.){3}\d{1,3}", tok):
+                ips.add(tok)
+    except Exception:
+        pass
+
+    # Reverse lookup discovered IPs for host aliases.
+    for ip in list(ips):
+        try:
+            ptr = socket.gethostbyaddr(ip)[0].strip().lower()
+            if ptr:
+                hosts.add(ptr)
+        except Exception:
+            pass
+
+    return ips, hosts, host_suffixes
+
+def _build_self_redaction_patterns():
+    ips, hosts, host_suffixes = _discover_self_identifiers()
+    pats = []
+    # Hostnames first, then IPs, to avoid partial replacements inside host tokens.
+    for host in sorted(hosts, key=len, reverse=True):
+        pats.append((re.compile(re.escape(host), re.IGNORECASE), "<target-host>"))
+    for suffix in sorted(host_suffixes, key=len, reverse=True):
+        pats.append((re.compile(rf"[A-Za-z0-9._-]+\.{re.escape(suffix)}", re.IGNORECASE), "<target-host>"))
+    # Longest-first replacement avoids partial overlap artifacts.
+    for ip in sorted(ips, key=len, reverse=True):
+        pats.append((re.compile(re.escape(ip)), "<target-ip>"))
+        # Common dash-notation seen in hostnames (e.g. 1-2-3-4.example.tld).
+        dashed = ip.replace('.', '-')
+        if dashed != ip:
+            pats.append((re.compile(re.escape(dashed), re.IGNORECASE), "<target-ip>"))
+    return pats
+
+SELF_REDACTION_PATTERNS = _build_self_redaction_patterns()
 
 def reset_all():
     """Wipes the SQLite database and clears relevant Redis keys."""
@@ -36,7 +170,8 @@ def reset_all():
         r = redis.Redis(host=os.environ.get('REDIS_HOST', 'localhost'), port=6379, db=0, decode_responses=True)
         keys_to_clear = ["knock:total_global", "knock:proto_counts", "knock:uptime_minutes", "knock:last_time", "knock:last_lat", "knock:last_lng", "knock:recent",
                          "knock:recent:ssh", "knock:recent:tnet", "knock:recent:smtp", "knock:recent:rdp", "knock:recent:mail", "knock:recent:ftp",
-                         "knock:recent:sip"]
+                         "knock:recent:sip", "knock:diag:smtp587:no_knock", "knock:diag:smtp587:last", "knock:diag:smtp587:reason_counts",
+                         "knock:forensics:mail_raw", "knock:config:enabled_protocols", "knock:config:protocol_meta"]
         for key in keys_to_clear:
             r.delete(key)
         print("   [+] Cleared Redis keys")
@@ -187,6 +322,8 @@ def sanitize_credential(s):
         return s
     if '\ufffd' in s or not s.isprintable():
         return '<cryptic binary>'
+    for pat, replacement in SELF_REDACTION_PATTERNS:
+        s = pat.sub(replacement, s)
     return s
 
 def sanitize_body(s, max_len=2000):
@@ -197,7 +334,89 @@ def sanitize_body(s, max_len=2000):
     for ch in s:
         if ch in ('\n', '\r', '\t') or ch.isprintable():
             out.append(ch)
-    return ''.join(out)[:max_len]
+    clean = ''.join(out)
+    for pat, replacement in SELF_REDACTION_PATTERNS:
+        clean = pat.sub(replacement, clean)
+    return clean[:max_len]
+
+def build_smtp_diag(knock):
+    return {
+        "proto": "SMTP",
+        "ip": knock.get("ip"),
+        "session_id": knock.get("session_id"),
+        "event": sanitize_credential(str(knock.get("event", ""))),
+        "duration_ms": int(knock.get("duration_ms", 0) or 0),
+        "commands_seen": int(knock.get("commands_seen", 0) or 0),
+        "stop_reason": sanitize_credential(str(knock.get("stop_reason", ""))),
+        "no_knock_reason": sanitize_credential(str(knock.get("no_knock_reason", ""))),
+        "no_knock_detail": sanitize_credential(str(knock.get("no_knock_detail", ""))),
+        "last_cmd": sanitize_credential(str(knock.get("last_cmd", ""))),
+        "tls_active": bool(knock.get("tls_active", False)),
+        "authed": bool(knock.get("authed", False)),
+        "saw_starttls": bool(knock.get("saw_starttls", False)),
+        "saw_auth": bool(knock.get("saw_auth", False)),
+        "saw_mail": bool(knock.get("saw_mail", False)),
+        "saw_rcpt": bool(knock.get("saw_rcpt", False)),
+        "saw_data": bool(knock.get("saw_data", False)),
+        "ts": int(time.time()),
+    }
+
+def store_smtp_diag(redis_conn, diag):
+    redis_conn.lpush("knock:diag:smtp587:no_knock", json.dumps(diag))
+    redis_conn.ltrim("knock:diag:smtp587:no_knock", 0, 499)
+    redis_conn.set("knock:diag:smtp587:last", json.dumps(diag))
+    if diag["no_knock_reason"]:
+        redis_conn.hincrby("knock:diag:smtp587:reason_counts", diag["no_knock_reason"], 1)
+    print(
+        f"🧪 SMTP587 no-knock {diag['ip']} | reason={diag['no_knock_reason']} "
+        f"stop={diag['stop_reason']} cmds={diag['commands_seen']}",
+        flush=True,
+    )
+
+def build_mail_forensic(knock, proto, ip):
+    mail_from = knock.get("mail_from", knock.get("smtp_mail_from"))
+    mail_to = knock.get("mail_to", knock.get("smtp_rcpt_to"))
+    subject = knock.get("subject")
+    body = knock.get("body")
+    if proto not in ("SMTP", "MAIL"):
+        return None
+    if not any(v is not None for v in (mail_from, mail_to, subject, body)):
+        return None
+    return {
+        "ts": int(time.time()),
+        "proto": proto,
+        "ip": ip,
+        "session_id": knock.get("session_id"),
+        "mail_from": str(mail_from) if mail_from is not None else None,
+        "mail_to": str(mail_to) if mail_to is not None else None,
+        "subject": str(subject) if subject is not None else None,
+        "body": str(body) if body is not None else None,
+    }
+
+def store_mail_forensic(redis_conn, forensic):
+    if not forensic:
+        return
+    redis_conn.lpush("knock:forensics:mail_raw", json.dumps(forensic))
+    redis_conn.ltrim("knock:forensics:mail_raw", 0, max(0, MAIL_FORENSICS_MAX - 1))
+
+def is_over_limit_and_block(redis_conn, ip, projected_hits, max_knocks):
+    if not max_knocks:
+        return False
+    if projected_hits <= max_knocks:
+        return False
+    if not redis_conn.sismember("knock:blocked", ip):
+        add_to_blocklist(ip, redis_conn)
+    print(f"⛔ Dropped knock from over-limit IP {ip} ({projected_hits}>{max_knocks})", flush=True)
+    return True
+
+def format_cred_summary(user, pw):
+    if user is not None and pw is not None:
+        return f"{user}:{pw}"
+    if user is not None:
+        return f"user={user}"
+    if pw is not None:
+        return f"pass={pw}"
+    return "no-credentials"
 
 def get_geo_maximal(ip, city_reader, asn_reader):
     geo = {"iso": "XX", "country": "Unknown", "city": "Unknown", "region": None, "isp": "Unknown", "asn": None, "lat": None, "lng": None}
@@ -233,6 +452,9 @@ def add_to_blocklist(ip, r):
 def monitor(save_knocks=False, max_knocks=None):
     init_db()
     r = redis.Redis(host=os.environ.get('REDIS_HOST', 'localhost'), port=6379, db=0, decode_responses=True)
+    enabled_protocols = parse_enabled_protocols()
+    publish_protocol_config(r, enabled_protocols)
+    print(f"🧭 Enabled protocols: {', '.join(enabled_protocols)}", flush=True)
     while True:
         try:
             c_reader = geoip2.database.Reader(GEOIP_CITY_PATH)
@@ -276,23 +498,22 @@ def monitor(save_knocks=False, max_knocks=None):
     except Exception as e:
         print(f"⚠️ Could not seed totals from SQLite: {e}")
 
-    # Spawn honeypots as subprocesses
-    honeypots = {
-        "SSH":  subprocess.Popen([sys.executable, "-u", "ssh_honeypot.py"],
-                                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True),
-        "TNET": subprocess.Popen([sys.executable, "-u", "telnet_honeypot.py"],
-                                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True),
-        "SMTP": subprocess.Popen([sys.executable, "-u", "smtp_honeypot.py"],
-                                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True),
-        "MAIL": subprocess.Popen([sys.executable, "-u", "smtp25_honeypot.py"],
-                                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True),
-        "RDP":  subprocess.Popen([sys.executable, "-u", "rdp_honeypot.py"],
-                                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True),
-        "FTP":  subprocess.Popen([sys.executable, "-u", "ftp_honeypot.py"],
-                                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True),
-        "SIP":  subprocess.Popen([sys.executable, "-u", "sip_honeypot.py"],
-                                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True),
-    }
+    # Spawn enabled honeypots as subprocesses
+    honeypots = {}
+    for proto in enabled_protocols:
+        script = PROTOCOL_META.get(proto, {}).get("honeypot_script")
+        if not script:
+            print(f"⚠️ No honeypot script configured for protocol {proto}; skipping", flush=True)
+            continue
+        honeypots[proto] = subprocess.Popen(
+            [sys.executable, "-u", script],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+        )
+    if not honeypots:
+        print("❌ No honeypots enabled after parsing ENABLED_PROTOCOLS", flush=True)
+        sys.exit(1)
 
     knock_queue = queue.Queue()
 
@@ -329,9 +550,13 @@ def monitor(save_knocks=False, max_knocks=None):
         except (json.JSONDecodeError, ValueError):
             print(line, end='', flush=True)  # pass through diagnostic output from honeypots
             continue
+        if knock.get("type") == "SMTP_DIAG":
+            store_smtp_diag(r, build_smtp_diag(knock))
+            continue
         if knock.get("type") == "KNOCK":
             proto = str(knock.get("proto", "SSH")).upper()
             ip = knock["ip"]
+            forensic = build_mail_forensic(knock, proto, ip)
             raw_user = knock.get("user")
             raw_pass = knock.get("pass")
             user = sanitize_credential(raw_user if isinstance(raw_user, str) else str(raw_user)) if proto in USER_PANEL_PROTOCOLS and raw_user is not None else None
@@ -349,7 +574,7 @@ def monitor(save_knocks=False, max_knocks=None):
             if pw is None:
                 package.pop("pass")
             if knock.get("subject"):
-                package["subject"] = knock["subject"]
+                package["subject"] = sanitize_credential(str(knock["subject"]))
             if knock.get("body"):
                 package["body"] = sanitize_body(knock.get("body"))
             # Pass through SIP-only extended telemetry into Redis/websocket payloads.
@@ -365,6 +590,10 @@ def monitor(save_knocks=False, max_knocks=None):
                     package[k] = sanitize_credential(str(v))
             try:
                 package.update(get_intel_stats_before_update(package))
+                projected_hits = int(package.get('ip_hits', 0) or 0)
+                if is_over_limit_and_block(r, ip, projected_hits, max_knocks):
+                    continue
+                store_mail_forensic(r, forensic)
                 log_to_maximalist_db(package, save_knocks=save_knocks)
             except Exception as e:
                 print(f"⚠️ DB error (knock skipped): {e}")
@@ -385,16 +614,9 @@ def monitor(save_knocks=False, max_knocks=None):
                 right = pw if pw is not None else package.get("mail_to", package.get("smtp_rcpt_to", "<none>"))
                 print(f"📧 MAIL {geo['iso']} | {left} → {right} | {package['subject'][:60]} via {geo['isp']}")
             else:
-                if user is not None and pw is not None:
-                    cred = f"{user}:{pw}"
-                elif user is not None:
-                    cred = f"user={user}"
-                elif pw is not None:
-                    cred = f"pass={pw}"
-                else:
-                    cred = "no-credentials"
+                cred = format_cred_summary(user, pw)
                 print(f"📡 {proto} {geo['iso']} | {cred} via {geo['isp']}")
-            if max_knocks and package.get('ip_hits', 0) >= max_knocks and not r.sismember("knock:blocked", ip):
+            if max_knocks and int(package.get('ip_hits', 0) or 0) >= max_knocks and not r.sismember("knock:blocked", ip):
                 add_to_blocklist(ip, r)
 
 if __name__ == "__main__":

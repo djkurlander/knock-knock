@@ -578,11 +578,16 @@
         if (soundEnabled) { initAudio(); audioCtx.resume().then(() => playUIClick()); }
     }
 
-    const PROTO_MODES = ['ALL', 'SSH', 'TNET', 'SMTP', 'MAIL', 'RDP', 'FTP', 'SIP'];
-    const TRACKED_PROTOCOLS = PROTO_MODES.filter(p => p !== 'ALL');
-    const USERNAME_PROTOCOLS = new Set(['SSH', 'TNET', 'FTP', 'RDP', 'SMTP']);
-    const PASSWORD_PROTOCOLS = new Set(['SSH', 'TNET', 'FTP', 'SMTP']);
-    const PROTO_COLORS = {
+    const DEFAULT_PROTOCOL_META = {
+        SSH:  { proto_int: 0, enabled: true, supports_user_panel: true,  supports_pass_panel: true,  color: '#00ff41' },
+        TNET: { proto_int: 1, enabled: true, supports_user_panel: true,  supports_pass_panel: true,  color: '#00fbff' },
+        SMTP: { proto_int: 2, enabled: true, supports_user_panel: true,  supports_pass_panel: true,  color: '#ff00ff' },
+        MAIL: { proto_int: 4, enabled: true, supports_user_panel: false, supports_pass_panel: false, color: '#00ffaa' },
+        RDP:  { proto_int: 3, enabled: true, supports_user_panel: true,  supports_pass_panel: false, color: '#ff1a1a' },
+        FTP:  { proto_int: 5, enabled: true, supports_user_panel: true,  supports_pass_panel: true,  color: '#c77dff' },
+        SIP:  { proto_int: 6, enabled: true, supports_user_panel: false, supports_pass_panel: false, color: '#ff7a00' },
+    };
+    const DEFAULT_PROTO_COLORS = {
         ALL:  '#ffcc00',
         SSH:  '#00ff41',
         TNET: '#00fbff',
@@ -592,6 +597,13 @@
         FTP:  '#c77dff',
         SIP:  '#ff7a00',
     };
+    let SERVER_PROTOCOL_META = { ...DEFAULT_PROTOCOL_META };
+    let TRACKED_PROTOCOLS = Object.keys(DEFAULT_PROTOCOL_META);
+    let PROTO_MODES = ['ALL', ...TRACKED_PROTOCOLS];
+    let USERNAME_PROTOCOLS = new Set(['SSH', 'TNET', 'FTP', 'RDP', 'SMTP']);
+    let PASSWORD_PROTOCOLS = new Set(['SSH', 'TNET', 'FTP', 'SMTP']);
+    let PROTO_COLORS = { ...DEFAULT_PROTO_COLORS };
+    let PROTO_INT = Object.fromEntries(TRACKED_PROTOCOLS.map(p => [p, Number(DEFAULT_PROTOCOL_META[p]?.proto_int)]));
     let protoModeIdx = 0;
     const USER_PANEL_INDEX = 3;
     const PASS_PANEL_INDEX = 4;
@@ -610,6 +622,54 @@
 
     function isPassPanelRelevant(mode) {
         return mode === 'ALL' || PASSWORD_PROTOCOLS.has(mode);
+    }
+
+    function ensureFeedBuckets() {
+        if (!feedData.ALL) feedData.ALL = [];
+        TRACKED_PROTOCOLS.forEach(p => {
+            if (!feedData[p]) feedData[p] = [];
+        });
+        Object.keys(feedData).forEach(p => {
+            if (p === 'ALL') return;
+            if (!TRACKED_PROTOCOLS.includes(p)) delete feedData[p];
+        });
+    }
+
+    function applyProtocolConfig(enabledProtocols, protocolMeta) {
+        const fallbackTracked = Object.keys(DEFAULT_PROTOCOL_META);
+        const enabled = Array.isArray(enabledProtocols)
+            ? enabledProtocols.map(p => String(p || '').toUpperCase()).filter(p => fallbackTracked.includes(p))
+            : fallbackTracked;
+        TRACKED_PROTOCOLS = enabled.length ? enabled : fallbackTracked;
+        SERVER_PROTOCOL_META = { ...DEFAULT_PROTOCOL_META, ...(protocolMeta || {}) };
+        PROTO_INT = Object.fromEntries(
+            Object.keys(DEFAULT_PROTOCOL_META).map(p => [p, Number(SERVER_PROTOCOL_META[p]?.proto_int ?? DEFAULT_PROTOCOL_META[p].proto_int)])
+        );
+        USERNAME_PROTOCOLS = new Set(TRACKED_PROTOCOLS.filter(p => Boolean(SERVER_PROTOCOL_META[p]?.supports_user_panel)));
+        PASSWORD_PROTOCOLS = new Set(TRACKED_PROTOCOLS.filter(p => Boolean(SERVER_PROTOCOL_META[p]?.supports_pass_panel)));
+        PROTO_COLORS = { ...DEFAULT_PROTO_COLORS };
+        TRACKED_PROTOCOLS.forEach(p => {
+            const c = SERVER_PROTOCOL_META[p]?.color;
+            if (typeof c === 'string' && c) PROTO_COLORS[p] = c;
+        });
+        PROTO_MODES = ['ALL', ...TRACKED_PROTOCOLS];
+        if (protoModeIdx >= PROTO_MODES.length) protoModeIdx = 0;
+        ensureFeedBuckets();
+    }
+
+    function getCurrentMode() {
+        return PROTO_MODES[protoModeIdx] || 'ALL';
+    }
+
+    function applyProtoButtons(mode = getCurrentMode()) {
+        const modeColor = PROTO_COLORS[mode] || PROTO_COLORS.ALL;
+        const glowColor = hexToRgba(modeColor, 0.7);
+        document.querySelectorAll('.proto-cycle-btn').forEach(el => {
+            el.innerHTML = `<span class="proto-cycle-btn-label">⟳ ${mode}</span>`;
+            el.style.color = modeColor;
+            el.style.borderColor = modeColor;
+            el.style.setProperty('--btn-glow', glowColor);
+        });
     }
 
     function setVisible(el, visible, displayValue = '') {
@@ -786,22 +846,14 @@
         playUIClick();
         const preferredIdx = getPanelIndexFromTarget(e.target);
         protoModeIdx = (protoModeIdx + 1) % PROTO_MODES.length;
-        const newMode = PROTO_MODES[protoModeIdx];
-        const modeColor = PROTO_COLORS[newMode];
-        const glowColor = hexToRgba(modeColor, 0.7);
-        document.querySelectorAll('.proto-cycle-btn').forEach(el => {
-            el.innerHTML = `<span class="proto-cycle-btn-label">⟳ ${newMode}</span>`;
-            el.style.color = modeColor;
-            el.style.borderColor = modeColor;
-            el.style.setProperty('--btn-glow', glowColor);
-        });
+        const newMode = getCurrentMode();
+        applyProtoButtons(newMode);
         const active = getActiveLeaderboards();
         renderLeaderboards(active);
         refreshHeatGlobe(active.loc);
         refreshFeed();
-        const mode = PROTO_MODES[protoModeIdx];
         applyProtocolPanelVisibility(preferredIdx);
-        const topKnock = feedData[mode]?.[0];
+        const topKnock = feedData[newMode]?.[0];
         if (topKnock) {
             updateGlobeLocation(topKnock);
             if (topKnock.lat != null) rotateGlobeToLocation(topKnock.lat, topKnock.lng);
@@ -868,15 +920,15 @@
         ips: []         // {label, count}
     };
 
-    // Per-protocol leaderboard cache: keys are proto ints as strings ("0","1","2","3")
-    // Maps to same structure as leaderboards above
-    const PROTO_INT = { 'SSH': 0, 'TNET': 1, 'SMTP': 2, 'RDP': 3, 'MAIL': 4, 'FTP': 5, 'SIP': 6 };
+    // Per-protocol leaderboard cache: keys are proto ints as strings.
+    // Maps to same structure as leaderboards above.
     let protoStatsCache = {};
     let protoBreakdownCache = {};
     let uptimeMinutesCache = 0;
 
     // Per-protocol feed arrays (newest at index 0)
-    const feedData = { ALL: [], SSH: [], TNET: [], SMTP: [], MAIL: [], RDP: [], FTP: [], SIP: [] };
+    const feedData = { ALL: [] };
+    ensureFeedBuckets();
 
     function normalizeProtoBreakdown(rawBreakdown, totalGlobal = null) {
         const out = {};
@@ -2137,6 +2189,7 @@
             }
             else if (msg.type === 'init_stats') {
                 debugLog(`init_stats received (total=${d.total})`);
+                applyProtocolConfig(d.enabled_protocols, d.protocol_meta);
                 ['d-total', 'm-total'].forEach(id => document.getElementById(id).innerText = (d.total || 0).toLocaleString());
                 ['d-kpm', 'm-kpm'].forEach(id => document.getElementById(id).innerText = d.kpm || '0.00');
                 uptimeMinutesCache = Number(d.uptime_minutes || 0);
@@ -2154,6 +2207,8 @@
                 leaderboards.ips = d.top_ips || [];
                 if (d.proto_stats) protoStatsCache = d.proto_stats;
                 protoBreakdownCache = normalizeProtoBreakdown(d.proto_breakdown || {}, d.total || 0);
+                applyProtoButtons(getCurrentMode());
+                applyProtocolPanelVisibility();
                 renderProtoStats();
                 // Refresh Heat extrusion colors/heights without re-setting image or polygon data
                 refreshHeatGlobe(getActiveLeaderboards().loc);
@@ -2165,15 +2220,11 @@
                     // Populate feed arrays from dedicated per-protocol Redis lists
                     feedData.ALL = d.history.slice(0, MAX_PER_PANEL);
                     const ph = d.proto_histories || {};
-                    feedData.SSH  = (ph.ssh  || []).slice(0, MAX_PER_PANEL);
-                    feedData.TNET = (ph.tnet || []).slice(0, MAX_PER_PANEL);
-                    feedData.SMTP = (ph.smtp || []).slice(0, MAX_PER_PANEL);
-                    feedData.MAIL = (ph.mail || []).slice(0, MAX_PER_PANEL);
-                    feedData.RDP  = (ph.rdp  || []).slice(0, MAX_PER_PANEL);
-                    feedData.FTP  = (ph.ftp  || []).slice(0, MAX_PER_PANEL);
-                    feedData.SIP  = (ph.sip  || []).slice(0, MAX_PER_PANEL);
+                    TRACKED_PROTOCOLS.forEach(proto => {
+                        feedData[proto] = (ph[proto.toLowerCase()] || []).slice(0, MAX_PER_PANEL);
+                    });
                     refreshFeed();
-                    const activeMode = PROTO_MODES[protoModeIdx];
+                    const activeMode = getCurrentMode();
                     const topKnock = feedData[activeMode]?.[0];
                     if (topKnock) {
                         updateGlobeLocation(topKnock);

@@ -2210,7 +2210,9 @@
             }
             else if (msg.type === 'init_stats') {
                 debugLog(`init_stats received (total=${d.total})`);
-                applyProtocolConfig(d.enabled_protocols, d.protocol_meta);
+                if (Array.isArray(d.enabled_protocols) || (d.protocol_meta && typeof d.protocol_meta === 'object')) {
+                    applyProtocolConfig(d.enabled_protocols, d.protocol_meta);
+                }
                 ['d-total', 'm-total'].forEach(id => document.getElementById(id).innerText = (d.total || 0).toLocaleString());
                 ['d-kpm', 'm-kpm'].forEach(id => document.getElementById(id).innerText = d.kpm || '0.00');
                 uptimeMinutesCache = Number(d.uptime_minutes || 0);

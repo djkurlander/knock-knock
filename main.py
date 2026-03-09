@@ -161,10 +161,7 @@ class GlobalStatsCache:
                 await self._refresh_cache()
                 print(f"📊 Stats Cache Updated: {self.last_updated}")
 
-                payload = await manager.get_initial_data()
-                # Protocol config is bootstrap-only; avoid resending every 60s.
-                payload.pop("enabled_protocols", None)
-                payload.pop("protocol_meta", None)
+                payload = await manager.get_initial_data(include_protocol_config=False)
                 await manager.broadcast(json.dumps({"type": "init_stats", "data": payload}))
             except Exception as e:
                 print(f"❌ Cache Update Error: {e}")
@@ -223,7 +220,7 @@ class ConnectionManager:
             print(f"Error fetching history ({key}): {e}")
             return []
 
-    async def get_initial_data(self):
+    async def get_initial_data(self, include_protocol_config=True):
         total_val = await r.get("knock:total_global")
         uptime_val = await r.get("knock:uptime_minutes")
         last_knock_val = await r.get("knock:last_time")
@@ -231,7 +228,10 @@ class ConnectionManager:
         last_lng_val = await r.get("knock:last_lng")
         current_kpm = await self.get_kpm()
         proto_counts_raw = await r.hgetall("knock:proto_counts")
-        enabled_protocols, protocol_meta = await load_protocol_runtime_config()
+        enabled_protocols = []
+        protocol_meta = {}
+        if include_protocol_config:
+            enabled_protocols, protocol_meta = await load_protocol_runtime_config()
         total_count = int(total_val) if total_val else 0
         proto_breakdown = {}
         for name in PROTO.keys():
@@ -244,7 +244,7 @@ class ConnectionManager:
         for name in PROTO_NAME.values():
             proto_histories[name.lower()] = await self.get_recent_knocks(f"knock:recent:{name.lower()}")
 
-        return {
+        payload = {
             "top_locations": stats_cache.top_locations,
             "total": int(total_val) if total_val else 0,
             "uptime_minutes": int(uptime_val) if uptime_val else 0,
@@ -258,12 +258,14 @@ class ConnectionManager:
             "top_ips": stats_cache.top_ips,
             "proto_stats": {str(k): v for k, v in stats_cache.proto_stats.items()},
             "proto_breakdown": proto_breakdown,
-            "enabled_protocols": enabled_protocols,
-            "protocol_meta": protocol_meta,
             "proto_histories": proto_histories,
             "history": history,
             "cache_ts": stats_cache.last_updated
         }
+        if include_protocol_config:
+            payload["enabled_protocols"] = enabled_protocols
+            payload["protocol_meta"] = protocol_meta
+        return payload
 
     async def connect(self, websocket: WebSocket):
         await websocket.accept()

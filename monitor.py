@@ -596,7 +596,8 @@ def monitor(save_knocks=False, max_knocks=None):
                 store_mail_forensic(r, forensic)
                 log_to_maximalist_db(package, save_knocks=save_knocks)
             except Exception as e:
-                print(f"⚠️ DB error (knock skipped): {e}")
+                print(f"⚠️ DB error (knock dropped): {e}", flush=True)
+                continue
             r.lpush("knock:recent", json.dumps(package))
             r.ltrim("knock:recent", 0, 99)
             proto_key = "knock:recent:" + package['proto'].lower()

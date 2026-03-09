@@ -45,6 +45,7 @@ fi
 # --- Reset (optional) ---
 if [ "$RESET" = true ]; then
     echo "Performing data wipe..."
+    BLOCKLIST_FILE="$DB_DIR/blocklist.txt"
 
     # Delete SQLite databases
     for db in "$DB_DIR/knock_knock.db" "$DB_DIR/visitors.db"; do
@@ -64,8 +65,12 @@ if [ "$RESET" = true ]; then
         REDIS_CMD="redis-cli"
     fi
 
-    $REDIS_CMD del knock:total_global knock:uptime_minutes knock:last_time knock:last_lat knock:last_lng knock:recent knock:recent:ssh knock:recent:tnet knock:recent:smtp knock:recent:mail knock:recent:rdp knock:recent:ftp knock:recent:sip > /dev/null
+    $REDIS_CMD del knock:total_global knock:uptime_minutes knock:last_time knock:last_lat knock:last_lng knock:recent knock:recent:ssh knock:recent:tnet knock:recent:smtp knock:recent:mail knock:recent:rdp knock:recent:ftp knock:recent:sip knock:blocked > /dev/null
     echo "  [+] Cleared Redis keys"
+
+    # Clear persisted blocklist so monitor doesn't reload banned IPs on boot
+    : > "$BLOCKLIST_FILE"
+    echo "  [+] Cleared $BLOCKLIST_FILE"
 fi
 
 # --- Start ---

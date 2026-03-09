@@ -1895,47 +1895,68 @@
         return lines;
     }
 
-    function protocolFeedFields(d) {
-        const proto = (d?.proto || '').toUpperCase();
-        if (proto === 'SIP') {
-            const uriUser = sipUriUser(d.sip_request_uri);
-            const ext = d.sip_extension || d.sip_auth_user || d.sip_uri_user || uriUser || null;
-            const account = ext ? displayUsername(ext) : '<span style="color:var(--ui-grey-dim)">n/a</span>';
-            return `<span style="color:var(--ui-label)">account:</span> <span>${account}</span>`;
-        }
+    const NA_INLINE = '<span style="color:var(--ui-grey-dim)">n/a</span>';
+    const SMTP_MESSAGE_STAGES = new Set(['preauth_envelope', 'postauth_envelope', 'preauth_message']);
 
-        if (proto === 'MAIL') {
-            const mf = d.mail_from ? escapeHtml(d.mail_from) : '<span style="color:var(--ui-grey-dim)">n/a</span>';
-            const mt = d.mail_to ? escapeHtml(d.mail_to) : '<span style="color:var(--ui-grey-dim)">n/a</span>';
-            const lines = [
-                `<span style="color:var(--ui-label)">from:</span> <span style="color:var(--neon-green)">${mf}</span> <span style="color:var(--ui-label); margin-left:10px;">to:</span> <span style="color:var(--neon-green)">${mt}</span>`,
-                ...emailFeedExtraLines(d),
-            ];
-            return lines.join('<br>');
-        }
+    function renderFromToBlock(d, fromKey, toKey, includeContent = true) {
+        const mf = d[fromKey] ? escapeHtml(d[fromKey]) : NA_INLINE;
+        const mt = d[toKey] ? escapeHtml(d[toKey]) : NA_INLINE;
+        const lines = [
+            `<span style="color:var(--ui-label)">from:</span> <span style="color:var(--neon-green)">${mf}</span> <span style="color:var(--ui-label); margin-left:10px;">to:</span> <span style="color:var(--neon-green)">${mt}</span>`,
+        ];
+        if (includeContent) lines.push(...emailFeedExtraLines(d));
+        return lines.join('<br>');
+    }
 
-        if (proto === 'RDP') {
-            const u = hasUserField(d) ? displayUsername(d.user) : '<span style="color:var(--ui-grey-dim)">n/a</span>';
-            return `<span style="color:var(--ui-label)">username:</span> <span>${u}</span>`;
-        }
-
-        if (proto === 'SMTP') {
-            const stage = d.smtp_stage || '';
-            if (stage === 'preauth_envelope' || stage === 'postauth_envelope' || stage === 'preauth_message') {
-                const mf = d.smtp_mail_from ? escapeHtml(d.smtp_mail_from) : '<span style="color:var(--ui-grey-dim)">n/a</span>';
-                const mt = d.smtp_rcpt_to ? escapeHtml(d.smtp_rcpt_to) : '<span style="color:var(--ui-grey-dim)">n/a</span>';
-                const lines = [
-                    `<span style="color:var(--ui-label)">from:</span> <span style="color:var(--neon-green)">${mf}</span> <span style="color:var(--ui-label); margin-left:10px;">to:</span> <span style="color:var(--neon-green)">${mt}</span>`,
-                    ...emailFeedExtraLines(d),
-                ];
-                return lines.join('<br>');
-            }
-        }
-
-        const safeUser = hasUserField(d) ? displayUsername(d.user) : '<span style="color:var(--ui-grey-dim)">n/a</span>';
-        const safePass = hasPassField(d) ? displayPassword(d.pass) : '<span style="color:var(--ui-grey-dim)">n/a</span>';
+    function renderDefaultCredBlock(d) {
+        const safeUser = hasUserField(d) ? displayUsername(d.user) : NA_INLINE;
+        const safePass = hasPassField(d) ? displayPassword(d.pass) : NA_INLINE;
         return `<span style="color:var(--ui-label)">user:</span> <span>${safeUser}</span>
             <span style="color:var(--ui-label); margin-left:10px;">password:</span> <span class="knock-pass">${safePass}</span>`;
+    }
+
+    function renderSipAccountBlock(d) {
+        const uriUser = sipUriUser(d.sip_request_uri);
+        const ext = d.sip_extension || d.sip_auth_user || d.sip_uri_user || uriUser || null;
+        const account = ext ? displayUsername(ext) : NA_INLINE;
+        return `<span style="color:var(--ui-label)">account:</span> <span>${account}</span>`;
+    }
+
+    const PROTOCOL_FEED_SCHEMAS = [
+        {
+            name: 'sip_account',
+            match: (d, proto) => proto === 'SIP',
+            render: d => renderSipAccountBlock(d),
+        },
+        {
+            name: 'mail_envelope',
+            match: (d, proto) => proto === 'MAIL',
+            render: d => renderFromToBlock(d, 'mail_from', 'mail_to', true),
+        },
+        {
+            name: 'rdp_username',
+            match: (d, proto) => proto === 'RDP',
+            render: d => {
+                const u = hasUserField(d) ? displayUsername(d.user) : NA_INLINE;
+                return `<span style="color:var(--ui-label)">username:</span> <span>${u}</span>`;
+            },
+        },
+        {
+            name: 'smtp_message',
+            match: (d, proto) => proto === 'SMTP' && SMTP_MESSAGE_STAGES.has(String(d.smtp_stage || '')),
+            render: d => renderFromToBlock(d, 'smtp_mail_from', 'smtp_rcpt_to', true),
+        },
+        {
+            name: 'default_credentials',
+            match: () => true,
+            render: d => renderDefaultCredBlock(d),
+        },
+    ];
+
+    function protocolFeedFields(d) {
+        const proto = (d?.proto || '').toUpperCase();
+        const schema = PROTOCOL_FEED_SCHEMAS.find(s => s.match(d, proto));
+        return schema ? schema.render(d, proto) : renderDefaultCredBlock(d);
     }
 
     function makeKnockEl(d, flash) {

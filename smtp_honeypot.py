@@ -392,7 +392,7 @@ def handle_connection(client_sock, client_ip):
                         if body_status != 'ok':
                             trace(session_id, client_ip, 'data_body_recv_end', status=body_status, lines=len(body_lines))
                             break
-                        if body_line == '.' or not body_line:
+                        if body_line == '.':
                             break
                         body_lines.append(body_line)
                     body = '\n'.join(body_lines)[:2000] or None

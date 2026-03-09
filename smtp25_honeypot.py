@@ -5,6 +5,7 @@ import json
 import os
 import random
 import string
+import ssl
 import redis
 
 MAX_MESSAGES_PER_SESSION = 10
@@ -41,25 +42,37 @@ _EHLO_RESP = (
     "250-8BITMIME\r\n"
     "250 PIPELINING\r\n"
 ).encode()
+_EHLO_RESP_TLS = (
+    f"250-{_SMTP_HOSTNAME}\r\n"
+    "250-SIZE 10240000\r\n"
+    "250-ENHANCEDSTATUSCODES\r\n"
+    "250-8BITMIME\r\n"
+    "250 PIPELINING\r\n"
+).encode()
+
+SMTP_TLS_CERT_PATH = os.environ.get('SMTP_TLS_CERT_PATH', 'data/rdp.crt')
+SMTP_TLS_KEY_PATH = os.environ.get('SMTP_TLS_KEY_PATH', 'data/rdp.key')
 
 
 def recv_line(sock, timeout=30):
-    """Read one SMTP line terminated by \\r\\n or \\n."""
+    """Read one SMTP line terminated by \\r\\n or \\n, with status."""
     sock.settimeout(timeout)
     buf = b''
-    try:
-        while True:
+    while True:
+        try:
             ch = sock.recv(1)
-            if not ch:
-                break
-            if ch == b'\n':
-                break
-            if ch == b'\r':
-                continue
-            buf += ch
-    except (socket.timeout, ConnectionResetError, BrokenPipeError, OSError):
-        pass
-    return buf.decode('utf-8', errors='replace').strip()
+        except socket.timeout:
+            return '', 'timeout'
+        except (ConnectionResetError, BrokenPipeError, OSError) as e:
+            return '', f"recv_error:{type(e).__name__}"
+        if not ch:
+            line = buf.decode('utf-8', errors='replace').strip()
+            return line, ('peer_closed' if not line else 'ok')
+        if ch == b'\n':
+            return buf.decode('utf-8', errors='replace').strip(), 'ok'
+        if ch == b'\r':
+            continue
+        buf += ch
 
 def extract_addr(raw):
     """Pull address out of 'MAIL FROM:<addr>' or 'RCPT TO:<addr>' line."""
@@ -74,6 +87,7 @@ def handle_connection(client_sock, client_ip):
     rcpt_to = None
     subject = None
     messages = 0
+    tls_active = False
     try:
         client_sock.settimeout(30)
         print(f"🔌 MAIL connect {client_ip}", flush=True)
@@ -82,13 +96,31 @@ def handle_connection(client_sock, client_ip):
         client_sock.sendall(_BANNER)
 
         while True:
-            line = recv_line(client_sock)
+            line, recv_status = recv_line(client_sock)
+            if recv_status != 'ok':
+                break
             if not line:
                 break
             upper = line.upper()
 
             if upper.startswith('EHLO') or upper.startswith('HELO'):
-                client_sock.sendall(_EHLO_RESP)
+                client_sock.sendall(_EHLO_RESP_TLS if tls_active else _EHLO_RESP)
+
+            elif upper == 'STARTTLS':
+                if tls_active:
+                    client_sock.sendall(b"503 5.5.1 TLS already active\r\n")
+                    continue
+                try:
+                    client_sock.sendall(b"220 2.0.0 Ready to start TLS\r\n")
+                    tls_ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+                    tls_ctx.load_cert_chain(certfile=SMTP_TLS_CERT_PATH, keyfile=SMTP_TLS_KEY_PATH)
+                    client_sock = tls_ctx.wrap_socket(client_sock, server_side=True)
+                    client_sock.settimeout(30)
+                    tls_active = True
+                    # RFC-wise client should issue EHLO again after STARTTLS.
+                    continue
+                except Exception:
+                    break
 
             elif upper.startswith('MAIL FROM:'):
                 mail_from = extract_addr(line[10:])
@@ -108,7 +140,9 @@ def handle_connection(client_sock, client_ip):
                 # Read email headers until blank line, pick up Subject
                 client_sock.settimeout(15)
                 for _ in range(200):  # cap header lines
-                    hdr = recv_line(client_sock, timeout=15)
+                    hdr, hdr_status = recv_line(client_sock, timeout=15)
+                    if hdr_status != 'ok':
+                        break
                     if not hdr or hdr == '.':
                         break
                     if hdr.upper().startswith('SUBJECT:'):
@@ -117,8 +151,10 @@ def handle_connection(client_sock, client_ip):
                 # Capture message body (up to 2000 chars)
                 body_lines = []
                 for _ in range(500):  # cap body lines
-                    body_line = recv_line(client_sock, timeout=10)
-                    if body_line == '.' or not body_line:
+                    body_line, body_status = recv_line(client_sock, timeout=10)
+                    if body_status != 'ok':
+                        break
+                    if body_line == '.':
                         break
                     body_lines.append(body_line)
                 body = '\n'.join(body_lines)[:2000] or None

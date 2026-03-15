@@ -122,6 +122,13 @@ def clear_force_classic(ip):
     except Exception:
         pass
 
+def normalize_knock_username(username):
+    if username is None:
+        return None
+    if not isinstance(username, str):
+        username = str(username)
+    return username.lower()
+
 def note_nla_parse_failure(ip, nla_status):
     """
     Track NLA failures likely caused by parse/handshake incompleteness and
@@ -619,8 +626,9 @@ def handle_connection(client_sock, client_ip):
                 )
                 final_stage = classic_status
                 if username:
+                    emit_user = normalize_knock_username(username)
                     knock = {"type": "KNOCK", "proto": "RDP",
-                             "ip": client_ip, "user": username}
+                             "ip": client_ip, "user": emit_user}
                     if domain:
                         knock["domain"] = domain
                     print(json.dumps(knock), flush=True)
@@ -631,9 +639,10 @@ def handle_connection(client_sock, client_ip):
                     clear_force_classic(client_ip)
                     return True
                 if cookie_user:
+                    emit_user = normalize_knock_username(cookie_user)
                     trace(session_id, client_ip, 'emit_cookie_fallback_classic')
                     knock = {"type": "KNOCK", "proto": "RDP",
-                             "ip": client_ip, "user": cookie_user}
+                             "ip": client_ip, "user": emit_user}
                     if cookie_domain:
                         knock["domain"] = cookie_domain
                     print(json.dumps(knock), flush=True)
@@ -673,9 +682,10 @@ def handle_connection(client_sock, client_ip):
                 return
             # Don't attempt NLA after having already emitted classic confirm on this socket.
             if cookie_user:
+                emit_user = normalize_knock_username(cookie_user)
                 trace(session_id, client_ip, 'emit_cookie_knock_after_forced_classic')
                 knock = {"type": "KNOCK", "proto": "RDP",
-                         "ip": client_ip, "user": cookie_user}
+                         "ip": client_ip, "user": emit_user}
                 if cookie_domain:
                     knock["domain"] = cookie_domain
                 print(json.dumps(knock), flush=True)
@@ -690,9 +700,10 @@ def handle_connection(client_sock, client_ip):
 
                 # Client doesn't want SSL — emit cookie knock if we have one, then done
                 if cookie_user:
+                    emit_user = normalize_knock_username(cookie_user)
                     trace(session_id, client_ip, 'emit_cookie_knock')
                     knock = {"type": "KNOCK", "proto": "RDP",
-                             "ip": client_ip, "user": cookie_user}
+                             "ip": client_ip, "user": emit_user}
                     if cookie_domain:
                         knock["domain"] = cookie_domain
                     print(json.dumps(knock), flush=True)
@@ -728,9 +739,10 @@ def handle_connection(client_sock, client_ip):
 
         if captures:
             for i, (username, domain) in enumerate(captures, start=1):
+                emit_user = normalize_knock_username(username)
                 trace(session_id, client_ip, 'emit_nla_knock', attempt=i, user=username, domain=domain)
                 knock = {"type": "KNOCK", "proto": "RDP",
-                         "ip": client_ip, "user": username}
+                         "ip": client_ip, "user": emit_user}
                 if domain:
                     knock["domain"] = domain
                 print(json.dumps(knock), flush=True)
@@ -743,9 +755,10 @@ def handle_connection(client_sock, client_ip):
                 trace(session_id, client_ip, 'nla_parse_failure_recorded',
                       count=fail_count, force_classic_enabled=forced, status=nla_status)
         if (not captures) and cookie_user:
+            emit_user = normalize_knock_username(cookie_user)
             trace(session_id, client_ip, 'emit_cookie_fallback_knock')
             knock = {"type": "KNOCK", "proto": "RDP",
-                     "ip": client_ip, "user": cookie_user}
+                     "ip": client_ip, "user": emit_user}
             if cookie_domain:
                 knock["domain"] = cookie_domain
             print(json.dumps(knock), flush=True)

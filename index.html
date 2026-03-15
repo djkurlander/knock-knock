@@ -347,6 +347,7 @@
             .m-content .bar-label > span:last-child { flex-shrink: 0; }
             .m-content .knock-location img.emoji,
             .m-content .bar-label img.emoji { vertical-align: middle; }
+            .m-content .proto-col-header { text-align: left !important; }
             .m-content { scrollbar-width: none; -ms-overflow-style: none; }
             .m-content::-webkit-scrollbar { display: none !important; width: 0; height: 0; }
 
@@ -1055,13 +1056,13 @@
             .sort((a, b) => (b.kpm - a.kpm) || (b.count - a.count) || a.proto.localeCompare(b.proto));
 
         const header = `
-            <div style="display:grid;grid-template-columns:1fr 0.82fr 1.38fr 0.80fr;gap:8px;margin-bottom:8px;color:var(--ui-label);font-weight:bold;">
-                <span style="text-align:center;">PROTO</span><span style="text-align:center;">%</span><span style="text-align:center;">KNOCKS</span><span style="text-align:center;">/MIN</span>
+            <div style="display:grid;grid-template-columns:1fr 0.82fr 1.45fr 0.73fr;gap:8px;margin-bottom:8px;color:var(--ui-label);font-weight:bold;">
+                <span class="proto-col-header" style="text-align:center;">PROTO</span><span style="text-align:center;">%</span><span style="text-align:center;">KNOCKS</span><span style="text-align:center;">/MIN</span>
             </div>
         `;
         const body = rows.map(r => `
-            <div class="proto-stats-row" data-proto="${escapeHtml(r.proto)}" style="display:grid;grid-template-columns:1fr 0.82fr 1.38fr 0.80fr;gap:8px;padding:4px 0;border-bottom:1px solid #222;">
-                <span style="font-weight:bold;color:${escapeHtml(PROTO_COLORS[r.proto] || PROTO_COLORS.ALL)};padding-left:4px;">${escapeHtml(r.proto)}</span>
+            <div class="proto-stats-row" data-proto="${escapeHtml(r.proto)}" style="display:grid;grid-template-columns:1fr 0.82fr 1.45fr 0.73fr;gap:8px;padding:4px 0;border-bottom:1px solid #222;">
+                <span style="font-weight:bold;color:${escapeHtml(PROTO_COLORS[r.proto] || PROTO_COLORS.ALL)};padding-left:6px;">${escapeHtml(r.proto)}</span>
                 <span style="color:var(--neon-green);text-align:center;">${r.pct.toFixed(1)}%</span>
                 <span style="color:var(--data-blue);text-align:center;">${r.count.toLocaleString()}</span>
                 <span style="color:var(--neon-green);text-align:center;">${r.kpm.toFixed(1)}</span>
@@ -2004,7 +2005,8 @@
         const mf = d[fromKey] ? escapeHtml(d[fromKey]) : NA_INLINE;
         const mt = d[toKey] ? escapeHtml(d[toKey]) : NA_INLINE;
         const lines = [
-            `<span style="color:var(--ui-label)">from:</span> <span style="color:var(--neon-green)">${mf}</span> <span style="color:var(--ui-label); margin-left:10px;">to:</span> <span style="color:var(--neon-green)">${mt}</span>`,
+            `<span style="color:var(--ui-label)">from:</span> <span style="color:var(--neon-green)">${mf}</span>`,
+            `<span style="color:var(--ui-label)">to:</span> <span style="color:var(--neon-green)">${mt}</span>`,
         ];
         if (includeContent) lines.push(...emailFeedExtraLines(d));
         return lines.join('<br>');

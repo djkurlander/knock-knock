@@ -54,11 +54,54 @@
         .stat-value { color: var(--warning-yellow); font-weight: bold; }
         .stat-label { color: var(--ui-label); font-size: 0.9em; text-transform: uppercase; }
 
-        .knock { margin-bottom: 10px; padding: 5px 0 10px 0; border-bottom: 1px solid #1a1a1a; font-size: 1.1em; line-height: 1.5; }
+        .knock {
+            margin-bottom: 10px;
+            padding: 5px 0 10px 0;
+            border-bottom: 1px solid #1a1a1a;
+            font-size: 1.1em;
+            line-height: 1.5;
+            position: relative;
+            overflow: visible;
+        }
+        .knock::before {
+            content: '';
+            position: absolute;
+            inset: 0 -6px;
+            background: transparent;
+            pointer-events: none;
+            z-index: 0;
+        }
+        .knock > * {
+            position: relative;
+            z-index: 1;
+        }
         .knock-meta { font-size: 0.9em; }
         .knock-pass { color: var(--neon-green); }
 
-        .bar-row { margin-bottom: 12px; padding: 8px 12px; border-radius: 4px; border: 1px solid transparent; }
+        .bar-row {
+            margin-bottom: 12px;
+            padding: 8px 12px;
+            border-radius: 4px;
+            border: 1px solid transparent;
+            position: relative;
+            overflow: visible;
+        }
+        .bar-row::before {
+            content: '';
+            position: absolute;
+            inset: 0 -6px;
+            border-radius: 4px;
+            background: transparent;
+            pointer-events: none;
+            z-index: 0;
+        }
+        .bar-row.pulse-active::before {
+            animation: pulse-green-row 3s ease forwards;
+        }
+        .bar-row > * {
+            position: relative;
+            z-index: 1;
+        }
         .bar-label { display: flex; justify-content: space-between; align-items: center; font-size: 1.1em; margin-bottom: 6px; gap: 10px; }
         .bar-label span:first-child { display: flex; align-items: center; gap: 0.3em; }
         .knock-location { display: flex; align-items: center; gap: 0.3em; justify-content: space-between; }
@@ -111,7 +154,9 @@
         .ip-fill { background: var(--ip-purple); }
 
         @keyframes pulse-green { 0% { background: rgba(0, 255, 65, 0.4); } 100% { background: transparent; } }
-        .new-knock-flash { animation: pulse-green 3s forwards; }
+        @keyframes pulse-green-row { 0% { background: rgba(0, 255, 65, 0.4); } 100% { background: transparent; } }
+        .new-knock-flash { animation: none; }
+        .knock.new-knock-flash::before { animation: pulse-green 3s forwards; }
 
         .status-dot { height: 14px; width: 14px; border-radius: 50%; background: var(--hazard-red); display: inline-block; vertical-align: 0.2em; margin-left: 10px; }
         .status-online { background: var(--neon-green); box-shadow: 0 0 10px var(--neon-green); }
@@ -218,9 +263,25 @@
                 box-shadow: inset 0 0 20px rgba(0, 255, 65, 0.05), 0 0 10px rgba(0, 255, 65, 0.1); 
             }
 
-            .d-content { flex: 1; overflow-y: auto; overflow-x: hidden; font-size: 0.75em; scrollbar-gutter: stable; margin-right: -10px; padding-right: 6px; word-break: break-word; }
+            .d-content {
+                flex: 1;
+                overflow-y: auto;
+                overflow-x: hidden;
+                font-size: 0.75em;
+                scrollbar-gutter: stable;
+                margin-left: -6px;
+                padding-left: 6px;
+                margin-right: -10px;
+                padding-right: 6px;
+                word-break: break-word;
+            }
             .d-content .knock { margin-bottom: 4px; padding: 3px 0 7px 0; line-height: 1.3; }
-            .d-content .bar-row { margin-bottom: 0; padding: 6px 0 10px 0; }
+            .d-content .bar-row {
+                margin-bottom: 0;
+                margin-left: -6px;
+                margin-right: -6px;
+                padding: 6px 6px 10px 6px;
+            }
             .d-content .bar-label { margin-bottom: 4px; display: flex; justify-content: space-between; gap: 4px; align-items: flex-start; }
             .d-content .bar-label > span:first-child { min-width: 0; flex: 1; }
             .d-content .bar-label > span:last-child { flex-shrink: 0; }
@@ -265,18 +326,29 @@
             .m-pane { width: 100vw; height: 100%; flex-shrink: 0; scroll-snap-align: start; display: flex; flex-direction: column; padding: 20px 10px 20px 20px; box-sizing: border-box; background: #0f0f0f; border-right: 1px solid #1a1a1a; }
             
             .m-content {
-                flex: 1; overflow-y: auto; overflow-x: hidden;
+                flex: 1;
+                overflow-y: auto;
+                overflow-x: hidden;
+                margin-left: -6px;
+                padding-left: 6px;
                 padding-right: 5px;
                 font-size: 0.85em;
                 word-break: break-word;
             }
             .m-content .knock { margin-bottom: 6px; padding: 4px 0 8px 0; line-height: 1.3; }
-            .m-content .bar-row { margin-bottom: 0; padding: 5px 0 8px 0; }
+            .m-content .bar-row {
+                margin-bottom: 0;
+                margin-left: -6px;
+                margin-right: -6px;
+                padding: 5px 6px 8px 6px;
+            }
             .m-content .bar-label { margin-bottom: 4px; display: flex; justify-content: space-between; gap: 4px; align-items: flex-start; }
             .m-content .bar-label > span:first-child { min-width: 0; flex: 1; }
             .m-content .bar-label > span:last-child { flex-shrink: 0; }
             .m-content .knock-location img.emoji,
             .m-content .bar-label img.emoji { vertical-align: middle; }
+            .m-content { scrollbar-width: none; -ms-overflow-style: none; }
+            .m-content::-webkit-scrollbar { display: none !important; width: 0; height: 0; }
 
             #m-viewport::-webkit-scrollbar { display: none !important; }
 
@@ -983,16 +1055,16 @@
             .sort((a, b) => (b.kpm - a.kpm) || (b.count - a.count) || a.proto.localeCompare(b.proto));
 
         const header = `
-            <div style="display:grid;grid-template-columns:1fr 0.9fr 1.25fr 0.85fr;gap:8px;margin-bottom:8px;color:var(--ui-label);font-weight:bold;">
-                <span>PROTO</span><span>%</span><span>KNOCKS</span><span>/MIN</span>
+            <div style="display:grid;grid-template-columns:1fr 0.82fr 1.38fr 0.80fr;gap:8px;margin-bottom:8px;color:var(--ui-label);font-weight:bold;">
+                <span style="text-align:center;">PROTO</span><span style="text-align:center;">%</span><span style="text-align:center;">KNOCKS</span><span style="text-align:center;">/MIN</span>
             </div>
         `;
         const body = rows.map(r => `
-            <div class="proto-stats-row" data-proto="${escapeHtml(r.proto)}" style="display:grid;grid-template-columns:1fr 0.9fr 1.25fr 0.85fr;gap:8px;padding:4px 0;border-bottom:1px solid #222;">
-                <span style="font-weight:bold;color:${escapeHtml(PROTO_COLORS[r.proto] || PROTO_COLORS.ALL)};">${escapeHtml(r.proto)}</span>
-                <span style="color:var(--neon-green)">${r.pct.toFixed(1)}%</span>
-                <span style="color:var(--data-blue)">${r.count.toLocaleString()}</span>
-                <span style="color:var(--neon-green)">${r.kpm.toFixed(1)}</span>
+            <div class="proto-stats-row" data-proto="${escapeHtml(r.proto)}" style="display:grid;grid-template-columns:1fr 0.82fr 1.38fr 0.80fr;gap:8px;padding:4px 0;border-bottom:1px solid #222;">
+                <span style="font-weight:bold;color:${escapeHtml(PROTO_COLORS[r.proto] || PROTO_COLORS.ALL)};padding-left:4px;">${escapeHtml(r.proto)}</span>
+                <span style="color:var(--neon-green);text-align:center;">${r.pct.toFixed(1)}%</span>
+                <span style="color:var(--data-blue);text-align:center;">${r.count.toLocaleString()}</span>
+                <span style="color:var(--neon-green);text-align:center;">${r.kpm.toFixed(1)}</span>
             </div>
         `).join('');
 
@@ -1018,6 +1090,13 @@
                 { background: 'transparent' }
             ], { duration: 3000, easing: 'ease' });
         });
+    }
+
+    function triggerBarRowPulse(row) {
+        if (!row) return;
+        row.classList.remove('pulse-active');
+        void row.offsetWidth;
+        row.classList.add('pulse-active');
     }
 
     function addToFeed(d) {
@@ -1814,11 +1893,7 @@
                 row.setAttribute('data-count', newCount);
             }
 
-            if (row.highlightAnimation) row.highlightAnimation.cancel();
-            row.highlightAnimation = row.animate([
-                { background: 'rgba(0, 255, 65, 0.4)' },
-                { background: 'transparent' }
-            ], { duration: 3000, easing: 'ease' });
+            triggerBarRowPulse(row);
 
             const rows = Array.from(container.children);
             rows.sort((a, b) => (parseInt(b.getAttribute('data-count')) || 0) - (parseInt(a.getAttribute('data-count')) || 0));
@@ -2141,6 +2216,23 @@
         });
     }
 
+    function renderInfoEmpty() {
+        const mode = getCurrentMode();
+        const msg = mode === 'ALL'
+            ? 'No knocks yet.'
+            : `No ${mode} knocks yet.`;
+        const html = `
+            <div class="knock" style="border-bottom:none;">
+                <span style="color:var(--ui-label)">Note:</span>
+                <span style="color:var(--neon-green)">${escapeHtml(msg)}</span>
+            </div>
+        `;
+        ['d-details', 'm-details'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.innerHTML = html;
+        });
+    }
+
     function renderTrivia(d) {
         if (!d) return;
         const loc = formatLocation(d);
@@ -2357,6 +2449,8 @@
         if (topKnock) {
             renderInfo(topKnock);
             renderTrivia(topKnock);
+        } else {
+            renderInfoEmpty();
         }
     }
 

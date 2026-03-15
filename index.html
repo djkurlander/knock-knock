@@ -62,6 +62,18 @@
         .bar-label { display: flex; justify-content: space-between; align-items: center; font-size: 1.1em; margin-bottom: 6px; gap: 10px; }
         .bar-label span:first-child { display: flex; align-items: center; gap: 0.3em; }
         .knock-location { display: flex; align-items: center; gap: 0.3em; justify-content: space-between; }
+        .globe-loc-line {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.35em;
+            flex-wrap: wrap;
+        }
+        .globe-loc-line .proto-badge {
+            font-size: 0.7em;
+            height: 1.25em;
+            margin-left: 0.2em;
+        }
 
         .proto-badge {
             font-family: 'Courier New', Courier, monospace;
@@ -1538,7 +1550,7 @@
     function updateGlobeLocation(d) {
         if (!d) return;
         const loc = formatLocation(d);
-        const locHtml = `${getFlag(d.iso)} ${escapeHtml(loc)}`;
+        const locHtml = `<span class="globe-loc-line"><span>${getFlag(d.iso)}</span><span>${escapeHtml(loc)}</span>${getProtoBadge(d.proto)}</span>`;
         ['d-globe-loc-text', 'm-globe-loc-text'].forEach(id => {
             const el = document.getElementById(id);
             if (el) { el.innerHTML = locHtml; twemoji.parse(el); }

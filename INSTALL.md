@@ -93,7 +93,7 @@ docker compose logs -f honeypot-monitor
 # Should show:
 #   ⏳ Waiting for GeoIP databases...  (briefly, during first-time download)
 #   ✅ GeoIP databases loaded
-#   🚀 Maximalist Monitor Active...
+#   🚀 Knock-Knock Monitor Active...
 
 docker compose logs web   # Should show uvicorn startup
 ```

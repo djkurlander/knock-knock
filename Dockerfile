@@ -2,12 +2,13 @@ FROM python:3.12-slim
 
 RUN pip install --no-cache-dir \
     paramiko \
+    impacket \
     geoip2 \
     redis \
     fastapi \
     "uvicorn[standard]"
 
 WORKDIR /app
-COPY ssh_honeypot.py telnet_honeypot.py smtp_honeypot.py smtp25_honeypot.py rdp_honeypot.py ftp_honeypot.py stub_honeypot.py monitor.py main.py constants.py index.html ./
+COPY monitor.py main.py constants.py index.html ./
+COPY honeypots/ honeypots/
 COPY static/ static/
-RUN python -c "import paramiko; paramiko.RSAKey.generate(2048).write_private_key_file('server.key')"

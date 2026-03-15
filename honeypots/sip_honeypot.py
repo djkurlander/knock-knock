@@ -10,9 +10,15 @@ import threading
 import time
 import uuid
 
-import redis
+from common import (
+    create_dualstack_tcp_listener,
+    create_dualstack_udp_listener,
+    get_redis_client,
+    is_blocked as is_blocked_common,
+    normalize_ip,
+)
 
-_R = redis.Redis(host=os.environ.get('REDIS_HOST', 'localhost'), port=6379, db=0, decode_responses=True)
+_R = get_redis_client()
 
 SIP_PORT = int(os.environ.get('SIP_PORT', '5060'))
 SIP_REALM = os.environ.get('SIP_REALM', 'asterisk')
@@ -34,16 +40,7 @@ _ack_seen = {}
 
 
 def is_blocked(ip):
-    try:
-        return _R.sismember('knock:blocked', ip)
-    except Exception:
-        return False
-
-
-def normalize_ip(ip):
-    if ip.startswith('::ffff:'):
-        return ip[7:]
-    return ip
+    return is_blocked_common(_R, ip)
 
 
 def trace(session_id, client_ip, stage, **fields):
@@ -133,6 +130,12 @@ def get_ack_state(client_ip, req):
 
 def _nonce(size=24):
     alphabet = string.ascii_letters + string.digits
+    return ''.join(random.choice(alphabet) for _ in range(size))
+
+
+def _sip_tag(size=10):
+    # Keep tag token wire-safe and non-branded.
+    alphabet = string.ascii_lowercase + string.digits
     return ''.join(random.choice(alphabet) for _ in range(size))
 
 
@@ -287,11 +290,11 @@ def choose_challenge():
 
 def build_response(req, code, reason, extra_headers=None):
     headers = req.get('headers', {})
-    via = _header_first(headers, 'via') or 'SIP/2.0/UDP 0.0.0.0:5060;branch=z9hG4bKknock'
-    from_h = _header_first(headers, 'from') or '<sip:unknown@unknown>;tag=knock'
+    via = _header_first(headers, 'via') or f'SIP/2.0/UDP 0.0.0.0:5060;branch=z9hG4bK{_sip_tag(12)}'
+    from_h = _header_first(headers, 'from') or f'<sip:unknown@unknown>;tag={_sip_tag(10)}'
     to_h = _header_first(headers, 'to') or '<sip:unknown@unknown>'
-    if 'tag=' not in to_h:
-        to_h = f'{to_h};tag=knock{random.randint(1000,9999)}'
+    if not re.search(r'(^|;)\s*tag=', to_h, flags=re.IGNORECASE):
+        to_h = f'{to_h};tag={_sip_tag(10)}'
     call_id = _header_first(headers, 'call-id') or _nonce(12)
     cseq = _header_first(headers, 'cseq') or '1 REGISTER'
 
@@ -593,16 +596,9 @@ def tcp_loop(sock):
 
 
 def start_honeypot():
-    udp_sock = socket.socket(socket.AF_INET6, socket.SOCK_DGRAM)
-    udp_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    udp_sock.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 0)
-    udp_sock.bind(('::', SIP_PORT))
+    udp_sock = create_dualstack_udp_listener(SIP_PORT)
 
-    tcp_sock = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)
-    tcp_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    tcp_sock.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 0)
-    tcp_sock.bind(('::', SIP_PORT))
-    tcp_sock.listen(200)
+    tcp_sock = create_dualstack_tcp_listener(SIP_PORT, backlog=200)
 
     print(f'🚀 SIP Honeypot Active on Port {SIP_PORT} (UDP+TCP IPv4+IPv6). Collecting radiation...', flush=True)
 

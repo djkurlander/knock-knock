@@ -241,7 +241,7 @@ def heartbeat_worker(redis_conn):
             print(f"❌ Heartbeat Error: {e}")
         time.sleep(60)
 
-def log_to_maximalist_db(data, save_knocks=True):
+def log_to_enriched_db(data, save_knocks=True):
     conn = sqlite3.connect(DB_PATH, timeout=10)
     cur = conn.cursor()
     try:
@@ -418,7 +418,7 @@ def format_cred_summary(user, pw):
         return f"pass={pw}"
     return "no-credentials"
 
-def get_geo_maximal(ip, city_reader, asn_reader):
+def get_geo_enriched(ip, city_reader, asn_reader):
     geo = {"iso": "XX", "country": "Unknown", "city": "Unknown", "region": None, "isp": "Unknown", "asn": None, "lat": None, "lng": None}
     try:
         if city_reader:
@@ -561,7 +561,7 @@ def monitor(save_knocks=False, max_knocks=None):
             raw_pass = knock.get("pass")
             user = sanitize_credential(raw_user if isinstance(raw_user, str) else str(raw_user)) if proto in USER_PANEL_PROTOCOLS and raw_user is not None else None
             pw = sanitize_credential(raw_pass if isinstance(raw_pass, str) else str(raw_pass)) if proto in PASS_PANEL_PROTOCOLS and raw_pass is not None else None
-            geo = get_geo_maximal(ip, c_reader, a_reader)
+            geo = get_geo_enriched(ip, c_reader, a_reader)
             package = {
                 "ip": ip, "user": user, "pass": pw,
                 "proto": proto,
@@ -577,10 +577,16 @@ def monitor(save_knocks=False, max_knocks=None):
                 package["subject"] = sanitize_credential(str(knock["subject"]))
             if knock.get("body"):
                 package["body"] = sanitize_body(knock.get("body"))
-            # Pass through SIP-only extended telemetry into Redis/websocket payloads.
+            if proto == "RDP":
+                raw_domain = knock.get("domain")
+                if raw_domain is not None:
+                    domain = sanitize_credential(str(raw_domain))
+                    if domain:
+                        package["rdp_domain"] = domain
+            # Pass through protocol-specific extended telemetry into Redis/websocket payloads.
             # This is intentionally not persisted in SQLite.
             for k, v in knock.items():
-                if not isinstance(k, str) or not k.startswith(("sip_", "smtp_", "mail_")):
+                if not isinstance(k, str) or not k.startswith(("sip_", "smtp_", "mail_", "smb_", "rdp_")):
                     continue
                 if isinstance(v, str):
                     package[k] = sanitize_credential(v)
@@ -594,7 +600,7 @@ def monitor(save_knocks=False, max_knocks=None):
                 if is_over_limit_and_block(r, ip, projected_hits, max_knocks):
                     continue
                 store_mail_forensic(r, forensic)
-                log_to_maximalist_db(package, save_knocks=save_knocks)
+                log_to_enriched_db(package, save_knocks=save_knocks)
             except Exception as e:
                 print(f"⚠️ DB error (knock dropped): {e}", flush=True)
                 continue

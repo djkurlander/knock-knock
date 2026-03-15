@@ -2,16 +2,13 @@
 import socket
 import threading
 import json
-import os
-import redis
+from common import create_dualstack_tcp_listener, get_redis_client, is_blocked as is_blocked_common, normalize_ip
 
-_r = redis.Redis(host=os.environ.get('REDIS_HOST', 'localhost'), port=6379, db=0, decode_responses=True)
+_r = get_redis_client()
+
 
 def is_blocked(ip):
-    try:
-        return _r.sismember("knock:blocked", ip)
-    except Exception:
-        return False
+    return is_blocked_common(_r, ip)
 
 # Telnet protocol constants (RFC 854)
 IAC  = 0xFF  # Interpret As Command
@@ -106,19 +103,9 @@ def handle_connection(client_sock, client_ip):
         except:
             pass
 
-def normalize_ip(ip):
-    """Normalize IPv4-mapped IPv6 addresses to plain IPv4."""
-    if ip.startswith('::ffff:'):
-        return ip[7:]
-    return ip
-
 def start_honeypot():
     # Dual-stack socket: accepts both IPv4 and IPv6
-    sock = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)
-    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    sock.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 0)
-    sock.bind(('::', 23))
-    sock.listen(100)
+    sock = create_dualstack_tcp_listener(23, backlog=100)
 
     print("🚀 Telnet Honeypot Active on Port 23 (IPv4+IPv6). Collecting radiation...", flush=True)
 

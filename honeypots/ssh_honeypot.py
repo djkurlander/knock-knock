@@ -5,15 +5,16 @@ import threading
 import logging
 import json
 import os
-import redis
+import shutil
+from common import create_dualstack_tcp_listener, get_redis_client, is_blocked as is_blocked_common, normalize_ip
 
-_r = redis.Redis(host=os.environ.get('REDIS_HOST', 'localhost'), port=6379, db=0, decode_responses=True)
+_r = get_redis_client()
+SSH_HOST_KEY_PATH = os.environ.get('SSH_HOST_KEY_PATH', os.path.join(os.environ.get('DB_DIR', 'data'), 'ssh_host_rsa_key'))
+SSH_LEGACY_HOST_KEY_PATH = 'server.key'
+
 
 def is_blocked(ip):
-    try:
-        return _r.sismember("knock:blocked", ip)
-    except Exception:
-        return False
+    return is_blocked_common(_r, ip)
 # Log to a file we can tail in real-time
 # paramiko.util.log_to_file("honeypot_debug.log") 
 
@@ -67,23 +68,18 @@ def handle_connection(client_sock, addr, host_key):
     finally:
         transport.close()
 
-def normalize_ip(ip):
-    """Normalize IPv4-mapped IPv6 addresses to plain IPv4."""
-    if ip.startswith('::ffff:'):
-        return ip[7:]  # Strip ::ffff: prefix
-    return ip
-
 def start_honeypot():
-    # 1. Load the key from the file you generated earlier
-    # Make sure 'server.key' is in the same folder as this script
-    host_key = paramiko.RSAKey(filename='server.key')
+    os.makedirs(os.path.dirname(SSH_HOST_KEY_PATH) or '.', exist_ok=True)
+    if not os.path.exists(SSH_HOST_KEY_PATH) and os.path.exists(SSH_LEGACY_HOST_KEY_PATH):
+        shutil.copyfile(SSH_LEGACY_HOST_KEY_PATH, SSH_HOST_KEY_PATH)
+        os.chmod(SSH_HOST_KEY_PATH, 0o600)
+    if not os.path.exists(SSH_HOST_KEY_PATH):
+        os.makedirs(os.path.dirname(SSH_HOST_KEY_PATH) or '.', exist_ok=True)
+        paramiko.RSAKey.generate(2048).write_private_key_file(SSH_HOST_KEY_PATH)
+    host_key = paramiko.RSAKey(filename=SSH_HOST_KEY_PATH)
 
     # Dual-stack socket: accepts both IPv4 and IPv6
-    sock = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)
-    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    sock.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 0)
-    sock.bind(('::', 22))
-    sock.listen(100)
+    sock = create_dualstack_tcp_listener(22, backlog=100)
 
     print("🚀 Honeypot Active on Port 22 (IPv4+IPv6). Collecting radiation...")
 

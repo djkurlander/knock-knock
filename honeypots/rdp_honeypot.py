@@ -11,12 +11,16 @@ import json
 import os
 import time
 import struct
-import subprocess
-import sys
 import random
 import string
 import uuid
-import redis
+from common import (
+    create_dualstack_tcp_listener,
+    ensure_self_signed_server_cert,
+    get_redis_client,
+    is_blocked as is_blocked_common,
+    normalize_ip,
+)
 
 from impacket import ntlm
 
@@ -26,7 +30,7 @@ _COMPUTER_NAME = 'DESKTOP-' + ''.join(random.choices(string.ascii_uppercase + st
 CERT_FILE = os.environ.get('DB_DIR', 'data') + '/rdp.crt'
 KEY_FILE  = os.environ.get('DB_DIR', 'data') + '/rdp.key'
 
-_r = redis.Redis(host=os.environ.get('REDIS_HOST', 'localhost'), port=6379, db=0, decode_responses=True)
+_r = get_redis_client()
 TRACE_ENABLED = os.environ.get('RDP_TRACE', '1').lower() not in ('0', 'false', 'no')
 TRACE_IP = os.environ.get('RDP_TRACE_IP', '').strip()
 # Compatibility-first TLS policy for honeypot capture fidelity.
@@ -96,10 +100,7 @@ def resolve_min_tls_version():
     return ssl.TLSVersion.TLSv1
 
 def is_blocked(ip):
-    try:
-        return _r.sismember("knock:blocked", ip)
-    except Exception:
-        return False
+    return is_blocked_common(_r, ip)
 
 def _force_classic_key(ip):
     return f"rdp:force_classic:{ip}"
@@ -158,16 +159,17 @@ def note_nla_parse_failure(ip, nla_status):
 
 def ensure_cert():
     """Generate a self-signed cert for TLS if not already present."""
+    # Preserve existing broad client compatibility defaults for this endpoint.
     if os.path.exists(CERT_FILE) and os.path.exists(KEY_FILE):
         return
-    digest_flag = '-sha1' if CERT_DIGEST == 'sha1' else '-sha256'
-    subprocess.run([
-        'openssl', 'req', '-newkey', 'rsa:2048', '-nodes',
-        digest_flag,
-        '-keyout', KEY_FILE, '-x509', '-days', '3650',
-        '-out', CERT_FILE,
-        '-subj', '/CN=DESKTOP-RDP/O=Microsoft/C=US'
-    ], capture_output=True)
+    ensure_self_signed_server_cert(
+        cert_path=CERT_FILE,
+        key_path=KEY_FILE,
+        subject='/CN=DESKTOP-RDP/O=Microsoft/C=US',
+        san_dns=None,
+        days=3650,
+        digest=CERT_DIGEST,
+    )
 
 # --- X.224 / TPKT helpers ---
 
@@ -628,7 +630,7 @@ def handle_connection(client_sock, client_ip):
                 if username:
                     emit_user = normalize_knock_username(username)
                     knock = {"type": "KNOCK", "proto": "RDP",
-                             "ip": client_ip, "user": emit_user}
+                             "ip": client_ip, "user": emit_user, "rdp_source": "classic"}
                     if domain:
                         knock["domain"] = domain
                     print(json.dumps(knock), flush=True)
@@ -642,7 +644,7 @@ def handle_connection(client_sock, client_ip):
                     emit_user = normalize_knock_username(cookie_user)
                     trace(session_id, client_ip, 'emit_cookie_fallback_classic')
                     knock = {"type": "KNOCK", "proto": "RDP",
-                             "ip": client_ip, "user": emit_user}
+                             "ip": client_ip, "user": emit_user, "rdp_source": "cookie"}
                     if cookie_domain:
                         knock["domain"] = cookie_domain
                     print(json.dumps(knock), flush=True)
@@ -685,7 +687,7 @@ def handle_connection(client_sock, client_ip):
                 emit_user = normalize_knock_username(cookie_user)
                 trace(session_id, client_ip, 'emit_cookie_knock_after_forced_classic')
                 knock = {"type": "KNOCK", "proto": "RDP",
-                         "ip": client_ip, "user": emit_user}
+                         "ip": client_ip, "user": emit_user, "rdp_source": "cookie"}
                 if cookie_domain:
                     knock["domain"] = cookie_domain
                 print(json.dumps(knock), flush=True)
@@ -703,7 +705,7 @@ def handle_connection(client_sock, client_ip):
                     emit_user = normalize_knock_username(cookie_user)
                     trace(session_id, client_ip, 'emit_cookie_knock')
                     knock = {"type": "KNOCK", "proto": "RDP",
-                             "ip": client_ip, "user": emit_user}
+                             "ip": client_ip, "user": emit_user, "rdp_source": "cookie"}
                     if cookie_domain:
                         knock["domain"] = cookie_domain
                     print(json.dumps(knock), flush=True)
@@ -742,7 +744,7 @@ def handle_connection(client_sock, client_ip):
                 emit_user = normalize_knock_username(username)
                 trace(session_id, client_ip, 'emit_nla_knock', attempt=i, user=username, domain=domain)
                 knock = {"type": "KNOCK", "proto": "RDP",
-                         "ip": client_ip, "user": emit_user}
+                         "ip": client_ip, "user": emit_user, "rdp_source": "nla"}
                 if domain:
                     knock["domain"] = domain
                 print(json.dumps(knock), flush=True)
@@ -758,7 +760,7 @@ def handle_connection(client_sock, client_ip):
             emit_user = normalize_knock_username(cookie_user)
             trace(session_id, client_ip, 'emit_cookie_fallback_knock')
             knock = {"type": "KNOCK", "proto": "RDP",
-                     "ip": client_ip, "user": emit_user}
+                     "ip": client_ip, "user": emit_user, "rdp_source": "cookie"}
             if cookie_domain:
                 knock["domain"] = cookie_domain
             print(json.dumps(knock), flush=True)
@@ -790,11 +792,6 @@ def handle_connection(client_sock, client_ip):
             creds_captured=creds_captured,
         )
 
-def normalize_ip(ip):
-    if ip.startswith('::ffff:'):
-        return ip[7:]
-    return ip
-
 def start_honeypot():
     ensure_cert()
     if RDP_CLASSIC_CAPTURE:
@@ -804,11 +801,7 @@ def start_honeypot():
             print(f"⚠️ RDP classic capture enabled but unavailable: {_classic_import_error}", flush=True)
     else:
         print("🧪 RDP classic capture disabled (set RDP_CLASSIC_CAPTURE=1 to enable)", flush=True)
-    sock = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)
-    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    sock.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 0)
-    sock.bind(('::', 3389))
-    sock.listen(100)
+    sock = create_dualstack_tcp_listener(3389, backlog=100)
     print("🚀 RDP Honeypot Active on Port 3389 (NLA/NTLM). Collecting radiation...", flush=True)
     while True:
         client, addr = sock.accept()

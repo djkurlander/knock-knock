@@ -6,17 +6,21 @@ import os
 import random
 import string
 import ssl
-import redis
+from common import (
+    create_dualstack_tcp_listener,
+    ensure_self_signed_server_cert,
+    get_redis_client,
+    is_blocked as is_blocked_common,
+    normalize_ip,
+)
 
 MAX_MESSAGES_PER_SESSION = 10
 
-_r = redis.Redis(host=os.environ.get('REDIS_HOST', 'localhost'), port=6379, db=0, decode_responses=True)
+_r = get_redis_client()
+
 
 def is_blocked(ip):
-    try:
-        return _r.sismember("knock:blocked", ip)
-    except Exception:
-        return False
+    return is_blocked_common(_r, ip)
 
 def _get_smtp_hostname():
     """Resolve our own reverse DNS for a realistic SMTP banner; fall back to IP."""
@@ -50,8 +54,25 @@ _EHLO_RESP_TLS = (
     "250 PIPELINING\r\n"
 ).encode()
 
-SMTP_TLS_CERT_PATH = os.environ.get('SMTP_TLS_CERT_PATH', 'data/rdp.crt')
-SMTP_TLS_KEY_PATH = os.environ.get('SMTP_TLS_KEY_PATH', 'data/rdp.key')
+SMTP_TLS_CERT_PATH = os.environ.get('SMTP_TLS_CERT_PATH', 'data/smtp.crt')
+SMTP_TLS_KEY_PATH = os.environ.get('SMTP_TLS_KEY_PATH', 'data/smtp.key')
+
+
+def _smtp_tls_cert_subject(hostname):
+    cn = (hostname or 'mail.local').strip()
+    if len(cn) > 64:
+        cn = cn[:64]
+    return f"/CN={cn}/O=Postfix/C=US"
+
+
+def ensure_smtp_cert():
+    ensure_self_signed_server_cert(
+        cert_path=SMTP_TLS_CERT_PATH,
+        key_path=SMTP_TLS_KEY_PATH,
+        subject=_smtp_tls_cert_subject(_SMTP_HOSTNAME),
+        san_dns=_SMTP_HOSTNAME,
+        days=825,
+    )
 
 
 def recv_line(sock, timeout=30):
@@ -203,17 +224,9 @@ def handle_connection(client_sock, client_ip):
         except:
             pass
 
-def normalize_ip(ip):
-    if ip.startswith('::ffff:'):
-        return ip[7:]
-    return ip
-
 def start_honeypot():
-    sock = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)
-    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    sock.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 0)
-    sock.bind(('::', 25))
-    sock.listen(100)
+    ensure_smtp_cert()
+    sock = create_dualstack_tcp_listener(25, backlog=100)
     print("🚀 MAIL Honeypot Active on Port 25 (IPv4+IPv6). Collecting radiation...", flush=True)
     while True:
         client, addr = sock.accept()

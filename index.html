@@ -101,14 +101,6 @@
                 transform: translateY(0);
             }
         }
-        .proto-all  { color: var(--ui-label); }
-        .proto-ssh  { color: var(--neon-green); }
-        .proto-tnet { color: var(--data-blue); }
-        .proto-smtp { color: var(--user-magenta); }
-        .proto-mail { color: #00ffaa; }
-        .proto-rdp  { color: var(--hazard-red); }
-        .proto-ftp  { color: #c77dff; }
-        .proto-sip  { color: #ff7a00; }
         .bar-bg { background: #1a1a1a; height: 10px; border-radius: 5px; overflow: hidden; }
         .bar-fill { background: var(--neon-green); height: 100%; transition: width 1s; opacity: 0.7; }
         
@@ -603,6 +595,7 @@
         RDP:  { proto_int: 3, enabled: true, supports_user_panel: true,  supports_pass_panel: false, color: '#ff1a1a' },
         FTP:  { proto_int: 5, enabled: true, supports_user_panel: true,  supports_pass_panel: true,  color: '#c77dff' },
         SIP:  { proto_int: 6, enabled: true, supports_user_panel: false, supports_pass_panel: false, color: '#ff7a00' },
+        SMB:  { proto_int: 7, enabled: true, supports_user_panel: true,  supports_pass_panel: false, color: '#d6d9df' },
     };
     const DEFAULT_PROTO_COLORS = {
         ALL:  '#ffcc00',
@@ -613,6 +606,7 @@
         RDP:  '#ff1a1a',
         FTP:  '#c77dff',
         SIP:  '#ff7a00',
+        SMB:  '#d6d9df',
     };
     let SERVER_PROTOCOL_META = { ...DEFAULT_PROTOCOL_META };
     let TRACKED_PROTOCOLS = Object.keys(DEFAULT_PROTOCOL_META);
@@ -771,26 +765,22 @@
         const desktopAnchorBefore = desktopBoxesBefore[desktopCurrentIdx] || null;
         const desktopAnchorLeftBefore = desktopAnchorBefore ? desktopAnchorBefore.getBoundingClientRect().left : null;
         const mobileCurrentIdx = getMobileCurrentOriginalIndex();
-        const mode = PROTO_MODES[protoModeIdx];
-        const showUser = isUserPanelRelevant(mode);
-        const showPass = isPassPanelRelevant(mode);
-
-        setVisible(document.getElementById('d-box-user'), showUser, 'flex');
-        setVisible(document.getElementById('d-box-pass'), showPass, 'flex');
-        setVisible(document.getElementById('m-pane-user'), showUser, 'flex');
-        setVisible(document.getElementById('m-pane-pass'), showPass, 'flex');
+        setVisible(document.getElementById('d-box-user'), true, 'flex');
+        setVisible(document.getElementById('d-box-pass'), true, 'flex');
+        setVisible(document.getElementById('m-pane-user'), true, 'flex');
+        setVisible(document.getElementById('m-pane-pass'), true, 'flex');
 
         const dNavItems = document.querySelectorAll('.d-nav-item');
-        setVisible(dNavItems[USER_PANEL_INDEX], showUser, 'flex');
-        setVisible(dNavItems[PASS_PANEL_INDEX], showPass, 'flex');
+        setVisible(dNavItems[USER_PANEL_INDEX], true, 'flex');
+        setVisible(dNavItems[PASS_PANEL_INDEX], true, 'flex');
 
         const mNavItems = document.querySelectorAll('.m-nav .nav-item');
-        setVisible(mNavItems[USER_PANEL_INDEX], showUser, 'flex');
-        setVisible(mNavItems[PASS_PANEL_INDEX], showPass, 'flex');
+        setVisible(mNavItems[USER_PANEL_INDEX], true, 'flex');
+        setVisible(mNavItems[PASS_PANEL_INDEX], true, 'flex');
 
         const dots = document.querySelectorAll('.m-dots .dot');
-        setVisible(dots[USER_PANEL_INDEX], showUser, 'block');
-        setVisible(dots[PASS_PANEL_INDEX], showPass, 'block');
+        setVisible(dots[USER_PANEL_INDEX], true, 'block');
+        setVisible(dots[PASS_PANEL_INDEX], true, 'block');
 
         const mobilePanes = getMobilePanes();
         const visibleMobileIdxs = mobilePanes
@@ -999,7 +989,7 @@
         `;
         const body = rows.map(r => `
             <div class="proto-stats-row" data-proto="${escapeHtml(r.proto)}" style="display:grid;grid-template-columns:1fr 0.9fr 1.25fr 0.85fr;gap:8px;padding:4px 0;border-bottom:1px solid #222;">
-                <span class="proto-${r.proto.toLowerCase()}" style="font-weight:bold;">${escapeHtml(r.proto)}</span>
+                <span style="font-weight:bold;color:${escapeHtml(PROTO_COLORS[r.proto] || PROTO_COLORS.ALL)};">${escapeHtml(r.proto)}</span>
                 <span style="color:var(--neon-green)">${r.pct.toFixed(1)}%</span>
                 <span style="color:var(--data-blue)">${r.count.toLocaleString()}</span>
                 <span style="color:var(--neon-green)">${r.kpm.toFixed(1)}</span>
@@ -1746,6 +1736,21 @@
             const container = document.getElementById(layout + prefix);
             if (!container) return;
             container.innerHTML = '';
+            const mode = getCurrentMode();
+            const passNotRelevant = prefix === 'pass' && !isPassPanelRelevant(mode);
+            const userNotRelevant = prefix === 'user' && !isUserPanelRelevant(mode);
+            if (passNotRelevant || userNotRelevant) {
+                const note = passNotRelevant
+                    ? `The ${mode} protocol does not provide password data.`
+                    : `The ${mode} protocol does not provide username data.`;
+                container.innerHTML = `
+                    <div class="knock" style="border-bottom:none;">
+                        <span style="color:var(--ui-label)">Note:</span>
+                        <span style="color:var(--neon-green)">${escapeHtml(note)}</span>
+                    </div>
+                `;
+                return;
+            }
             if (!data || data.length === 0) return;
             const max = data[0].count;
             data.forEach(item => {
@@ -1777,6 +1782,10 @@
     const fillClasses = { loc: 'loc-fill', pass: 'password-fill', prov: 'provider-fill', user: 'user-fill', ip: 'ip-fill' };
 
     function incrementAndSort(prefix, id, displayName) {
+        const mode = getCurrentMode();
+        if ((prefix === 'pass' && !isPassPanelRelevant(mode)) || (prefix === 'user' && !isUserPanelRelevant(mode))) {
+            return;
+        }
         ['d-', 'm-'].forEach(layout => {
             const container = document.getElementById(layout + prefix);
             if (!container) return;
@@ -1882,7 +1891,8 @@
     function getProtoBadge(proto) {
         const label = (proto || 'SSH').toUpperCase().slice(0, 4);
         const cls = label.toLowerCase().replace(/[^a-z]/g, '');
-        return `<span class="proto-badge proto-${cls}"><span class="proto-badge-label">${escapeHtml(label)}</span></span>`;
+        const color = PROTO_COLORS[label] || PROTO_COLORS.ALL;
+        return `<span class="proto-badge proto-${cls}" style="color:${escapeHtml(color)}"><span class="proto-badge-label">${escapeHtml(label)}</span></span>`;
     }
 
     function sipUriUser(uri) {
@@ -1955,7 +1965,32 @@
             match: (d, proto) => proto === 'RDP',
             render: d => {
                 const u = hasUserField(d) ? displayUsername(d.user) : NA_INLINE;
-                return `<span style="color:var(--ui-label)">username:</span> <span>${u}</span>`;
+                const domain = d.rdp_domain ? escapeHtml(d.rdp_domain) : '';
+                const source = d.rdp_source ? escapeHtml(d.rdp_source) : '';
+                const domainLine = domain
+                    ? `<br><span style="color:var(--ui-label)">domain:</span> <span>${domain}</span>`
+                    : '';
+                const sourceLine = source
+                    ? `<br><span style="color:var(--ui-label)">source:</span> <span>${source}</span>`
+                    : '';
+                return `<span style="color:var(--ui-label)">user:</span> <span>${u}</span>${domainLine}${sourceLine}`;
+            },
+        },
+        {
+            name: 'smb_username',
+            match: (d, proto) => proto === 'SMB',
+            render: d => {
+                const u = hasUserField(d) ? displayUsername(d.user) : NA_INLINE;
+                const share = d.smb_share ? escapeHtml(d.smb_share) : '';
+                const domain = d.smb_domain ? escapeHtml(d.smb_domain) : '';
+                const host = d.smb_host ? escapeHtml(d.smb_host) : '';
+                const shareLine = share
+                    ? `<br><span style="color:var(--ui-label)">share:</span> <span>${share}</span>`
+                    : '';
+                const domainHostLine = (domain || host)
+                    ? `<br><span style="color:var(--ui-label)">host:</span> <span>${host || NA_INLINE}</span> <span style="color:var(--ui-label); margin-left:10px;">domain:</span> <span>${domain || NA_INLINE}</span>`
+                    : '';
+                return `<span style="color:var(--ui-label)">user:</span> <span>${u}</span>${shareLine}${domainHostLine}`;
             },
         },
         {

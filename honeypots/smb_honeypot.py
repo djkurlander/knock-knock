@@ -152,6 +152,43 @@ def trace(client_ip, stage, **fields):
     print(f"{base} {suffix}".rstrip(), flush=True)
 
 
+def _extract_smb2_negotiate_dialects(packet):
+    # Returns list[int] dialect ids from SMB2 NEGOTIATE request packet.
+    dialects = []
+    try:
+        if hasattr(packet, '__getitem__'):
+            try:
+                data = packet['Data']
+            except Exception:
+                data = None
+            if data:
+                nego = smb2.SMB2Negotiate(data)
+                dialects = [int(d) for d in (nego['Dialects'] or [])]
+                return dialects
+    except Exception:
+        pass
+    try:
+        raw = _packet_bytes(packet)
+        if raw:
+            p = smb2.SMB2Packet(raw)
+            data = p['Data']
+            if data:
+                nego = smb2.SMB2Negotiate(data)
+                dialects = [int(d) for d in (nego['Dialects'] or [])]
+    except Exception:
+        pass
+    return dialects
+
+
+def _classify_smb2_family(packet):
+    dialects = _extract_smb2_negotiate_dialects(packet)
+    if not dialects:
+        return None, []
+    smb3_dialects = {smb2.SMB2_DIALECT_30, smb2.SMB2_DIALECT_302, smb2.SMB2_DIALECT_311}
+    family = 'SMB3' if any(d in smb3_dialects for d in dialects) else 'SMB2'
+    return family, dialects
+
+
 def _set_conn_smb_version(smbServer, connId, connData, version):
     if not version:
         return
@@ -159,7 +196,14 @@ def _set_conn_smb_version(smbServer, connId, connData, version):
         data = connData if isinstance(connData, dict) else smbServer.getConnectionData(connId, checkStatus=False)
         if not isinstance(data, dict):
             return
-        data['knock_smb_version'] = version
+        current = str(data.get('knock_smb_version') or '').strip().upper()
+        incoming = str(version).strip().upper()
+        # Keep SMB3 once detected; later SMB2 hooks should not downgrade it.
+        if current == 'SMB3' and incoming == 'SMB2':
+            incoming = current
+        if not incoming:
+            return
+        data['knock_smb_version'] = incoming
         smbServer.setConnectionData(connId, data)
     except Exception:
         pass
@@ -244,13 +288,16 @@ def install_session_setup_hooks(server):
     if original_smb2_negotiate is not None:
         def wrapped_smb2_negotiate(connId, smbServer, recvPacket, *extra):
             connData = smbServer.getConnectionData(connId, checkStatus=False)
-            _set_conn_smb_version(smbServer, connId, connData, 'SMB2')
+            smb_family, dialects = _classify_smb2_family(recvPacket)
+            _set_conn_smb_version(smbServer, connId, connData, smb_family or 'SMB2')
             trace(
                 normalize_ip(connData.get('ClientIP')) or '-',
                 'smb2_negotiate',
                 conn_id=connId,
                 authenticated=bool(connData.get('Authenticated')),
                 packet_len=len(_packet_bytes(recvPacket)),
+                smb_version=smb_family or 'SMB2',
+                dialects=','.join(hex(d) for d in dialects) if dialects else '-',
             )
             return original_smb2_negotiate(connId, smbServer, recvPacket, *extra)
         smb_server.hookSmb2Command(smb2.SMB2_NEGOTIATE, wrapped_smb2_negotiate)

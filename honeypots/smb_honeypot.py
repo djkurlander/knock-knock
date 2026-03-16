@@ -152,6 +152,19 @@ def trace(client_ip, stage, **fields):
     print(f"{base} {suffix}".rstrip(), flush=True)
 
 
+def _set_conn_smb_version(smbServer, connId, connData, version):
+    if not version:
+        return
+    try:
+        data = connData if isinstance(connData, dict) else smbServer.getConnectionData(connId, checkStatus=False)
+        if not isinstance(data, dict):
+            return
+        data['knock_smb_version'] = version
+        smbServer.setConnectionData(connId, data)
+    except Exception:
+        pass
+
+
 def apply_server_fingerprint(server):
     smb_server = server.getServer()
     try:
@@ -182,6 +195,7 @@ def install_session_setup_hooks(server):
     if original_smb1_negotiate is not None:
         def wrapped_smb1_negotiate(connId, smbServer, SMBCommand, recvPacket):
             connData = smbServer.getConnectionData(connId, checkStatus=False)
+            _set_conn_smb_version(smbServer, connId, connData, 'SMB1')
             trace(
                 normalize_ip(connData.get('ClientIP')) or '-',
                 'smb1_negotiate',
@@ -196,6 +210,7 @@ def install_session_setup_hooks(server):
     if original_smb1 is not None:
         def wrapped_smb1(connId, smbServer, SMBCommand, recvPacket):
             connData = smbServer.getConnectionData(connId, checkStatus=False)
+            _set_conn_smb_version(smbServer, connId, connData, 'SMB1')
             ntlm_type = _ntlm_type_label(recvPacket)
             trace(
                 normalize_ip(connData.get('ClientIP')) or '-',
@@ -212,6 +227,7 @@ def install_session_setup_hooks(server):
     if original_smb1_tree is not None:
         def wrapped_smb1_tree(connId, smbServer, SMBCommand, recvPacket):
             connData = smbServer.getConnectionData(connId, checkStatus=False)
+            _set_conn_smb_version(smbServer, connId, connData, 'SMB1')
             share = _extract_share_from_packet(recvPacket) or _extract_share_from_conn_data(connData)
             trace(
                 normalize_ip(connData.get('ClientIP')) or '-',
@@ -228,6 +244,7 @@ def install_session_setup_hooks(server):
     if original_smb2_negotiate is not None:
         def wrapped_smb2_negotiate(connId, smbServer, recvPacket, *extra):
             connData = smbServer.getConnectionData(connId, checkStatus=False)
+            _set_conn_smb_version(smbServer, connId, connData, 'SMB2')
             trace(
                 normalize_ip(connData.get('ClientIP')) or '-',
                 'smb2_negotiate',
@@ -242,6 +259,7 @@ def install_session_setup_hooks(server):
     if original_smb2 is not None:
         def wrapped_smb2(connId, smbServer, recvPacket):
             connData = smbServer.getConnectionData(connId, checkStatus=False)
+            _set_conn_smb_version(smbServer, connId, connData, 'SMB2')
             ntlm_type = _ntlm_type_label(recvPacket)
             trace(
                 normalize_ip(connData.get('ClientIP')) or '-',
@@ -258,6 +276,7 @@ def install_session_setup_hooks(server):
     if original_smb2_tree is not None:
         def wrapped_smb2_tree(connId, smbServer, recvPacket):
             connData = smbServer.getConnectionData(connId, checkStatus=False)
+            _set_conn_smb_version(smbServer, connId, connData, 'SMB2')
             share = _extract_share_from_packet(recvPacket) or _extract_share_from_conn_data(connData)
             trace(
                 normalize_ip(connData.get('ClientIP')) or '-',
@@ -286,9 +305,9 @@ def is_blocked(ip):
     return is_blocked_common(_r, ip)
 
 
-def should_emit(ip, user, domain, host):
+def should_emit(ip, user, domain, host, version):
     now = time.time()
-    key = (ip or '', user or '', domain or '', host or '')
+    key = (ip or '', user or '', domain or '', host or '', version or '')
     with _dedup_lock:
         cutoff = now - EMIT_DEDUP_WINDOW_SEC
         stale = [k for k, ts in _dedup_seen.items() if ts < cutoff]
@@ -305,6 +324,8 @@ def auth_callback(smbServer, connData, domain_name, user_name, host_name):
     domain_name = (domain_name or '').strip()
     host_name = (host_name or '').strip()
     smb_share = _extract_share_from_conn_data(connData)
+    smb_version = (connData.get('knock_smb_version') if isinstance(connData, dict) else None) or ''
+    smb_version = smb_version.strip()
     raw_user = user_name
     user_kind = _username_kind(raw_user)
     user_name = normalize_username(raw_user)
@@ -316,6 +337,7 @@ def auth_callback(smbServer, connData, domain_name, user_name, host_name):
         user_kind=user_kind,
         user=user_name,
         smb_share=smb_share,
+        smb_version=smb_version,
         domain=domain_name,
         host=host_name,
         authenticated=bool(connData.get('Authenticated')),
@@ -334,12 +356,13 @@ def auth_callback(smbServer, connData, domain_name, user_name, host_name):
             raw_user=raw_user,
             user_kind=user_kind,
             smb_share=smb_share,
+            smb_version=smb_version,
             domain=domain_name,
             host=host_name,
         )
         return
-    if not should_emit(client_ip, user_name, domain_name, host_name):
-        trace(client_ip, 'auth_dedup_skip', user=user_name, domain=domain_name, host=host_name)
+    if not should_emit(client_ip, user_name, domain_name, host_name, smb_version):
+        trace(client_ip, 'auth_dedup_skip', user=user_name, smb_version=smb_version, domain=domain_name, host=host_name)
         return
 
     knock = {
@@ -350,12 +373,14 @@ def auth_callback(smbServer, connData, domain_name, user_name, host_name):
     }
     if smb_share:
         knock['smb_share'] = smb_share
+    if smb_version:
+        knock['smb_version'] = smb_version
     if domain_name:
         knock['smb_domain'] = domain_name
     if host_name:
         knock['smb_host'] = host_name
     print(json.dumps(knock), flush=True)
-    trace(client_ip, 'knock_emitted', user=user_name, smb_share=smb_share, domain=domain_name, host=host_name)
+    trace(client_ip, 'knock_emitted', user=user_name, smb_share=smb_share, smb_version=smb_version, domain=domain_name, host=host_name)
 
 
 def build_server():

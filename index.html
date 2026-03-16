@@ -2129,13 +2129,20 @@
                 const share = d.smb_share ? escapeHtml(d.smb_share) : '';
                 const domain = d.smb_domain ? escapeHtml(d.smb_domain) : '';
                 const host = d.smb_host ? escapeHtml(d.smb_host) : '';
+                const version = d.smb_version ? escapeHtml(d.smb_version) : '';
+                const userLine = domain
+                    ? `<span style="color:var(--ui-label)">user:</span> <span>${u}</span> <span style="color:var(--ui-label); margin-left:10px;">domain:</span> <span>${domain}</span>`
+                    : `<span style="color:var(--ui-label)">user:</span> <span>${u}</span>`;
                 const shareLine = share
                     ? `<br><span style="color:var(--ui-label)">share:</span> <span>${share}</span>`
                     : '';
-                const domainHostLine = (domain || host)
-                    ? `<br><span style="color:var(--ui-label)">host:</span> <span>${host || NA_INLINE}</span> <span style="color:var(--ui-label); margin-left:10px;">domain:</span> <span>${domain || NA_INLINE}</span>`
+                const hostLine = host
+                    ? `<br><span style="color:var(--ui-label)">host:</span> <span>${host}</span>`
                     : '';
-                return `<span style="color:var(--ui-label)">user:</span> <span>${u}</span>${shareLine}${domainHostLine}`;
+                const versionLine = version
+                    ? `<br><span style="color:var(--ui-label)">version:</span> <span>${version}</span>`
+                    : '';
+                return `${userLine}${shareLine}${hostLine}${versionLine}`;
             },
         },
         {

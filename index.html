@@ -30,6 +30,7 @@
             --bg-dark: #0a0a0a;
             --ui-label: #ffcc00;
             --ui-grey-dim: #707070;
+            --pulse-duration: 3000ms;
         }
         
         html, body {
@@ -71,7 +72,7 @@
             pointer-events: none;
             z-index: 0;
         }
-        .knock.pulse-active::before { animation: pulse-green 3s ease forwards; }
+        .knock.pulse-active::before { animation: pulse-green var(--pulse-duration) ease forwards; }
         .knock > * {
             position: relative;
             z-index: 1;
@@ -96,7 +97,7 @@
             pointer-events: none;
             z-index: 0;
         }
-        .bar-row.pulse-active::before { animation: pulse-green 3s ease forwards; }
+        .bar-row.pulse-active::before { animation: pulse-green var(--pulse-duration) ease forwards; }
         .bar-row > * {
             position: relative;
             z-index: 1;
@@ -113,7 +114,7 @@
             pointer-events: none;
             z-index: 0;
         }
-        .proto-stats-row.pulse-active::before { animation: pulse-green 3s ease forwards; }
+        .proto-stats-row.pulse-active::before { animation: pulse-green var(--pulse-duration) ease forwards; }
         .proto-stats-row > * {
             position: relative;
             z-index: 1;
@@ -582,6 +583,29 @@
     let knockCount = 0;
     const DEBUG_STORAGE_KEY = 'knock_debug_log';
     const MAX_PER_PANEL = 100;
+    const PULSE_TIMEOUT_BUFFER_MS = 80;
+
+    function parseCssTimeToMs(value, fallbackMs) {
+        const raw = String(value || '').trim();
+        if (!raw) return fallbackMs;
+        if (raw.endsWith('ms')) {
+            const n = Number.parseFloat(raw);
+            return Number.isFinite(n) ? n : fallbackMs;
+        }
+        if (raw.endsWith('s')) {
+            const n = Number.parseFloat(raw);
+            return Number.isFinite(n) ? (n * 1000) : fallbackMs;
+        }
+        const n = Number.parseFloat(raw);
+        return Number.isFinite(n) ? n : fallbackMs;
+    }
+
+    // Keep JS cleanup timing in sync with CSS pulse duration.
+    const PULSE_DURATION_MS = parseCssTimeToMs(
+        getComputedStyle(document.documentElement).getPropertyValue('--pulse-duration'),
+        3000
+    );
+    const PULSE_TIMEOUT_MS = Math.ceil(PULSE_DURATION_MS + PULSE_TIMEOUT_BUFFER_MS);
 
     if (DEBUG) {
         debugDiv = document.createElement('div');
@@ -1104,9 +1128,14 @@
 
     function triggerPulseClass(el) {
         if (!el) return;
+        // Cleanup must be robust: animationend can be missed when DOM is reflowed/reordered.
         if (el._pulseOnEnd) {
             el.removeEventListener('animationend', el._pulseOnEnd);
             el._pulseOnEnd = null;
+        }
+        if (el._pulseTimeout) {
+            clearTimeout(el._pulseTimeout);
+            el._pulseTimeout = null;
         }
         el.classList.remove('pulse-active');
         void el.offsetWidth;
@@ -1116,8 +1145,20 @@
             el.classList.remove('pulse-active');
             el.removeEventListener('animationend', el._pulseOnEnd);
             el._pulseOnEnd = null;
+            if (el._pulseTimeout) {
+                clearTimeout(el._pulseTimeout);
+                el._pulseTimeout = null;
+            }
         };
         el.addEventListener('animationend', el._pulseOnEnd);
+        el._pulseTimeout = setTimeout(() => {
+            el.classList.remove('pulse-active');
+            if (el._pulseOnEnd) {
+                el.removeEventListener('animationend', el._pulseOnEnd);
+                el._pulseOnEnd = null;
+            }
+            el._pulseTimeout = null;
+        }, PULSE_TIMEOUT_MS);
     }
 
     function triggerBarRowPulse(row) {
@@ -1923,8 +1964,11 @@
             const rows = Array.from(container.children);
             rows.sort((a, b) => (parseInt(b.getAttribute('data-count')) || 0) - (parseInt(a.getAttribute('data-count')) || 0));
             const max = parseInt(rows[0].getAttribute('data-count')) || 1;
-            rows.forEach(el => {
-                container.appendChild(el);
+            // Only move rows whose index changes; full re-append can retrigger active CSS pulses.
+            rows.forEach((el, idx) => {
+                if (container.children[idx] !== el) {
+                    container.insertBefore(el, container.children[idx] || null);
+                }
                 el.querySelector('.bar-fill').style.width = ((parseInt(el.getAttribute('data-count')) || 0) / max * 100) + '%';
             });
             if (prefix !== 'loc') while (container.children.length > MAX_PER_PANEL) container.lastChild.remove();

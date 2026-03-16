@@ -71,29 +71,50 @@ API_URL = 'https://api.abuseipdb.com/api/v2/bulk-report'
 MAX_ROWS = 10_000
 
 
+def _has_table(conn, name):
+    return conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (name,)
+    ).fetchone() is not None
+
+
 def fetch_ips(hours, proto_filter=None):
     """
     Return list of (ip, total_hits, last_seen, proto_names, categories_str)
-    from ip_intel_proto within the lookback window, grouped by IP.
+    within the lookback window, grouped by IP.
+
+    Uses ip_intel_proto when available (multiprotocol schema), otherwise
+    falls back to ip_intel (SSH-only / pre-migration schema).
     """
     cutoff = (datetime.now() - timedelta(hours=hours)).strftime('%Y-%m-%d %H:%M:%S')
     conn = sqlite3.connect(DB_PATH)
+    has_proto = _has_table(conn, 'ip_intel_proto')
 
-    if proto_filter:
-        placeholders = ','.join('?' * len(proto_filter))
-        rows = conn.execute(
-            f'SELECT ip, GROUP_CONCAT(proto), SUM(hits), MAX(last_seen) '
-            f'FROM ip_intel_proto '
-            f'WHERE last_seen >= ? AND proto IN ({placeholders}) '
-            f'GROUP BY ip ORDER BY SUM(hits) DESC LIMIT ?',
-            [cutoff] + proto_filter + [MAX_ROWS],
-        ).fetchall()
+    if has_proto:
+        if proto_filter:
+            placeholders = ','.join('?' * len(proto_filter))
+            rows = conn.execute(
+                f'SELECT ip, GROUP_CONCAT(proto), SUM(hits), MAX(last_seen) '
+                f'FROM ip_intel_proto '
+                f'WHERE last_seen >= ? AND proto IN ({placeholders}) '
+                f'GROUP BY ip ORDER BY SUM(hits) DESC LIMIT ?',
+                [cutoff] + proto_filter + [MAX_ROWS],
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                'SELECT ip, GROUP_CONCAT(proto), SUM(hits), MAX(last_seen) '
+                'FROM ip_intel_proto '
+                'WHERE last_seen >= ? '
+                'GROUP BY ip ORDER BY SUM(hits) DESC LIMIT ?',
+                (cutoff, MAX_ROWS),
+            ).fetchall()
     else:
+        if proto_filter:
+            print('Warning: --proto filter ignored (database has no per-protocol tables)', file=sys.stderr)
         rows = conn.execute(
-            'SELECT ip, GROUP_CONCAT(proto), SUM(hits), MAX(last_seen) '
-            'FROM ip_intel_proto '
+            'SELECT ip, NULL, hits, last_seen '
+            'FROM ip_intel '
             'WHERE last_seen >= ? '
-            'GROUP BY ip ORDER BY SUM(hits) DESC LIMIT ?',
+            'ORDER BY hits DESC LIMIT ?',
             (cutoff, MAX_ROWS),
         ).fetchall()
 
@@ -101,7 +122,10 @@ def fetch_ips(hours, proto_filter=None):
 
     result = []
     for ip, protos_str, total_hits, last_seen in rows:
-        proto_ints = [int(p) for p in protos_str.split(',')]
+        if protos_str is not None:
+            proto_ints = [int(p) for p in protos_str.split(',')]
+        else:
+            proto_ints = [0]  # assume SSH for legacy schema
         categories = set()
         names = []
         for p in proto_ints:

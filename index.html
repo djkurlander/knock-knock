@@ -2136,13 +2136,15 @@
                 const shareLine = share
                     ? `<br><span style="color:var(--ui-label)">share:</span> <span>${share}</span>`
                     : '';
-                const hostLine = host
-                    ? `<br><span style="color:var(--ui-label)">host:</span> <span>${host}</span>`
-                    : '';
-                const versionLine = version
-                    ? `<br><span style="color:var(--ui-label)">version:</span> <span>${version}</span>`
-                    : '';
-                return `${userLine}${shareLine}${hostLine}${versionLine}`;
+                let hostVersionLine = '';
+                if (host && version) {
+                    hostVersionLine = `<br><span style="color:var(--ui-label)">host:</span> <span>${host}</span> <span style="color:var(--ui-label); margin-left:10px;">version:</span> <span>${version}</span>`;
+                } else if (host) {
+                    hostVersionLine = `<br><span style="color:var(--ui-label)">host:</span> <span>${host}</span>`;
+                } else if (version) {
+                    hostVersionLine = `<br><span style="color:var(--ui-label)">version:</span> <span>${version}</span>`;
+                }
+                return `${userLine}${shareLine}${hostVersionLine}`;
             },
         },
         {

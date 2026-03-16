@@ -1095,9 +1095,17 @@
 
     function triggerBarRowPulse(row) {
         if (!row) return;
+        if (row._pulseTimeout) {
+            clearTimeout(row._pulseTimeout);
+            row._pulseTimeout = null;
+        }
         row.classList.remove('pulse-active');
         void row.offsetWidth;
         row.classList.add('pulse-active');
+        row._pulseTimeout = setTimeout(() => {
+            row.classList.remove('pulse-active');
+            row._pulseTimeout = null;
+        }, 3050);
     }
 
     function addToFeed(d) {

@@ -135,9 +135,11 @@ class GlobalStatsCache:
         self.top_providers = await loop.run_in_executor(None, self._get_top_stats, "isp", None)
         self.top_users = await loop.run_in_executor(None, self._get_top_stats, "username", None)
         self.top_ips = await loop.run_in_executor(None, self._get_top_stats, "ip", None)
-        # Per-protocol leaderboards (_proto tables, composite index-driven)
+        # Per-protocol leaderboards — only query enabled protocols
+        enabled_protocols, _ = await load_protocol_runtime_config()
         self.proto_stats = {}
-        for proto_int in PROTO_NAME:
+        for name in enabled_protocols:
+            proto_int = PROTO[name]
             self.proto_stats[proto_int] = {
                 "top_locations": await loop.run_in_executor(None, self._get_top_stats, "location", proto_int),
                 "top_passwords": await loop.run_in_executor(None, self._get_top_stats, "password", proto_int),

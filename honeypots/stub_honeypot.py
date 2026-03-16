@@ -2,13 +2,7 @@
 import socket
 import threading
 import argparse
-from common import create_dualstack_tcp_listener, get_redis_client, is_blocked as is_blocked_common, normalize_ip
-
-_r = get_redis_client()
-
-
-def is_blocked(ip):
-    return is_blocked_common(_r, ip)
+from common import create_dualstack_tcp_listener, is_blocked, normalize_ip
 
 def handle_connection(client_sock, client_ip, proto):
     try:

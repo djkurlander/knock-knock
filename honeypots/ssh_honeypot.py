@@ -6,15 +6,10 @@ import logging
 import json
 import os
 import shutil
-from common import create_dualstack_tcp_listener, get_redis_client, is_blocked as is_blocked_common, normalize_ip
+from common import create_dualstack_tcp_listener, is_blocked, normalize_ip
 
-_r = get_redis_client()
 SSH_HOST_KEY_PATH = os.environ.get('SSH_HOST_KEY_PATH', os.path.join(os.environ.get('DB_DIR', 'data'), 'ssh_host_rsa_key'))
 SSH_LEGACY_HOST_KEY_PATH = 'server.key'
-
-
-def is_blocked(ip):
-    return is_blocked_common(_r, ip)
 # Log to a file we can tail in real-time
 # paramiko.util.log_to_file("honeypot_debug.log") 
 

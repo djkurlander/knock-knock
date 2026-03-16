@@ -8,35 +8,17 @@ import string
 import ssl
 from common import (
     create_dualstack_tcp_listener,
-    ensure_self_signed_server_cert,
-    get_redis_client,
-    is_blocked as is_blocked_common,
+    ensure_smtp_cert,
+    extract_addr,
+    get_smtp_hostname,
+    is_blocked,
     normalize_ip,
+    smtp_recv_line as recv_line,
 )
 
 MAX_MESSAGES_PER_SESSION = 10
 
-_r = get_redis_client()
-
-
-def is_blocked(ip):
-    return is_blocked_common(_r, ip)
-
-def _get_smtp_hostname():
-    """Resolve our own reverse DNS for a realistic SMTP banner; fall back to IP."""
-    try:
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.connect(('8.8.8.8', 80))
-        ip = s.getsockname()[0]
-        s.close()
-        try:
-            return socket.gethostbyaddr(ip)[0]
-        except Exception:
-            return ip
-    except Exception:
-        return 'localhost'
-
-_SMTP_HOSTNAME = _get_smtp_hostname()
+_SMTP_HOSTNAME = get_smtp_hostname()
 _BANNER = f"220 {_SMTP_HOSTNAME} ESMTP Postfix\r\n".encode()
 _EHLO_RESP = (
     f"250-{_SMTP_HOSTNAME}\r\n"
@@ -56,52 +38,6 @@ _EHLO_RESP_TLS = (
 
 SMTP_TLS_CERT_PATH = os.environ.get('SMTP_TLS_CERT_PATH', 'data/smtp.crt')
 SMTP_TLS_KEY_PATH = os.environ.get('SMTP_TLS_KEY_PATH', 'data/smtp.key')
-
-
-def _smtp_tls_cert_subject(hostname):
-    cn = (hostname or 'mail.local').strip()
-    if len(cn) > 64:
-        cn = cn[:64]
-    return f"/CN={cn}/O=Postfix/C=US"
-
-
-def ensure_smtp_cert():
-    ensure_self_signed_server_cert(
-        cert_path=SMTP_TLS_CERT_PATH,
-        key_path=SMTP_TLS_KEY_PATH,
-        subject=_smtp_tls_cert_subject(_SMTP_HOSTNAME),
-        san_dns=_SMTP_HOSTNAME,
-        days=825,
-    )
-
-
-def recv_line(sock, timeout=30):
-    """Read one SMTP line terminated by \\r\\n or \\n, with status."""
-    sock.settimeout(timeout)
-    buf = b''
-    while True:
-        try:
-            ch = sock.recv(1)
-        except socket.timeout:
-            return '', 'timeout'
-        except (ConnectionResetError, BrokenPipeError, OSError) as e:
-            return '', f"recv_error:{type(e).__name__}"
-        if not ch:
-            line = buf.decode('utf-8', errors='replace').strip()
-            return line, ('peer_closed' if not line else 'ok')
-        if ch == b'\n':
-            return buf.decode('utf-8', errors='replace').strip(), 'ok'
-        if ch == b'\r':
-            continue
-        buf += ch
-
-def extract_addr(raw):
-    """Pull address out of 'MAIL FROM:<addr>' or 'RCPT TO:<addr>' line."""
-    raw = raw.strip()
-    if '<' in raw and '>' in raw:
-        addr = raw[raw.index('<') + 1:raw.index('>')]
-        return '<none>' if addr == '' else addr
-    return raw
 
 def handle_connection(client_sock, client_ip):
     mail_from = None
@@ -225,7 +161,7 @@ def handle_connection(client_sock, client_ip):
             pass
 
 def start_honeypot():
-    ensure_smtp_cert()
+    ensure_smtp_cert(_SMTP_HOSTNAME, SMTP_TLS_CERT_PATH, SMTP_TLS_KEY_PATH)
     sock = create_dualstack_tcp_listener(25, backlog=100)
     print("🚀 MAIL Honeypot Active on Port 25 (IPv4+IPv6). Collecting radiation...", flush=True)
     while True:

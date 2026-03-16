@@ -11,7 +11,7 @@ import uuid
 from impacket import smb
 from impacket import smb3structs as smb2
 from impacket.smbserver import SimpleSMBServer
-from common import get_redis_client, is_blocked as is_blocked_common, normalize_ip
+from common import is_blocked, normalize_ip
 
 
 SMB_PORT = int(os.environ.get('SMB_PORT', '445'))
@@ -21,7 +21,6 @@ EMIT_DEDUP_WINDOW_SEC = max(1, int(os.environ.get('SMB_DEDUP_WINDOW_SEC', '60'))
 SMB_SERVER_NAME = os.environ.get('SMB_SERVER_NAME', 'Windows Server 2019 Standard 10.0').strip() or 'Windows Server 2019 Standard 10.0'
 SMB_SERVER_OS = os.environ.get('SMB_SERVER_OS', 'Windows Server 2019 Standard 17763').strip() or 'Windows Server 2019 Standard 17763'
 SMB_SERVER_DOMAIN = os.environ.get('SMB_SERVER_DOMAIN', 'WORKGROUP').strip() or 'WORKGROUP'
-_r = get_redis_client()
 _dedup_lock = threading.Lock()
 _dedup_seen = {}
 
@@ -346,10 +345,6 @@ def normalize_username(username):
     if not username:
         return None
     return username.lower()
-
-
-def is_blocked(ip):
-    return is_blocked_common(_r, ip)
 
 
 def should_emit(ip, user, domain, host, version):

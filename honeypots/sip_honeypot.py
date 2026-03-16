@@ -13,12 +13,9 @@ import uuid
 from common import (
     create_dualstack_tcp_listener,
     create_dualstack_udp_listener,
-    get_redis_client,
-    is_blocked as is_blocked_common,
+    is_blocked,
     normalize_ip,
 )
-
-_R = get_redis_client()
 
 SIP_PORT = int(os.environ.get('SIP_PORT', '5060'))
 SIP_REALM = os.environ.get('SIP_REALM', 'asterisk')
@@ -37,10 +34,6 @@ _dedup_lock = threading.Lock()
 _dedup_seen = {}
 _ack_lock = threading.Lock()
 _ack_seen = {}
-
-
-def is_blocked(ip):
-    return is_blocked_common(_R, ip)
 
 
 def trace(session_id, client_ip, stage, **fields):

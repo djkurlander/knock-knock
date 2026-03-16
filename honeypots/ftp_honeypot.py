@@ -2,30 +2,7 @@
 import socket
 import threading
 import json
-from common import create_dualstack_tcp_listener, get_redis_client, is_blocked as is_blocked_common, normalize_ip
-
-_r = get_redis_client()
-
-
-def is_blocked(ip):
-    return is_blocked_common(_r, ip)
-
-def recv_line(sock, timeout=30):
-    sock.settimeout(timeout)
-    buf = b''
-    try:
-        while True:
-            ch = sock.recv(1)
-            if not ch:
-                break
-            if ch == b'\n':
-                break
-            if ch == b'\r':
-                continue
-            buf += ch
-    except (socket.timeout, ConnectionResetError, BrokenPipeError, OSError):
-        pass
-    return buf.decode('utf-8', errors='replace').strip()
+from common import create_dualstack_tcp_listener, is_blocked, normalize_ip, recv_line
 
 MAX_LOGIN_ATTEMPTS = 3
 

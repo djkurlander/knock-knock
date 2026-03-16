@@ -18,7 +18,7 @@ from common import (
     create_dualstack_tcp_listener,
     ensure_self_signed_server_cert,
     get_redis_client,
-    is_blocked as is_blocked_common,
+    is_blocked,
     normalize_ip,
 )
 
@@ -98,9 +98,6 @@ def resolve_min_tls_version():
     if v in ('1.3', 'tls1.3'):
         return ssl.TLSVersion.TLSv1_3
     return ssl.TLSVersion.TLSv1
-
-def is_blocked(ip):
-    return is_blocked_common(_r, ip)
 
 def _force_classic_key(ip):
     return f"rdp:force_classic:{ip}"

@@ -1,4 +1,4 @@
-#!/root/knock-knock/.venv/bin/python
+#!/usr/bin/env python3
 """
 Quick test: simulate an RDP NLA client connecting to localhost:3389
 with a known username/password to verify the honeypot captures it.

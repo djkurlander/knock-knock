@@ -1,4 +1,4 @@
-#!/root/knock-knock/.venv/bin/python
+#!/usr/bin/env python3
 """
 RDP honeypot - NLA level using impacket.
 Captures username (and domain) from NTLM AUTHENTICATE message.

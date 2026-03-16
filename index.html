@@ -2112,13 +2112,13 @@
                 const u = hasUserField(d) ? displayUsername(d.user) : NA_INLINE;
                 const domain = d.rdp_domain ? escapeHtml(d.rdp_domain) : '';
                 const source = d.rdp_source ? escapeHtml(d.rdp_source) : '';
-                const domainLine = domain
-                    ? `<br><span style="color:var(--ui-label)">domain:</span> <span>${domain}</span>`
-                    : '';
+                const userLine = domain
+                    ? `<span style="color:var(--ui-label)">user:</span> <span>${u}</span> <span style="color:var(--ui-label); margin-left:10px;">domain:</span> <span>${domain}</span>`
+                    : `<span style="color:var(--ui-label)">user:</span> <span>${u}</span>`;
                 const sourceLine = source
                     ? `<br><span style="color:var(--ui-label)">source:</span> <span>${source}</span>`
                     : '';
-                return `<span style="color:var(--ui-label)">user:</span> <span>${u}</span>${domainLine}${sourceLine}`;
+                return `${userLine}${sourceLine}`;
             },
         },
         {

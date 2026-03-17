@@ -1647,8 +1647,9 @@
         { name: 'Heat', img: '/static/earth-black.png', hex: false, outlines: false, cities: false, extruded: true, viewAlt: 0.3, viewAltDesktop: 0.2 },
         { name: 'Atlas', img: '/static/marble_with_borders.jpg', hex: false, outlines: '#00ff41', cities: false },
     ];
+    const DEFAULT_GLOBE_STYLE_IDX = 4; // Heat
     const savedStyle = parseInt(localStorage.getItem('globeStyle'));
-    let paneGlobeStyleIdx = (savedStyle >= 0 && savedStyle < GLOBE_STYLES.length) ? savedStyle : (window.innerWidth <= 800 ? 5 : 0);
+    let paneGlobeStyleIdx = (savedStyle >= 0 && savedStyle < GLOBE_STYLES.length) ? savedStyle : DEFAULT_GLOBE_STYLE_IDX;
 
     function applyGlobeStyle(globe, idx) {
         const style = GLOBE_STYLES[idx];

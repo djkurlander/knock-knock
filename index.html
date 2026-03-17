@@ -231,17 +231,21 @@
                 border: 1px solid var(--mode-color, var(--warning-yellow)); border-radius: 0;
                 padding: 2px 8px; font-family: monospace; letter-spacing: 1px;
                 text-transform: uppercase; background: transparent;
-                line-height: 1.1; transition: opacity 0.2s, box-shadow 0.2s, background-color 0.2s;
-                opacity: 0.78;
+                line-height: 1.1; transition: opacity 0.2s, box-shadow 0.2s, background-color 0.2s, transform 0.2s;
+                opacity: 0.45;
             }
             .d-proto-switch-btn.is-active {
                 opacity: 1;
-                background: rgba(15, 15, 15, 0.85);
-                box-shadow: 0 0 4px 1px var(--mode-glow, rgba(255, 204, 0, 0.6));
+                color: #050505;
+                background: var(--mode-color, var(--warning-yellow));
+                border-color: var(--mode-color, var(--warning-yellow));
+                box-shadow: 0 0 8px 2px var(--mode-glow, rgba(255, 204, 0, 0.8));
+                transform: translateY(-1px);
+                font-weight: bold;
             }
             @media (hover: hover) {
                 .d-proto-switch-btn:hover {
-                    opacity: 1;
+                    opacity: 0.75;
                     box-shadow: 0 0 4px 1px var(--mode-glow, rgba(255, 204, 0, 0.6));
                 }
             }
@@ -471,6 +475,17 @@
             transform: translateY(0.06em);
         }
         @media (hover: hover) { .proto-cycle-btn:hover { box-shadow: 0 0 4px 2px var(--btn-glow, rgba(255,204,0,0.7)); } }
+        .proto-cycle-btn.desktop-readonly {
+            cursor: default;
+            pointer-events: none;
+            transform: translateY(-1px);
+        }
+        .proto-cycle-btn.desktop-readonly .proto-cycle-btn-label {
+            transform: translate(0.045em, 0.06em);
+        }
+        .proto-cycle-btn.desktop-readonly:hover {
+            box-shadow: none !important;
+        }
     </style>
 </head>
 <body>
@@ -516,16 +531,16 @@
     </div>
     
     <div class="d-grid" id="d-slider-container">
-        <div class="d-box" id="d-box-feed"><h2 style="display:flex;justify-content:space-between;align-items:center;">LIVE FEED: LOGIN ATTEMPTS<span id="d-feed-proto-btn" class="proto-cycle-btn" onclick="cycleProto(event)" style="vertical-align:initial;">⟳ ALL</span></h2><div id="d-feed" class="d-content"></div></div>
-        <div class="d-box" id="d-box-globe"><h2 style="display:flex;justify-content:space-between;align-items:center;">GLOBE VIEW<span class="proto-cycle-btn" onclick="cycleProto(event)" style="vertical-align:initial;">⟳ ALL</span></h2><div id="d-globe-location" style="text-align:center; margin-bottom:10px;"><div id="d-globe-loc-text" style="color:var(--neon-green);"></div><div id="d-globe-loc-isp" style="color:var(--data-blue); font-size:0.85em;"></div></div><div id="d-globe-pane" class="d-content globe-pane"></div></div>
-        <div class="d-box"><h2 style="display:flex;justify-content:space-between;align-items:center;">LOCATION<span class="proto-cycle-btn" onclick="cycleProto(event)" style="vertical-align:initial;">⟳ ALL</span></h2><div id="d-loc" class="d-content"></div></div>
-        <div class="d-box" id="d-box-user"><h2 style="display:flex;justify-content:space-between;align-items:center;">USERNAME<span class="proto-cycle-btn" onclick="cycleProto(event)" style="vertical-align:initial;">⟳ ALL</span></h2><div id="d-user" class="d-content"></div></div>
-        <div class="d-box" id="d-box-pass"><h2 style="display:flex;justify-content:space-between;align-items:center;">PASSWORD<span class="proto-cycle-btn" onclick="cycleProto(event)" style="vertical-align:initial;">⟳ ALL</span></h2><div id="d-pass" class="d-content"></div></div>
-        <div class="d-box"><h2 style="display:flex;justify-content:space-between;align-items:center;">ISP<span class="proto-cycle-btn" onclick="cycleProto(event)" style="vertical-align:initial;">⟳ ALL</span></h2><div id="d-prov" class="d-content"></div></div>
-        <div class="d-box"><h2 style="display:flex;justify-content:space-between;align-items:center;">IP ADDRESS<span class="proto-cycle-btn" onclick="cycleProto(event)" style="vertical-align:initial;">⟳ ALL</span></h2><div id="d-ip" class="d-content"></div></div>
-        <div class="d-box" id="d-box-info"><h2 style="display:flex;justify-content:space-between;align-items:center;">LAST KNOCK<span class="proto-cycle-btn" onclick="cycleProto(event)" style="vertical-align:initial;">⟳ ALL</span></h2><div id="d-details" class="d-content"></div></div>
+        <div class="d-box" id="d-box-feed"><h2 style="display:flex;justify-content:space-between;align-items:center;">LIVE FEED: LOGIN ATTEMPTS<span id="d-feed-proto-btn" class="proto-cycle-btn desktop-readonly" style="vertical-align:initial;">ALL</span></h2><div id="d-feed" class="d-content"></div></div>
+        <div class="d-box" id="d-box-globe"><h2 style="display:flex;justify-content:space-between;align-items:center;">GLOBE VIEW<span class="proto-cycle-btn desktop-readonly" style="vertical-align:initial;">ALL</span></h2><div id="d-globe-location" style="text-align:center; margin-bottom:10px;"><div id="d-globe-loc-text" style="color:var(--neon-green);"></div><div id="d-globe-loc-isp" style="color:var(--data-blue); font-size:0.85em;"></div></div><div id="d-globe-pane" class="d-content globe-pane"></div></div>
+        <div class="d-box"><h2 style="display:flex;justify-content:space-between;align-items:center;">LOCATION<span class="proto-cycle-btn desktop-readonly" style="vertical-align:initial;">ALL</span></h2><div id="d-loc" class="d-content"></div></div>
+        <div class="d-box" id="d-box-user"><h2 style="display:flex;justify-content:space-between;align-items:center;">USERNAME<span class="proto-cycle-btn desktop-readonly" style="vertical-align:initial;">ALL</span></h2><div id="d-user" class="d-content"></div></div>
+        <div class="d-box" id="d-box-pass"><h2 style="display:flex;justify-content:space-between;align-items:center;">PASSWORD<span class="proto-cycle-btn desktop-readonly" style="vertical-align:initial;">ALL</span></h2><div id="d-pass" class="d-content"></div></div>
+        <div class="d-box"><h2 style="display:flex;justify-content:space-between;align-items:center;">ISP<span class="proto-cycle-btn desktop-readonly" style="vertical-align:initial;">ALL</span></h2><div id="d-prov" class="d-content"></div></div>
+        <div class="d-box"><h2 style="display:flex;justify-content:space-between;align-items:center;">IP ADDRESS<span class="proto-cycle-btn desktop-readonly" style="vertical-align:initial;">ALL</span></h2><div id="d-ip" class="d-content"></div></div>
+        <div class="d-box" id="d-box-info"><h2 style="display:flex;justify-content:space-between;align-items:center;">LAST KNOCK<span class="proto-cycle-btn desktop-readonly" style="vertical-align:initial;">ALL</span></h2><div id="d-details" class="d-content"></div></div>
         <div class="d-box" id="d-box-proto"><h2>PROTO STATS</h2><div id="d-proto-stats" class="d-content"></div></div>
-        <div class="d-box" id="d-box-trivia"><h2 style="display:flex;justify-content:space-between;align-items:center;">TRIVIA<span class="proto-cycle-btn" onclick="cycleProto(event)" style="vertical-align:initial;">⟳ ALL</span></h2><div id="d-trivia" class="d-content"></div></div>
+        <div class="d-box" id="d-box-trivia"><h2 style="display:flex;justify-content:space-between;align-items:center;">TRIVIA<span class="proto-cycle-btn desktop-readonly" style="vertical-align:initial;">ALL</span></h2><div id="d-trivia" class="d-content"></div></div>
         <div class="d-box" id="d-box-jokes"><h2>KNOCK-KNOCK JOKES</h2><div id="d-jokes" class="d-content" style="color:var(--neon-green); line-height:1.6;"></div></div>
         <div class="d-box"><h2>ABOUT</h2><div class="d-content" style="color:var(--neon-green); line-height:1.6;">
             <div style="font-size:1.4em; font-weight:bold; margin-bottom:20px;">KNOCK-KNOCK.NET</div>
@@ -828,7 +843,9 @@
         const modeColor = PROTO_COLORS[mode] || PROTO_COLORS.ALL;
         const glowColor = hexToRgba(modeColor, 0.7);
         document.querySelectorAll('.proto-cycle-btn').forEach(el => {
-            el.innerHTML = `<span class="proto-cycle-btn-label">⟳ ${mode}</span>`;
+            const readonlyDesktop = el.classList.contains('desktop-readonly');
+            const label = readonlyDesktop ? mode : `⟳ ${mode}`;
+            el.innerHTML = `<span class="proto-cycle-btn-label">${label}</span>`;
             el.style.color = modeColor;
             el.style.borderColor = modeColor;
             el.style.setProperty('--btn-glow', glowColor);
@@ -1100,7 +1117,9 @@
     document.querySelectorAll('.proto-cycle-btn').forEach(el => {
         const txt = (el.textContent || '').trim();
         const mode = (txt.split(/\s+/).pop() || 'ALL').toUpperCase();
-        el.innerHTML = `<span class="proto-cycle-btn-label">⟳ ${mode}</span>`;
+        const readonlyDesktop = el.classList.contains('desktop-readonly');
+        const label = readonlyDesktop ? mode : `⟳ ${mode}`;
+        el.innerHTML = `<span class="proto-cycle-btn-label">${label}</span>`;
     });
 
     function initAudio() {

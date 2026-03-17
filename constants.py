@@ -44,7 +44,7 @@ PROTOCOL_META = {
     },
     'FTP': {
         'proto_int': 5,
-        'color': '#c77dff',
+        'color': '#FFFF77',
         'supports_user_panel': True,
         'supports_pass_panel': True,
         'honeypot_script': 'honeypots/ftp_honeypot.py',

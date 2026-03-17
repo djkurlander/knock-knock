@@ -208,9 +208,44 @@
             .d-stats .stat-label { font-size: 1em; }
             .d-stats .stat-value { font-size: 1em; }
 
-            .d-header-content { display: flex; justify-content: space-between; align-items: flex-start; }
-            .d-header-left { flex: 1; -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; }
-            .d-header-right { flex: 0 0 110px; display: flex; align-items: center; justify-content: center; }
+            .d-header-content { position: relative; display: flex; justify-content: space-between; align-items: flex-start; }
+            .d-header-left { flex: 1; min-width: 0; -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; }
+            .d-header-mid { position: absolute; left: 0; top: 0; z-index: 2; display: none; }
+            .d-header-proto-switcher { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; width: fit-content; max-width: 420px; }
+            .d-header-proto-label {
+                color: var(--warning-yellow);
+                font-size: 0.95em;
+                letter-spacing: 0.7px;
+                font-weight: bold;
+                text-align: left;
+                width: 100%;
+            }
+            .d-header-proto-buttons {
+                display: grid;
+                grid-template-columns: repeat(5, auto);
+                justify-content: start;
+                gap: 6px;
+            }
+            .d-proto-switch-btn {
+                color: var(--mode-color, var(--warning-yellow)); font-size: 0.88em; cursor: pointer;
+                border: 1px solid var(--mode-color, var(--warning-yellow)); border-radius: 0;
+                padding: 2px 8px; font-family: monospace; letter-spacing: 1px;
+                text-transform: uppercase; background: transparent;
+                line-height: 1.1; transition: opacity 0.2s, box-shadow 0.2s, background-color 0.2s;
+                opacity: 0.78;
+            }
+            .d-proto-switch-btn.is-active {
+                opacity: 1;
+                background: rgba(15, 15, 15, 0.85);
+                box-shadow: 0 0 4px 1px var(--mode-glow, rgba(255, 204, 0, 0.6));
+            }
+            @media (hover: hover) {
+                .d-proto-switch-btn:hover {
+                    opacity: 1;
+                    box-shadow: 0 0 4px 1px var(--mode-glow, rgba(255, 204, 0, 0.6));
+                }
+            }
+            .d-header-right { flex: 0 0 110px; display: flex; align-items: center; justify-content: center; z-index: 1; }
             #d-globe-container { width: 110px; height: 110px; cursor: pointer; }
             #d-globe-container canvas { width: 100% !important; height: 100% !important; }
 
@@ -460,12 +495,18 @@
         <div class="d-header-content">
             <div class="d-header-left" onclick="toggleSound()" style="cursor:pointer;">
                 <h1>BOTS ARE KNOCKING <span class="status-dot"></span></h1>
-                <div style="font-size: 1em; color: var(--neon-green); margin-top: -8px; margin-bottom: 12px; font-style: italic;">... BUT THEY CAN'T COME IN. &nbsp;<span id="d-header-sound" style="font-style:normal; cursor:pointer;">🔈</span></div>
+                <div id="d-header-tagline" style="font-size: 1em; color: var(--neon-green); margin-top: -8px; margin-bottom: 12px; font-style: italic;">... BUT THEY CAN'T COME IN. &nbsp;<span id="d-header-sound" style="font-style:normal; cursor:pointer;">🔈</span></div>
                 <div class="d-stats">
                     <span class="stat-label">Knocks:</span>&nbsp;<span id="d-total" class="stat-value">0</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="stat-label">Per Min:</span>&nbsp;<span id="d-kpm" class="stat-value">0.00</span>
                 </div>
                 <div class="d-stats">
                     <span class="stat-label">SINCE LAST KNOCK:</span>&nbsp;<span id="d-since" class="stat-value">-</span>
+                </div>
+            </div>
+            <div class="d-header-mid">
+                <div class="d-header-proto-switcher" id="d-header-proto-switcher">
+                    <div class="d-header-proto-label">Filter by protocol:</div>
+                    <div id="d-header-proto-buttons" class="d-header-proto-buttons"></div>
                 </div>
             </div>
             <div class="d-header-right">
@@ -776,6 +817,7 @@
         PROTO_MODES = ['ALL', ...TRACKED_PROTOCOLS];
         if (protoModeIdx >= PROTO_MODES.length) protoModeIdx = 0;
         ensureFeedBuckets();
+        renderDesktopProtocolSwitcher();
     }
 
     function getCurrentMode() {
@@ -791,6 +833,7 @@
             el.style.borderColor = modeColor;
             el.style.setProperty('--btn-glow', glowColor);
         });
+        updateDesktopProtocolSwitcher(mode);
     }
 
     function setVisible(el, visible, displayValue = '') {
@@ -958,11 +1001,71 @@
         return `rgba(${r},${g},${b},${alpha})`;
     }
 
-    function cycleProto(e) {
-        e.stopPropagation();  // don't trigger toggleSound() on the parent div
-        playUIClick();
-        const preferredIdx = getPanelIndexFromTarget(e.target);
-        protoModeIdx = (protoModeIdx + 1) % PROTO_MODES.length;
+    function positionDesktopProtocolSwitcher() {
+        if (window.innerWidth <= 800) return;
+        const header = document.querySelector('#desktop-layout .d-header-content');
+        const mid = document.querySelector('#desktop-layout .d-header-mid');
+        const switcher = document.getElementById('d-header-proto-switcher');
+        const dot = document.querySelector('#desktop-layout .d-header-left .status-dot');
+        const globe = document.getElementById('d-globe-container');
+        const tagline = document.getElementById('d-header-tagline');
+        if (!header || !mid || !switcher || !dot || !globe || !tagline) return;
+
+        const headerRect = header.getBoundingClientRect();
+        const dotRect = dot.getBoundingClientRect();
+        const globeRect = globe.getBoundingClientRect();
+        const switcherRect = switcher.getBoundingClientRect();
+        const taglineRect = tagline.getBoundingClientRect();
+
+        const centerX = (dotRect.right + globeRect.left) / 2;
+        let left = centerX - headerRect.left - (switcherRect.width / 2);
+        const maxLeft = Math.max(0, headerRect.width - switcherRect.width);
+        left = Math.max(0, Math.min(left, maxLeft));
+
+        const top = Math.max(0, taglineRect.top - headerRect.top);
+        mid.style.left = `${Math.round(left)}px`;
+        mid.style.top = `${Math.round(top)}px`;
+    }
+
+    function renderDesktopProtocolSwitcher() {
+        const mid = document.querySelector('#desktop-layout .d-header-mid');
+        const container = document.getElementById('d-header-proto-buttons');
+        if (!mid || !container) return;
+        mid.style.display = 'block';
+        container.innerHTML = '';
+        PROTO_MODES.forEach(mode => {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'd-proto-switch-btn';
+            btn.dataset.mode = mode;
+            btn.textContent = mode;
+            btn.setAttribute('aria-label', `Filter ${mode}`);
+            btn.addEventListener('click', (e) => onDesktopProtoSwitchClick(mode, e));
+            container.appendChild(btn);
+        });
+        updateDesktopProtocolSwitcher(getCurrentMode());
+        requestAnimationFrame(positionDesktopProtocolSwitcher);
+    }
+
+    function updateDesktopProtocolSwitcher(mode = getCurrentMode()) {
+        const buttons = document.querySelectorAll('#d-header-proto-buttons .d-proto-switch-btn');
+        buttons.forEach(btn => {
+            const btnMode = String(btn.dataset.mode || 'ALL').toUpperCase();
+            const modeColor = PROTO_COLORS[btnMode] || PROTO_COLORS.ALL;
+            const isActive = btnMode === mode;
+            btn.classList.toggle('is-active', isActive);
+            btn.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+            btn.style.setProperty('--mode-color', modeColor);
+            btn.style.setProperty('--mode-glow', hexToRgba(modeColor, 0.6));
+        });
+    }
+
+    function setProtocolMode(mode, { preferredIdx = null, playSound = false } = {}) {
+        const normalized = String(mode || '').toUpperCase();
+        const targetIdx = PROTO_MODES.indexOf(normalized);
+        if (targetIdx < 0) return;
+        if (playSound) playUIClick();
+        protoModeIdx = targetIdx;
         const newMode = getCurrentMode();
         applyProtoButtons(newMode);
         const active = getActiveLeaderboards();
@@ -979,6 +1082,18 @@
             clearGlobeLocation();
         }
         refreshStatsAndTrivia();
+    }
+
+    function onDesktopProtoSwitchClick(mode, e) {
+        if (e) e.stopPropagation();
+        setProtocolMode(mode, { preferredIdx: getDesktopActiveIndex(), playSound: true });
+    }
+
+    function cycleProto(e) {
+        e.stopPropagation();  // don't trigger toggleSound() on the parent div
+        const preferredIdx = getPanelIndexFromTarget(e.target);
+        const nextMode = PROTO_MODES[(protoModeIdx + 1) % PROTO_MODES.length];
+        setProtocolMode(nextMode, { preferredIdx, playSound: true });
     }
 
     // Ensure initial protocol cycle buttons use the same optical-centering wrapper.
@@ -1608,6 +1723,7 @@
                 createPaneGlobe('mobile');
             }
             setupPaneGlobeVisibility();
+            positionDesktopProtocolSwitcher();
         }, 300);
     });
 
@@ -1745,6 +1861,7 @@
             }
         }
         lastWidth = window.innerWidth;
+        positionDesktopProtocolSwitcher();
     });
 
     setInterval(() => {

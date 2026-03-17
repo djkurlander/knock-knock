@@ -20,7 +20,7 @@ GEOIP_ASN_PATH = '/usr/share/GeoIP/GeoLite2-ASN.mmdb'
 DB_PATH = os.environ.get('DB_DIR', 'data') + '/knock_knock.db'
 BLOCKLIST_FILE = os.environ.get('DB_DIR', 'data') + '/blocklist.txt'
 
-from constants import PROTO, PROTO_NAME, PROTOCOL_META, DEFAULT_ENABLED_PROTOCOLS
+from constants import PROTO, PROTO_NAME, PROTOCOL_META, DEFAULT_ENABLED_PROTOCOLS, sort_protocols_for_ui
 
 USER_PANEL_PROTOCOLS = {name for name, meta in PROTOCOL_META.items() if meta.get('supports_user_panel')}
 PASS_PANEL_PROTOCOLS = {name for name, meta in PROTOCOL_META.items() if meta.get('supports_pass_panel')}
@@ -46,7 +46,7 @@ def parse_enabled_protocols():
     return enabled
 
 def publish_protocol_config(redis_conn, enabled_protocols):
-    enabled = [p for p in enabled_protocols if p in PROTO]
+    enabled = sort_protocols_for_ui([p for p in enabled_protocols if p in PROTO])
     meta = {}
     for name in PROTO.keys():
         base = PROTOCOL_META.get(name, {})

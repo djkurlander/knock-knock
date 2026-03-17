@@ -371,6 +371,20 @@
             .m-stat-row .stat-label { font-size: 1em; }
             .m-stat-row .stat-value { font-size: 1em; }
             .m-pane h2 { font-size: 1.02em; }
+            .m-pane .proto-cycle-btn {
+                font-size: 0.98em;
+                padding: 2px 6px;
+                transform: translateY(-2px);
+            }
+            .m-pane .proto-cycle-btn-label {
+                gap: 0.2em;
+                transform: translateY(0.03em);
+            }
+            .m-pane .proto-cycle-arrow {
+                font-size: 1.35em;
+                line-height: 0.8;
+                transform: translateY(-0.02em);
+            }
 
             .m-progress-container { height: 4px; background: #000; width: 100%; }
             #m-progress-bar { height: 100%; width: 0%; background: var(--neon-green); box-shadow: 0 0 12px var(--neon-green); }
@@ -470,7 +484,10 @@
             line-height: 1;
         }
         .proto-cycle-btn-label {
-            display: block;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.16em;
             line-height: 1;
             transform: translateY(0.06em);
         }
@@ -481,7 +498,7 @@
             transform: translateY(-1px);
         }
         .proto-cycle-btn.desktop-readonly .proto-cycle-btn-label {
-            transform: translate(0.045em, 0.06em);
+            transform: translate(0.06em, 0.06em);
         }
         .proto-cycle-btn.desktop-readonly:hover {
             box-shadow: none !important;
@@ -756,12 +773,12 @@
     const DEFAULT_PROTOCOL_META = {
         SSH:  { proto_int: 0, enabled: true, supports_user_panel: true,  supports_pass_panel: true,  color: '#00ff41' },
         TNET: { proto_int: 1, enabled: true, supports_user_panel: true,  supports_pass_panel: true,  color: '#00fbff' },
+        FTP:  { proto_int: 5, enabled: true, supports_user_panel: true,  supports_pass_panel: true,  color: '#c77dff' },
+        RDP:  { proto_int: 3, enabled: true, supports_user_panel: true,  supports_pass_panel: false, color: '#ff1a1a' },
+        SMB:  { proto_int: 7, enabled: true, supports_user_panel: true,  supports_pass_panel: false, color: '#d6d9df' },
+        SIP:  { proto_int: 6, enabled: true, supports_user_panel: false, supports_pass_panel: false, color: '#ff7a00' },
         SMTP: { proto_int: 2, enabled: true, supports_user_panel: true,  supports_pass_panel: true,  color: '#ff00ff' },
         MAIL: { proto_int: 4, enabled: true, supports_user_panel: false, supports_pass_panel: false, color: '#00ffaa' },
-        RDP:  { proto_int: 3, enabled: true, supports_user_panel: true,  supports_pass_panel: false, color: '#ff1a1a' },
-        FTP:  { proto_int: 5, enabled: true, supports_user_panel: true,  supports_pass_panel: true,  color: '#c77dff' },
-        SIP:  { proto_int: 6, enabled: true, supports_user_panel: false, supports_pass_panel: false, color: '#ff7a00' },
-        SMB:  { proto_int: 7, enabled: true, supports_user_panel: true,  supports_pass_panel: false, color: '#d6d9df' },
     };
     const DEFAULT_PROTO_COLORS = {
         ALL:  '#ffcc00',
@@ -844,8 +861,10 @@
         const glowColor = hexToRgba(modeColor, 0.7);
         document.querySelectorAll('.proto-cycle-btn').forEach(el => {
             const readonlyDesktop = el.classList.contains('desktop-readonly');
-            const label = readonlyDesktop ? mode : `⟳ ${mode}`;
-            el.innerHTML = `<span class="proto-cycle-btn-label">${label}</span>`;
+            const labelHtml = readonlyDesktop
+                ? `<span class="proto-cycle-btn-label">${mode}</span>`
+                : `<span class="proto-cycle-btn-label"><span class="proto-cycle-arrow">⟳</span><span class="proto-cycle-mode">${mode}</span></span>`;
+            el.innerHTML = labelHtml;
             el.style.color = modeColor;
             el.style.borderColor = modeColor;
             el.style.setProperty('--btn-glow', glowColor);
@@ -1118,8 +1137,10 @@
         const txt = (el.textContent || '').trim();
         const mode = (txt.split(/\s+/).pop() || 'ALL').toUpperCase();
         const readonlyDesktop = el.classList.contains('desktop-readonly');
-        const label = readonlyDesktop ? mode : `⟳ ${mode}`;
-        el.innerHTML = `<span class="proto-cycle-btn-label">${label}</span>`;
+        const labelHtml = readonlyDesktop
+            ? `<span class="proto-cycle-btn-label">${mode}</span>`
+            : `<span class="proto-cycle-btn-label"><span class="proto-cycle-arrow">⟳</span><span class="proto-cycle-mode">${mode}</span></span>`;
+        el.innerHTML = labelHtml;
     });
 
     function initAudio() {

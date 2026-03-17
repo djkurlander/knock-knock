@@ -5,7 +5,7 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
 from datetime import datetime
 from fastapi.staticfiles import StaticFiles
-from constants import PROTO, PROTO_NAME, PROTOCOL_META, DEFAULT_ENABLED_PROTOCOLS
+from constants import PROTO, PROTO_NAME, PROTOCOL_META, DEFAULT_ENABLED_PROTOCOLS, sort_protocols_for_ui
 
 app = FastAPI()
 
@@ -97,7 +97,7 @@ async def load_protocol_runtime_config():
         enabled_protocols = json.loads(enabled_protocols_raw) if enabled_protocols_raw else list(DEFAULT_ENABLED_PROTOCOLS)
     except Exception:
         enabled_protocols = list(DEFAULT_ENABLED_PROTOCOLS)
-    enabled_protocols = [p for p in enabled_protocols if p in PROTO]
+    enabled_protocols = sort_protocols_for_ui([p for p in enabled_protocols if p in PROTO])
     if not enabled_protocols:
         enabled_protocols = list(DEFAULT_ENABLED_PROTOCOLS)
 

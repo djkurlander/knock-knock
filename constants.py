@@ -2,6 +2,9 @@
 PROTO = {'SSH': 0, 'TNET': 1, 'SMTP': 2, 'RDP': 3, 'MAIL': 4, 'FTP': 5, 'SIP': 6, 'SMB': 7}
 PROTO_NAME = {v: k for k, v in PROTO.items()}  # reverse lookup: 0->'SSH' etc.
 
+# Canonical protocol order for UI controls and displays.
+PROTOCOL_UI_ORDER = ['SSH', 'TNET', 'FTP', 'RDP', 'SMB', 'SIP', 'SMTP', 'MAIL']
+
 # Declarative protocol metadata for monitor/web UI.
 PROTOCOL_META = {
     'SSH': {
@@ -62,4 +65,15 @@ PROTOCOL_META = {
     },
 }
 
-DEFAULT_ENABLED_PROTOCOLS = list(PROTO.keys())
+def sort_protocols_for_ui(protocols):
+    normalized = [str(p or '').upper() for p in (protocols or [])]
+    unique = []
+    for name in normalized:
+        if name in PROTO and name not in unique:
+            unique.append(name)
+    preferred = [name for name in PROTOCOL_UI_ORDER if name in unique]
+    extras = sorted([name for name in unique if name not in preferred])
+    return preferred + extras
+
+
+DEFAULT_ENABLED_PROTOCOLS = list(PROTOCOL_UI_ORDER)

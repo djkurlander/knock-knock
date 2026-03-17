@@ -171,6 +171,10 @@
         .ip-fill { background: var(--ip-purple); }
 
         @keyframes pulse-green { 0% { background: rgba(0, 255, 65, 0.4); } 100% { background: transparent; } }
+        @keyframes latest-proto-fade {
+            0%   { opacity: 1; }
+            100% { opacity: 0; }
+        }
 
         .status-dot { height: 14px; width: 14px; border-radius: 50%; background: var(--hazard-red); display: inline-block; vertical-align: 0.2em; margin-left: 10px; }
         .status-online { background: var(--neon-green); box-shadow: 0 0 10px var(--neon-green); }
@@ -207,6 +211,34 @@
             .d-stats:first-of-type { margin-top: 5px; }
             .d-stats .stat-label { font-size: 1em; }
             .d-stats .stat-value { font-size: 1em; }
+            .d-stats-wrap { position: relative; display: inline-block; }
+            .d-stats-block { display: flex; flex-direction: column; }
+            .d-latest-proto-chip {
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                padding: 2px 8px;
+                border: 1px solid var(--ui-label);
+                color: var(--ui-label);
+                font-family: monospace;
+                font-size: 0.88em;
+                line-height: 1;
+                letter-spacing: 0.7px;
+                text-transform: uppercase;
+                background: rgba(12, 12, 12, 0.92);
+                opacity: 0;
+                pointer-events: none;
+                white-space: nowrap;
+                position: absolute;
+                left: var(--latest-proto-chip-left, 245px);
+                top: 50%;
+                transform: translateY(-50%);
+            }
+            .d-latest-proto-chip.is-visible {
+                opacity: 1;
+                box-shadow: 0 0 6px 1px var(--latest-proto-glow, rgba(255, 204, 0, 0.55));
+                animation: latest-proto-fade var(--chip-fade-ms, 3000ms) linear forwards;
+            }
 
             .d-header-content { position: relative; display: flex; justify-content: space-between; align-items: flex-start; }
             .d-header-left { flex: 1; min-width: 0; -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; }
@@ -359,9 +391,35 @@
             }
             
             .m-header { flex: 0 0 auto; padding: 15px; background: #0a0a0a; border-bottom: 1px solid #222; }
-            .m-header-content { display: flex; justify-content: space-between; align-items: flex-start; }
+            .m-header-content { position: relative; display: flex; justify-content: space-between; align-items: flex-start; }
             .m-header-left { flex: 1; -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; }
             .m-header-right { flex: 0 0 80px; display: flex; align-items: center; justify-content: center; }
+            .m-fixed-proto-chip {
+                position: absolute;
+                right: 140px;
+                top: 62px;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                padding: 3px 8px 1px 8px;
+                border: 1px solid var(--warning-yellow);
+                color: var(--warning-yellow);
+                font-family: monospace;
+                font-size: 0.82em;
+                line-height: 1;
+                letter-spacing: 0.7px;
+                text-transform: uppercase;
+                background: rgba(12, 12, 12, 0.92);
+                box-shadow: 0 0 5px 1px var(--m-fixed-proto-glow, rgba(255, 204, 0, 0.45));
+                pointer-events: none;
+                white-space: nowrap;
+                opacity: 0;
+            }
+            .m-fixed-proto-chip.is-visible {
+                opacity: 1;
+                box-shadow: 0 0 6px 1px var(--m-fixed-proto-glow, rgba(255, 204, 0, 0.45));
+                animation: latest-proto-fade var(--chip-fade-ms, 3000ms) linear forwards;
+            }
             #globe-container { width: 85px; height: 85px; cursor: pointer; }
             #globe-container canvas { width: 100% !important; height: 100% !important; }
             .m-header h1 { font-size: 1.36em; margin: 0; }
@@ -528,11 +586,16 @@
             <div class="d-header-left" onclick="toggleSound()" style="cursor:pointer;">
                 <h1>BOTS ARE KNOCKING <span class="status-dot"></span></h1>
                 <div id="d-header-tagline" style="font-size: 1em; color: var(--neon-green); margin-top: -8px; margin-bottom: 12px; font-style: italic;">... BUT THEY CAN'T COME IN. &nbsp;<span id="d-header-sound" style="font-style:normal; cursor:pointer;">🔈</span></div>
-                <div class="d-stats">
-                    <span class="stat-label">Knocks:</span>&nbsp;<span id="d-total" class="stat-value">0</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="stat-label">Per Min:</span>&nbsp;<span id="d-kpm" class="stat-value">0.00</span>
-                </div>
-                <div class="d-stats">
-                    <span class="stat-label">SINCE LAST KNOCK:</span>&nbsp;<span id="d-since" class="stat-value">-</span>
+                <div class="d-stats-wrap">
+                    <div class="d-stats-block">
+                        <div class="d-stats">
+                            <span class="stat-label">Total Knocks:</span>&nbsp;<span id="d-total" class="stat-value">0</span>
+                        </div>
+                        <div class="d-stats">
+                            <span class="stat-label">Per Min:</span>&nbsp;<span id="d-kpm" class="stat-value">0.00</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="stat-label">AGO:</span>&nbsp;<span id="d-since" class="stat-value">-</span>
+                        </div>
+                    </div>
+                    <div id="d-latest-proto-chip" class="d-latest-proto-chip" aria-live="polite"></div>
                 </div>
             </div>
             <div class="d-header-mid">
@@ -582,15 +645,16 @@
                 <h1>BOTS ARE KNOCKING <span class="status-dot"></span></h1>
                 <div style="font-size: 0.85em; color: var(--neon-green); margin-top: -2px; margin-bottom: 8px; font-style: italic;">... BUT THEY CAN'T COME IN. &nbsp;<span id="m-header-sound" style="font-style:normal; cursor:pointer;">🔈</span></div>
                 <div class="m-stat-row">
-                    <span class="stat-label">Knocks:</span>&nbsp;<span id="m-total" class="stat-value">0</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="stat-label">Per Min:</span>&nbsp;<span id="m-kpm" class="stat-value">0.00</span>
+                    <span class="stat-label">Total Knocks:</span>&nbsp;<span id="m-total" class="stat-value">0</span>
                 </div>
                 <div class="m-stat-row">
-                    <span class="stat-label">SINCE LAST KNOCK:</span>&nbsp;<span id="m-since" class="stat-value">-</span>
+                    <span class="stat-label">Per Min:</span>&nbsp;<span id="m-kpm" class="stat-value">0.00</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="stat-label">AGO:</span>&nbsp;<span id="m-since" class="stat-value">-</span>
                 </div>
             </div>
             <div class="m-header-right">
                 <div id="globe-container"></div>
             </div>
+            <div id="m-fixed-proto-chip" class="m-fixed-proto-chip" aria-live="polite">ALL</div>
         </div>
     </div>
     <div class="m-progress-container"><div id="m-progress-bar"></div></div>
@@ -799,6 +863,15 @@
     let PROTO_COLORS = { ...DEFAULT_PROTO_COLORS };
     let PROTO_INT = Object.fromEntries(TRACKED_PROTOCOLS.map(p => [p, Number(DEFAULT_PROTOCOL_META[p]?.proto_int)]));
     let protoModeIdx = 0;
+    const PROTO_CHIP_TIMEOUTS = Object.create(null);
+    const DESKTOP_LATEST_PROTO_CHIP = {
+        chipId: 'd-latest-proto-chip',
+        glowVar: '--latest-proto-glow',
+    };
+    const MOBILE_LATEST_PROTO_CHIP = {
+        chipId: 'm-fixed-proto-chip',
+        glowVar: '--m-fixed-proto-glow',
+    };
     const USER_PANEL_INDEX = 3;
     const PASS_PANEL_INDEX = 4;
 
@@ -870,6 +943,30 @@
             el.style.setProperty('--btn-glow', glowColor);
         });
         updateDesktopProtocolSwitcher(mode);
+    }
+
+    function pulseProtoChip(proto, cfg) {
+        const chip = document.getElementById(cfg?.chipId || '');
+        if (!chip) return;
+        const p = String(proto || '').toUpperCase();
+        if (!p) return;
+        const color = PROTO_COLORS[p] || PROTO_COLORS.ALL;
+        chip.textContent = p;
+        chip.style.borderColor = color;
+        chip.style.color = color;
+        chip.style.setProperty(cfg.glowVar, hexToRgba(color, 0.55));
+        chip.style.setProperty('--chip-fade-ms', `${PULSE_TIMEOUT_MS}ms`);
+        chip.classList.remove('is-visible');
+        void chip.offsetWidth;
+        chip.classList.add('is-visible');
+        if (PROTO_CHIP_TIMEOUTS[cfg.chipId]) {
+            clearTimeout(PROTO_CHIP_TIMEOUTS[cfg.chipId]);
+            PROTO_CHIP_TIMEOUTS[cfg.chipId] = null;
+        }
+        PROTO_CHIP_TIMEOUTS[cfg.chipId] = setTimeout(() => {
+            chip.classList.remove('is-visible');
+            PROTO_CHIP_TIMEOUTS[cfg.chipId] = null;
+        }, PULSE_TIMEOUT_MS + 40);
     }
 
     function setVisible(el, visible, displayValue = '') {
@@ -2564,6 +2661,8 @@
                 knockCount++;
                 debugLog(`Knock #${knockCount} from ${d.iso || '??'}`);
                 playClick();
+                pulseProtoChip(d.proto, DESKTOP_LATEST_PROTO_CHIP);
+                pulseProtoChip(d.proto, MOBILE_LATEST_PROTO_CHIP);
                 if (knockMatchesFilter(d)) pulseGlobeAtmosphere();
                 lastKnockTime = Math.floor(Date.now() / 1000);
                 document.getElementById('m-since').innerText = '0s';

@@ -45,6 +45,7 @@ fi
 # --- Reset (optional) ---
 if [ "$RESET" = true ]; then
     echo "Performing data wipe..."
+    BLOCKLIST_FILE="$DB_DIR/blocklist.txt"
 
     # Delete SQLite databases
     for db in "$DB_DIR/knock_knock.db" "$DB_DIR/visitors.db"; do
@@ -64,8 +65,12 @@ if [ "$RESET" = true ]; then
         REDIS_CMD="redis-cli"
     fi
 
-    $REDIS_CMD del knock:total_global knock:last_time knock:last_lat knock:last_lng knock:recent > /dev/null
+    $REDIS_CMD del knock:total_global knock:uptime_minutes knock:last_time knock:last_lat knock:last_lng knock:recent knock:recent:ssh knock:recent:tnet knock:recent:smtp knock:recent:mail knock:recent:rdp knock:recent:ftp knock:recent:sip knock:recent:smb knock:blocked > /dev/null
     echo "  [+] Cleared Redis keys"
+
+    # Clear persisted blocklist so monitor doesn't reload banned IPs on boot
+    : > "$BLOCKLIST_FILE"
+    echo "  [+] Cleared $BLOCKLIST_FILE"
 fi
 
 # --- Start ---
@@ -83,7 +88,7 @@ else
     systemctl daemon-reload
 
     systemctl start knock-monitor
-    echo "  [+] Honeypot + Monitor online (port 22, log parsing active)"
+    echo "  [+] Honeypot + Monitor online (ports 21/FTP 22/SSH 23/Telnet 25/MAIL 587/SMTP 445/SMB 3389/RDP 5060/SIP, log parsing active)"
 
     systemctl start knock-web
     echo "  [+] Web server online (WebSockets active)"

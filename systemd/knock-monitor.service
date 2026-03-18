@@ -1,5 +1,5 @@
 [Unit]
-Description=Knock-Knock SSH Honeypot and Monitor
+Description=Knock-Knock Honeypot and Monitor
 After=network.target redis-server.service
 
 [Service]

@@ -2,12 +2,12 @@
 # knock-watch.sh — lightweight health check for knock-knock servers
 #
 # Run via cron every 5 minutes:
-#   */5 * * * * /root/knock-knock/knock-watch.sh
-#   */5 * * * * /root/knock-knock/knock-watch.sh --central  # on one server only
+#   */5 * * * * /root/knock-knock/extras/knock-watch.sh
+#   */5 * * * * /root/knock-knock/extras/knock-watch.sh --central  # on one server only
 #
 # Usage:
-#   ./knock-watch.sh              # local checks only
-#   ./knock-watch.sh --central    # local checks + remote server checks
+#   ./extras/knock-watch.sh              # local checks only
+#   ./extras/knock-watch.sh --central    # local checks + remote server checks
 #
 # Environment variables:
 #   NTFY_TOPIC       push notification topic (required — change the default!)

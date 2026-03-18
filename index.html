@@ -4,6 +4,7 @@
     <title>Knock-Knock | Live Intruder Map</title>
     <link rel="icon" type="image/png" href="static/robot1.png">
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0">
+    <meta name="format-detection" content="telephone=no,email=no,address=no">
     <meta property="og:title" content="Knock-Knock | Live Intruder Map">
     <meta property="og:description" content="A real-time 3D globe showing bots trying to break into my server via SSH">
     <meta property="og:image" content="https://knock-knock.net/static/og-image.jpg">
@@ -29,6 +30,7 @@
             --bg-dark: #0a0a0a;
             --ui-label: #ffcc00;
             --ui-grey-dim: #707070;
+            --pulse-duration: 3000ms;
         }
         
         html, body {
@@ -53,14 +55,112 @@
         .stat-value { color: var(--warning-yellow); font-weight: bold; }
         .stat-label { color: var(--ui-label); font-size: 0.9em; text-transform: uppercase; }
 
-        .knock { margin-bottom: 10px; padding: 5px 0 10px 0; border-bottom: 1px solid #1a1a1a; font-size: 1.1em; line-height: 1.5; }
+        .knock {
+            margin-bottom: 10px;
+            padding: 5px 0 10px 0;
+            border-bottom: 1px solid #1a1a1a;
+            font-size: 1.1em;
+            line-height: 1.5;
+            position: relative;
+            overflow: visible;
+        }
+        .knock::before {
+            content: '';
+            position: absolute;
+            inset: 0 -6px;
+            background: transparent;
+            pointer-events: none;
+            z-index: 0;
+        }
+        .knock.pulse-active::before { animation: pulse-green var(--pulse-duration) ease forwards; }
+        .knock > * {
+            position: relative;
+            z-index: 1;
+        }
         .knock-meta { font-size: 0.9em; }
         .knock-pass { color: var(--neon-green); }
 
-        .bar-row { margin-bottom: 12px; padding: 8px 12px; border-radius: 4px; border: 1px solid transparent; }
+        .bar-row {
+            margin-bottom: 12px;
+            padding: 8px 12px;
+            border-radius: 4px;
+            border: 1px solid transparent;
+            position: relative;
+            overflow: visible;
+        }
+        .bar-row::before {
+            content: '';
+            position: absolute;
+            inset: 0 -6px;
+            border-radius: 4px;
+            background: transparent;
+            pointer-events: none;
+            z-index: 0;
+        }
+        .bar-row.pulse-active::before { animation: pulse-green var(--pulse-duration) ease forwards; }
+        .bar-row > * {
+            position: relative;
+            z-index: 1;
+        }
+        .proto-stats-row {
+            position: relative;
+            overflow: visible;
+        }
+        .proto-stats-row::before {
+            content: '';
+            position: absolute;
+            inset: 0 -6px;
+            background: transparent;
+            pointer-events: none;
+            z-index: 0;
+        }
+        .proto-stats-row.pulse-active::before { animation: pulse-green var(--pulse-duration) ease forwards; }
+        .proto-stats-row > * {
+            position: relative;
+            z-index: 1;
+        }
         .bar-label { display: flex; justify-content: space-between; align-items: center; font-size: 1.1em; margin-bottom: 6px; gap: 10px; }
         .bar-label span:first-child { display: flex; align-items: center; gap: 0.3em; }
-        .knock-location { display: flex; align-items: center; gap: 0.3em; }
+        .knock-location { display: flex; align-items: center; gap: 0.3em; justify-content: space-between; }
+        .globe-loc-line {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.35em;
+            flex-wrap: wrap;
+        }
+        .globe-loc-line .proto-badge {
+            font-size: 0.7em;
+            height: 1.25em;
+            margin-left: 0.2em;
+        }
+
+        .proto-badge {
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 0.75em;
+            font-weight: bold;
+            display: inline-grid;
+            place-items: center;
+            width: 4ch;
+            height: 1.3em;
+            padding: 0 2px;
+            border: 1px solid currentColor;
+            border-radius: 0;
+            flex-shrink: 0;
+            line-height: 1;
+            box-sizing: content-box;
+            opacity: 1;
+        }
+        .proto-badge-label {
+            display: block;
+            line-height: 1;
+            transform: translateY(0.06em);
+        }
+        @media (min-width: 801px) {
+            #d-globe-location .proto-badge-label {
+                transform: translateY(0);
+            }
+        }
         .bar-bg { background: #1a1a1a; height: 10px; border-radius: 5px; overflow: hidden; }
         .bar-fill { background: var(--neon-green); height: 100%; transition: width 1s; opacity: 0.7; }
         
@@ -71,7 +171,11 @@
         .ip-fill { background: var(--ip-purple); }
 
         @keyframes pulse-green { 0% { background: rgba(0, 255, 65, 0.4); } 100% { background: transparent; } }
-        .new-knock-flash { animation: pulse-green 3s forwards; }
+        @keyframes latest-proto-fade {
+            0%    { opacity: 1; }
+            16.67% { opacity: 1; }
+            100%  { opacity: 0; }
+        }
 
         .status-dot { height: 14px; width: 14px; border-radius: 50%; background: var(--hazard-red); display: inline-block; vertical-align: 0.2em; margin-left: 10px; }
         .status-online { background: var(--neon-green); box-shadow: 0 0 10px var(--neon-green); }
@@ -108,10 +212,77 @@
             .d-stats:first-of-type { margin-top: 5px; }
             .d-stats .stat-label { font-size: 1em; }
             .d-stats .stat-value { font-size: 1em; }
+            .d-stats-wrap { position: relative; display: inline-block; }
+            .d-stats-block { display: flex; flex-direction: column; }
+            .d-latest-proto-chip {
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                padding: 2px 8px;
+                border: 1px solid var(--ui-label);
+                color: var(--ui-label);
+                font-family: monospace;
+                font-size: 0.88em;
+                line-height: 1;
+                letter-spacing: 0.7px;
+                text-transform: uppercase;
+                background: rgba(12, 12, 12, 0.92);
+                opacity: 0;
+                pointer-events: none;
+                white-space: nowrap;
+                position: absolute;
+                left: var(--latest-proto-chip-left, 245px);
+                top: 50%;
+                transform: translateY(-50%);
+            }
+            .d-latest-proto-chip.is-visible {
+                opacity: 1;
+                box-shadow: 0 0 6px 1px var(--latest-proto-glow, rgba(255, 204, 0, 0.55));
+                animation: latest-proto-fade var(--pulse-duration, 3000ms) linear forwards;
+            }
 
-            .d-header-content { display: flex; justify-content: space-between; align-items: flex-start; }
-            .d-header-left { flex: 1; -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; }
-            .d-header-right { flex: 0 0 110px; display: flex; align-items: center; justify-content: center; }
+            .d-header-content { position: relative; display: flex; justify-content: space-between; align-items: flex-start; }
+            .d-header-left { flex: 1; min-width: 0; -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; }
+            .d-header-mid { position: absolute; left: 0; top: 0; z-index: 2; display: none; }
+            .d-header-proto-switcher { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; width: fit-content; max-width: 420px; }
+            .d-header-proto-label {
+                color: var(--warning-yellow);
+                font-size: 0.95em;
+                letter-spacing: 0.7px;
+                font-weight: bold;
+                text-align: left;
+                width: 100%;
+            }
+            .d-header-proto-buttons {
+                display: grid;
+                grid-template-columns: repeat(5, auto);
+                justify-content: start;
+                gap: 6px;
+            }
+            .d-proto-switch-btn {
+                color: var(--mode-color, var(--warning-yellow)); font-size: 0.88em; cursor: pointer;
+                border: 1px solid var(--mode-color, var(--warning-yellow)); border-radius: 0;
+                padding: 2px 8px; font-family: monospace; letter-spacing: 1px;
+                text-transform: uppercase; background: transparent;
+                line-height: 1.1; transition: opacity 0.2s, box-shadow 0.2s, background-color 0.2s, transform 0.2s;
+                opacity: 0.75;
+            }
+            .d-proto-switch-btn.is-active {
+                opacity: 1;
+                color: #050505;
+                background: var(--mode-color, var(--warning-yellow));
+                border-color: var(--mode-color, var(--warning-yellow));
+                box-shadow: 0 0 8px 2px var(--mode-glow, rgba(255, 204, 0, 0.8));
+                transform: translateY(-1px);
+                font-weight: bold;
+            }
+            @media (hover: hover) {
+                .d-proto-switch-btn:hover {
+                    opacity: 1;
+                    box-shadow: 0 0 4px 1px var(--mode-glow, rgba(255, 204, 0, 0.6));
+                }
+            }
+            .d-header-right { flex: 0 0 110px; display: flex; align-items: center; justify-content: center; z-index: 1; }
             #d-globe-container { width: 110px; height: 110px; cursor: pointer; }
             #d-globe-container canvas { width: 100% !important; height: 100% !important; }
 
@@ -130,6 +301,7 @@
 
             .d-box {
                 flex: 0 0 250px;
+                min-width: 0;
                 scroll-snap-align: start;
                 height: 100%;
                 border: 1px solid #333;
@@ -177,10 +349,28 @@
                 box-shadow: inset 0 0 20px rgba(0, 255, 65, 0.05), 0 0 10px rgba(0, 255, 65, 0.1); 
             }
 
-            .d-content { flex: 1; overflow-y: auto; font-size: 0.75em; scrollbar-gutter: stable; margin-right: -10px; padding-right: 6px; }
+            .d-content {
+                flex: 1;
+                overflow-y: auto;
+                overflow-x: hidden;
+                font-size: 0.75em;
+                scrollbar-gutter: stable;
+                margin-left: -6px;
+                padding-left: 6px;
+                margin-right: -10px;
+                padding-right: 6px;
+                word-break: break-word;
+            }
             .d-content .knock { margin-bottom: 4px; padding: 3px 0 7px 0; line-height: 1.3; }
-            .d-content .bar-row { margin-bottom: 0; padding: 6px 0 10px 0; }
-            .d-content .bar-label { margin-bottom: 4px; }
+            .d-content .bar-row {
+                margin-bottom: 0;
+                margin-left: -6px;
+                margin-right: -6px;
+                padding: 6px 6px 10px 6px;
+            }
+            .d-content .bar-label { margin-bottom: 4px; display: flex; justify-content: space-between; gap: 4px; align-items: flex-start; }
+            .d-content .bar-label > span:first-child { min-width: 0; flex: 1; }
+            .d-content .bar-label > span:last-child { flex-shrink: 0; }
             .d-box h2 { font-size: 1.1em; }
             .d-content::-webkit-scrollbar { width: 2px; background: transparent; }
             .d-content::-webkit-scrollbar-thumb { background: transparent !important; border-radius: 10px; transition: background 0.15s ease; }
@@ -202,9 +392,35 @@
             }
             
             .m-header { flex: 0 0 auto; padding: 15px; background: #0a0a0a; border-bottom: 1px solid #222; }
-            .m-header-content { display: flex; justify-content: space-between; align-items: flex-start; }
+            .m-header-content { position: relative; display: flex; justify-content: space-between; align-items: flex-start; }
             .m-header-left { flex: 1; -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; }
             .m-header-right { flex: 0 0 80px; display: flex; align-items: center; justify-content: center; }
+            .m-fixed-proto-chip {
+                position: absolute;
+                right: 140px;
+                top: 62px;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                padding: 3px 8px 1px 8px;
+                border: 1px solid var(--warning-yellow);
+                color: var(--warning-yellow);
+                font-family: monospace;
+                font-size: 0.82em;
+                line-height: 1;
+                letter-spacing: 0.7px;
+                text-transform: uppercase;
+                background: rgba(12, 12, 12, 0.92);
+                box-shadow: 0 0 5px 1px var(--m-fixed-proto-glow, rgba(255, 204, 0, 0.45));
+                pointer-events: none;
+                white-space: nowrap;
+                opacity: 0;
+            }
+            .m-fixed-proto-chip.is-visible {
+                opacity: 1;
+                box-shadow: 0 0 6px 1px var(--m-fixed-proto-glow, rgba(255, 204, 0, 0.45));
+                animation: latest-proto-fade var(--pulse-duration, 3000ms) linear forwards;
+            }
             #globe-container { width: 85px; height: 85px; cursor: pointer; }
             #globe-container canvas { width: 100% !important; height: 100% !important; }
             .m-header h1 { font-size: 1.36em; margin: 0; }
@@ -214,6 +430,20 @@
             .m-stat-row .stat-label { font-size: 1em; }
             .m-stat-row .stat-value { font-size: 1em; }
             .m-pane h2 { font-size: 1.02em; }
+            .m-pane .proto-cycle-btn {
+                font-size: 0.98em;
+                padding: 2px 6px;
+                transform: translateY(-2px);
+            }
+            .m-pane .proto-cycle-btn-label {
+                gap: 0.2em;
+                transform: translateY(0.03em);
+            }
+            .m-pane .proto-cycle-arrow {
+                font-size: 1.35em;
+                line-height: 0.8;
+                transform: translateY(-0.02em);
+            }
 
             .m-progress-container { height: 4px; background: #000; width: 100%; }
             #m-progress-bar { height: 100%; width: 0%; background: var(--neon-green); box-shadow: 0 0 12px var(--neon-green); }
@@ -222,15 +452,30 @@
             .m-pane { width: 100vw; height: 100%; flex-shrink: 0; scroll-snap-align: start; display: flex; flex-direction: column; padding: 20px 10px 20px 20px; box-sizing: border-box; background: #0f0f0f; border-right: 1px solid #1a1a1a; }
             
             .m-content {
-                flex: 1; overflow-y: auto;
+                flex: 1;
+                overflow-y: auto;
+                overflow-x: hidden;
+                margin-left: -6px;
+                padding-left: 6px;
                 padding-right: 5px;
                 font-size: 0.85em;
+                word-break: break-word;
             }
             .m-content .knock { margin-bottom: 6px; padding: 4px 0 8px 0; line-height: 1.3; }
-            .m-content .bar-row { margin-bottom: 0; padding: 5px 0 8px 0; }
-            .m-content .bar-label { margin-bottom: 4px; }
+            .m-content .bar-row {
+                margin-bottom: 0;
+                margin-left: -6px;
+                margin-right: -6px;
+                padding: 5px 6px 8px 6px;
+            }
+            .m-content .bar-label { margin-bottom: 4px; display: flex; justify-content: space-between; gap: 4px; align-items: flex-start; }
+            .m-content .bar-label > span:first-child { min-width: 0; flex: 1; }
+            .m-content .bar-label > span:last-child { flex-shrink: 0; }
             .m-content .knock-location img.emoji,
             .m-content .bar-label img.emoji { vertical-align: middle; }
+            .m-content .proto-col-header { text-align: left !important; }
+            .m-content { scrollbar-width: none; -ms-overflow-style: none; }
+            .m-content::-webkit-scrollbar { display: none !important; width: 0; height: 0; }
 
             #m-viewport::-webkit-scrollbar { display: none !important; }
 
@@ -286,6 +531,37 @@
             text-transform: uppercase;
         }
         @media (hover: hover) { .pane-globe-style-btn:hover { border-color: rgba(0,255,65,0.7); } }
+
+        .proto-cycle-btn {
+            display: inline-grid; place-items: center; vertical-align: 0.2em;
+            color: var(--ui-label); font-size: 0.85em; cursor: pointer;
+            border: 1px solid rgba(255,204,0,0.85); border-radius: 0;
+            padding: 1px 4px; font-family: monospace; letter-spacing: 1px;
+            text-transform: uppercase; font-style: normal;
+            user-select: none; transition: border-color 0.2s;
+            white-space: nowrap; margin-left: 8px;
+            line-height: 1;
+        }
+        .proto-cycle-btn-label {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.16em;
+            line-height: 1;
+            transform: translateY(0.06em);
+        }
+        @media (hover: hover) { .proto-cycle-btn:hover { box-shadow: 0 0 4px 2px var(--btn-glow, rgba(255,204,0,0.7)); } }
+        .proto-cycle-btn.desktop-readonly {
+            cursor: default;
+            pointer-events: none;
+            transform: translateY(-1px);
+        }
+        .proto-cycle-btn.desktop-readonly .proto-cycle-btn-label {
+            transform: translate(0.06em, 0.06em);
+        }
+        .proto-cycle-btn.desktop-readonly:hover {
+            box-shadow: none !important;
+        }
     </style>
 </head>
 <body>
@@ -300,21 +576,33 @@
             <div class="d-nav-item" onclick="dJump(4)">🔑<span>PASS</span></div>
             <div class="d-nav-item" onclick="dJump(5)">🔌<span>ISP</span></div>
             <div class="d-nav-item" onclick="dJump(6)">🔢<span>IP</span></div>
-            <div class="d-nav-item" onclick="dJump(7)">📋<span>STATS</span></div>
-            <div class="d-nav-item" onclick="dJump(8)">🎲<span>TRIVIA</span></div>
-            <div class="d-nav-item" onclick="dJump(9)">😂<span>JOKES</span></div>
-            <div class="d-nav-item" onclick="dJump(10)">ℹ️<span>ABOUT</span></div>
+            <div class="d-nav-item" onclick="dJump(7)">📋<span>LAST</span></div>
+            <div class="d-nav-item" onclick="dJump(8)">📊<span>PROTO</span></div>
+            <div class="d-nav-item" onclick="dJump(9)">🎲<span>TRIVIA</span></div>
+            <div class="d-nav-item" onclick="dJump(10)">😂<span>JOKES</span></div>
+            <div class="d-nav-item" onclick="dJump(11)">ℹ️<span>ABOUT</span></div>
         </nav>
 
         <div class="d-header-content">
             <div class="d-header-left" onclick="toggleSound()" style="cursor:pointer;">
                 <h1>BOTS ARE KNOCKING <span class="status-dot"></span></h1>
-                <div style="font-size: 1em; color: var(--neon-green); margin-top: -8px; margin-bottom: 12px; font-style: italic;">... BUT THEY CAN'T COME IN. &nbsp;<span id="d-header-sound" style="font-style:normal; cursor:pointer;">🔈</span></div>
-                <div class="d-stats">
-                    <span class="stat-label">Knocks:</span>&nbsp;<span id="d-total" class="stat-value">0</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="stat-label">Per Min:</span>&nbsp;<span id="d-kpm" class="stat-value">0.00</span>
+                <div id="d-header-tagline" style="font-size: 1em; color: var(--neon-green); margin-top: -8px; margin-bottom: 7px; font-style: italic;">... BUT THEY CAN'T COME IN. &nbsp;<span id="d-header-sound" style="font-style:normal; cursor:pointer;">🔈</span></div>
+                <div class="d-stats-wrap">
+                    <div class="d-stats-block">
+                        <div class="d-stats">
+                            <span id="d-total-label" class="stat-label">Total Knocks:</span>&nbsp;<span id="d-total" class="stat-value">0</span>
+                        </div>
+                        <div class="d-stats">
+                            <span class="stat-label">Per Min:</span>&nbsp;<span id="d-kpm" class="stat-value">0.00</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="stat-label">AGO:</span>&nbsp;<span id="d-since" class="stat-value">-</span>
+                        </div>
+                    </div>
+                    <div id="d-latest-proto-chip" class="d-latest-proto-chip" aria-live="polite"></div>
                 </div>
-                <div class="d-stats">
-                    <span class="stat-label">SINCE LAST KNOCK:</span>&nbsp;<span id="d-since" class="stat-value">-</span>
+            </div>
+            <div class="d-header-mid">
+                <div class="d-header-proto-switcher" id="d-header-proto-switcher">
+                    <div class="d-header-proto-label">Filter by protocol:</div>
+                    <div id="d-header-proto-buttons" class="d-header-proto-buttons"></div>
                 </div>
             </div>
             <div class="d-header-right">
@@ -324,15 +612,16 @@
     </div>
     
     <div class="d-grid" id="d-slider-container">
-        <div class="d-box" id="d-box-feed"><h2>LIVE FEED: LOGIN ATTEMPTS</h2><div id="d-feed" class="d-content"></div></div>
-        <div class="d-box" id="d-box-globe"><h2>GLOBE VIEW</h2><div id="d-globe-location" style="text-align:center; margin-bottom:10px;"><div id="d-globe-loc-text" style="color:var(--neon-green);"></div><div id="d-globe-loc-isp" style="color:var(--data-blue); font-size:0.85em;"></div></div><div id="d-globe-pane" class="d-content globe-pane"></div></div>
-        <div class="d-box"><h2>LOCATION</h2><div id="d-loc" class="d-content"></div></div>
-        <div class="d-box"><h2>USERNAME</h2><div id="d-user" class="d-content"></div></div>
-        <div class="d-box"><h2>PASSWORD</h2><div id="d-pass" class="d-content"></div></div>
-        <div class="d-box"><h2>ISP</h2><div id="d-prov" class="d-content"></div></div>
-        <div class="d-box"><h2>IP ADDRESS</h2><div id="d-ip" class="d-content"></div></div>
-        <div class="d-box" id="d-box-info"><h2>STATS</h2><div id="d-details" class="d-content"></div></div>
-        <div class="d-box" id="d-box-trivia"><h2>TRIVIA</h2><div id="d-trivia" class="d-content"></div></div>
+        <div class="d-box" id="d-box-feed"><h2 style="display:flex;justify-content:space-between;align-items:center;">LIVE FEED: LOGIN ATTEMPTS<span id="d-feed-proto-btn" class="proto-cycle-btn desktop-readonly" style="vertical-align:initial;">ALL</span></h2><div id="d-feed" class="d-content"></div></div>
+        <div class="d-box" id="d-box-globe"><h2 style="display:flex;justify-content:space-between;align-items:center;">GLOBE VIEW<span class="proto-cycle-btn desktop-readonly" style="vertical-align:initial;">ALL</span></h2><div id="d-globe-location" style="text-align:center; margin-bottom:10px;"><div id="d-globe-loc-text" style="color:var(--neon-green);"></div><div id="d-globe-loc-isp" style="color:var(--data-blue); font-size:0.85em;"></div></div><div id="d-globe-pane" class="d-content globe-pane"></div></div>
+        <div class="d-box"><h2 style="display:flex;justify-content:space-between;align-items:center;">LOCATION<span class="proto-cycle-btn desktop-readonly" style="vertical-align:initial;">ALL</span></h2><div id="d-loc" class="d-content"></div></div>
+        <div class="d-box" id="d-box-user"><h2 style="display:flex;justify-content:space-between;align-items:center;">USERNAME<span class="proto-cycle-btn desktop-readonly" style="vertical-align:initial;">ALL</span></h2><div id="d-user" class="d-content"></div></div>
+        <div class="d-box" id="d-box-pass"><h2 style="display:flex;justify-content:space-between;align-items:center;">PASSWORD<span class="proto-cycle-btn desktop-readonly" style="vertical-align:initial;">ALL</span></h2><div id="d-pass" class="d-content"></div></div>
+        <div class="d-box"><h2 style="display:flex;justify-content:space-between;align-items:center;">ISP<span class="proto-cycle-btn desktop-readonly" style="vertical-align:initial;">ALL</span></h2><div id="d-prov" class="d-content"></div></div>
+        <div class="d-box"><h2 style="display:flex;justify-content:space-between;align-items:center;">IP ADDRESS<span class="proto-cycle-btn desktop-readonly" style="vertical-align:initial;">ALL</span></h2><div id="d-ip" class="d-content"></div></div>
+        <div class="d-box" id="d-box-info"><h2 style="display:flex;justify-content:space-between;align-items:center;">LAST KNOCK<span class="proto-cycle-btn desktop-readonly" style="vertical-align:initial;">ALL</span></h2><div id="d-details" class="d-content"></div></div>
+        <div class="d-box" id="d-box-proto"><h2>PROTO STATS</h2><div id="d-proto-stats" class="d-content"></div></div>
+        <div class="d-box" id="d-box-trivia"><h2 style="display:flex;justify-content:space-between;align-items:center;">TRIVIA<span class="proto-cycle-btn desktop-readonly" style="vertical-align:initial;">ALL</span></h2><div id="d-trivia" class="d-content"></div></div>
         <div class="d-box" id="d-box-jokes"><h2>KNOCK-KNOCK JOKES</h2><div id="d-jokes" class="d-content" style="color:var(--neon-green); line-height:1.6;"></div></div>
         <div class="d-box"><h2>ABOUT</h2><div class="d-content" style="color:var(--neon-green); line-height:1.6;">
             <div style="font-size:1.4em; font-weight:bold; margin-bottom:20px;">KNOCK-KNOCK.NET</div>
@@ -357,28 +646,30 @@
                 <h1>BOTS ARE KNOCKING <span class="status-dot"></span></h1>
                 <div style="font-size: 0.85em; color: var(--neon-green); margin-top: -2px; margin-bottom: 8px; font-style: italic;">... BUT THEY CAN'T COME IN. &nbsp;<span id="m-header-sound" style="font-style:normal; cursor:pointer;">🔈</span></div>
                 <div class="m-stat-row">
-                    <span class="stat-label">Knocks:</span>&nbsp;<span id="m-total" class="stat-value">0</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="stat-label">Per Min:</span>&nbsp;<span id="m-kpm" class="stat-value">0.00</span>
+                    <span id="m-total-label" class="stat-label">Total Knocks:</span>&nbsp;<span id="m-total" class="stat-value">0</span>
                 </div>
                 <div class="m-stat-row">
-                    <span class="stat-label">SINCE LAST KNOCK:</span>&nbsp;<span id="m-since" class="stat-value">-</span>
+                    <span class="stat-label">Per Min:</span>&nbsp;<span id="m-kpm" class="stat-value">0.00</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="stat-label">AGO:</span>&nbsp;<span id="m-since" class="stat-value">-</span>
                 </div>
             </div>
             <div class="m-header-right">
                 <div id="globe-container"></div>
             </div>
+            <div id="m-fixed-proto-chip" class="m-fixed-proto-chip" aria-live="polite">ALL</div>
         </div>
     </div>
     <div class="m-progress-container"><div id="m-progress-bar"></div></div>
     <div class="m-viewport" id="m-viewport">
-        <div class="m-pane" id="m-pane-feed"><h2>LIVE FEED: LOGIN ATTEMPTS</h2><div id="m-feed" class="m-content"></div></div>
-        <div class="m-pane" id="m-pane-globe"><h2>GLOBE VIEW</h2><div id="m-globe-location" style="text-align:center; margin-bottom:10px;"><div id="m-globe-loc-text" style="color:var(--neon-green);"></div><div id="m-globe-loc-isp" style="color:var(--data-blue); font-size:0.85em;"></div></div><div id="m-globe-pane" class="m-content globe-pane" style="display:flex; justify-content:center; align-items:center;"></div></div>
-        <div class="m-pane" id="m-pane-loc"><h2>LOCATION</h2><div id="m-loc" class="m-content"></div></div>
-        <div class="m-pane" id="m-pane-user"><h2>USERNAME</h2><div id="m-user" class="m-content"></div></div>
-        <div class="m-pane" id="m-pane-pass"><h2>PASSWORD</h2><div id="m-pass" class="m-content"></div></div>
-        <div class="m-pane" id="m-pane-prov"><h2>ISP</h2><div id="m-prov" class="m-content"></div></div>
-        <div class="m-pane" id="m-pane-ip"><h2>IP ADDRESS</h2><div id="m-ip" class="m-content"></div></div>
-        <div class="m-pane" id="m-pane-details"><h2>STATS</h2><div id="m-details" class="m-content"></div></div>
-        <div class="m-pane" id="m-pane-trivia"><h2>TRIVIA</h2><div id="m-trivia" class="m-content"></div></div>
+        <div class="m-pane" id="m-pane-feed"><h2 style="display:flex;justify-content:space-between;align-items:center;">LIVE FEED: LOGIN ATTEMPTS<span id="m-feed-proto-btn" class="proto-cycle-btn" onclick="cycleProto(event)" style="vertical-align:initial;">⟳ ALL</span></h2><div id="m-feed" class="m-content"></div></div>
+        <div class="m-pane" id="m-pane-globe"><h2 style="display:flex;justify-content:space-between;align-items:center;">GLOBE VIEW<span class="proto-cycle-btn" onclick="cycleProto(event)" style="vertical-align:initial;">⟳ ALL</span></h2><div id="m-globe-location" style="text-align:center; margin-bottom:10px;"><div id="m-globe-loc-text" style="color:var(--neon-green);"></div><div id="m-globe-loc-isp" style="color:var(--data-blue); font-size:0.85em;"></div></div><div id="m-globe-pane" class="m-content globe-pane" style="display:flex; justify-content:center; align-items:center;"></div></div>
+        <div class="m-pane" id="m-pane-loc"><h2 style="display:flex;justify-content:space-between;align-items:center;">LOCATION<span class="proto-cycle-btn" onclick="cycleProto(event)" style="vertical-align:initial;">⟳ ALL</span></h2><div id="m-loc" class="m-content"></div></div>
+        <div class="m-pane" id="m-pane-user"><h2 style="display:flex;justify-content:space-between;align-items:center;">USERNAME<span class="proto-cycle-btn" onclick="cycleProto(event)" style="vertical-align:initial;">⟳ ALL</span></h2><div id="m-user" class="m-content"></div></div>
+        <div class="m-pane" id="m-pane-pass"><h2 style="display:flex;justify-content:space-between;align-items:center;">PASSWORD<span class="proto-cycle-btn" onclick="cycleProto(event)" style="vertical-align:initial;">⟳ ALL</span></h2><div id="m-pass" class="m-content"></div></div>
+        <div class="m-pane" id="m-pane-prov"><h2 style="display:flex;justify-content:space-between;align-items:center;">ISP<span class="proto-cycle-btn" onclick="cycleProto(event)" style="vertical-align:initial;">⟳ ALL</span></h2><div id="m-prov" class="m-content"></div></div>
+        <div class="m-pane" id="m-pane-ip"><h2 style="display:flex;justify-content:space-between;align-items:center;">IP ADDRESS<span class="proto-cycle-btn" onclick="cycleProto(event)" style="vertical-align:initial;">⟳ ALL</span></h2><div id="m-ip" class="m-content"></div></div>
+        <div class="m-pane" id="m-pane-details"><h2 style="display:flex;justify-content:space-between;align-items:center;">LAST KNOCK<span class="proto-cycle-btn" onclick="cycleProto(event)" style="vertical-align:initial;">⟳ ALL</span></h2><div id="m-details" class="m-content"></div></div>
+        <div class="m-pane" id="m-pane-proto"><h2>PROTO STATS</h2><div id="m-proto-stats" class="m-content"></div></div>
+        <div class="m-pane" id="m-pane-trivia"><h2 style="display:flex;justify-content:space-between;align-items:center;">TRIVIA<span class="proto-cycle-btn" onclick="cycleProto(event)" style="vertical-align:initial;">⟳ ALL</span></h2><div id="m-trivia" class="m-content"></div></div>
         <div class="m-pane" id="m-pane-jokes"><h2>KNOCK-KNOCK JOKES</h2><div id="m-jokes" class="m-content" style="color:var(--neon-green); line-height:1.6;"></div></div>
         <div class="m-pane" id="m-pane-about"><h2>ABOUT</h2><div class="m-content" style="color:var(--neon-green); line-height:1.6;">
             <div style="font-size:1.4em; font-weight:bold; margin-bottom:20px;">KNOCK-KNOCK.NET</div>
@@ -396,7 +687,7 @@
     </div>
     <div class="m-footer">
         <div class="m-dots">
-            <div class="dot active" onclick="jump(0)"></div><div class="dot" onclick="jump(1)"></div><div class="dot" onclick="jump(2)"></div><div class="dot" onclick="jump(3)"></div><div class="dot" onclick="jump(4)"></div><div class="dot" onclick="jump(5)"></div><div class="dot" onclick="jump(6)"></div><div class="dot" onclick="jump(7)"></div><div class="dot" onclick="jump(8)"></div><div class="dot" onclick="jump(9)"></div><div class="dot" onclick="jump(10)"></div>
+            <div class="dot active" onclick="jump(0)"></div><div class="dot" onclick="jump(1)"></div><div class="dot" onclick="jump(2)"></div><div class="dot" onclick="jump(3)"></div><div class="dot" onclick="jump(4)"></div><div class="dot" onclick="jump(5)"></div><div class="dot" onclick="jump(6)"></div><div class="dot" onclick="jump(7)"></div><div class="dot" onclick="jump(8)"></div><div class="dot" onclick="jump(9)"></div><div class="dot" onclick="jump(10)"></div><div class="dot" onclick="jump(11)"></div>
         </div>
         <div class="m-nav-container">
         <nav class="m-nav">
@@ -407,10 +698,11 @@
             <div class="nav-item" onclick="jump(4)">🔑<span>PASS</span></div>
             <div class="nav-item" onclick="jump(5)">🔌<span>ISP</span></div>
             <div class="nav-item" onclick="jump(6)">🔢<span>IP</span></div>
-            <div class="nav-item" onclick="jump(7)">📋<span>STATS</span></div>
-            <div class="nav-item" onclick="jump(8)">🎲<span>TRIVIA</span></div>
-            <div class="nav-item" onclick="jump(9)">😂<span>JOKES</span></div>
-            <div class="nav-item" onclick="jump(10)">ℹ️<span>ABOUT</span></div>
+            <div class="nav-item" onclick="jump(7)">📋<span>LAST</span></div>
+            <div class="nav-item" onclick="jump(8)">📊<span>PROTO</span></div>
+            <div class="nav-item" onclick="jump(9)">🎲<span>TRIVIA</span></div>
+            <div class="nav-item" onclick="jump(10)">😂<span>JOKES</span></div>
+            <div class="nav-item" onclick="jump(11)">ℹ️<span>ABOUT</span></div>
         </nav>
         </div>
     </div>
@@ -424,11 +716,36 @@
     let soundEnabled = localStorage.getItem('soundEnabled') === 'true';
 
     // --- DEBUG OVERLAY (add ?debug to URL to enable) ---
-    const DEBUG = new URLSearchParams(window.location.search).has('debug');
+    const URL_PARAMS = new URLSearchParams(window.location.search);
+    const DEBUG = URL_PARAMS.has('debug');
+    const SHOW_PARAM = URL_PARAMS.get('show');
     let debugDiv = null;
     let knockCount = 0;
     const DEBUG_STORAGE_KEY = 'knock_debug_log';
     const MAX_PER_PANEL = 100;
+    const PULSE_TIMEOUT_BUFFER_MS = 80;
+
+    function parseCssTimeToMs(value, fallbackMs) {
+        const raw = String(value || '').trim();
+        if (!raw) return fallbackMs;
+        if (raw.endsWith('ms')) {
+            const n = Number.parseFloat(raw);
+            return Number.isFinite(n) ? n : fallbackMs;
+        }
+        if (raw.endsWith('s')) {
+            const n = Number.parseFloat(raw);
+            return Number.isFinite(n) ? (n * 1000) : fallbackMs;
+        }
+        const n = Number.parseFloat(raw);
+        return Number.isFinite(n) ? n : fallbackMs;
+    }
+
+    // Keep JS cleanup timing in sync with CSS pulse duration.
+    const PULSE_DURATION_MS = parseCssTimeToMs(
+        getComputedStyle(document.documentElement).getPropertyValue('--pulse-duration'),
+        3000
+    );
+    const PULSE_TIMEOUT_MS = Math.ceil(PULSE_DURATION_MS + PULSE_TIMEOUT_BUFFER_MS);
 
     if (DEBUG) {
         debugDiv = document.createElement('div');
@@ -520,6 +837,509 @@
         if (soundEnabled) { initAudio(); audioCtx.resume().then(() => playUIClick()); }
     }
 
+    const DEFAULT_PROTOCOL_META = {
+        SSH:  { proto_int: 0, enabled: true, supports_user_panel: true,  supports_pass_panel: true,  color: '#00ff41' },
+        TNET: { proto_int: 1, enabled: true, supports_user_panel: true,  supports_pass_panel: true,  color: '#00fbff' },
+        FTP:  { proto_int: 5, enabled: true, supports_user_panel: true,  supports_pass_panel: true,  color: '#FFFF77' },
+        RDP:  { proto_int: 3, enabled: true, supports_user_panel: true,  supports_pass_panel: false, color: '#ff1a1a' },
+        SMB:  { proto_int: 7, enabled: true, supports_user_panel: true,  supports_pass_panel: false, color: '#d6d9df' },
+        SIP:  { proto_int: 6, enabled: true, supports_user_panel: false, supports_pass_panel: false, color: '#ff7a00' },
+        SMTP: { proto_int: 2, enabled: true, supports_user_panel: true,  supports_pass_panel: true,  color: '#ff00ff' },
+        MAIL: { proto_int: 4, enabled: true, supports_user_panel: false, supports_pass_panel: false, color: '#00ffaa' },
+    };
+    const DEFAULT_PROTO_COLORS = {
+        ALL:  '#ffcc00',
+        SSH:  '#00ff41',
+        TNET: '#00fbff',
+        SMTP: '#ff00ff',
+        MAIL: '#00ffaa',
+        RDP:  '#ff1a1a',
+        FTP:  '#FFFF77',
+        SIP:  '#ff7a00',
+        SMB:  '#d6d9df',
+    };
+    let SERVER_PROTOCOL_META = { ...DEFAULT_PROTOCOL_META };
+    let TRACKED_PROTOCOLS = Object.keys(DEFAULT_PROTOCOL_META);
+    let PROTO_MODES = ['ALL', ...TRACKED_PROTOCOLS];
+    let USERNAME_PROTOCOLS = new Set(['SSH', 'TNET', 'FTP', 'RDP', 'SMTP']);
+    let PASSWORD_PROTOCOLS = new Set(['SSH', 'TNET', 'FTP', 'SMTP']);
+    let PROTO_COLORS = { ...DEFAULT_PROTO_COLORS };
+    let PROTO_INT = Object.fromEntries(TRACKED_PROTOCOLS.map(p => [p, Number(DEFAULT_PROTOCOL_META[p]?.proto_int)]));
+    let protoModeIdx = 0;
+    const PROTO_CHIP_TIMEOUTS = Object.create(null);
+    const DESKTOP_LATEST_PROTO_CHIP = {
+        chipId: 'd-latest-proto-chip',
+        glowVar: '--latest-proto-glow',
+    };
+    const MOBILE_LATEST_PROTO_CHIP = {
+        chipId: 'm-fixed-proto-chip',
+        glowVar: '--m-fixed-proto-glow',
+    };
+    const USER_PANEL_INDEX = 3;
+    const PASS_PANEL_INDEX = 4;
+    const PROTO_STATS_PANEL_INDEX = 8;
+
+    let activeProtocols = [];
+    let classicView = false;
+    let isFiltered = false;
+    let showProtocolSwitcher  = true;
+    let showProtoCycleButtons = true;
+    let showProtoChip         = true;
+    let showProtoBadges       = true;
+    let showProtoStatsPane    = true;
+    let showUsernamePanel     = true;
+    let showPasswordPanel     = true;
+    const lastKnockTimeByProto = {};
+
+    function getFilteredTotal() {
+        let sum = 0;
+        activeProtocols.forEach(p => { sum += Number(protoBreakdownCache?.[p]?.count || 0); });
+        return sum;
+    }
+
+    function getFilteredKpm() {
+        const mins = Number(uptimeMinutesCache) || 0;
+        return mins > 0 ? (getFilteredTotal() / mins).toFixed(2) : '0.00';
+    }
+
+    function getFilteredLastKnockTime() {
+        let latest = null;
+        activeProtocols.forEach(p => {
+            const t = lastKnockTimeByProto[p];
+            if (t && (latest === null || t > latest)) latest = t;
+        });
+        return latest;
+    }
+
+    function updateHeaderStats(total, kpm) {
+        ['d-total', 'm-total'].forEach(id => document.getElementById(id).innerText = total.toLocaleString());
+        ['d-kpm', 'm-kpm'].forEach(id => document.getElementById(id).innerText = kpm);
+    }
+
+    function hasUserField(d) {
+        return d && d.user !== undefined && d.user !== null;
+    }
+
+    function hasPassField(d) {
+        return d && d.pass !== undefined && d.pass !== null;
+    }
+
+    function isUserPanelRelevant(mode) {
+        return mode === 'ALL' || USERNAME_PROTOCOLS.has(mode);
+    }
+
+    function isPassPanelRelevant(mode) {
+        return mode === 'ALL' || PASSWORD_PROTOCOLS.has(mode);
+    }
+
+    function ensureFeedBuckets() {
+        if (!feedData.ALL) feedData.ALL = [];
+        (activeProtocols.length ? activeProtocols : TRACKED_PROTOCOLS).forEach(p => {
+            if (!feedData[p]) feedData[p] = [];
+        });
+        Object.keys(feedData).forEach(p => {
+            if (p === 'ALL') return;
+            if (!TRACKED_PROTOCOLS.includes(p)) delete feedData[p];
+        });
+    }
+
+    function applyProtocolConfig(enabledProtocols, protocolMeta) {
+        const fallbackTracked = Object.keys(DEFAULT_PROTOCOL_META);
+        const enabled = Array.isArray(enabledProtocols)
+            ? enabledProtocols.map(p => String(p || '').toUpperCase()).filter(p => fallbackTracked.includes(p))
+            : fallbackTracked;
+        TRACKED_PROTOCOLS = enabled.length ? enabled : fallbackTracked;
+        SERVER_PROTOCOL_META = { ...DEFAULT_PROTOCOL_META, ...(protocolMeta || {}) };
+        PROTO_INT = Object.fromEntries(
+            Object.keys(DEFAULT_PROTOCOL_META).map(p => [p, Number(SERVER_PROTOCOL_META[p]?.proto_int ?? DEFAULT_PROTOCOL_META[p].proto_int)])
+        );
+        PROTO_COLORS = { ...DEFAULT_PROTO_COLORS };
+        TRACKED_PROTOCOLS.forEach(p => {
+            const c = SERVER_PROTOCOL_META[p]?.color;
+            if (typeof c === 'string' && c) PROTO_COLORS[p] = c;
+        });
+
+        // Compute activeProtocols from ?show param
+        activeProtocols = TRACKED_PROTOCOLS;
+        if (SHOW_PARAM) {
+            const requested = SHOW_PARAM.split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
+            const intersection = requested.filter(p => TRACKED_PROTOCOLS.includes(p));
+            if (intersection.length > 0) activeProtocols = intersection;
+        }
+
+        // Derive view mode and feature flags
+        classicView = activeProtocols.length === 1;
+        isFiltered = activeProtocols.length < TRACKED_PROTOCOLS.length;
+        showProtocolSwitcher  = !classicView;
+        showProtoCycleButtons = !classicView;
+        showProtoChip         = !classicView;
+        showProtoBadges       = !classicView;
+        showProtoStatsPane    = !classicView;
+
+        // Update header knock label
+        const knockLabel = classicView ? `${activeProtocols[0]} Knocks:` : 'Total Knocks:';
+        ['d-total-label', 'm-total-label'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.textContent = knockLabel;
+        });
+
+        // Panel visibility based on protocol capabilities
+        USERNAME_PROTOCOLS = new Set(activeProtocols.filter(p => Boolean(SERVER_PROTOCOL_META[p]?.supports_user_panel)));
+        PASSWORD_PROTOCOLS = new Set(activeProtocols.filter(p => Boolean(SERVER_PROTOCOL_META[p]?.supports_pass_panel)));
+        showUsernamePanel = activeProtocols.some(p => Boolean(SERVER_PROTOCOL_META[p]?.supports_user_panel));
+        showPasswordPanel = activeProtocols.some(p => Boolean(SERVER_PROTOCOL_META[p]?.supports_pass_panel));
+
+        if (classicView) {
+            PROTO_MODES = [activeProtocols[0]];
+            protoModeIdx = 0;
+        } else {
+            PROTO_MODES = ['ALL', ...activeProtocols];
+        }
+        if (protoModeIdx >= PROTO_MODES.length) protoModeIdx = 0;
+
+        // Hide proto chip elements in classic mode
+        if (!showProtoChip) {
+            ['d-latest-proto-chip', 'm-fixed-proto-chip'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.style.display = 'none';
+            });
+        }
+
+        ensureFeedBuckets();
+        renderDesktopProtocolSwitcher();
+    }
+
+    function getCurrentMode() {
+        return PROTO_MODES[protoModeIdx] || 'ALL';
+    }
+
+    function applyProtoButtons(mode = getCurrentMode()) {
+        if (!showProtoCycleButtons) {
+            document.querySelectorAll('.proto-cycle-btn').forEach(el => el.style.display = 'none');
+            return;
+        }
+        const modeColor = PROTO_COLORS[mode] || PROTO_COLORS.ALL;
+        const glowColor = hexToRgba(modeColor, 0.7);
+        document.querySelectorAll('.proto-cycle-btn').forEach(el => {
+            const readonlyDesktop = el.classList.contains('desktop-readonly');
+            const labelHtml = readonlyDesktop
+                ? `<span class="proto-cycle-btn-label">${mode}</span>`
+                : `<span class="proto-cycle-btn-label"><span class="proto-cycle-arrow">⟳</span><span class="proto-cycle-mode">${mode}</span></span>`;
+            el.innerHTML = labelHtml;
+            el.style.color = modeColor;
+            el.style.borderColor = modeColor;
+            el.style.setProperty('--btn-glow', glowColor);
+        });
+        updateDesktopProtocolSwitcher(mode);
+    }
+
+    function pulseProtoChip(proto, cfg) {
+        const chip = document.getElementById(cfg?.chipId || '');
+        if (!chip) return;
+        const p = String(proto || '').toUpperCase();
+        if (!p) return;
+        const color = PROTO_COLORS[p] || PROTO_COLORS.ALL;
+        chip.textContent = p;
+        chip.style.borderColor = color;
+        chip.style.color = color;
+        chip.style.setProperty(cfg.glowVar, hexToRgba(color, 0.55));
+        chip.classList.remove('is-visible');
+        void chip.offsetWidth;
+        chip.classList.add('is-visible');
+        if (PROTO_CHIP_TIMEOUTS[cfg.chipId]) {
+            clearTimeout(PROTO_CHIP_TIMEOUTS[cfg.chipId]);
+            PROTO_CHIP_TIMEOUTS[cfg.chipId] = null;
+        }
+        PROTO_CHIP_TIMEOUTS[cfg.chipId] = setTimeout(() => {
+            chip.classList.remove('is-visible');
+            PROTO_CHIP_TIMEOUTS[cfg.chipId] = null;
+        }, PULSE_TIMEOUT_MS + 40);
+    }
+
+    function setVisible(el, visible, displayValue = '') {
+        if (!el) return;
+        el.style.display = visible ? displayValue : 'none';
+    }
+
+    function nearestVisibleIndex(targetIdx, visibleIdxs) {
+        if (!visibleIdxs.length) return 0;
+        if (visibleIdxs.includes(targetIdx)) return targetIdx;
+        const right = visibleIdxs.filter(i => i > targetIdx);
+        if (right.length) return right[0];
+        return visibleIdxs[visibleIdxs.length - 1];
+    }
+
+    function getMobileCurrentOriginalIndex() {
+        const visible = getMobileVisiblePanes();
+        if (!visible.length) return 0;
+        const visibleIdx = Math.round(vp.scrollLeft / vp.clientWidth);
+        const clamped = Math.max(0, Math.min(visible.length - 1, visibleIdx));
+        const pane = visible[clamped];
+        const idx = mobilePaneOriginalIndex(pane);
+        return idx >= 0 ? idx : 0;
+    }
+
+    function setMobileViewportOffsetInstant(offset) {
+        const prev = vp.style.scrollBehavior;
+        vp.style.scrollBehavior = 'auto';
+        vp.scrollLeft = offset * vp.clientWidth;
+        requestAnimationFrame(() => {
+            vp.style.scrollBehavior = prev || '';
+        });
+    }
+
+    function getDesktopCurrentIndex() {
+        const container = document.getElementById('d-slider-container');
+        const boxes = Array.from(container.children);
+        if (!boxes.length) return 0;
+        const containerLeft = container.getBoundingClientRect().left;
+        let bestIdx = 0;
+        let bestDist = Infinity;
+        boxes.forEach((box, idx) => {
+            const dist = Math.abs(box.getBoundingClientRect().left - containerLeft);
+            if (dist < bestDist) {
+                bestDist = dist;
+                bestIdx = idx;
+            }
+        });
+        return bestIdx;
+    }
+
+    function getDesktopActiveIndex() {
+        const navItems = Array.from(document.querySelectorAll('.d-nav-item'));
+        const navIdx = navItems.findIndex(item => item.classList.contains('active'));
+        if (navIdx >= 0) return navIdx;
+        const boxes = Array.from(document.querySelectorAll('#d-slider-container .d-box'));
+        const boxIdx = boxes.findIndex(box => box.classList.contains('is-active'));
+        if (boxIdx >= 0) return boxIdx;
+        return getDesktopCurrentIndex();
+    }
+
+    function getPanelIndexFromTarget(target) {
+        const desktopContainer = document.getElementById('d-slider-container');
+        const dBox = target?.closest?.('.d-box');
+        if (desktopContainer && dBox) {
+            const boxes = Array.from(desktopContainer.children);
+            const idx = boxes.indexOf(dBox);
+            if (idx >= 0) return idx;
+        }
+        const mPane = target?.closest?.('.m-pane');
+        if (mPane) {
+            const idx = mobilePaneOriginalIndex(mPane);
+            if (idx >= 0) return idx;
+        }
+        return null;
+    }
+
+    function applyProtocolPanelVisibility(preferredIdx = null) {
+        const desktopContainer = document.getElementById('d-slider-container');
+        const desktopBoxesBefore = Array.from(desktopContainer.children);
+        const desktopCurrentIdx = Number.isInteger(preferredIdx) ? preferredIdx : getDesktopActiveIndex();
+        const desktopAnchorBefore = desktopBoxesBefore[desktopCurrentIdx] || null;
+        const desktopAnchorLeftBefore = desktopAnchorBefore ? desktopAnchorBefore.getBoundingClientRect().left : null;
+        const mobileCurrentIdx = getMobileCurrentOriginalIndex();
+        // Username panel — hide if no active protocol supports usernames
+        setVisible(document.getElementById('d-box-user'), showUsernamePanel, 'flex');
+        setVisible(document.getElementById('m-pane-user'), showUsernamePanel, 'flex');
+        // Password panel — hide if no active protocol supports passwords
+        setVisible(document.getElementById('d-box-pass'), showPasswordPanel, 'flex');
+        setVisible(document.getElementById('m-pane-pass'), showPasswordPanel, 'flex');
+
+        const dNavItems = document.querySelectorAll('.d-nav-item');
+        setVisible(dNavItems[USER_PANEL_INDEX], showUsernamePanel, 'flex');
+        setVisible(dNavItems[PASS_PANEL_INDEX], showPasswordPanel, 'flex');
+
+        const mNavItems = document.querySelectorAll('.m-nav .nav-item');
+        setVisible(mNavItems[USER_PANEL_INDEX], showUsernamePanel, 'flex');
+        setVisible(mNavItems[PASS_PANEL_INDEX], showPasswordPanel, 'flex');
+
+        const dots = document.querySelectorAll('.m-dots .dot');
+        setVisible(dots[USER_PANEL_INDEX], showUsernamePanel, 'block');
+        setVisible(dots[PASS_PANEL_INDEX], showPasswordPanel, 'block');
+
+        // Proto Stats pane — hide in classic mode
+        setVisible(document.getElementById('d-box-proto'), showProtoStatsPane, 'flex');
+        setVisible(document.getElementById('m-pane-proto'), showProtoStatsPane, 'flex');
+        setVisible(dNavItems[PROTO_STATS_PANEL_INDEX], showProtoStatsPane, 'flex');
+        setVisible(mNavItems[PROTO_STATS_PANEL_INDEX], showProtoStatsPane, 'flex');
+        setVisible(dots[PROTO_STATS_PANEL_INDEX], showProtoStatsPane, 'block');
+
+        const mobilePanes = getMobilePanes();
+        const visibleMobileIdxs = mobilePanes
+            .map((pane, idx) => ({ pane, idx }))
+            .filter(({ pane }) => getComputedStyle(pane).display !== 'none')
+            .map(({ idx }) => idx);
+        const mobileTargetIdx = nearestVisibleIndex(mobileCurrentIdx, visibleMobileIdxs);
+        const mobileTargetOffset = Math.max(0, visibleMobileIdxs.indexOf(mobileTargetIdx));
+        setMobileViewportOffsetInstant(mobileTargetOffset);
+        lastPaneIdx = mobileTargetIdx;
+
+        const boxes = Array.from(desktopContainer.children);
+        const visibleDesktopIdxs = boxes
+            .map((box, idx) => ({ box, idx }))
+            .filter(({ box }) => getComputedStyle(box).display !== 'none')
+            .map(({ idx }) => idx);
+        const desktopTargetIdx = nearestVisibleIndex(desktopCurrentIdx, visibleDesktopIdxs);
+        const desktopCurrentStillVisible = visibleDesktopIdxs.includes(desktopCurrentIdx);
+        if (desktopCurrentStillVisible && desktopTargetIdx === desktopCurrentIdx) {
+            const desktopAnchorAfter = boxes[desktopCurrentIdx] || null;
+            if (desktopAnchorAfter && desktopAnchorLeftBefore !== null) {
+                const desktopAnchorLeftAfter = desktopAnchorAfter.getBoundingClientRect().left;
+                const delta = desktopAnchorLeftAfter - desktopAnchorLeftBefore;
+                if (Math.abs(delta) > 0.5) {
+                    const prev = desktopContainer.style.scrollBehavior;
+                    desktopContainer.style.scrollBehavior = 'auto';
+                    desktopContainer.scrollLeft += delta;
+                    requestAnimationFrame(() => {
+                        desktopContainer.style.scrollBehavior = prev || '';
+                    });
+                }
+            }
+        } else {
+            dJump(desktopTargetIdx);
+        }
+    }
+
+    function renderLeaderboards(stats) {
+        renderBars('loc',  stats.loc,       'loc-fill', true);
+        renderBars('pass', stats.passwords, 'password-fill');
+        renderBars('prov', stats.providers, 'provider-fill');
+        renderBars('user', stats.users,     'user-fill');
+        renderBars('ip',   stats.ips,       'ip-fill');
+    }
+
+    function getActiveLeaderboards() {
+        const mode = PROTO_MODES[protoModeIdx];
+        if (mode === 'ALL') return leaderboards;
+        const pi = String(PROTO_INT[mode]);
+        const ps = protoStatsCache[pi];
+        if (!ps) return { loc: [], passwords: [], providers: [], users: [], ips: [] };
+        return {
+            loc:       ps.top_locations  || [],
+            passwords: ps.top_passwords  || [],
+            providers: ps.top_providers  || [],
+            users:     ps.top_users      || [],
+            ips:       ps.top_ips        || [],
+        };
+    }
+
+    function hexToRgba(hex, alpha) {
+        const r = parseInt(hex.slice(1,3), 16);
+        const g = parseInt(hex.slice(3,5), 16);
+        const b = parseInt(hex.slice(5,7), 16);
+        return `rgba(${r},${g},${b},${alpha})`;
+    }
+
+    function positionDesktopProtocolSwitcher() {
+        if (window.innerWidth <= 800) return;
+        const header = document.querySelector('#desktop-layout .d-header-content');
+        const mid = document.querySelector('#desktop-layout .d-header-mid');
+        const switcher = document.getElementById('d-header-proto-switcher');
+        const dot = document.querySelector('#desktop-layout .d-header-left .status-dot');
+        const globe = document.getElementById('d-globe-container');
+        const tagline = document.getElementById('d-header-tagline');
+        if (!header || !mid || !switcher || !dot || !globe || !tagline) return;
+
+        const headerRect = header.getBoundingClientRect();
+        const dotRect = dot.getBoundingClientRect();
+        const globeRect = globe.getBoundingClientRect();
+        const switcherRect = switcher.getBoundingClientRect();
+        const taglineRect = tagline.getBoundingClientRect();
+
+        const centerX = (dotRect.right + globeRect.left) / 2;
+        let left = centerX - headerRect.left - (switcherRect.width / 2);
+        const maxLeft = Math.max(0, headerRect.width - switcherRect.width);
+        left = Math.max(0, Math.min(left, maxLeft));
+
+        const top = Math.max(0, taglineRect.top - headerRect.top);
+        mid.style.left = `${Math.round(left)}px`;
+        mid.style.top = `${Math.round(top)}px`;
+    }
+
+    function renderDesktopProtocolSwitcher() {
+        const mid = document.querySelector('#desktop-layout .d-header-mid');
+        const container = document.getElementById('d-header-proto-buttons');
+        if (!mid || !container) return;
+        if (!showProtocolSwitcher) {
+            mid.style.display = 'none';
+            return;
+        }
+        mid.style.display = 'block';
+        container.innerHTML = '';
+        PROTO_MODES.forEach(mode => {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'd-proto-switch-btn';
+            btn.dataset.mode = mode;
+            btn.textContent = mode;
+            btn.setAttribute('aria-label', `Filter ${mode}`);
+            btn.addEventListener('click', (e) => onDesktopProtoSwitchClick(mode, e));
+            container.appendChild(btn);
+        });
+        updateDesktopProtocolSwitcher(getCurrentMode());
+        requestAnimationFrame(positionDesktopProtocolSwitcher);
+    }
+
+    function updateDesktopProtocolSwitcher(mode = getCurrentMode()) {
+        const buttons = document.querySelectorAll('#d-header-proto-buttons .d-proto-switch-btn');
+        buttons.forEach(btn => {
+            const btnMode = String(btn.dataset.mode || 'ALL').toUpperCase();
+            const modeColor = PROTO_COLORS[btnMode] || PROTO_COLORS.ALL;
+            const isActive = btnMode === mode;
+            btn.classList.toggle('is-active', isActive);
+            btn.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+            btn.style.setProperty('--mode-color', modeColor);
+            btn.style.setProperty('--mode-glow', hexToRgba(modeColor, 0.6));
+        });
+    }
+
+    function setProtocolMode(mode, { preferredIdx = null, playSound = false } = {}) {
+        const normalized = String(mode || '').toUpperCase();
+        const targetIdx = PROTO_MODES.indexOf(normalized);
+        if (targetIdx < 0) return;
+        if (playSound) playUIClick();
+        protoModeIdx = targetIdx;
+        const newMode = getCurrentMode();
+        applyProtoButtons(newMode);
+        const active = getActiveLeaderboards();
+        renderLeaderboards(active);
+        refreshHeatGlobe(active.loc);
+        refreshFeed();
+        applyProtocolPanelVisibility(preferredIdx);
+        const topKnock = feedData[newMode]?.[0];
+        if (topKnock) {
+            updateGlobeLocation(topKnock);
+            if (topKnock.lat != null) rotateGlobeToLocation(topKnock.lat, topKnock.lng);
+        } else {
+            hideGlobeDot();
+            clearGlobeLocation();
+        }
+        refreshStatsAndTrivia();
+    }
+
+    function onDesktopProtoSwitchClick(mode, e) {
+        if (e) e.stopPropagation();
+        setProtocolMode(mode, { preferredIdx: getDesktopActiveIndex(), playSound: true });
+    }
+
+    function cycleProto(e) {
+        e.stopPropagation();  // don't trigger toggleSound() on the parent div
+        const preferredIdx = getPanelIndexFromTarget(e.target);
+        const nextMode = PROTO_MODES[(protoModeIdx + 1) % PROTO_MODES.length];
+        setProtocolMode(nextMode, { preferredIdx, playSound: true });
+    }
+
+    // Ensure initial protocol cycle buttons use the same optical-centering wrapper.
+    document.querySelectorAll('.proto-cycle-btn').forEach(el => {
+        const txt = (el.textContent || '').trim();
+        const mode = (txt.split(/\s+/).pop() || 'ALL').toUpperCase();
+        const readonlyDesktop = el.classList.contains('desktop-readonly');
+        const labelHtml = readonlyDesktop
+            ? `<span class="proto-cycle-btn-label">${mode}</span>`
+            : `<span class="proto-cycle-btn-label"><span class="proto-cycle-arrow">⟳</span><span class="proto-cycle-mode">${mode}</span></span>`;
+        el.innerHTML = labelHtml;
+    });
+
     function initAudio() {
         if (!audioCtx) {
             audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -569,6 +1389,211 @@
         ips: []         // {label, count}
     };
 
+    // Per-protocol leaderboard cache: keys are proto ints as strings.
+    // Maps to same structure as leaderboards above.
+    let protoStatsCache = {};
+    let protoBreakdownCache = {};
+    let uptimeMinutesCache = 0;
+
+    // Per-protocol feed arrays (newest at index 0)
+    const feedData = { ALL: [] };
+    ensureFeedBuckets();
+
+    function normalizeProtoBreakdown(rawBreakdown, totalGlobal = null) {
+        const out = {};
+        TRACKED_PROTOCOLS.forEach(proto => {
+            const row = rawBreakdown?.[proto] || {};
+            const countRaw = Number(row.count);
+            const count = Number.isFinite(countRaw) ? Math.max(0, Math.floor(countRaw)) : 0;
+            let pctRaw = Number(row.pct);
+            let pct = Number.isFinite(pctRaw) ? pctRaw : 0;
+            if (totalGlobal !== null && totalGlobal > 0) {
+                pct = Number(((count * 100) / totalGlobal).toFixed(2));
+            }
+            out[proto] = { count, pct };
+        });
+        return out;
+    }
+
+    function bumpProtoBreakdownWithKnock(d) {
+        const proto = (d?.proto || '').toUpperCase();
+        if (!TRACKED_PROTOCOLS.includes(proto)) return;
+        if (!protoBreakdownCache[proto]) {
+            protoBreakdownCache[proto] = { count: 0, pct: 0 };
+        }
+        protoBreakdownCache[proto].count += 1;
+        const total = Number(d?.total_global);
+        if (Number.isFinite(total) && total > 0) {
+            TRACKED_PROTOCOLS.forEach(name => {
+                const count = Number(protoBreakdownCache[name]?.count || 0);
+                protoBreakdownCache[name] = {
+                    count,
+                    pct: Number(((count * 100) / total).toFixed(2))
+                };
+            });
+        }
+    }
+
+    function renderProtoStats() {
+        const uptimeMinutes = Number(uptimeMinutesCache) || 0;
+        const rows = TRACKED_PROTOCOLS.map(proto => {
+            const count = Number(protoBreakdownCache?.[proto]?.count || 0);
+            const pct = Number(protoBreakdownCache?.[proto]?.pct || 0);
+            const kpm = uptimeMinutes > 0 ? (count / uptimeMinutes) : 0;
+            return { proto, count, pct, kpm };
+        })
+            .sort((a, b) => (b.kpm - a.kpm) || (b.count - a.count) || a.proto.localeCompare(b.proto));
+
+        const header = `
+            <div style="display:grid;grid-template-columns:1fr 0.82fr 1.45fr 0.73fr;gap:8px;margin-bottom:8px;color:var(--ui-label);font-weight:bold;">
+                <span class="proto-col-header" style="text-align:center;">PROTO</span><span style="text-align:center;">%</span><span style="text-align:center;">KNOCKS</span><span style="text-align:center;">/MIN</span>
+            </div>
+        `;
+        const body = rows.map(r => `
+            <div class="proto-stats-row" data-proto="${escapeHtml(r.proto)}" style="display:grid;grid-template-columns:1fr 0.82fr 1.45fr 0.73fr;gap:8px;padding:4px 0;border-bottom:1px solid #222;">
+                <span style="font-weight:bold;color:${escapeHtml(PROTO_COLORS[r.proto] || PROTO_COLORS.ALL)};padding-left:6px;">${escapeHtml(r.proto)}</span>
+                <span style="color:var(--neon-green);text-align:center;">${r.pct.toFixed(1)}%</span>
+                <span style="color:var(--data-blue);text-align:center;">${r.count.toLocaleString()}</span>
+                <span style="color:var(--neon-green);text-align:center;">${r.kpm.toFixed(1)}</span>
+            </div>
+        `).join('');
+
+        const footer = `<div style="margin-top:8px;color:var(--ui-grey-dim);font-size:0.9em;">Uptime basis: ${uptimeMinutes.toLocaleString()} min</div>`;
+        const html = header + body + footer;
+        ['d-proto-stats', 'm-proto-stats'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.innerHTML = html;
+        });
+    }
+
+    function pulseProtoStatsRow(proto) {
+        const p = (proto || '').toUpperCase();
+        if (!TRACKED_PROTOCOLS.includes(p)) return;
+        ['d-proto-stats', 'm-proto-stats'].forEach(id => {
+            const container = document.getElementById(id);
+            if (!container) return;
+            const row = container.querySelector(`.proto-stats-row[data-proto="${CSS.escape(p)}"]`);
+            if (!row) return;
+            triggerPulseClass(row);
+        });
+    }
+
+    function triggerPulseClass(el) {
+        if (!el) return;
+        // Cleanup must be robust: animationend can be missed when DOM is reflowed/reordered.
+        if (el._pulseOnEnd) {
+            el.removeEventListener('animationend', el._pulseOnEnd);
+            el._pulseOnEnd = null;
+        }
+        if (el._pulseTimeout) {
+            clearTimeout(el._pulseTimeout);
+            el._pulseTimeout = null;
+        }
+        el.classList.remove('pulse-active');
+        void el.offsetWidth;
+        el.classList.add('pulse-active');
+        el._pulseOnEnd = (ev) => {
+            if (ev.animationName !== 'pulse-green') return;
+            el.classList.remove('pulse-active');
+            el.removeEventListener('animationend', el._pulseOnEnd);
+            el._pulseOnEnd = null;
+            if (el._pulseTimeout) {
+                clearTimeout(el._pulseTimeout);
+                el._pulseTimeout = null;
+            }
+        };
+        el.addEventListener('animationend', el._pulseOnEnd);
+        el._pulseTimeout = setTimeout(() => {
+            el.classList.remove('pulse-active');
+            if (el._pulseOnEnd) {
+                el.removeEventListener('animationend', el._pulseOnEnd);
+                el._pulseOnEnd = null;
+            }
+            el._pulseTimeout = null;
+        }, PULSE_TIMEOUT_MS);
+    }
+
+    function triggerBarRowPulse(row) {
+        triggerPulseClass(row);
+    }
+
+    function addToFeed(d) {
+        const proto = (d.proto || 'SSH').toUpperCase();
+        if (!activeProtocols.includes(proto)) return;
+        feedData.ALL.unshift(d);
+        if (feedData[proto]) feedData[proto].unshift(d);
+        if (feedData.ALL.length > MAX_PER_PANEL) feedData.ALL.length = MAX_PER_PANEL;
+        if (feedData[proto] && feedData[proto].length > MAX_PER_PANEL) feedData[proto].length = MAX_PER_PANEL;
+    }
+
+    function clearGlobeLocation() {
+        ['d-globe-loc-text', 'm-globe-loc-text'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.innerHTML = '';
+        });
+        ['d-globe-loc-isp', 'm-globe-loc-isp'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.innerText = '';
+        });
+    }
+
+    function hideGlobeDot() {
+        [mobileGlobe, desktopGlobe, paneGlobeDesktop, paneGlobeMobile].forEach(g => {
+            if (!g) return;
+            g._pointData[0]._hidden = true;
+            g.pointsData(g._pointData);
+        });
+    }
+
+    function refreshHeatGlobe(locData) {
+        if (!GLOBE_STYLES[paneGlobeStyleIdx].extruded) return;
+        const hitsMap = {};
+        let maxHits = 1;
+        (locData || []).forEach(c => {
+            hitsMap[c.iso] = c.count;
+            if (c.count > maxHits) maxHits = c.count;
+        });
+        const logMax = Math.log(1 + maxHits);
+        [paneGlobeDesktop, paneGlobeMobile].forEach(g => {
+            if (!g) return;
+            g.polygonCapColor(d => {
+                const h = hitsMap[d.properties.ISO_A2] || 0;
+                if (!h) return 'rgba(0, 255, 65, 0.05)';
+                const t = Math.log(1 + h) / logMax;
+                return `rgb(${Math.round(255 * t)}, ${Math.round(255 * (1 - t))}, 0)`;
+            });
+            g.polygonSideColor(d => {
+                const h = hitsMap[d.properties.ISO_A2] || 0;
+                if (!h) return 'rgba(0,0,0,0)';
+                const t = Math.log(1 + h) / logMax;
+                return `rgba(255, ${Math.round(200 * (1 - t))}, 0, 0.6)`;
+            });
+            g.polygonAltitude(d => {
+                const h = hitsMap[d.properties.ISO_A2] || 0;
+                if (!h) return 0.002;
+                return 0.002 + 0.12 * Math.log(1 + h) / logMax;
+            });
+            // Spread to new array reference — globe.gl skips its digest when the
+            // same array reference is passed again, so accessors never re-evaluate.
+            if (countriesData) g.polygonsData([...countriesData]);
+        });
+        // The animation loop may be paused; resume briefly so the updated scene
+        // actually gets rendered, then re-schedule the pause as normal.
+        if (paneGlobeDesktop && paneGlobeVisible.desktop) paneGlobeDesktop.resumeAnimation();
+        if (paneGlobeMobile && paneGlobeVisible.mobile) paneGlobeMobile.resumeAnimation();
+        schedulePaneGlobePause();
+    }
+
+    function refreshFeed() {
+        const mode = PROTO_MODES[protoModeIdx];
+        const data = feedData[mode] || feedData.ALL;
+        ['d-feed', 'm-feed'].forEach(id => {
+            const el = document.getElementById(id);
+            el.innerHTML = '';
+            data.forEach(d => el.appendChild(makeKnockEl(d)));
+        });
+    }
+
     function getRank(list, value, key = 'label') {
         if (!list || !value) return null;
         const idx = list.findIndex(item => item[key] === value);
@@ -610,13 +1635,13 @@
             .width(size)
             .height(size)
             .pointsData([])
-            .pointAltitude(0.01)
+            .pointAltitude(d => d.alt ?? 0.01)
             .pointColor(() => '#ff0000')
-            .pointRadius(1.5)
+            .pointRadius(d => d._hidden ? 0 : 1.5)
             .pointsTransitionDuration(0)
             (container);
 
-        g._pointData = [{ lat: 0, lng: 0 }];
+        g._pointData = [{ lat: 0, lng: 0, alt: 0.01, _hidden: true }];
         g.controls().enableZoom = false;
         g.controls().enablePan = false;
         g.controls().autoRotate = false;
@@ -626,6 +1651,7 @@
             if (lastLat !== null) {
                 g._pointData[0].lat = lastLat;
                 g._pointData[0].lng = lastLng;
+                g._pointData[0]._hidden = false;
                 g.pointsData(g._pointData);
                 g.pointOfView({ lat: lastLat, lng: lastLng, altitude: 1.4 });
             }
@@ -722,8 +1748,9 @@
         { name: 'Heat', img: '/static/earth-black.png', hex: false, outlines: false, cities: false, extruded: true, viewAlt: 0.3, viewAltDesktop: 0.2 },
         { name: 'Atlas', img: '/static/marble_with_borders.jpg', hex: false, outlines: '#00ff41', cities: false },
     ];
+    const DEFAULT_GLOBE_STYLE_IDX = 4; // Heat
     const savedStyle = parseInt(localStorage.getItem('globeStyle'));
-    let paneGlobeStyleIdx = (savedStyle >= 0 && savedStyle < GLOBE_STYLES.length) ? savedStyle : (window.innerWidth <= 800 ? 5 : 0);
+    let paneGlobeStyleIdx = (savedStyle >= 0 && savedStyle < GLOBE_STYLES.length) ? savedStyle : DEFAULT_GLOBE_STYLE_IDX;
 
     function applyGlobeStyle(globe, idx) {
         const style = GLOBE_STYLES[idx];
@@ -859,22 +1886,30 @@
             .showAtmosphere(false)
             .width(size).height(size)
             .pointsData([])
-            .pointAltitude(0.01)
+            .pointAltitude(d => d.alt ?? 0.01)
             .pointColor(() => '#ff0000')
-            .pointRadius(1.5)
+            .pointRadius(d => d._hidden ? 0 : 1.5)
             .pointsTransitionDuration(0)
             (pane);
-        globe._pointData = [{ lat: 0, lng: 0 }];
+        globe._pointData = [{ lat: 0, lng: 0, alt: 0.01, _hidden: true }];
         globe.controls().enableZoom = false;
         globe.controls().autoRotate = false;
         if (which === 'desktop') paneGlobeDesktop = globe; else paneGlobeMobile = globe;
         globe.onGlobeReady(() => {
-            if (lastLat !== null) {
-                globe._pointData[0].lat = lastLat;
-                globe._pointData[0].lng = lastLng;
+            const activeMode = PROTO_MODES[protoModeIdx];
+            const topKnock = feedData[activeMode]?.[0];
+            if (topKnock?.lat != null) {
+                globe._pointData[0].lat = topKnock.lat;
+                globe._pointData[0].lng = topKnock.lng;
+                globe._pointData[0].alt = 0.01;
+                globe._pointData[0]._hidden = false;
                 globe.pointsData(globe._pointData);
+                globe.pointOfView({ lat: topKnock.lat, lng: topKnock.lng, altitude: cfg.altitude });
+            } else {
+                globe._pointData[0]._hidden = true;
+                globe.pointsData(globe._pointData);
+                globe.pointOfView({ altitude: cfg.altitude });
             }
-            globe.pointOfView(lastLat !== null ? { lat: lastLat, lng: lastLng, altitude: cfg.altitude } : { altitude: cfg.altitude });
             const cam = globe.camera();
             const globeEdge = Math.asin(1 / (cfg.altitude + 1)) / ((cam.fov / 2) * Math.PI / 180) * 100;
             const closestSide = Math.min(pane.clientWidth, pane.clientHeight) / 2;
@@ -927,6 +1962,7 @@
                 createPaneGlobe('mobile');
             }
             setupPaneGlobeVisibility();
+            positionDesktopProtocolSwitcher();
         }, 300);
     });
 
@@ -1009,7 +2045,7 @@
     function updateGlobeLocation(d) {
         if (!d) return;
         const loc = formatLocation(d);
-        const locHtml = `${getFlag(d.iso)} ${loc}`;
+        const locHtml = `<span class="globe-loc-line"><span>${getFlag(d.iso)}</span><span>${escapeHtml(loc)}</span>${getProtoBadge(d.proto)}</span>`;
         ['d-globe-loc-text', 'm-globe-loc-text'].forEach(id => {
             const el = document.getElementById(id);
             if (el) { el.innerHTML = locHtml; twemoji.parse(el); }
@@ -1035,6 +2071,8 @@
             if (!g) return;
             g._pointData[0].lat = lat;
             g._pointData[0].lng = lng;
+            g._pointData[0].alt = 0.01;
+            g._pointData[0]._hidden = false;
             g.pointsData(g._pointData);
             g.pointOfView({ lat, lng, altitude: alt }, 1000);
         });
@@ -1062,20 +2100,43 @@
             }
         }
         lastWidth = window.innerWidth;
+        positionDesktopProtocolSwitcher();
     });
 
     setInterval(() => {
-        if (lastKnockTime) {
-            const secs = Math.floor(Date.now() / 1000 - lastKnockTime) + 's';
+        const t = isFiltered ? getFilteredLastKnockTime() : lastKnockTime;
+        if (t) {
+            const secs = Math.floor(Date.now() / 1000 - t) + 's';
             document.getElementById('m-since').innerText = secs;
             document.getElementById('d-since').innerText = secs;
         }
     }, 1000);
 
     // MOBILE NAVIGATION
+    function getMobilePanes() {
+        return Array.from(document.querySelectorAll('#m-viewport .m-pane'));
+    }
+
+    function getMobileVisiblePanes() {
+        return getMobilePanes().filter(p => getComputedStyle(p).display !== 'none');
+    }
+
+    function mobilePaneOriginalIndex(pane) {
+        return Number(pane?.dataset?.paneIndex ?? -1);
+    }
+
     function jump(idx) {
         const vp = document.getElementById('m-viewport');
-        vp.scrollTo({ left: idx * vp.clientWidth, behavior: 'smooth' });
+        const panes = getMobilePanes();
+        const visible = getMobileVisiblePanes();
+        let target = panes[idx];
+        if (!target || getComputedStyle(target).display === 'none') {
+            target = visible[0];
+        }
+        if (!target) return;
+        const visibleIdx = visible.indexOf(target);
+        if (visibleIdx < 0) return;
+        vp.scrollTo({ left: visibleIdx * vp.clientWidth, behavior: 'smooth' });
     }
 
     // DESKTOP ROTATION LOGIC
@@ -1121,15 +2182,21 @@
     function dJump(idx) {
         const container = document.getElementById('d-slider-container');
         const boxes = Array.from(container.children);
+        const visibleBoxes = boxes.filter(box => getComputedStyle(box).display !== 'none');
         const navItems = document.querySelectorAll('.d-nav-item');
+        let targetBox = boxes[idx];
+        if (!targetBox || getComputedStyle(targetBox).display === 'none') {
+            targetBox = visibleBoxes[0];
+        }
+        if (!targetBox) return;
+        const targetIdx = boxes.indexOf(targetBox);
 
-        navItems.forEach((item, i) => item.classList.toggle('active', i === idx));
+        navItems.forEach((item, i) => item.classList.toggle('active', i === targetIdx));
         boxes.forEach((box, i) => {
             box.style.order = '';
-            box.classList.toggle('is-active', i === idx);
+            box.classList.toggle('is-active', i === targetIdx);
         });
-        const box = boxes[idx];
-        const boxRect = box.getBoundingClientRect();
+        const boxRect = targetBox.getBoundingClientRect();
         const containerRect = container.getBoundingClientRect();
         if (boxRect.left < containerRect.left || boxRect.right > containerRect.right) {
             const targetLeft = container.scrollLeft + boxRect.left - containerRect.left - 1;
@@ -1137,29 +2204,67 @@
         }
     }
 
+    function installPanelHeaderScrollToTop() {
+        const targets = [
+            { selector: '.d-box h2', contentSelector: '.d-content' },
+            { selector: '.m-pane h2', contentSelector: '.m-content' },
+        ];
+
+        targets.forEach(({ selector, contentSelector }) => {
+            document.querySelectorAll(selector).forEach((header) => {
+                header.addEventListener('click', (e) => {
+                    // Keep protocol button behavior untouched.
+                    if (e.target.closest('.proto-cycle-btn')) return;
+                    const panel = header.parentElement;
+                    if (!panel) return;
+                    const content = panel.querySelector(contentSelector);
+                    if (!content) return;
+                    if (content.scrollTop === 0) return;
+                    content.scrollTo({ top: 0, behavior: 'smooth' });
+                });
+            });
+        });
+    }
+
+    installPanelHeaderScrollToTop();
+
     const getFlag = (iso) => {
         if (iso === 'XX' || !iso) return '🏴‍☠️';
         return iso.toUpperCase().replace(/./g, char => String.fromCodePoint(char.charCodeAt(0) + 127397));
     };
-
-    function escapeHtml(s) {
-        if (s == null) return '';
-        return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-    }
 
     function renderBars(prefix, data, colorClass = '', useFlags = false) {
         ['d-', 'm-'].forEach(layout => {
             const container = document.getElementById(layout + prefix);
             if (!container) return;
             container.innerHTML = '';
+            const mode = getCurrentMode();
+            const passNotRelevant = prefix === 'pass' && !isPassPanelRelevant(mode);
+            const userNotRelevant = prefix === 'user' && !isUserPanelRelevant(mode);
+            if (passNotRelevant || userNotRelevant) {
+                const note = passNotRelevant
+                    ? `The ${mode} protocol does not provide password data.`
+                    : `The ${mode} protocol does not provide username data.`;
+                container.innerHTML = `
+                    <div class="knock" style="border-bottom:none;">
+                        <span style="color:var(--ui-label)">Note:</span>
+                        <span style="color:var(--neon-green)">${escapeHtml(note)}</span>
+                    </div>
+                `;
+                return;
+            }
             if (!data || data.length === 0) return;
             const max = data[0].count;
             data.forEach(item => {
                 const pct = (item.count / max) * 100;
-                let label = useFlags ? `${getFlag(item.iso)} ${escapeHtml(item.country)}` : escapeHtml(item.label || item.country);
+                let label = useFlags
+                    ? `${getFlag(item.iso)} ${escapeHtml(item.country ?? '')}`
+                    : (item.label ?? item.country ?? '');
+                if (prefix === 'pass' || prefix === 'user') label = displayCredential(label);
                 // Format IPv6 addresses in IP leaderboard
-                if (prefix === 'ip' && label) label = formatIP(item.label || item.country);
-                const rawId = useFlags ? item.iso : (item.label || item.country || item.isp);
+                if (prefix === 'ip' && label) label = formatIP(label);
+                else if (!useFlags && prefix !== 'pass' && prefix !== 'user') label = escapeHtml(label);
+                const rawId = useFlags ? item.iso : (item.label ?? item.country ?? item.isp ?? '');
                 const div = document.createElement('div');
                 div.className = 'bar-row';
                 div.setAttribute('data-id', `${prefix}-${rawId}`);
@@ -1168,12 +2273,21 @@
                 container.appendChild(div);
                 if (useFlags) twemoji.parse(div);
             });
+            // Pin <not provided> to bottom of password panel regardless of count
+            if (prefix === 'pass') {
+                const notProvidedRow = container.querySelector('.bar-row[data-id="pass-<not provided>"]');
+                if (notProvidedRow) container.appendChild(notProvidedRow);
+            }
         });
     }
 
     const fillClasses = { loc: 'loc-fill', pass: 'password-fill', prov: 'provider-fill', user: 'user-fill', ip: 'ip-fill' };
 
     function incrementAndSort(prefix, id, displayName) {
+        const mode = getCurrentMode();
+        if ((prefix === 'pass' && !isPassPanelRelevant(mode)) || (prefix === 'user' && !isUserPanelRelevant(mode))) {
+            return;
+        }
         ['d-', 'm-'].forEach(layout => {
             const container = document.getElementById(layout + prefix);
             if (!container) return;
@@ -1182,9 +2296,11 @@
             let newCount;
 
             if (!row) {
-                let label = escapeHtml(id);
+                let label = id;
                 if (prefix === 'loc') label = `${getFlag(id)} ${escapeHtml(displayName || id)}`;
                 else if (prefix === 'ip') label = formatIP(id);
+                else if (prefix === 'pass' || prefix === 'user') label = displayCredential(label);
+                if (prefix !== 'loc' && prefix !== 'ip' && prefix !== 'pass' && prefix !== 'user') label = escapeHtml(label);
                 row = document.createElement('div');
                 row.className = 'bar-row';
                 row.setAttribute('data-id', uniqueId);
@@ -1200,67 +2316,241 @@
                 row.setAttribute('data-count', newCount);
             }
 
-            if (row.highlightAnimation) row.highlightAnimation.cancel();
-            row.highlightAnimation = row.animate([
-                { background: 'rgba(0, 255, 65, 0.4)' },
-                { background: 'transparent' }
-            ], { duration: 3000, easing: 'ease' });
+            triggerBarRowPulse(row);
 
             const rows = Array.from(container.children);
             rows.sort((a, b) => (parseInt(b.getAttribute('data-count')) || 0) - (parseInt(a.getAttribute('data-count')) || 0));
             const max = parseInt(rows[0].getAttribute('data-count')) || 1;
-            rows.forEach(el => {
-                container.appendChild(el);
+            // Only move rows whose index changes; full re-append can retrigger active CSS pulses.
+            rows.forEach((el, idx) => {
+                if (container.children[idx] !== el) {
+                    container.insertBefore(el, container.children[idx] || null);
+                }
                 el.querySelector('.bar-fill').style.width = ((parseInt(el.getAttribute('data-count')) || 0) / max * 100) + '%';
             });
             if (prefix !== 'loc') while (container.children.length > MAX_PER_PANEL) container.lastChild.remove();
+            // Pin <not provided> to bottom of password panel regardless of count
+            if (prefix === 'pass') {
+                const notProvidedRow = container.querySelector('.bar-row[data-id="pass-<not provided>"]');
+                if (notProvidedRow) container.appendChild(notProvidedRow);
+            }
         });
     }
 
     function formatLocation(d) {
-        const city = escapeHtml(d.city);
-        const region = escapeHtml(d.region);
-        const country = escapeHtml(d.country);
         const hasCity = d.city && d.city !== 'Unknown';
         const hasRegion = d.region && d.region !== 'Unknown';
 
-        if (!hasCity && !hasRegion) return `Somewhere in ${country}`;
-        if (!hasCity && hasRegion) return `${region}, ${country}`;
-        if (hasCity && hasRegion) return (d.iso === 'US' || d.iso === 'CA') ? `${city}, ${region}, ${country}` : `${city}, ${country}`;
-        return `${city}, ${country}`;
+        if (!hasCity && !hasRegion) return `Somewhere in ${d.country}`;
+        if (!hasCity && hasRegion) return `${d.region}, ${d.country}`;
+        if (hasCity && hasRegion) return (d.iso === 'US' || d.iso === 'CA') ? `${d.city}, ${d.region}, ${d.country}` : `${d.city}, ${d.country}`;
+        return `${d.city}, ${d.country}`;
+    }
+
+    function escapeHtml(v) {
+        return String(v ?? '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
+    function displayCredential(v) {
+        const raw = String(v ?? '');
+        if (raw === '') return '&lt;blank&gt;';
+        if (raw.trim() === '') {
+            const n = raw.length;
+            return n === 1 ? '&lt;space&gt;' : `&lt;spaces x${n}&gt;`;
+        }
+        return escapeHtml(raw);
+    }
+
+    function displayPassword(v) {
+        return displayCredential(v);
+    }
+
+    function displayUsername(v) {
+        return displayCredential(v);
     }
 
     function formatIP(ip) {
         if (!ip) return '';
+        const safeIp = escapeHtml(ip);
         // IPv6 addresses contain colons; IPv4 don't
         if (ip.includes(':')) {
             // Truncate IPv6: show first 2 and last 2 segments
             const parts = ip.split(':');
             if (parts.length > 4) {
-                const truncated = `${escapeHtml(parts[0])}:${escapeHtml(parts[1])}:…:${escapeHtml(parts[parts.length - 1])}`;
-                return `<span title="${escapeHtml(ip)}" style="cursor:help">${truncated}</span>`;
+                const truncated = `${parts[0]}:${parts[1]}:…:${parts[parts.length - 1]}`;
+                return `<span title="${safeIp}" style="cursor:help">${escapeHtml(truncated)}</span>`;
             }
         }
-        return escapeHtml(ip);
+        return safeIp;
+    }
+
+    function getProtoBadge(proto) {
+        if (!showProtoBadges) return '';
+        const label = (proto || 'SSH').toUpperCase().slice(0, 4);
+        const cls = label.toLowerCase().replace(/[^a-z]/g, '');
+        const color = PROTO_COLORS[label] || PROTO_COLORS.ALL;
+        return `<span class="proto-badge proto-${cls}" style="color:${escapeHtml(color)}"><span class="proto-badge-label">${escapeHtml(label)}</span></span>`;
+    }
+
+    function sipUriUser(uri) {
+        if (!uri) return null;
+        const m = String(uri).match(/^\s*sips?:([^@;>\s]+)/i);
+        if (!m) return null;
+        const userInfo = m[1];
+        if (!userInfo) return null;
+        const colon = userInfo.indexOf(':');
+        return colon >= 0 ? userInfo.slice(0, colon) : userInfo;
+    }
+
+    function oneLinePreview(v, maxLen = 140) {
+        const s = String(v ?? '').replace(/\s+/g, ' ').trim();
+        if (s.length <= maxLen) return s;
+        return s.slice(0, maxLen) + '...';
+    }
+
+    function emailFeedExtraLines(d) {
+        const lines = [];
+        if (d.subject) {
+            lines.push(`<span style="color:var(--ui-label)">subject:</span> <span style="color:var(--neon-green)">${escapeHtml(d.subject)}</span>`);
+        }
+        if (d.body) {
+            lines.push(`<span style="color:var(--ui-label)">body:</span> <span style="color:var(--neon-green)">${escapeHtml(oneLinePreview(d.body))}</span>`);
+        }
+        return lines;
+    }
+
+    const NA_INLINE = '<span style="color:var(--ui-grey-dim)">n/a</span>';
+    const SMTP_MESSAGE_STAGES = new Set(['preauth_envelope', 'postauth_envelope', 'preauth_message']);
+
+    function renderFromToBlock(d, fromKey, toKey, includeContent = true) {
+        const mf = d[fromKey] ? escapeHtml(d[fromKey]) : NA_INLINE;
+        const mt = d[toKey] ? escapeHtml(d[toKey]) : NA_INLINE;
+        const lines = [
+            `<span style="color:var(--ui-label)">from:</span> <span style="color:var(--neon-green)">${mf}</span>`,
+            `<span style="color:var(--ui-label)">to:</span> <span style="color:var(--neon-green)">${mt}</span>`,
+        ];
+        if (includeContent) lines.push(...emailFeedExtraLines(d));
+        return lines.join('<br>');
+    }
+
+    function renderDefaultCredBlock(d) {
+        const safeUser = hasUserField(d) ? displayUsername(d.user) : NA_INLINE;
+        const safePass = hasPassField(d) ? displayPassword(d.pass) : NA_INLINE;
+        return `<span style="color:var(--ui-label)">user:</span> <span>${safeUser}</span>
+            <span style="color:var(--ui-label); margin-left:10px;">password:</span> <span class="knock-pass">${safePass}</span>`;
+    }
+
+    function renderSipAccountBlock(d) {
+        const uriUser = sipUriUser(d.sip_request_uri);
+        const ext = d.sip_extension || d.sip_auth_user || d.sip_uri_user || uriUser || null;
+        const account = ext ? displayUsername(ext) : NA_INLINE;
+        return `<span style="color:var(--ui-label)">account:</span> <span>${account}</span>`;
+    }
+
+    const PROTOCOL_FEED_SCHEMAS = [
+        {
+            name: 'sip_account',
+            match: (d, proto) => proto === 'SIP',
+            render: d => renderSipAccountBlock(d),
+        },
+        {
+            name: 'mail_envelope',
+            match: (d, proto) => proto === 'MAIL',
+            render: d => renderFromToBlock(d, 'mail_from', 'mail_to', true),
+        },
+        {
+            name: 'rdp_username',
+            match: (d, proto) => proto === 'RDP',
+            render: d => {
+                const u = hasUserField(d) ? displayUsername(d.user) : NA_INLINE;
+                const domain = d.rdp_domain ? escapeHtml(d.rdp_domain) : '';
+                const source = d.rdp_source ? escapeHtml(d.rdp_source) : '';
+                const userLine = domain
+                    ? `<span style="color:var(--ui-label)">user:</span> <span>${u}</span> <span style="color:var(--ui-label); margin-left:10px;">domain:</span> <span>${domain}</span>`
+                    : `<span style="color:var(--ui-label)">user:</span> <span>${u}</span>`;
+                const sourceLine = source
+                    ? `<br><span style="color:var(--ui-label)">source:</span> <span>${source}</span>`
+                    : '';
+                return `${userLine}${sourceLine}`;
+            },
+        },
+        {
+            name: 'smb_username',
+            match: (d, proto) => proto === 'SMB',
+            render: d => {
+                const u = hasUserField(d) ? displayUsername(d.user) : NA_INLINE;
+                const share = d.smb_share ? escapeHtml(d.smb_share) : '';
+                const domain = d.smb_domain ? escapeHtml(d.smb_domain) : '';
+                const host = d.smb_host ? escapeHtml(d.smb_host) : '';
+                const version = d.smb_version ? escapeHtml(d.smb_version) : '';
+                const userLine = domain
+                    ? `<span style="color:var(--ui-label)">user:</span> <span>${u}</span> <span style="color:var(--ui-label); margin-left:10px;">domain:</span> <span>${domain}</span>`
+                    : `<span style="color:var(--ui-label)">user:</span> <span>${u}</span>`;
+                const shareLine = share
+                    ? `<br><span style="color:var(--ui-label)">share:</span> <span>${share}</span>`
+                    : '';
+                let hostVersionLine = '';
+                if (host && version) {
+                    hostVersionLine = `<br><span style="color:var(--ui-label)">host:</span> <span>${host}</span> <span style="color:var(--ui-label); margin-left:10px;">version:</span> <span>${version}</span>`;
+                } else if (host) {
+                    hostVersionLine = `<br><span style="color:var(--ui-label)">host:</span> <span>${host}</span>`;
+                } else if (version) {
+                    hostVersionLine = `<br><span style="color:var(--ui-label)">version:</span> <span>${version}</span>`;
+                }
+                return `${userLine}${shareLine}${hostVersionLine}`;
+            },
+        },
+        {
+            name: 'smtp_message',
+            match: (d, proto) => proto === 'SMTP' && SMTP_MESSAGE_STAGES.has(String(d.smtp_stage || '')),
+            render: d => renderFromToBlock(d, 'smtp_mail_from', 'smtp_rcpt_to', true),
+        },
+        {
+            name: 'default_credentials',
+            match: () => true,
+            render: d => renderDefaultCredBlock(d),
+        },
+    ];
+
+    function protocolFeedFields(d) {
+        const proto = (d?.proto || '').toUpperCase();
+        const schema = PROTOCOL_FEED_SCHEMAS.find(s => s.match(d, proto));
+        return schema ? schema.render(d, proto) : renderDefaultCredBlock(d);
+    }
+
+    function makeKnockEl(d) {
+        const loc = formatLocation(d);
+        const safeLoc = escapeHtml(loc);
+        const safeIsp = escapeHtml(d.isp);
+        const protoLine = protocolFeedFields(d);
+        const div = document.createElement('div');
+        div.className = 'knock';
+        div.innerHTML = `
+            <div class="knock-location"><span style="display:flex;align-items:center;gap:0.3em"><strong>${getFlag(d.iso)}</strong> <strong>${safeLoc}</strong></span>${getProtoBadge(d.proto)}</div>
+            ${protoLine}<br>
+            <span class="knock-meta"><span style="color:var(--ui-label)">ISP:</span> <span style="color:var(--data-blue)">${safeIsp}</span> <span style="color:var(--ui-label); margin-left:10px;">IP:</span> <span style="color:var(--data-blue)">${formatIP(d.ip)}</span></span>
+        `;
+        twemoji.parse(div);
+        return div;
+    }
+
+    function knockMatchesFilter(d) {
+        const mode = PROTO_MODES[protoModeIdx];
+        return mode === 'ALL' || (d.proto || 'SSH').toUpperCase() === mode;
     }
 
     function renderKnock(d, isNew = true) {
-        const loc = formatLocation(d);
-        
-        const html = `
-            <div class="knock-location"><strong>${getFlag(d.iso)}</strong> <strong>${loc}</strong></div>
-            <span style="color:var(--ui-label)">user:</span> <span>${escapeHtml(d.user)}</span>
-            <span style="color:var(--ui-label); margin-left:10px;">password:</span> <span class="knock-pass">${escapeHtml(d.pass)}</span><br>
-            <span class="knock-meta"><span style="color:var(--ui-label)">ISP:</span> <span style="color:var(--data-blue)">${escapeHtml(d.isp)}</span> <span style="color:var(--ui-label); margin-left:10px;">IP:</span> <span style="color:var(--data-blue)">${formatIP(d.ip)}</span></span>
-        `;
-
+        if (!knockMatchesFilter(d)) return;
         ['d-feed', 'm-feed'].forEach(id => {
             const el = document.getElementById(id);
-            const div = document.createElement('div');
-            div.className = 'knock' + (isNew ? ' new-knock-flash' : '');
-            div.innerHTML = html;
+            const div = makeKnockEl(d);
             if (isNew) el.prepend(div); else el.appendChild(div);
-            twemoji.parse(div);
+            if (isNew) triggerPulseClass(div);
             if (el.children.length > MAX_PER_PANEL) el.lastChild.remove();
         });
     }
@@ -1286,45 +2576,75 @@
 
     function renderInfo(d) {
         const loc = formatLocation(d);
+        const safeLoc = escapeHtml(loc);
+        const safeCountry = escapeHtml(d.country);
+        const safeUser = displayUsername(d.user);
+        const safePass = displayPassword(d.pass);
+        const safeIsp = escapeHtml(d.isp);
+        const protoLine = protocolFeedFields(d);
+        const modeProto = (d.proto || '').toUpperCase();
+        const showUserStats = hasUserField(d) && isUserPanelRelevant(modeProto);
+        const showPassStats = hasPassField(d) && isPassPanelRelevant(modeProto);
 
         // Get rankings from leaderboards
-        const countryRank = formatRank(getRank(leaderboards.loc, d.iso, 'iso'));
-        const userRank = formatRank(getRank(leaderboards.users, d.user));
-        const passRank = formatRank(getRank(leaderboards.passwords, d.pass));
-        const ispRank = formatRank(getRank(leaderboards.providers, d.isp));
-        const ipRank = formatRank(getRank(leaderboards.ips, d.ip));
+        const activeLB = getActiveLeaderboards();
+        const countryRank = formatRank(getRank(activeLB.loc, d.iso, 'iso'));
+        const userRank = formatRank(getRank(activeLB.users, d.user));
+        const passRank = formatRank(getRank(activeLB.passwords, d.pass));
+        const ispRank = formatRank(getRank(activeLB.providers, d.isp));
+        const ipRank = formatRank(getRank(activeLB.ips, d.ip));
+
+        // Use per-protocol stats when a protocol filter is active
+        const filtered = PROTO_MODES[protoModeIdx] !== 'ALL';
+        const countryHits = filtered ? (d.country_hits_proto ?? d.country_hits) : d.country_hits;
+        const countryLast = filtered ? (d.country_last_proto ?? d.country_last) : d.country_last;
+        const userHits    = filtered ? (d.user_hits_proto    ?? d.user_hits)    : d.user_hits;
+        const userLast    = filtered ? (d.user_last_proto    ?? d.user_last)    : d.user_last;
+        const passHits    = filtered ? (d.pass_hits_proto    ?? d.pass_hits)    : d.pass_hits;
+        const passLast    = filtered ? (d.pass_last_proto    ?? d.pass_last)    : d.pass_last;
+        const ispHits     = filtered ? (d.isp_hits_proto     ?? d.isp_hits)     : d.isp_hits;
+        const ispLast     = filtered ? (d.isp_last_proto     ?? d.isp_last)     : d.isp_last;
+        const ipHits      = filtered ? (d.ip_hits_proto      ?? d.ip_hits)      : d.ip_hits;
+        const ipLast      = filtered ? (d.ip_last_proto      ?? d.ip_last)      : d.ip_last;
+
+        const userSection = showUserStats ? `
+            <div class="info-item" style="margin-bottom:12px;">
+                <div><span style="color:var(--ui-label)">user:</span> <span style="color:var(--neon-green)">${safeUser}${userRank}</span></div>
+                <div><span style="color:var(--ui-label)">count:</span> <span style="color:var(--neon-green)">${(userHits || 0).toLocaleString()}</span></div>
+                <div><span style="color:var(--ui-label)">last seen:</span> <span style="color:var(--neon-green)">${formatTimeSince(userLast)}</span></div>
+            </div>
+        ` : '';
+
+        const passSection = showPassStats ? `
+            <div class="info-item" style="margin-bottom:12px;">
+                <div><span style="color:var(--ui-label)">password:</span> <span style="color:var(--neon-green)">${safePass}${passRank}</span></div>
+                <div><span style="color:var(--ui-label)">count:</span> <span style="color:var(--neon-green)">${(passHits || 0).toLocaleString()}</span></div>
+                <div><span style="color:var(--ui-label)">last seen:</span> <span style="color:var(--neon-green)">${formatTimeSince(passLast)}</span></div>
+            </div>
+        ` : '';
 
         const html = `
             <div class="info-section" style="font-size:1.1em; margin-bottom:15px; padding-bottom:10px; border-bottom:1px solid #333;">
-                <div class="knock-location"><strong>${getFlag(d.iso)}</strong> <strong>${loc}</strong></div>
-                <span style="color:var(--ui-label)">user:</span> <span>${escapeHtml(d.user)}</span>
-                <span style="color:var(--ui-label); margin-left:10px;">password:</span> <span class="knock-pass">${escapeHtml(d.pass)}</span><br>
-                <span class="knock-meta"><span style="color:var(--ui-label)">ISP:</span> <span style="color:var(--data-blue)">${escapeHtml(d.isp)}</span> <span style="color:var(--ui-label); margin-left:10px;">IP:</span> <span style="color:var(--data-blue)">${formatIP(d.ip)}</span></span>
+                <div class="knock-location"><span style="display:flex;align-items:center;gap:0.3em"><strong>${getFlag(d.iso)}</strong> <strong>${safeLoc}</strong></span>${getProtoBadge(d.proto)}</div>
+                ${protoLine}<br>
+                <span class="knock-meta"><span style="color:var(--ui-label)">ISP:</span> <span style="color:var(--data-blue)">${safeIsp}</span> <span style="color:var(--ui-label); margin-left:10px;">IP:</span> <span style="color:var(--data-blue)">${formatIP(d.ip)}</span></span>
             </div>
             <div class="info-item" style="margin-bottom:12px;">
-                <div><span style="color:var(--ui-label)">country:</span> <span style="color:var(--neon-green)">${escapeHtml(d.country)}${countryRank}</span></div>
-                <div><span style="color:var(--ui-label)">count:</span> <span style="color:var(--neon-green)">${(d.country_hits || 0).toLocaleString()}</span></div>
-                <div><span style="color:var(--ui-label)">last seen:</span> <span style="color:var(--neon-green)">${formatTimeSince(d.country_last)}</span></div>
+                <div><span style="color:var(--ui-label)">country:</span> <span style="color:var(--neon-green)">${safeCountry}${countryRank}</span></div>
+                <div><span style="color:var(--ui-label)">count:</span> <span style="color:var(--neon-green)">${(countryHits || 0).toLocaleString()}</span></div>
+                <div><span style="color:var(--ui-label)">last seen:</span> <span style="color:var(--neon-green)">${formatTimeSince(countryLast)}</span></div>
             </div>
+            ${userSection}
+            ${passSection}
             <div class="info-item" style="margin-bottom:12px;">
-                <div><span style="color:var(--ui-label)">user:</span> <span style="color:var(--neon-green)">${escapeHtml(d.user)}${userRank}</span></div>
-                <div><span style="color:var(--ui-label)">count:</span> <span style="color:var(--neon-green)">${(d.user_hits || 0).toLocaleString()}</span></div>
-                <div><span style="color:var(--ui-label)">last seen:</span> <span style="color:var(--neon-green)">${formatTimeSince(d.user_last)}</span></div>
-            </div>
-            <div class="info-item" style="margin-bottom:12px;">
-                <div><span style="color:var(--ui-label)">password:</span> <span style="color:var(--neon-green)">${escapeHtml(d.pass)}${passRank}</span></div>
-                <div><span style="color:var(--ui-label)">count:</span> <span style="color:var(--neon-green)">${(d.pass_hits || 0).toLocaleString()}</span></div>
-                <div><span style="color:var(--ui-label)">last seen:</span> <span style="color:var(--neon-green)">${formatTimeSince(d.pass_last)}</span></div>
-            </div>
-            <div class="info-item" style="margin-bottom:12px;">
-                <div><span style="color:var(--ui-label)">ISP:</span> <span style="color:var(--neon-green)">${escapeHtml(d.isp)}${ispRank}</span></div>
-                <div><span style="color:var(--ui-label)">count:</span> <span style="color:var(--neon-green)">${(d.isp_hits || 0).toLocaleString()}</span></div>
-                <div><span style="color:var(--ui-label)">last seen:</span> <span style="color:var(--neon-green)">${formatTimeSince(d.isp_last)}</span></div>
+                <div><span style="color:var(--ui-label)">ISP:</span> <span style="color:var(--neon-green)">${safeIsp}${ispRank}</span></div>
+                <div><span style="color:var(--ui-label)">count:</span> <span style="color:var(--neon-green)">${(ispHits || 0).toLocaleString()}</span></div>
+                <div><span style="color:var(--ui-label)">last seen:</span> <span style="color:var(--neon-green)">${formatTimeSince(ispLast)}</span></div>
             </div>
             <div class="info-item" style="margin-bottom:12px;">
                 <div><span style="color:var(--ui-label)">IP:</span> <span style="color:var(--neon-green)">${formatIP(d.ip)}${ipRank}</span></div>
-                <div><span style="color:var(--ui-label)">count:</span> <span style="color:var(--neon-green)">${(d.ip_hits || 0).toLocaleString()}</span></div>
-                <div><span style="color:var(--ui-label)">last seen:</span> <span style="color:var(--neon-green)">${formatTimeSince(d.ip_last)}</span></div>
+                <div><span style="color:var(--ui-label)">count:</span> <span style="color:var(--neon-green)">${(ipHits || 0).toLocaleString()}</span></div>
+                <div><span style="color:var(--ui-label)">last seen:</span> <span style="color:var(--neon-green)">${formatTimeSince(ipLast)}</span></div>
             </div>
         `;
         ['d-details', 'm-details'].forEach(id => {
@@ -1334,26 +2654,49 @@
         });
     }
 
+    function renderInfoEmpty() {
+        const mode = getCurrentMode();
+        const msg = mode === 'ALL'
+            ? 'No knocks yet.'
+            : `No ${mode} knocks yet.`;
+        const html = `
+            <div class="knock" style="border-bottom:none;">
+                <span style="color:var(--ui-label)">Note:</span>
+                <span style="color:var(--neon-green)">${escapeHtml(msg)}</span>
+            </div>
+        `;
+        ['d-details', 'm-details'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.innerHTML = html;
+        });
+    }
+
     function renderTrivia(d) {
         if (!d) return;
         const loc = formatLocation(d);
+        const safeLoc = escapeHtml(loc);
+        const modeProto = (d.proto || '').toUpperCase();
+        const showUserTrivia = hasUserField(d) && isUserPanelRelevant(modeProto);
+        const showPassTrivia = hasPassField(d) && isPassPanelRelevant(modeProto);
+        const safeIsp = escapeHtml(d.isp);
+        const protoLine = protocolFeedFields(d);
 
         // Build trivia content
         let triviaItems = [];
 
         // User trivia (blue)
-        const userFacts = triviaUserMap[d.user];
+        const userFacts = showUserTrivia ? triviaUserMap[d.user] : null;
         if (userFacts && userFacts.length > 0) {
             const fact = userFacts[Math.floor(Math.random() * userFacts.length)];
             triviaItems.push(`<p style="margin-bottom:12px;"><span style="color:var(--ui-label)">User trivia:</span> <span style="color:var(--data-blue)">${fact}</span></p>`);
         }
 
         // Password trivia (blue) - from JSON or computed
-        const passFacts = triviaPassMap[d.pass];
+        const passFacts = showPassTrivia ? triviaPassMap[d.pass] : null;
         if (passFacts && passFacts.length > 0) {
             const fact = passFacts[Math.floor(Math.random() * passFacts.length)];
             triviaItems.push(`<p style="margin-bottom:12px;"><span style="color:var(--ui-label)">Password trivia:</span> <span style="color:var(--data-blue)">${fact}</span></p>`);
-        } else {
+        } else if (showPassTrivia) {
             // Try computed trivia rules
             const computed = getComputedPassTrivia(d);
             if (computed) {
@@ -1386,10 +2729,9 @@
 
         const html = `
             <div class="info-section" style="font-size:1.1em; margin-bottom:15px; padding-bottom:10px; border-bottom:1px solid #333;">
-                <div class="knock-location"><strong>${getFlag(d.iso)}</strong> <strong>${loc}</strong></div>
-                <span style="color:var(--ui-label)">user:</span> <span>${escapeHtml(d.user)}</span>
-                <span style="color:var(--ui-label); margin-left:10px;">password:</span> <span class="knock-pass">${escapeHtml(d.pass)}</span><br>
-                <span class="knock-meta"><span style="color:var(--ui-label)">ISP:</span> <span style="color:var(--data-blue)">${escapeHtml(d.isp)}</span> <span style="color:var(--ui-label); margin-left:10px;">IP:</span> <span style="color:var(--data-blue)">${formatIP(d.ip)}</span></span>
+                <div class="knock-location"><span style="display:flex;align-items:center;gap:0.3em"><strong>${getFlag(d.iso)}</strong> <strong>${safeLoc}</strong></span>${getProtoBadge(d.proto)}</div>
+                ${protoLine}<br>
+                <span class="knock-meta"><span style="color:var(--ui-label)">ISP:</span> <span style="color:var(--data-blue)">${safeIsp}</span> <span style="color:var(--ui-label); margin-left:10px;">IP:</span> <span style="color:var(--data-blue)">${formatIP(d.ip)}</span></span>
             </div>
             <div style="line-height:1.6;">
                 ${triviaContent}
@@ -1423,103 +2765,134 @@
                 knockCount++;
                 debugLog(`Knock #${knockCount} from ${d.iso || '??'}`);
                 playClick();
-                pulseGlobeAtmosphere();
-                lastKnockTime = Math.floor(Date.now() / 1000);
-                document.getElementById('m-since').innerText = '0s';
-                document.getElementById('d-since').innerText = '0s';
+                if (showProtoChip) {
+                    pulseProtoChip(d.proto, DESKTOP_LATEST_PROTO_CHIP);
+                    pulseProtoChip(d.proto, MOBILE_LATEST_PROTO_CHIP);
+                }
+                if (knockMatchesFilter(d)) pulseGlobeAtmosphere();
+                const knockProto = (d.proto || 'SSH').toUpperCase();
+                const now = Math.floor(Date.now() / 1000);
+                lastKnockTime = now;
+                lastKnockTimeByProto[knockProto] = now;
+                if (!isFiltered || activeProtocols.includes(knockProto)) {
+                    document.getElementById('m-since').innerText = '0s';
+                    document.getElementById('d-since').innerText = '0s';
+                }
+                addToFeed(d);
                 renderKnock(d, true);
-                ['d-total', 'm-total'].forEach(id => document.getElementById(id).innerText = d.total_global.toLocaleString());
-                ['d-kpm', 'm-kpm'].forEach(id => document.getElementById(id).innerText = d.kpm);
-                incrementAndSort('loc', d.iso, d.country);
-                incrementAndSort('pass', d.pass);
-                incrementAndSort('prov', d.isp);
-                incrementAndSort('user', d.user);
-                incrementAndSort('ip', d.ip);
-                currentKnock = d;
-                renderInfo(d);
-                scheduleTrivia(d);
-                updateGlobeLocation(d);
-                rotateGlobeToLocation(d.lat, d.lng);
+                if (Number.isFinite(Number(d.uptime_minutes))) uptimeMinutesCache = Number(d.uptime_minutes);
+                bumpProtoBreakdownWithKnock(d);
+                if (isFiltered) {
+                    updateHeaderStats(getFilteredTotal(), getFilteredKpm());
+                } else {
+                    updateHeaderStats(d.total_global, d.kpm);
+                }
+                renderProtoStats();
+                pulseProtoStatsRow(d.proto);
+                if (knockMatchesFilter(d)) {
+                    incrementAndSort('loc', d.iso, d.country);
+                    if (hasPassField(d)) incrementAndSort('pass', d.pass);
+                    incrementAndSort('prov', d.isp);
+                    if (hasUserField(d)) incrementAndSort('user', d.user);
+                    incrementAndSort('ip', d.ip);
+                }
+                refreshStatsAndTrivia();
+                if (knockMatchesFilter(d)) {
+                    updateGlobeLocation(d);
+                    rotateGlobeToLocation(d.lat, d.lng);
+                }
             }
             else if (msg.type === 'init_stats') {
                 debugLog(`init_stats received (total=${d.total})`);
-                ['d-total', 'm-total'].forEach(id => document.getElementById(id).innerText = (d.total || 0).toLocaleString());
-                ['d-kpm', 'm-kpm'].forEach(id => document.getElementById(id).innerText = d.kpm || '0.00');
-                if (d.last_knock_time) {
-                    lastKnockTime = d.last_knock_time;
-                    const secs = Math.floor(Date.now() / 1000 - lastKnockTime) + 's';
-                    document.getElementById('m-since').innerText = secs;
-                    document.getElementById('d-since').innerText = secs;
+                if (Array.isArray(d.enabled_protocols) || (d.protocol_meta && typeof d.protocol_meta === 'object')) {
+                    applyProtocolConfig(d.enabled_protocols, d.protocol_meta);
                 }
-                if (d.last_lat !== null && d.last_lng !== null) {
-                    rotateGlobeToLocation(d.last_lat, d.last_lng);
-                }
+                uptimeMinutesCache = Number(d.uptime_minutes || 0);
+                if (d.last_knock_time) lastKnockTime = d.last_knock_time;
                 // Store leaderboards globally for ranking lookups
                 leaderboards.loc = d.top_locations || [];
                 leaderboards.passwords = d.top_passwords || [];
                 leaderboards.providers = d.top_providers || [];
                 leaderboards.users = d.top_users || [];
                 leaderboards.ips = d.top_ips || [];
-                // Refresh Heat extrusion colors/heights without re-setting image or polygon data
-                if (GLOBE_STYLES[paneGlobeStyleIdx].extruded) {
-                    const hitsMap = {};
-                    let maxHits = 1;
-                    leaderboards.loc.forEach(c => {
-                        hitsMap[c.iso] = c.count;
-                        if (c.count > maxHits) maxHits = c.count;
-                    });
-                    const logMax = Math.log(1 + maxHits);
-                    [paneGlobeDesktop, paneGlobeMobile].forEach(g => {
-                        if (!g) return;
-                        g.polygonCapColor(d => {
-                            const h = hitsMap[d.properties.ISO_A2] || 0;
-                            if (!h) return 'rgba(0, 255, 65, 0.05)';
-                            const t = Math.log(1 + h) / logMax;
-                            return `rgb(${Math.round(255 * t)}, ${Math.round(255 * (1 - t))}, 0)`;
-                        });
-                        g.polygonSideColor(d => {
-                            const h = hitsMap[d.properties.ISO_A2] || 0;
-                            if (!h) return 'rgba(0,0,0,0)';
-                            const t = Math.log(1 + h) / logMax;
-                            return `rgba(255, ${Math.round(200 * (1 - t))}, 0, 0.6)`;
-                        });
-                        g.polygonAltitude(d => {
-                            const h = hitsMap[d.properties.ISO_A2] || 0;
-                            if (!h) return 0.002;
-                            return 0.002 + 0.12 * Math.log(1 + h) / logMax;
-                        });
-                    });
+                if (d.proto_stats) protoStatsCache = d.proto_stats;
+                protoBreakdownCache = normalizeProtoBreakdown(d.proto_breakdown || {}, d.total || 0);
+
+                // Seed per-protocol last knock times from history
+                const ph = d.proto_histories || {};
+                activeProtocols.forEach(p => {
+                    const first = (ph[p.toLowerCase()] || [])[0];
+                    if (first?.timestamp) {
+                        const ts = typeof first.timestamp === 'string'
+                            ? Math.floor(new Date(first.timestamp).getTime() / 1000)
+                            : Number(first.timestamp);
+                        if (Number.isFinite(ts)) lastKnockTimeByProto[p] = ts;
+                    }
+                });
+
+                // Update header stats (filtered or global)
+                if (isFiltered) {
+                    updateHeaderStats(getFilteredTotal(), getFilteredKpm());
+                    const filteredAgo = getFilteredLastKnockTime();
+                    if (filteredAgo) {
+                        const secs = Math.floor(Date.now() / 1000 - filteredAgo) + 's';
+                        document.getElementById('m-since').innerText = secs;
+                        document.getElementById('d-since').innerText = secs;
+                    }
+                } else {
+                    updateHeaderStats(d.total || 0, d.kpm || '0.00');
+                    if (d.last_knock_time) {
+                        const secs = Math.floor(Date.now() / 1000 - d.last_knock_time) + 's';
+                        document.getElementById('m-since').innerText = secs;
+                        document.getElementById('d-since').innerText = secs;
+                    }
                 }
+                applyProtoButtons(getCurrentMode());
+                applyProtocolPanelVisibility();
+                renderProtoStats();
+                // Refresh Heat extrusion colors/heights without re-setting image or polygon data
+                refreshHeatGlobe(getActiveLeaderboards().loc);
 
                 const preScroll = vp.scrollLeft;
-                renderBars('loc', d.top_locations, 'loc-fill', true);
-                renderBars('pass', d.top_passwords, 'password-fill');
-                renderBars('prov', d.top_providers, 'provider-fill');
-                renderBars('user', d.top_users, 'user-fill');
-                renderBars('ip', d.top_ips, 'ip-fill');
+                renderLeaderboards(getActiveLeaderboards());
                 if (vp.scrollLeft !== preScroll) debugLog(`⚠️ SCROLL SHIFTED during init_stats: ${preScroll} → ${vp.scrollLeft}`);
                 if (d.history) {
-                    ['d-feed', 'm-feed'].forEach(id => document.getElementById(id).innerHTML = '');
-                    d.history.forEach(k => renderKnock(k, false));
-                    if (d.history.length > 0) updateGlobeLocation(d.history[0]);
+                    // Populate feed arrays from dedicated per-protocol Redis lists
+                    const allHistory = d.history || [];
+                    feedData.ALL = (activeProtocols.length === TRACKED_PROTOCOLS.length
+                        ? allHistory
+                        : allHistory.filter(k => activeProtocols.includes((k.proto || 'SSH').toUpperCase()))
+                    ).slice(0, MAX_PER_PANEL);
+                    const ph = d.proto_histories || {};
+                    activeProtocols.forEach(proto => {
+                        feedData[proto] = (ph[proto.toLowerCase()] || []).slice(0, MAX_PER_PANEL);
+                    });
+                    refreshFeed();
+                    const activeMode = getCurrentMode();
+                    const topKnock = feedData[activeMode]?.[0];
+                    if (topKnock) {
+                        updateGlobeLocation(topKnock);
+                        if (topKnock.lat != null) rotateGlobeToLocation(topKnock.lat, topKnock.lng);
+                    } else {
+                        hideGlobeDot();
+                    }
                 }
-                // Render Stats and Trivia panes with enriched last knock data
-                if (d.last_knock_stats) {
-                    currentKnock = d.last_knock_stats;
-                    renderInfo(d.last_knock_stats);
-                    scheduleTrivia(d.last_knock_stats);
-                }
+                refreshStatsAndTrivia();
             }
         };
     }
 
     const vp = document.getElementById('m-viewport');
+    getMobilePanes().forEach((pane, idx) => pane.dataset.paneIndex = String(idx));
     let lastPaneIdx = 0;
     vp.addEventListener('scroll', () => {
         const scrolled = (vp.scrollLeft / (vp.scrollWidth - vp.clientWidth)) * 100;
         document.getElementById('m-progress-bar').style.width = scrolled + '%';
-        const currentIdx = Math.round(vp.scrollLeft / vp.clientWidth);
-        if (currentIdx !== lastPaneIdx) {
+        const visible = getMobileVisiblePanes();
+        const visibleIdx = Math.round(vp.scrollLeft / vp.clientWidth);
+        const currentPane = visible[visibleIdx];
+        const currentIdx = mobilePaneOriginalIndex(currentPane);
+        if (currentIdx >= 0 && currentIdx !== lastPaneIdx) {
             debugLog(`PANE CHANGE: ${lastPaneIdx} → ${currentIdx}`);
             lastPaneIdx = currentIdx;
         }
@@ -1528,7 +2901,8 @@
     const observer = new IntersectionObserver((entries) => {
         entries.forEach(entry => {
             if (entry.isIntersecting) {
-                const idx = Array.from(entry.target.parentNode.children).indexOf(entry.target);
+                const idx = mobilePaneOriginalIndex(entry.target);
+                if (idx < 0) return;
                 document.querySelectorAll('.dot').forEach((d, i) => d.classList.toggle('active', i === idx));
                 document.querySelectorAll('.nav-item').forEach((n, i) => {
                     n.classList.toggle('active', i === idx);
@@ -1540,38 +2914,20 @@
     document.querySelectorAll('.m-pane').forEach(p => observer.observe(p));
 
     // --- TRIVIA PANE LOGIC ---
-    const TRIVIA_MIN_DISPLAY_SECONDS = 12;
     let triviaUserMap = {};      // user -> facts array
     let triviaPassMap = {};      // pass -> facts array
     let triviaCountryMap = {};   // country -> {facts: [...], index: n}
-    let triviaLastRenderTime = 0;
-    let triviaPendingKnock = null;
-    let triviaTimeout = null;
     let triviaLoaded = false;
 
-    function scheduleTrivia(d) {
-        const now = Date.now();
-        const elapsed = (now - triviaLastRenderTime) / 1000;
-
-        if (elapsed >= TRIVIA_MIN_DISPLAY_SECONDS) {
-            // Enough time has passed, render immediately
-            renderTrivia(d);
-            triviaLastRenderTime = now;
-            triviaPendingKnock = null;
+    function refreshStatsAndTrivia() {
+        const mode = PROTO_MODES[protoModeIdx];
+        const topKnock = feedData[mode]?.[0] || null;
+        currentKnock = topKnock;
+        if (topKnock) {
+            renderInfo(topKnock);
+            renderTrivia(topKnock);
         } else {
-            // Too soon, queue this knock
-            triviaPendingKnock = d;
-            if (!triviaTimeout) {
-                const remaining = (TRIVIA_MIN_DISPLAY_SECONDS - elapsed) * 1000;
-                triviaTimeout = setTimeout(() => {
-                    triviaTimeout = null;
-                    if (triviaPendingKnock) {
-                        renderTrivia(triviaPendingKnock);
-                        triviaLastRenderTime = Date.now();
-                        triviaPendingKnock = null;
-                    }
-                }, remaining);
-            }
+            renderInfoEmpty();
         }
     }
 
@@ -1583,23 +2939,25 @@
     }
 
     function greenText(text) {
-        return `<span style="color:var(--neon-green)">${text}</span>`;
+        return `<span style="color:var(--neon-green)">${escapeHtml(text)}</span>`;
     }
 
     // Computed trivia rules - each returns HTML string or null
     const computedPassRules = [
         // Rule: Username equals password
         (d) => {
+            if (!hasUserField(d) || !hasPassField(d)) return null;
             if (d.user === d.pass) {
-                return `The user and password are both ${greenText(escapeHtml(d.pass))}. Pro tip: Don't double up.`;
+                return `The user and password are both ${greenText(d.pass)}. Pro tip: Don't double up.`;
             }
             return null;
         },
         // Rule: Username is prefix of password
         (d) => {
+            if (!hasUserField(d) || !hasPassField(d)) return null;
             if (d.pass.startsWith(d.user) && d.pass.length > d.user.length) {
                 const suffix = d.pass.slice(d.user.length);
-                return `This password is simply the user with a suffix added: ${greenText(escapeHtml(d.user) + ' + ' + escapeHtml(suffix))}. Don't be simple.`;
+                return `This password is simply the user with a suffix added: ${greenText(d.user + ' + ' + suffix)}. Don't be simple.`;
             }
             return null;
         }
@@ -1642,7 +3000,7 @@
                 });
                 triviaLoaded = true;
                 // Re-render with current knock if available
-                if (currentKnock) renderTrivia(currentKnock);
+                if (currentKnock) refreshStatsAndTrivia();
             })
             .catch(err => console.error('Failed to load country trivia:', err));
     }
@@ -1790,6 +3148,7 @@
 
     window.addEventListener('load', () => {
         dJump(0);
+        applyProtocolPanelVisibility();
         initGlobes();
         initPaneGlobes();
         setupJokesObserver();

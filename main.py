@@ -5,6 +5,7 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
 from datetime import datetime
 from fastapi.staticfiles import StaticFiles
+from constants import PROTO, PROTO_NAME, PROTOCOL_META, DEFAULT_ENABLED_PROTOCOLS, sort_protocols_for_ui
 
 app = FastAPI()
 
@@ -89,6 +90,33 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 r = redis.from_url(f"redis://{os.environ.get('REDIS_HOST', 'localhost')}", decode_responses=True)
 DB_PATH = os.environ.get('DB_DIR', 'data') + '/knock_knock.db'
 
+async def load_protocol_runtime_config():
+    enabled_protocols_raw = await r.get("knock:config:enabled_protocols")
+    protocol_meta_raw = await r.get("knock:config:protocol_meta")
+    try:
+        enabled_protocols = json.loads(enabled_protocols_raw) if enabled_protocols_raw else list(DEFAULT_ENABLED_PROTOCOLS)
+    except Exception:
+        enabled_protocols = list(DEFAULT_ENABLED_PROTOCOLS)
+    enabled_protocols = sort_protocols_for_ui([p for p in enabled_protocols if p in PROTO])
+    if not enabled_protocols:
+        enabled_protocols = list(DEFAULT_ENABLED_PROTOCOLS)
+
+    default_protocol_meta = {
+        name: {
+            "proto_int": PROTO.get(name),
+            "enabled": name in enabled_protocols,
+            "supports_user_panel": bool(PROTOCOL_META.get(name, {}).get("supports_user_panel", False)),
+            "supports_pass_panel": bool(PROTOCOL_META.get(name, {}).get("supports_pass_panel", False)),
+            "color": PROTOCOL_META.get(name, {}).get("color", "#ffcc00"),
+        }
+        for name in PROTO.keys()
+    }
+    try:
+        protocol_meta = json.loads(protocol_meta_raw) if protocol_meta_raw else default_protocol_meta
+    except Exception:
+        protocol_meta = default_protocol_meta
+    return enabled_protocols, protocol_meta
+
 class GlobalStatsCache:
     def __init__(self):
         self.top_locations = []
@@ -96,15 +124,29 @@ class GlobalStatsCache:
         self.top_providers = []
         self.top_users = []
         self.top_ips = []
+        self.proto_stats = {}  # keyed by proto int: {0: {top_locations, ...}, ...}
         self.last_updated = None
 
     async def _refresh_cache(self):
         loop = asyncio.get_event_loop()
-        self.top_locations = await loop.run_in_executor(None, self._get_top_stats, "location")
-        self.top_passwords = await loop.run_in_executor(None, self._get_top_stats, "password")
-        self.top_providers = await loop.run_in_executor(None, self._get_top_stats, "isp")
-        self.top_users = await loop.run_in_executor(None, self._get_top_stats, "username")
-        self.top_ips = await loop.run_in_executor(None, self._get_top_stats, "ip")
+        # ALL leaderboards (existing tables, index-driven)
+        self.top_locations = await loop.run_in_executor(None, self._get_top_stats, "location", None)
+        self.top_passwords = await loop.run_in_executor(None, self._get_top_stats, "password", None)
+        self.top_providers = await loop.run_in_executor(None, self._get_top_stats, "isp", None)
+        self.top_users = await loop.run_in_executor(None, self._get_top_stats, "username", None)
+        self.top_ips = await loop.run_in_executor(None, self._get_top_stats, "ip", None)
+        # Per-protocol leaderboards — only query enabled protocols
+        enabled_protocols, _ = await load_protocol_runtime_config()
+        self.proto_stats = {}
+        for name in enabled_protocols:
+            proto_int = PROTO[name]
+            self.proto_stats[proto_int] = {
+                "top_locations": await loop.run_in_executor(None, self._get_top_stats, "location", proto_int),
+                "top_passwords": await loop.run_in_executor(None, self._get_top_stats, "password", proto_int),
+                "top_providers": await loop.run_in_executor(None, self._get_top_stats, "isp", proto_int),
+                "top_users":     await loop.run_in_executor(None, self._get_top_stats, "username", proto_int),
+                "top_ips":       await loop.run_in_executor(None, self._get_top_stats, "ip", proto_int),
+            }
         self.last_updated = datetime.now().strftime("%H:%M:%S")
 
     async def update_and_broadcast(self):
@@ -121,24 +163,34 @@ class GlobalStatsCache:
                 await self._refresh_cache()
                 print(f"📊 Stats Cache Updated: {self.last_updated}")
 
-                payload = await manager.get_initial_data()
+                payload = await manager.get_initial_data(include_protocol_config=False)
                 await manager.broadcast(json.dumps({"type": "init_stats", "data": payload}))
             except Exception as e:
                 print(f"❌ Cache Update Error: {e}")
 
-    def _get_top_stats(self, stat_type):
+    def _get_top_stats(self, stat_type, proto=None):
         """Synchronous helper for the executor - uses indexed intel tables."""
         conn = sqlite3.connect(DB_PATH, timeout=10)
         conn.row_factory = sqlite3.Row
         cur = conn.cursor()
-        queries = {
-            "location": "SELECT iso_code as iso, country, hits as count FROM country_intel ORDER BY hits DESC",
-            "password": "SELECT password as label, hits as count FROM pass_intel ORDER BY hits DESC LIMIT 100",
-            "username": "SELECT username as label, hits as count FROM user_intel ORDER BY hits DESC LIMIT 100",
-            "isp": "SELECT isp as label, hits as count FROM isp_intel ORDER BY hits DESC LIMIT 100",
-            "ip": "SELECT ip as label, hits as count FROM ip_intel ORDER BY hits DESC LIMIT 100",
-        }
-        cur.execute(queries[stat_type])
+        if proto is None:
+            queries = {
+                "location": "SELECT iso_code as iso, country, hits as count FROM country_intel ORDER BY hits DESC",
+                "password": "SELECT password as label, hits as count FROM pass_intel ORDER BY hits DESC LIMIT 100",
+                "username": "SELECT username as label, hits as count FROM user_intel ORDER BY hits DESC LIMIT 100",
+                "isp":      "SELECT isp as label, hits as count FROM isp_intel ORDER BY hits DESC LIMIT 100",
+                "ip":       "SELECT ip as label, hits as count FROM ip_intel ORDER BY hits DESC LIMIT 100",
+            }
+            cur.execute(queries[stat_type])
+        else:
+            queries = {
+                "location": "SELECT iso_code as iso, country, hits as count FROM country_intel_proto WHERE proto=? ORDER BY hits DESC",
+                "password": "SELECT password as label, hits as count FROM pass_intel_proto WHERE proto=? ORDER BY hits DESC LIMIT 100",
+                "username": "SELECT username as label, hits as count FROM user_intel_proto WHERE proto=? ORDER BY hits DESC LIMIT 100",
+                "isp":      "SELECT isp as label, hits as count FROM isp_intel_proto WHERE proto=? ORDER BY hits DESC LIMIT 100",
+                "ip":       "SELECT ip as label, hits as count FROM ip_intel_proto WHERE proto=? ORDER BY hits DESC LIMIT 100",
+            }
+            cur.execute(queries[stat_type], (proto,))
         rows = cur.fetchall()
         conn.close()
         return [dict(row) for row in rows]
@@ -162,24 +214,42 @@ class ConnectionManager:
         except Exception:
             return 0.0
 
-    async def get_recent_knocks(self, limit=10):
+    async def get_recent_knocks(self, key="knock:recent", limit=100):
         try:
-            raw = await r.lrange("knock:recent", 0, limit - 1)
+            raw = await r.lrange(key, 0, limit - 1)
             return [json.loads(item) for item in raw]
         except Exception as e:
-            print(f"Error fetching history: {e}")
+            print(f"Error fetching history ({key}): {e}")
             return []
 
-    async def get_initial_data(self):
+    async def get_initial_data(self, include_protocol_config=True):
         total_val = await r.get("knock:total_global")
+        uptime_val = await r.get("knock:uptime_minutes")
         last_knock_val = await r.get("knock:last_time")
         last_lat_val = await r.get("knock:last_lat")
         last_lng_val = await r.get("knock:last_lng")
         current_kpm = await self.get_kpm()
+        proto_counts_raw = await r.hgetall("knock:proto_counts")
+        enabled_protocols = []
+        protocol_meta = {}
+        if include_protocol_config:
+            enabled_protocols, protocol_meta = await load_protocol_runtime_config()
+        total_count = int(total_val) if total_val else 0
+        proto_breakdown = {}
+        for name in PROTO.keys():
+            count = int(proto_counts_raw.get(name, 0))
+            pct = round((count * 100.0 / total_count), 2) if total_count > 0 else 0.0
+            proto_breakdown[name] = {"count": count, "pct": pct}
 
-        return {
+        history = await self.get_recent_knocks("knock:recent")
+        proto_histories = {}
+        for name in PROTO_NAME.values():
+            proto_histories[name.lower()] = await self.get_recent_knocks(f"knock:recent:{name.lower()}")
+
+        payload = {
             "top_locations": stats_cache.top_locations,
             "total": int(total_val) if total_val else 0,
+            "uptime_minutes": int(uptime_val) if uptime_val else 0,
             "kpm": current_kpm,
             "last_knock_time": int(last_knock_val) if last_knock_val else None,
             "last_lat": float(last_lat_val) if last_lat_val else None,
@@ -188,23 +258,32 @@ class ConnectionManager:
             "top_providers": stats_cache.top_providers,
             "top_users": stats_cache.top_users,
             "top_ips": stats_cache.top_ips,
+            "proto_stats": {str(k): v for k, v in stats_cache.proto_stats.items()},
+            "proto_breakdown": proto_breakdown,
+            "proto_histories": proto_histories,
+            "history": history,
             "cache_ts": stats_cache.last_updated
         }
+        if include_protocol_config:
+            payload["enabled_protocols"] = enabled_protocols
+            payload["protocol_meta"] = protocol_meta
+        return payload
 
     async def connect(self, websocket: WebSocket):
         await websocket.accept()
         # The 100ms breather we discussed for Cloudflare stability
         await asyncio.sleep(0.1)
         self.active_connections.append(websocket)
-        
+
         try:
             stats = await self.get_initial_data()
-            history = await self.get_recent_knocks(100)
+            history = stats.get("history", [])
 
             payload = {
                 "type": "init_stats",
                 "data": {
                     "total": stats.get("total", 0),
+                    "uptime_minutes": stats.get("uptime_minutes", 0),
                     "kpm": stats.get("kpm", 0.0),
                     "last_knock_time": stats.get("last_knock_time"),
                     "last_lat": stats.get("last_lat"),
@@ -215,6 +294,11 @@ class ConnectionManager:
                     "top_providers": stats.get("top_providers", []),
                     "top_users": stats.get("top_users", []),
                     "top_ips": stats.get("top_ips", []),
+                    "proto_stats": stats.get("proto_stats", {}),
+                    "proto_breakdown": stats.get("proto_breakdown", {}),
+                    "enabled_protocols": stats.get("enabled_protocols", []),
+                    "protocol_meta": stats.get("protocol_meta", {}),
+                    "proto_histories": stats.get("proto_histories", {}),
                     "cache_ts": stats.get("cache_ts"),
                     "last_knock_stats": history[0] if history else None
                 }
@@ -245,12 +329,15 @@ async def redis_listener():
             data = json.loads(message["data"])
             data["kpm"] = await manager.get_kpm()
             total_val = await r.get("knock:total_global")
+            uptime_val = await r.get("knock:uptime_minutes")
             data["total_global"] = int(total_val) if total_val else 0
+            data["uptime_minutes"] = int(uptime_val) if uptime_val else 0
             payload = json.dumps({"type": "new_knock", "data": data})
             await manager.broadcast(payload)
 
 @app.on_event("startup")
 async def startup_event():
+    print("🚀 Knock-Knock Web Active...", flush=True)
     asyncio.create_task(redis_listener())
     asyncio.create_task(stats_cache.update_and_broadcast())
 

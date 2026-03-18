@@ -1,6 +1,7 @@
 import sys
 import subprocess
 import signal
+import queue
 import geoip2.database
 import redis
 import json
@@ -9,6 +10,8 @@ import os
 import threading
 import time
 import argparse
+import re
+import socket
 from datetime import datetime
 
 # --- Configuration ---
@@ -17,9 +20,145 @@ GEOIP_ASN_PATH = '/usr/share/GeoIP/GeoLite2-ASN.mmdb'
 DB_PATH = os.environ.get('DB_DIR', 'data') + '/knock_knock.db'
 BLOCKLIST_FILE = os.environ.get('DB_DIR', 'data') + '/blocklist.txt'
 
+from constants import PROTO, PROTO_NAME, PROTOCOL_META, DEFAULT_ENABLED_PROTOCOLS, sort_protocols_for_ui
+
+USER_PANEL_PROTOCOLS = {name for name, meta in PROTOCOL_META.items() if meta.get('supports_user_panel')}
+PASS_PANEL_PROTOCOLS = {name for name, meta in PROTOCOL_META.items() if meta.get('supports_pass_panel')}
+MAIL_FORENSICS_MAX = int(os.environ.get("MAIL_FORENSICS_MAX", "100"))
+
+def parse_enabled_protocols():
+    raw = os.environ.get("ENABLED_PROTOCOLS", "").strip()
+    if not raw:
+        return list(DEFAULT_ENABLED_PROTOCOLS)
+    enabled = []
+    for token in raw.split(','):
+        name = token.strip().upper()
+        if not name:
+            continue
+        if name not in PROTO:
+            print(f"⚠️ Ignoring unknown protocol in ENABLED_PROTOCOLS: {name}", flush=True)
+            continue
+        if name not in enabled:
+            enabled.append(name)
+    if not enabled:
+        print("⚠️ ENABLED_PROTOCOLS resolved to empty set; using defaults", flush=True)
+        return list(DEFAULT_ENABLED_PROTOCOLS)
+    return enabled
+
+def publish_protocol_config(redis_conn, enabled_protocols):
+    enabled = sort_protocols_for_ui([p for p in enabled_protocols if p in PROTO])
+    meta = {}
+    for name in PROTO.keys():
+        base = PROTOCOL_META.get(name, {})
+        meta[name] = {
+            "proto_int": PROTO.get(name),
+            "enabled": name in enabled,
+            "supports_user_panel": bool(base.get("supports_user_panel", False)),
+            "supports_pass_panel": bool(base.get("supports_pass_panel", False)),
+            "color": base.get("color", "#ffcc00"),
+        }
+    redis_conn.set("knock:config:enabled_protocols", json.dumps(enabled))
+    redis_conn.set("knock:config:protocol_meta", json.dumps(meta))
+
+def _discover_self_identifiers():
+    ips = set()
+    hosts = set()
+    host_suffixes = set()
+
+    # Explicit operator-provided aliases are always honored.
+    for key in ('REDACT_SELF_IPS', 'SERVER_IP', 'PUBLIC_IP', 'HOST_IP', 'HONEYPOT_IP'):
+        for v in os.environ.get(key, '').split(','):
+            v = v.strip()
+            if v:
+                ips.add(v)
+    for key in ('REDACT_SELF_HOSTS', 'SERVER_HOST', 'PUBLIC_HOST', 'HOST_FQDN', 'HONEYPOT_HOST'):
+        for v in os.environ.get(key, '').split(','):
+            v = v.strip().lower()
+            if v:
+                hosts.add(v)
+    for v in os.environ.get('REDACT_SELF_HOST_SUFFIXES', '').split(','):
+        v = v.strip().lower().lstrip('.')
+        if v:
+            host_suffixes.add(v)
+
+    # Auto-discover local hostnames.
+    try:
+        hn = socket.gethostname().strip().lower()
+        if hn:
+            hosts.add(hn)
+    except Exception:
+        pass
+    try:
+        fqn = socket.getfqdn().strip().lower()
+        if fqn:
+            hosts.add(fqn)
+    except Exception:
+        pass
+
+    # Auto-discover primary outbound IPv4 used by this host.
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+        s.close()
+        if ip:
+            ips.add(ip)
+    except Exception:
+        pass
+
+    # Auto-discover IPv4s bound/resolved to this hostname.
+    try:
+        for family, _, _, _, sockaddr in socket.getaddrinfo(socket.gethostname(), None):
+            if family == socket.AF_INET and sockaddr and sockaddr[0]:
+                ips.add(sockaddr[0])
+    except Exception:
+        pass
+    try:
+        for family, _, _, _, sockaddr in socket.getaddrinfo(socket.getfqdn(), None):
+            if family == socket.AF_INET and sockaddr and sockaddr[0]:
+                ips.add(sockaddr[0])
+    except Exception:
+        pass
+    try:
+        out = subprocess.check_output(["hostname", "-I"], text=True, stderr=subprocess.DEVNULL).strip()
+        for tok in out.split():
+            if re.fullmatch(r"(?:\d{1,3}\.){3}\d{1,3}", tok):
+                ips.add(tok)
+    except Exception:
+        pass
+
+    # Reverse lookup discovered IPs for host aliases.
+    for ip in list(ips):
+        try:
+            ptr = socket.gethostbyaddr(ip)[0].strip().lower()
+            if ptr:
+                hosts.add(ptr)
+        except Exception:
+            pass
+
+    return ips, hosts, host_suffixes
+
+def _build_self_redaction_patterns():
+    ips, hosts, host_suffixes = _discover_self_identifiers()
+    pats = []
+    # Hostnames first, then IPs, to avoid partial replacements inside host tokens.
+    for host in sorted(hosts, key=len, reverse=True):
+        pats.append((re.compile(re.escape(host), re.IGNORECASE), "<target-host>"))
+    for suffix in sorted(host_suffixes, key=len, reverse=True):
+        pats.append((re.compile(rf"[A-Za-z0-9._-]+\.{re.escape(suffix)}", re.IGNORECASE), "<target-host>"))
+    # Longest-first replacement avoids partial overlap artifacts.
+    for ip in sorted(ips, key=len, reverse=True):
+        pats.append((re.compile(re.escape(ip)), "<target-ip>"))
+        # Common dash-notation seen in hostnames (e.g. 1-2-3-4.example.tld).
+        dashed = ip.replace('.', '-')
+        if dashed != ip:
+            pats.append((re.compile(re.escape(dashed), re.IGNORECASE), "<target-ip>"))
+    return pats
+
+SELF_REDACTION_PATTERNS = _build_self_redaction_patterns()
+
 def reset_all():
-    """Wipes the SQLite database and clears relevant Redis keys.
-    NOTE: blocklist.txt and knock:blocked are intentionally preserved — use --reset-blocklist to clear them."""
+    """Wipes the SQLite database and clears relevant Redis keys."""
     print("🧹 Resetting all data as requested...")
     if os.path.exists(DB_PATH):
         try:
@@ -29,29 +168,13 @@ def reset_all():
             print(f"   [!] Error deleting {DB_PATH}: {e}")
     try:
         r = redis.Redis(host=os.environ.get('REDIS_HOST', 'localhost'), port=6379, db=0, decode_responses=True)
-        keys_to_clear = ["knock:total_global", "knock:uptime_minutes", "knock:last_time", "knock:last_lat", "knock:last_lng", "knock:recent"]
+        keys_to_clear = ["knock:total_global", "knock:proto_counts", "knock:uptime_minutes", "knock:last_time", "knock:last_lat", "knock:last_lng", "knock:recent",
+                         "knock:recent:ssh", "knock:recent:tnet", "knock:recent:smtp", "knock:recent:rdp", "knock:recent:mail", "knock:recent:ftp",
+                         "knock:recent:sip", "knock:diag:smtp587:no_knock", "knock:diag:smtp587:last", "knock:diag:smtp587:reason_counts",
+                         "knock:forensics:mail_raw", "knock:config:enabled_protocols", "knock:config:protocol_meta"]
         for key in keys_to_clear:
             r.delete(key)
         print("   [+] Cleared Redis keys")
-        print("   [i] Blocklist preserved (use --reset-blocklist to clear)")
-    except Exception as e:
-        print(f"   [!] Error clearing Redis: {e}")
-
-def reset_blocklist():
-    """Deletes blocklist.txt and clears knock:blocked from Redis."""
-    print("🧹 Resetting blocklist...")
-    if os.path.exists(BLOCKLIST_FILE):
-        try:
-            os.remove(BLOCKLIST_FILE)
-            print(f"   [+] Deleted {BLOCKLIST_FILE}")
-        except Exception as e:
-            print(f"   [!] Error deleting {BLOCKLIST_FILE}: {e}")
-    else:
-        print(f"   [i] {BLOCKLIST_FILE} does not exist, skipping")
-    try:
-        r = redis.Redis(host=os.environ.get('REDIS_HOST', 'localhost'), port=6379, db=0, decode_responses=True)
-        r.delete("knock:blocked")
-        print("   [+] Cleared knock:blocked from Redis")
     except Exception as e:
         print(f"   [!] Error clearing Redis: {e}")
 
@@ -62,8 +185,13 @@ def init_db():
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
         ip_address TEXT, iso_code TEXT, city TEXT, region TEXT, country TEXT, isp TEXT, asn INTEGER,
-        username TEXT, password TEXT
+        username TEXT, password TEXT, proto INTEGER
     )""")
+    # Migrate: add proto column to existing databases
+    knock_cols = [row[1] for row in cur.execute("PRAGMA table_info(knocks)").fetchall()]
+    if 'proto' not in knock_cols:
+        cur.execute("ALTER TABLE knocks ADD COLUMN proto INTEGER")
+        print("✅ Migrated knocks: added proto column")
     cur.execute("CREATE TABLE IF NOT EXISTS user_intel (username TEXT PRIMARY KEY, hits INTEGER, last_seen DATETIME)")
     cur.execute("CREATE TABLE IF NOT EXISTS pass_intel (password TEXT PRIMARY KEY, hits INTEGER, last_seen DATETIME)")
     cur.execute("CREATE TABLE IF NOT EXISTS country_intel (iso_code TEXT PRIMARY KEY, country TEXT, hits INTEGER, last_seen DATETIME)")
@@ -85,6 +213,17 @@ def init_db():
     cur.execute("CREATE INDEX IF NOT EXISTS idx_country_intel_hits ON country_intel(hits DESC)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_isp_intel_hits ON isp_intel(hits DESC)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_ip_intel_hits ON ip_intel(hits DESC)")
+    # Per-protocol intel tables (composite PK: value + proto)
+    cur.execute("CREATE TABLE IF NOT EXISTS user_intel_proto (username TEXT, proto INTEGER, hits INTEGER, last_seen DATETIME, PRIMARY KEY (username, proto))")
+    cur.execute("CREATE TABLE IF NOT EXISTS pass_intel_proto (password TEXT, proto INTEGER, hits INTEGER, last_seen DATETIME, PRIMARY KEY (password, proto))")
+    cur.execute("CREATE TABLE IF NOT EXISTS country_intel_proto (iso_code TEXT, proto INTEGER, country TEXT, hits INTEGER, last_seen DATETIME, PRIMARY KEY (iso_code, proto))")
+    cur.execute("CREATE TABLE IF NOT EXISTS isp_intel_proto (isp TEXT, proto INTEGER, hits INTEGER, last_seen DATETIME, asn INTEGER, PRIMARY KEY (isp, proto))")
+    cur.execute("CREATE TABLE IF NOT EXISTS ip_intel_proto (ip TEXT, proto INTEGER, hits INTEGER, last_seen DATETIME, lat REAL, lng REAL, PRIMARY KEY (ip, proto))")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_user_intel_proto_hits ON user_intel_proto(proto, hits DESC)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_pass_intel_proto_hits ON pass_intel_proto(proto, hits DESC)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_country_intel_proto_hits ON country_intel_proto(proto, hits DESC)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_isp_intel_proto_hits ON isp_intel_proto(proto, hits DESC)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_ip_intel_proto_hits ON ip_intel_proto(proto, hits DESC)")
     cur.execute("PRAGMA journal_mode=WAL")
     conn.commit()
     conn.close()
@@ -102,21 +241,31 @@ def heartbeat_worker(redis_conn):
             print(f"❌ Heartbeat Error: {e}")
         time.sleep(60)
 
-def log_to_maximalist_db(data, save_knocks=True):
+def log_to_enriched_db(data, save_knocks=True):
     conn = sqlite3.connect(DB_PATH, timeout=10)
     cur = conn.cursor()
     try:
         if save_knocks:
-            cur.execute("""INSERT INTO knocks (ip_address, iso_code, city, region, country, isp, asn, username, password)
-                           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                        (data['ip'], data['iso'], data['city'], data.get('region'), data['country'], data['isp'], data.get('asn'), data['user'], data['pass']))
+            cur.execute("""INSERT INTO knocks (ip_address, iso_code, city, region, country, isp, asn, username, password, proto)
+                           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                        (data['ip'], data['iso'], data['city'], data.get('region'), data['country'], data['isp'], data.get('asn'), data.get('user'), data.get('pass'),
+                         PROTO.get(data.get('proto', 'SSH'), 0)))
         now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        cur.execute("INSERT INTO user_intel VALUES (?, 1, ?) ON CONFLICT(username) DO UPDATE SET hits=hits+1, last_seen=?", (data['user'], now, now))
-        cur.execute("INSERT INTO pass_intel VALUES (?, 1, ?) ON CONFLICT(password) DO UPDATE SET hits=hits+1, last_seen=?", (data['pass'], now, now))
+        proto_int = PROTO.get(data.get('proto', 'SSH'), 0)
+        if data.get('user') is not None:
+            cur.execute("INSERT INTO user_intel VALUES (?, 1, ?) ON CONFLICT(username) DO UPDATE SET hits=hits+1, last_seen=?", (data['user'], now, now))
+            cur.execute("INSERT INTO user_intel_proto VALUES (?, ?, 1, ?) ON CONFLICT(username, proto) DO UPDATE SET hits=hits+1, last_seen=?", (data['user'], proto_int, now, now))
+        if data.get('pass') is not None:
+            cur.execute("INSERT INTO pass_intel VALUES (?, 1, ?) ON CONFLICT(password) DO UPDATE SET hits=hits+1, last_seen=?", (data['pass'], now, now))
+            cur.execute("INSERT INTO pass_intel_proto VALUES (?, ?, 1, ?) ON CONFLICT(password, proto) DO UPDATE SET hits=hits+1, last_seen=?", (data['pass'], proto_int, now, now))
         cur.execute("INSERT INTO country_intel VALUES (?, ?, 1, ?) ON CONFLICT(iso_code) DO UPDATE SET hits=hits+1, last_seen=?, country=?", (data['iso'], data['country'], now, now, data['country']))
         cur.execute("INSERT INTO isp_intel VALUES (?, 1, ?, ?) ON CONFLICT(isp) DO UPDATE SET hits=hits+1, last_seen=?, asn=?", (data['isp'], now, data.get('asn'), now, data.get('asn')))
         cur.execute("INSERT INTO ip_intel VALUES (?, 1, ?, ?, ?) ON CONFLICT(ip) DO UPDATE SET hits=hits+1, last_seen=?, lat=?, lng=?",
                     (data['ip'], now, data.get('lat'), data.get('lng'), now, data.get('lat'), data.get('lng')))
+        cur.execute("INSERT INTO country_intel_proto VALUES (?, ?, ?, 1, ?) ON CONFLICT(iso_code, proto) DO UPDATE SET hits=hits+1, last_seen=?, country=?", (data['iso'], proto_int, data['country'], now, now, data['country']))
+        cur.execute("INSERT INTO isp_intel_proto VALUES (?, ?, 1, ?, ?) ON CONFLICT(isp, proto) DO UPDATE SET hits=hits+1, last_seen=?, asn=?", (data['isp'], proto_int, now, data.get('asn'), now, data.get('asn')))
+        cur.execute("INSERT INTO ip_intel_proto VALUES (?, ?, 1, ?, ?, ?) ON CONFLICT(ip, proto) DO UPDATE SET hits=hits+1, last_seen=?, lat=?, lng=?",
+                    (data['ip'], proto_int, now, data.get('lat'), data.get('lng'), now, data.get('lat'), data.get('lng')))
         conn.commit()
     finally:
         conn.close()
@@ -126,31 +275,150 @@ def get_intel_stats_before_update(data):
     conn = sqlite3.connect(DB_PATH, timeout=10)
     cur = conn.cursor()
     stats = {}
+    proto_int = PROTO.get(data.get('proto', 'SSH'), 0)
     try:
         cur.execute("SELECT hits, last_seen FROM country_intel WHERE iso_code=?", (data['iso'],))
         row = cur.fetchone()
         stats['country_hits'], stats['country_last'] = (row[0] + 1, row[1]) if row else (1, None)
-
-        cur.execute("SELECT hits, last_seen FROM user_intel WHERE username=?", (data['user'],))
+        cur.execute("SELECT hits, last_seen FROM country_intel_proto WHERE iso_code=? AND proto=?", (data['iso'], proto_int))
         row = cur.fetchone()
-        stats['user_hits'], stats['user_last'] = (row[0] + 1, row[1]) if row else (1, None)
+        stats['country_hits_proto'], stats['country_last_proto'] = (row[0] + 1, row[1]) if row else (1, None)
 
-        cur.execute("SELECT hits, last_seen FROM pass_intel WHERE password=?", (data['pass'],))
-        row = cur.fetchone()
-        stats['pass_hits'], stats['pass_last'] = (row[0] + 1, row[1]) if row else (1, None)
+        if data.get('user') is not None:
+            cur.execute("SELECT hits, last_seen FROM user_intel WHERE username=?", (data['user'],))
+            row = cur.fetchone()
+            stats['user_hits'], stats['user_last'] = (row[0] + 1, row[1]) if row else (1, None)
+            cur.execute("SELECT hits, last_seen FROM user_intel_proto WHERE username=? AND proto=?", (data['user'], proto_int))
+            row = cur.fetchone()
+            stats['user_hits_proto'], stats['user_last_proto'] = (row[0] + 1, row[1]) if row else (1, None)
+
+        if data.get('pass') is not None:
+            cur.execute("SELECT hits, last_seen FROM pass_intel WHERE password=?", (data['pass'],))
+            row = cur.fetchone()
+            stats['pass_hits'], stats['pass_last'] = (row[0] + 1, row[1]) if row else (1, None)
+            cur.execute("SELECT hits, last_seen FROM pass_intel_proto WHERE password=? AND proto=?", (data['pass'], proto_int))
+            row = cur.fetchone()
+            stats['pass_hits_proto'], stats['pass_last_proto'] = (row[0] + 1, row[1]) if row else (1, None)
 
         cur.execute("SELECT hits, last_seen FROM isp_intel WHERE isp=?", (data['isp'],))
         row = cur.fetchone()
         stats['isp_hits'], stats['isp_last'] = (row[0] + 1, row[1]) if row else (1, None)
+        cur.execute("SELECT hits, last_seen FROM isp_intel_proto WHERE isp=? AND proto=?", (data['isp'], proto_int))
+        row = cur.fetchone()
+        stats['isp_hits_proto'], stats['isp_last_proto'] = (row[0] + 1, row[1]) if row else (1, None)
 
         cur.execute("SELECT hits, last_seen FROM ip_intel WHERE ip=?", (data['ip'],))
         row = cur.fetchone()
         stats['ip_hits'], stats['ip_last'] = (row[0] + 1, row[1]) if row else (1, None)
+        cur.execute("SELECT hits, last_seen FROM ip_intel_proto WHERE ip=? AND proto=?", (data['ip'], proto_int))
+        row = cur.fetchone()
+        stats['ip_hits_proto'], stats['ip_last_proto'] = (row[0] + 1, row[1]) if row else (1, None)
     finally:
         conn.close()
     return stats
 
-def get_geo_maximal(ip, city_reader, asn_reader):
+def sanitize_credential(s):
+    if not s:
+        return s
+    if '\ufffd' in s or not s.isprintable():
+        return '<cryptic binary>'
+    for pat, replacement in SELF_REDACTION_PATTERNS:
+        s = pat.sub(replacement, s)
+    return s
+
+def sanitize_body(s, max_len=2000):
+    """Preserve readable multiline text while stripping non-printable control chars."""
+    if not s:
+        return s
+    out = []
+    for ch in s:
+        if ch in ('\n', '\r', '\t') or ch.isprintable():
+            out.append(ch)
+    clean = ''.join(out)
+    for pat, replacement in SELF_REDACTION_PATTERNS:
+        clean = pat.sub(replacement, clean)
+    return clean[:max_len]
+
+def build_smtp_diag(knock):
+    return {
+        "proto": "SMTP",
+        "ip": knock.get("ip"),
+        "session_id": knock.get("session_id"),
+        "event": sanitize_credential(str(knock.get("event", ""))),
+        "duration_ms": int(knock.get("duration_ms", 0) or 0),
+        "commands_seen": int(knock.get("commands_seen", 0) or 0),
+        "stop_reason": sanitize_credential(str(knock.get("stop_reason", ""))),
+        "no_knock_reason": sanitize_credential(str(knock.get("no_knock_reason", ""))),
+        "no_knock_detail": sanitize_credential(str(knock.get("no_knock_detail", ""))),
+        "last_cmd": sanitize_credential(str(knock.get("last_cmd", ""))),
+        "tls_active": bool(knock.get("tls_active", False)),
+        "authed": bool(knock.get("authed", False)),
+        "saw_starttls": bool(knock.get("saw_starttls", False)),
+        "saw_auth": bool(knock.get("saw_auth", False)),
+        "saw_mail": bool(knock.get("saw_mail", False)),
+        "saw_rcpt": bool(knock.get("saw_rcpt", False)),
+        "saw_data": bool(knock.get("saw_data", False)),
+        "ts": int(time.time()),
+    }
+
+def store_smtp_diag(redis_conn, diag):
+    redis_conn.lpush("knock:diag:smtp587:no_knock", json.dumps(diag))
+    redis_conn.ltrim("knock:diag:smtp587:no_knock", 0, 499)
+    redis_conn.set("knock:diag:smtp587:last", json.dumps(diag))
+    if diag["no_knock_reason"]:
+        redis_conn.hincrby("knock:diag:smtp587:reason_counts", diag["no_knock_reason"], 1)
+    print(
+        f"🧪 SMTP587 no-knock {diag['ip']} | reason={diag['no_knock_reason']} "
+        f"stop={diag['stop_reason']} cmds={diag['commands_seen']}",
+        flush=True,
+    )
+
+def build_mail_forensic(knock, proto, ip):
+    mail_from = knock.get("mail_from", knock.get("smtp_mail_from"))
+    mail_to = knock.get("mail_to", knock.get("smtp_rcpt_to"))
+    subject = knock.get("subject")
+    body = knock.get("body")
+    if proto not in ("SMTP", "MAIL"):
+        return None
+    if not any(v is not None for v in (mail_from, mail_to, subject, body)):
+        return None
+    return {
+        "ts": int(time.time()),
+        "proto": proto,
+        "ip": ip,
+        "session_id": knock.get("session_id"),
+        "mail_from": str(mail_from) if mail_from is not None else None,
+        "mail_to": str(mail_to) if mail_to is not None else None,
+        "subject": str(subject) if subject is not None else None,
+        "body": str(body) if body is not None else None,
+    }
+
+def store_mail_forensic(redis_conn, forensic):
+    if not forensic:
+        return
+    redis_conn.lpush("knock:forensics:mail_raw", json.dumps(forensic))
+    redis_conn.ltrim("knock:forensics:mail_raw", 0, max(0, MAIL_FORENSICS_MAX - 1))
+
+def is_over_limit_and_block(redis_conn, ip, projected_hits, max_knocks):
+    if not max_knocks:
+        return False
+    if projected_hits <= max_knocks:
+        return False
+    if not redis_conn.sismember("knock:blocked", ip):
+        add_to_blocklist(ip, redis_conn)
+    print(f"⛔ Dropped knock from over-limit IP {ip} ({projected_hits}>{max_knocks})", flush=True)
+    return True
+
+def format_cred_summary(user, pw):
+    if user is not None and pw is not None:
+        return f"{user}:{pw}"
+    if user is not None:
+        return f"user={user}"
+    if pw is not None:
+        return f"pass={pw}"
+    return "no-credentials"
+
+def get_geo_enriched(ip, city_reader, asn_reader):
     geo = {"iso": "XX", "country": "Unknown", "city": "Unknown", "region": None, "isp": "Unknown", "asn": None, "lat": None, "lng": None}
     try:
         if city_reader:
@@ -184,6 +452,9 @@ def add_to_blocklist(ip, r):
 def monitor(save_knocks=False, max_knocks=None):
     init_db()
     r = redis.Redis(host=os.environ.get('REDIS_HOST', 'localhost'), port=6379, db=0, decode_responses=True)
+    enabled_protocols = parse_enabled_protocols()
+    publish_protocol_config(r, enabled_protocols)
+    print(f"🧭 Enabled protocols: {', '.join(enabled_protocols)}", flush=True)
     while True:
         try:
             c_reader = geoip2.database.Reader(GEOIP_CITY_PATH)
@@ -194,7 +465,7 @@ def monitor(save_knocks=False, max_knocks=None):
             print(f"⏳ Waiting for GeoIP databases... ({e})")
             time.sleep(5)
 
-    # Seed knock:blocked Redis set from blocklist file
+    # Seed knock:blocked Redis set from blocklist file BEFORE spawning honeypots
     if os.path.exists(BLOCKLIST_FILE):
         try:
             with open(BLOCKLIST_FILE) as f:
@@ -211,79 +482,156 @@ def monitor(save_knocks=False, max_knocks=None):
         total = conn.execute("SELECT SUM(hits) FROM ip_intel").fetchone()[0] or 0
         uptime = conn.execute("SELECT uptime_minutes FROM monitor_heartbeats WHERE id=1").fetchone()
         uptime = uptime[0] if uptime else 0
+        proto_rows = conn.execute("SELECT proto, SUM(hits) AS c FROM ip_intel_proto GROUP BY proto").fetchall()
         conn.close()
         r.set("knock:total_global", total)
+        r.delete("knock:proto_counts")
+        for proto_int, count in proto_rows:
+            proto_name = PROTO_NAME.get(proto_int)
+            if proto_name:
+                r.hset("knock:proto_counts", proto_name, int(count))
+        for proto_name in PROTO.keys():
+            if not r.hexists("knock:proto_counts", proto_name):
+                r.hset("knock:proto_counts", proto_name, 0)
         if not r.get("knock:uptime_minutes"):
             r.set("knock:uptime_minutes", uptime)
     except Exception as e:
         print(f"⚠️ Could not seed totals from SQLite: {e}")
 
-    # Spawn honeypot as a subprocess and read from its stdout
-    honeypot_proc = subprocess.Popen(
-        [sys.executable, "-u", "honeypot.py"],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        text=True
-    )
-    input_stream = honeypot_proc.stdout
+    # Spawn enabled honeypots as subprocesses
+    honeypots = {}
+    for proto in enabled_protocols:
+        script = PROTOCOL_META.get(proto, {}).get("honeypot_script")
+        if not script:
+            print(f"⚠️ No honeypot script configured for protocol {proto}; skipping", flush=True)
+            continue
+        honeypots[proto] = subprocess.Popen(
+            [sys.executable, "-u", script],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+        )
+    if not honeypots:
+        print("❌ No honeypots enabled after parsing ENABLED_PROTOCOLS", flush=True)
+        sys.exit(1)
 
-    # If monitor is killed, take honeypot down too
+    knock_queue = queue.Queue()
+
+    def pipe_reader(proc, name):
+        for line in proc.stdout:
+            knock_queue.put(line)
+        code = proc.wait()
+        print(f"⚠️ {name} honeypot exited (code {code}), shutting down")
+        knock_queue.put(None)  # sentinel — signals main loop to shut down
+
+    for name, proc in honeypots.items():
+        threading.Thread(target=pipe_reader, args=(proc, name), daemon=True).start()
+
+    # If monitor is killed, take all honeypots down too
     def cleanup(signum, frame):
-        honeypot_proc.terminate()
+        for proc in honeypots.values():
+            proc.terminate()
         sys.exit(0)
     signal.signal(signal.SIGTERM, cleanup)
     signal.signal(signal.SIGINT, cleanup)
 
     threading.Thread(target=heartbeat_worker, args=(r,), daemon=True).start()
 
-    print("🚀 Maximalist Monitor Active...")
+    print("🚀 Knock-Knock Monitor Active...")
 
-    for line in input_stream:
+    while True:
+        line = knock_queue.get()
+        if line is None:  # a honeypot exited — terminate all and let systemd restart us
+            for proc in honeypots.values():
+                proc.terminate()
+            sys.exit(1)
         try:
             knock = json.loads(line)
         except (json.JSONDecodeError, ValueError):
+            print(line, end='', flush=True)  # pass through diagnostic output from honeypots
+            continue
+        if knock.get("type") == "SMTP_DIAG":
+            store_smtp_diag(r, build_smtp_diag(knock))
             continue
         if knock.get("type") == "KNOCK":
-            ip, user, pw = knock["ip"], knock["user"], knock["pass"]
-            geo = get_geo_maximal(ip, c_reader, a_reader)
+            proto = str(knock.get("proto", "SSH")).upper()
+            ip = knock["ip"]
+            forensic = build_mail_forensic(knock, proto, ip)
+            raw_user = knock.get("user")
+            raw_pass = knock.get("pass")
+            user = sanitize_credential(raw_user if isinstance(raw_user, str) else str(raw_user)) if proto in USER_PANEL_PROTOCOLS and raw_user is not None else None
+            pw = sanitize_credential(raw_pass if isinstance(raw_pass, str) else str(raw_pass)) if proto in PASS_PANEL_PROTOCOLS and raw_pass is not None else None
+            geo = get_geo_enriched(ip, c_reader, a_reader)
             package = {
                 "ip": ip, "user": user, "pass": pw,
+                "proto": proto,
                 "city": geo['city'], "region": geo['region'], "country": geo['country'],
                 "iso": geo['iso'], "isp": geo['isp'], "asn": geo['asn'],
                 "lat": geo['lat'], "lng": geo['lng']
             }
+            if user is None:
+                package.pop("user")
+            if pw is None:
+                package.pop("pass")
+            if knock.get("subject"):
+                package["subject"] = sanitize_credential(str(knock["subject"]))
+            if knock.get("body"):
+                package["body"] = sanitize_body(knock.get("body"))
+            if proto == "RDP":
+                raw_domain = knock.get("domain")
+                if raw_domain is not None:
+                    domain = sanitize_credential(str(raw_domain))
+                    if domain:
+                        package["rdp_domain"] = domain
+            # Pass through protocol-specific extended telemetry into Redis/websocket payloads.
+            # This is intentionally not persisted in SQLite.
+            for k, v in knock.items():
+                if not isinstance(k, str) or not k.startswith(("sip_", "smtp_", "mail_", "smb_", "rdp_")):
+                    continue
+                if isinstance(v, str):
+                    package[k] = sanitize_credential(v)
+                elif isinstance(v, (int, float, bool)) or v is None:
+                    package[k] = v
+                else:
+                    package[k] = sanitize_credential(str(v))
             try:
                 package.update(get_intel_stats_before_update(package))
-                log_to_maximalist_db(package, save_knocks=save_knocks)
+                projected_hits = int(package.get('ip_hits', 0) or 0)
+                if is_over_limit_and_block(r, ip, projected_hits, max_knocks):
+                    continue
+                store_mail_forensic(r, forensic)
+                log_to_enriched_db(package, save_knocks=save_knocks)
             except Exception as e:
-                print(f"⚠️ DB error (knock skipped): {e}")
+                print(f"⚠️ DB error (knock dropped): {e}", flush=True)
+                continue
             r.lpush("knock:recent", json.dumps(package))
             r.ltrim("knock:recent", 0, 99)
+            proto_key = "knock:recent:" + package['proto'].lower()
+            r.lpush(proto_key, json.dumps(package))
+            r.ltrim(proto_key, 0, 99)
             r.incr("knock:total_global")
+            r.hincrby("knock:proto_counts", package['proto'], 1)
             r.set("knock:last_time", int(time.time()))
             if geo['lat'] is not None:
                 r.set("knock:last_lat", geo['lat'])
                 r.set("knock:last_lng", geo['lng'])
             r.publish("radiation_stream", json.dumps(package))
-            print(f"📡 {geo['iso']} | {user}:{pw} via {geo['isp']}")
-            if max_knocks and package.get('ip_hits', 0) >= max_knocks and not r.sismember("knock:blocked", ip):
+            if package.get("subject"):
+                left = user if user is not None else package.get("mail_from", package.get("smtp_mail_from", "<none>"))
+                right = pw if pw is not None else package.get("mail_to", package.get("smtp_rcpt_to", "<none>"))
+                print(f"📧 MAIL {geo['iso']} | {left} → {right} | {package['subject'][:60]} via {geo['isp']}")
+            else:
+                cred = format_cred_summary(user, pw)
+                print(f"📡 {proto} {geo['iso']} | {cred} via {geo['isp']}")
+            if max_knocks and int(package.get('ip_hits', 0) or 0) >= max_knocks and not r.sismember("knock:blocked", ip):
                 add_to_blocklist(ip, r)
-
-    # Honeypot exited — log why and exit so systemd restarts us
-    exit_code = honeypot_proc.wait()
-    print(f"⚠️ Honeypot process exited (code {exit_code}), shutting down")
-    sys.exit(1)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Knock-Knock Monitor")
-    parser.add_argument("--reset-all", action="store_true", help="Delete DB and clear Redis (blocklist is preserved; use --reset-blocklist to clear it)")
-    parser.add_argument("--reset-blocklist", action="store_true", help="Delete blocklist.txt and clear knock:blocked from Redis")
+    parser.add_argument("--reset-all", action="store_true", help="Delete DB and clear Redis")
     parser.add_argument("--save-knocks", action="store_true", help="Save individual knocks to SQLite (off by default)")
     parser.add_argument("--max-knocks", type=int, default=None, metavar="N",
-                        help="Auto-add IP to blocklist after N knocks (default: disabled). "
-                             "Counts against all-time ip_intel hits, so existing high-hit IPs "
-                             "will be blocked on their next knock.")
+                        help="Auto-add IP to blocklist after N knocks (default: disabled)")
     args = parser.parse_args()
     if args.reset_all: reset_all()
-    if args.reset_blocklist: reset_blocklist()
     monitor(save_knocks=args.save_knocks, max_knocks=args.max_knocks)

@@ -172,8 +172,9 @@
 
         @keyframes pulse-green { 0% { background: rgba(0, 255, 65, 0.4); } 100% { background: transparent; } }
         @keyframes latest-proto-fade {
-            0%   { opacity: 1; }
-            100% { opacity: 0; }
+            0%    { opacity: 1; }
+            16.67% { opacity: 1; }
+            100%  { opacity: 0; }
         }
 
         .status-dot { height: 14px; width: 14px; border-radius: 50%; background: var(--hazard-red); display: inline-block; vertical-align: 0.2em; margin-left: 10px; }
@@ -237,7 +238,7 @@
             .d-latest-proto-chip.is-visible {
                 opacity: 1;
                 box-shadow: 0 0 6px 1px var(--latest-proto-glow, rgba(255, 204, 0, 0.55));
-                animation: latest-proto-fade var(--chip-fade-ms, 3000ms) linear forwards;
+                animation: latest-proto-fade var(--pulse-duration, 3000ms) linear forwards;
             }
 
             .d-header-content { position: relative; display: flex; justify-content: space-between; align-items: flex-start; }
@@ -418,7 +419,7 @@
             .m-fixed-proto-chip.is-visible {
                 opacity: 1;
                 box-shadow: 0 0 6px 1px var(--m-fixed-proto-glow, rgba(255, 204, 0, 0.45));
-                animation: latest-proto-fade var(--chip-fade-ms, 3000ms) linear forwards;
+                animation: latest-proto-fade var(--pulse-duration, 3000ms) linear forwards;
             }
             #globe-container { width: 85px; height: 85px; cursor: pointer; }
             #globe-container canvas { width: 100% !important; height: 100% !important; }
@@ -955,7 +956,6 @@
         chip.style.borderColor = color;
         chip.style.color = color;
         chip.style.setProperty(cfg.glowVar, hexToRgba(color, 0.55));
-        chip.style.setProperty('--chip-fade-ms', `${PULSE_TIMEOUT_MS}ms`);
         chip.classList.remove('is-visible');
         void chip.offsetWidth;
         chip.classList.add('is-visible');

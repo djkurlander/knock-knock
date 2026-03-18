@@ -590,7 +590,7 @@
                 <div class="d-stats-wrap">
                     <div class="d-stats-block">
                         <div class="d-stats">
-                            <span class="stat-label">Total Knocks:</span>&nbsp;<span id="d-total" class="stat-value">0</span>
+                            <span id="d-total-label" class="stat-label">Total Knocks:</span>&nbsp;<span id="d-total" class="stat-value">0</span>
                         </div>
                         <div class="d-stats">
                             <span class="stat-label">Per Min:</span>&nbsp;<span id="d-kpm" class="stat-value">0.00</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="stat-label">AGO:</span>&nbsp;<span id="d-since" class="stat-value">-</span>
@@ -646,7 +646,7 @@
                 <h1>BOTS ARE KNOCKING <span class="status-dot"></span></h1>
                 <div style="font-size: 0.85em; color: var(--neon-green); margin-top: -2px; margin-bottom: 8px; font-style: italic;">... BUT THEY CAN'T COME IN. &nbsp;<span id="m-header-sound" style="font-style:normal; cursor:pointer;">🔈</span></div>
                 <div class="m-stat-row">
-                    <span class="stat-label">Total Knocks:</span>&nbsp;<span id="m-total" class="stat-value">0</span>
+                    <span id="m-total-label" class="stat-label">Total Knocks:</span>&nbsp;<span id="m-total" class="stat-value">0</span>
                 </div>
                 <div class="m-stat-row">
                     <span class="stat-label">Per Min:</span>&nbsp;<span id="m-kpm" class="stat-value">0.00</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="stat-label">AGO:</span>&nbsp;<span id="m-since" class="stat-value">-</span>
@@ -716,7 +716,9 @@
     let soundEnabled = localStorage.getItem('soundEnabled') === 'true';
 
     // --- DEBUG OVERLAY (add ?debug to URL to enable) ---
-    const DEBUG = new URLSearchParams(window.location.search).has('debug');
+    const URL_PARAMS = new URLSearchParams(window.location.search);
+    const DEBUG = URL_PARAMS.has('debug');
+    const SHOW_PARAM = URL_PARAMS.get('show');
     let debugDiv = null;
     let knockCount = 0;
     const DEBUG_STORAGE_KEY = 'knock_debug_log';
@@ -875,6 +877,44 @@
     };
     const USER_PANEL_INDEX = 3;
     const PASS_PANEL_INDEX = 4;
+    const PROTO_STATS_PANEL_INDEX = 8;
+
+    let activeProtocols = [];
+    let classicView = false;
+    let isFiltered = false;
+    let showProtocolSwitcher  = true;
+    let showProtoCycleButtons = true;
+    let showProtoChip         = true;
+    let showProtoBadges       = true;
+    let showProtoStatsPane    = true;
+    let showUsernamePanel     = true;
+    let showPasswordPanel     = true;
+    const lastKnockTimeByProto = {};
+
+    function getFilteredTotal() {
+        let sum = 0;
+        activeProtocols.forEach(p => { sum += Number(protoBreakdownCache?.[p]?.count || 0); });
+        return sum;
+    }
+
+    function getFilteredKpm() {
+        const mins = Number(uptimeMinutesCache) || 0;
+        return mins > 0 ? (getFilteredTotal() / mins).toFixed(2) : '0.00';
+    }
+
+    function getFilteredLastKnockTime() {
+        let latest = null;
+        activeProtocols.forEach(p => {
+            const t = lastKnockTimeByProto[p];
+            if (t && (latest === null || t > latest)) latest = t;
+        });
+        return latest;
+    }
+
+    function updateHeaderStats(total, kpm) {
+        ['d-total', 'm-total'].forEach(id => document.getElementById(id).innerText = total.toLocaleString());
+        ['d-kpm', 'm-kpm'].forEach(id => document.getElementById(id).innerText = kpm);
+    }
 
     function hasUserField(d) {
         return d && d.user !== undefined && d.user !== null;
@@ -894,7 +934,7 @@
 
     function ensureFeedBuckets() {
         if (!feedData.ALL) feedData.ALL = [];
-        TRACKED_PROTOCOLS.forEach(p => {
+        (activeProtocols.length ? activeProtocols : TRACKED_PROTOCOLS).forEach(p => {
             if (!feedData[p]) feedData[p] = [];
         });
         Object.keys(feedData).forEach(p => {
@@ -913,15 +953,58 @@
         PROTO_INT = Object.fromEntries(
             Object.keys(DEFAULT_PROTOCOL_META).map(p => [p, Number(SERVER_PROTOCOL_META[p]?.proto_int ?? DEFAULT_PROTOCOL_META[p].proto_int)])
         );
-        USERNAME_PROTOCOLS = new Set(TRACKED_PROTOCOLS.filter(p => Boolean(SERVER_PROTOCOL_META[p]?.supports_user_panel)));
-        PASSWORD_PROTOCOLS = new Set(TRACKED_PROTOCOLS.filter(p => Boolean(SERVER_PROTOCOL_META[p]?.supports_pass_panel)));
         PROTO_COLORS = { ...DEFAULT_PROTO_COLORS };
         TRACKED_PROTOCOLS.forEach(p => {
             const c = SERVER_PROTOCOL_META[p]?.color;
             if (typeof c === 'string' && c) PROTO_COLORS[p] = c;
         });
-        PROTO_MODES = ['ALL', ...TRACKED_PROTOCOLS];
+
+        // Compute activeProtocols from ?show param
+        activeProtocols = TRACKED_PROTOCOLS;
+        if (SHOW_PARAM) {
+            const requested = SHOW_PARAM.split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
+            const intersection = requested.filter(p => TRACKED_PROTOCOLS.includes(p));
+            if (intersection.length > 0) activeProtocols = intersection;
+        }
+
+        // Derive view mode and feature flags
+        classicView = activeProtocols.length === 1;
+        isFiltered = activeProtocols.length < TRACKED_PROTOCOLS.length;
+        showProtocolSwitcher  = !classicView;
+        showProtoCycleButtons = !classicView;
+        showProtoChip         = !classicView;
+        showProtoBadges       = !classicView;
+        showProtoStatsPane    = !classicView;
+
+        // Update header knock label
+        const knockLabel = classicView ? `${activeProtocols[0]} Knocks:` : 'Total Knocks:';
+        ['d-total-label', 'm-total-label'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.textContent = knockLabel;
+        });
+
+        // Panel visibility based on protocol capabilities
+        USERNAME_PROTOCOLS = new Set(activeProtocols.filter(p => Boolean(SERVER_PROTOCOL_META[p]?.supports_user_panel)));
+        PASSWORD_PROTOCOLS = new Set(activeProtocols.filter(p => Boolean(SERVER_PROTOCOL_META[p]?.supports_pass_panel)));
+        showUsernamePanel = activeProtocols.some(p => Boolean(SERVER_PROTOCOL_META[p]?.supports_user_panel));
+        showPasswordPanel = activeProtocols.some(p => Boolean(SERVER_PROTOCOL_META[p]?.supports_pass_panel));
+
+        if (classicView) {
+            PROTO_MODES = [activeProtocols[0]];
+            protoModeIdx = 0;
+        } else {
+            PROTO_MODES = ['ALL', ...activeProtocols];
+        }
         if (protoModeIdx >= PROTO_MODES.length) protoModeIdx = 0;
+
+        // Hide proto chip elements in classic mode
+        if (!showProtoChip) {
+            ['d-latest-proto-chip', 'm-fixed-proto-chip'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.style.display = 'none';
+            });
+        }
+
         ensureFeedBuckets();
         renderDesktopProtocolSwitcher();
     }
@@ -931,6 +1014,10 @@
     }
 
     function applyProtoButtons(mode = getCurrentMode()) {
+        if (!showProtoCycleButtons) {
+            document.querySelectorAll('.proto-cycle-btn').forEach(el => el.style.display = 'none');
+            return;
+        }
         const modeColor = PROTO_COLORS[mode] || PROTO_COLORS.ALL;
         const glowColor = hexToRgba(modeColor, 0.7);
         document.querySelectorAll('.proto-cycle-btn').forEach(el => {
@@ -1051,22 +1138,31 @@
         const desktopAnchorBefore = desktopBoxesBefore[desktopCurrentIdx] || null;
         const desktopAnchorLeftBefore = desktopAnchorBefore ? desktopAnchorBefore.getBoundingClientRect().left : null;
         const mobileCurrentIdx = getMobileCurrentOriginalIndex();
-        setVisible(document.getElementById('d-box-user'), true, 'flex');
-        setVisible(document.getElementById('d-box-pass'), true, 'flex');
-        setVisible(document.getElementById('m-pane-user'), true, 'flex');
-        setVisible(document.getElementById('m-pane-pass'), true, 'flex');
+        // Username panel — hide if no active protocol supports usernames
+        setVisible(document.getElementById('d-box-user'), showUsernamePanel, 'flex');
+        setVisible(document.getElementById('m-pane-user'), showUsernamePanel, 'flex');
+        // Password panel — hide if no active protocol supports passwords
+        setVisible(document.getElementById('d-box-pass'), showPasswordPanel, 'flex');
+        setVisible(document.getElementById('m-pane-pass'), showPasswordPanel, 'flex');
 
         const dNavItems = document.querySelectorAll('.d-nav-item');
-        setVisible(dNavItems[USER_PANEL_INDEX], true, 'flex');
-        setVisible(dNavItems[PASS_PANEL_INDEX], true, 'flex');
+        setVisible(dNavItems[USER_PANEL_INDEX], showUsernamePanel, 'flex');
+        setVisible(dNavItems[PASS_PANEL_INDEX], showPasswordPanel, 'flex');
 
         const mNavItems = document.querySelectorAll('.m-nav .nav-item');
-        setVisible(mNavItems[USER_PANEL_INDEX], true, 'flex');
-        setVisible(mNavItems[PASS_PANEL_INDEX], true, 'flex');
+        setVisible(mNavItems[USER_PANEL_INDEX], showUsernamePanel, 'flex');
+        setVisible(mNavItems[PASS_PANEL_INDEX], showPasswordPanel, 'flex');
 
         const dots = document.querySelectorAll('.m-dots .dot');
-        setVisible(dots[USER_PANEL_INDEX], true, 'block');
-        setVisible(dots[PASS_PANEL_INDEX], true, 'block');
+        setVisible(dots[USER_PANEL_INDEX], showUsernamePanel, 'block');
+        setVisible(dots[PASS_PANEL_INDEX], showPasswordPanel, 'block');
+
+        // Proto Stats pane — hide in classic mode
+        setVisible(document.getElementById('d-box-proto'), showProtoStatsPane, 'flex');
+        setVisible(document.getElementById('m-pane-proto'), showProtoStatsPane, 'flex');
+        setVisible(dNavItems[PROTO_STATS_PANEL_INDEX], showProtoStatsPane, 'flex');
+        setVisible(mNavItems[PROTO_STATS_PANEL_INDEX], showProtoStatsPane, 'flex');
+        setVisible(dots[PROTO_STATS_PANEL_INDEX], showProtoStatsPane, 'block');
 
         const mobilePanes = getMobilePanes();
         const visibleMobileIdxs = mobilePanes
@@ -1164,6 +1260,10 @@
         const mid = document.querySelector('#desktop-layout .d-header-mid');
         const container = document.getElementById('d-header-proto-buttons');
         if (!mid || !container) return;
+        if (!showProtocolSwitcher) {
+            mid.style.display = 'none';
+            return;
+        }
         mid.style.display = 'block';
         container.innerHTML = '';
         PROTO_MODES.forEach(mode => {
@@ -1419,6 +1519,7 @@
 
     function addToFeed(d) {
         const proto = (d.proto || 'SSH').toUpperCase();
+        if (!activeProtocols.includes(proto)) return;
         feedData.ALL.unshift(d);
         if (feedData[proto]) feedData[proto].unshift(d);
         if (feedData.ALL.length > MAX_PER_PANEL) feedData.ALL.length = MAX_PER_PANEL;
@@ -2003,8 +2104,9 @@
     });
 
     setInterval(() => {
-        if (lastKnockTime) {
-            const secs = Math.floor(Date.now() / 1000 - lastKnockTime) + 's';
+        const t = isFiltered ? getFilteredLastKnockTime() : lastKnockTime;
+        if (t) {
+            const secs = Math.floor(Date.now() / 1000 - t) + 's';
             document.getElementById('m-since').innerText = secs;
             document.getElementById('d-since').innerText = secs;
         }
@@ -2288,6 +2390,7 @@
     }
 
     function getProtoBadge(proto) {
+        if (!showProtoBadges) return '';
         const label = (proto || 'SSH').toUpperCase().slice(0, 4);
         const cls = label.toLowerCase().replace(/[^a-z]/g, '');
         const color = PROTO_COLORS[label] || PROTO_COLORS.ALL;
@@ -2662,18 +2765,28 @@
                 knockCount++;
                 debugLog(`Knock #${knockCount} from ${d.iso || '??'}`);
                 playClick();
-                pulseProtoChip(d.proto, DESKTOP_LATEST_PROTO_CHIP);
-                pulseProtoChip(d.proto, MOBILE_LATEST_PROTO_CHIP);
+                if (showProtoChip) {
+                    pulseProtoChip(d.proto, DESKTOP_LATEST_PROTO_CHIP);
+                    pulseProtoChip(d.proto, MOBILE_LATEST_PROTO_CHIP);
+                }
                 if (knockMatchesFilter(d)) pulseGlobeAtmosphere();
-                lastKnockTime = Math.floor(Date.now() / 1000);
-                document.getElementById('m-since').innerText = '0s';
-                document.getElementById('d-since').innerText = '0s';
+                const knockProto = (d.proto || 'SSH').toUpperCase();
+                const now = Math.floor(Date.now() / 1000);
+                lastKnockTime = now;
+                lastKnockTimeByProto[knockProto] = now;
+                if (!isFiltered || activeProtocols.includes(knockProto)) {
+                    document.getElementById('m-since').innerText = '0s';
+                    document.getElementById('d-since').innerText = '0s';
+                }
                 addToFeed(d);
                 renderKnock(d, true);
-                ['d-total', 'm-total'].forEach(id => document.getElementById(id).innerText = d.total_global.toLocaleString());
-                ['d-kpm', 'm-kpm'].forEach(id => document.getElementById(id).innerText = d.kpm);
                 if (Number.isFinite(Number(d.uptime_minutes))) uptimeMinutesCache = Number(d.uptime_minutes);
                 bumpProtoBreakdownWithKnock(d);
+                if (isFiltered) {
+                    updateHeaderStats(getFilteredTotal(), getFilteredKpm());
+                } else {
+                    updateHeaderStats(d.total_global, d.kpm);
+                }
                 renderProtoStats();
                 pulseProtoStatsRow(d.proto);
                 if (knockMatchesFilter(d)) {
@@ -2694,15 +2807,8 @@
                 if (Array.isArray(d.enabled_protocols) || (d.protocol_meta && typeof d.protocol_meta === 'object')) {
                     applyProtocolConfig(d.enabled_protocols, d.protocol_meta);
                 }
-                ['d-total', 'm-total'].forEach(id => document.getElementById(id).innerText = (d.total || 0).toLocaleString());
-                ['d-kpm', 'm-kpm'].forEach(id => document.getElementById(id).innerText = d.kpm || '0.00');
                 uptimeMinutesCache = Number(d.uptime_minutes || 0);
-                if (d.last_knock_time) {
-                    lastKnockTime = d.last_knock_time;
-                    const secs = Math.floor(Date.now() / 1000 - lastKnockTime) + 's';
-                    document.getElementById('m-since').innerText = secs;
-                    document.getElementById('d-since').innerText = secs;
-                }
+                if (d.last_knock_time) lastKnockTime = d.last_knock_time;
                 // Store leaderboards globally for ranking lookups
                 leaderboards.loc = d.top_locations || [];
                 leaderboards.passwords = d.top_passwords || [];
@@ -2711,6 +2817,36 @@
                 leaderboards.ips = d.top_ips || [];
                 if (d.proto_stats) protoStatsCache = d.proto_stats;
                 protoBreakdownCache = normalizeProtoBreakdown(d.proto_breakdown || {}, d.total || 0);
+
+                // Seed per-protocol last knock times from history
+                const ph = d.proto_histories || {};
+                activeProtocols.forEach(p => {
+                    const first = (ph[p.toLowerCase()] || [])[0];
+                    if (first?.timestamp) {
+                        const ts = typeof first.timestamp === 'string'
+                            ? Math.floor(new Date(first.timestamp).getTime() / 1000)
+                            : Number(first.timestamp);
+                        if (Number.isFinite(ts)) lastKnockTimeByProto[p] = ts;
+                    }
+                });
+
+                // Update header stats (filtered or global)
+                if (isFiltered) {
+                    updateHeaderStats(getFilteredTotal(), getFilteredKpm());
+                    const filteredAgo = getFilteredLastKnockTime();
+                    if (filteredAgo) {
+                        const secs = Math.floor(Date.now() / 1000 - filteredAgo) + 's';
+                        document.getElementById('m-since').innerText = secs;
+                        document.getElementById('d-since').innerText = secs;
+                    }
+                } else {
+                    updateHeaderStats(d.total || 0, d.kpm || '0.00');
+                    if (d.last_knock_time) {
+                        const secs = Math.floor(Date.now() / 1000 - d.last_knock_time) + 's';
+                        document.getElementById('m-since').innerText = secs;
+                        document.getElementById('d-since').innerText = secs;
+                    }
+                }
                 applyProtoButtons(getCurrentMode());
                 applyProtocolPanelVisibility();
                 renderProtoStats();
@@ -2722,9 +2858,13 @@
                 if (vp.scrollLeft !== preScroll) debugLog(`⚠️ SCROLL SHIFTED during init_stats: ${preScroll} → ${vp.scrollLeft}`);
                 if (d.history) {
                     // Populate feed arrays from dedicated per-protocol Redis lists
-                    feedData.ALL = d.history.slice(0, MAX_PER_PANEL);
+                    const allHistory = d.history || [];
+                    feedData.ALL = (activeProtocols.length === TRACKED_PROTOCOLS.length
+                        ? allHistory
+                        : allHistory.filter(k => activeProtocols.includes((k.proto || 'SSH').toUpperCase()))
+                    ).slice(0, MAX_PER_PANEL);
                     const ph = d.proto_histories || {};
-                    TRACKED_PROTOCOLS.forEach(proto => {
+                    activeProtocols.forEach(proto => {
                         feedData[proto] = (ph[proto.toLowerCase()] || []).slice(0, MAX_PER_PANEL);
                     });
                     refreshFeed();

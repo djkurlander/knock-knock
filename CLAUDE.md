@@ -204,6 +204,8 @@ Additionally, `polygonsData(sameRef)` may be short-circuited by globe.gl — alw
 - **Trivia & Jokes**: Context about why usernames/passwords are chosen, plus knock-knock jokes
 - **Sound Effects**: Optional audio notifications for new knocks
 - **About**: Project info section
+- **Classic Mode**: Automatically activates when only one protocol is active — hides protocol switcher, cycle buttons, proto badges, proto chip pulses, and Proto Stats pane for a clean single-protocol UI. Header label changes from "Total Knocks" to "[PROTO] Knocks"
+- **`?show` URL Parameter**: Subset which protocols are visible (e.g., `?show=SSH`, `?show=SSH,RDP`). Intersected with server's enabled protocols; invalid values fall back to all enabled. Single-protocol `?show` triggers classic mode. When filtered, header stats (total, KPM, ago) reflect only the active protocols, computed client-side from `protoBreakdownCache` and `lastKnockTimeByProto`
 - **Debug Mode**: Overlay via `?debug` URL parameter
 - **Responsive**: Mobile carousel with swipe navigation, desktop grid layout
 - **WebSocket**: Auto-reconnect, live updates without polling

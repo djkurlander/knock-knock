@@ -30,7 +30,7 @@ PROTOCOL_META = {
     },
     'RDP': {
         'proto_int': 3,
-        'color': '#ff88EE',
+        'color': '#ff1a1a',
         'supports_user_panel': True,
         'supports_pass_panel': False,
         'honeypot_script': 'honeypots/rdp_honeypot.py',

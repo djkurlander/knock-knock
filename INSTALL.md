@@ -61,22 +61,11 @@ Knock-Knock uses MaxMind GeoLite2 databases for IP geolocation. You need a free 
 2. In your account dashboard, generate a license key
 3. Note your **Account ID** and **License Key** — you'll need them below
 
-### SSH Host Key (Systemd Only)
-
-The honeypot needs an RSA key to present to connecting clients. **Docker users can skip this** — the Docker image generates one automatically.
-
-```bash
-cd /root/knock-knock
-ssh-keygen -t rsa -b 2048 -f server.key -N ""
-rm server.key.pub
-chmod 600 server.key
-```
-
 ---
 
 ## Option 1: Docker (Simplest, Universal)
 
-Complete the [Prerequisites](#prerequisites) above first (skip the SSH Host Key step — Docker handles it).
+Complete the [Prerequisites](#prerequisites) above first.
 
 **Install Docker (skip if already installed):**
 ```bash

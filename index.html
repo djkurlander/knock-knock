@@ -1845,7 +1845,7 @@
                 const t = Math.log(1 + h) / logMax;
                 return `rgba(255, ${Math.round(200 * (1 - t))}, 0, 0.6)`;
             });
-            globe.polygonStrokeColor(() => 'rgba(0, 255, 65, 0.15)');
+            globe.polygonStrokeColor(() => 'rgb(10, 30, 10)');
             globe.polygonAltitude(d => {
                 const h = hitsMap[d.properties.ISO_A2] || 0;
                 if (!h) return 0.002;

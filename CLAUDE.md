@@ -201,6 +201,8 @@ schedulePaneGlobePause();
 
 Additionally, `polygonsData(sameRef)` may be short-circuited by globe.gl — always pass `[...countriesData]` to guarantee the polygon digest runs and accessor functions are re-evaluated.
 
+**Polygon stroke alpha bug (globe.gl):** Three.js `LineSegments` materials are created with `transparent: false` when the first stroke color is a fully opaque hex value (e.g. `#00ff41`). If a later style switch changes the stroke accessor to an `rgba()` with alpha < 1, the material's `transparent` flag stays `false` and the alpha is ignored — rendering the stroke at full brightness. Workaround: use only fully opaque `rgb()` stroke colors in all globe styles. A page refresh clears it (materials are recreated from scratch).
+
 ## Frontend Features
 
 - **3D Globe** (globe.gl): Displays attack location, rotates on new knocks; heat map mode extrudes countries by hit count

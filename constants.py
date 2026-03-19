@@ -38,9 +38,10 @@ PROTOCOL_META = {
     'MAIL': {
         'proto_int': 4,
         'color': '#00ffaa',
-        'supports_user_panel': False,
-        'supports_pass_panel': False,
-        'honeypot_script': 'honeypots/smtp25_honeypot.py',
+        'supports_user_panel': True,
+        'supports_pass_panel': True,
+        'honeypot_script': 'honeypots/smtp_honeypot.py',
+        'honeypot_args': ['--port', '25', '--proto', 'MAIL'],
     },
     'FTP': {
         'proto_int': 5,

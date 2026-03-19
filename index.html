@@ -199,6 +199,7 @@
             .d-nav {
                 display: flex; flex-wrap: wrap; gap: 16px 26px; margin-bottom: 10px;
                 border-bottom: 1px solid #222; padding-bottom: 10px;
+                visibility: hidden;
             }
             .d-nav-item {
                 color: var(--ui-grey-dim); font-size: 1.6em; cursor: pointer;
@@ -480,7 +481,7 @@
             #m-viewport::-webkit-scrollbar { display: none !important; }
 
             .m-footer { flex: 0 0 auto; background: #0a0a0a; border-top: 1px solid #222; padding-bottom: env(safe-area-inset-bottom); }
-            .m-dots { display: flex; justify-content: center; gap: 15px; padding: 12px 0; }
+            .m-dots { display: flex; justify-content: center; gap: 15px; padding: 12px 0; visibility: hidden; }
             .dot { width: 10px; height: 10px; border-radius: 50%; background: #222; transition: 0.3s; cursor: pointer; }
             .dot.active { background: var(--neon-green); transform: scale(1.4); box-shadow: 0 0 8px var(--neon-green); }
 
@@ -488,7 +489,7 @@
             .m-nav-container::before, .m-nav-container::after { content: ''; position: absolute; top: 0; bottom: 0; width: 30px; z-index: 10; pointer-events: none; }
             .m-nav-container::before { left: 0; background: linear-gradient(to right, #000 0%, transparent 100%); }
             .m-nav-container::after { right: 0; background: linear-gradient(to left, #000 0%, transparent 100%); }
-            .m-nav { display: flex; gap: 40px; padding: 15px 30px; overflow-x: auto; scrollbar-width: none; -ms-overflow-style: none; }
+            .m-nav { display: flex; gap: 40px; padding: 15px 30px; overflow-x: auto; scrollbar-width: none; -ms-overflow-style: none; visibility: hidden; }
             .m-nav::-webkit-scrollbar { display: none; }
             .nav-item { color: var(--ui-grey-dim); font-size: 1.8em; display: flex; flex-direction: column; align-items: center; cursor: pointer; transition: 0.2s; flex-shrink: 0; }
             .nav-item span { font-size: 0.45em; margin-top: 4px; font-weight: bold; }
@@ -624,12 +625,9 @@
         <div class="d-box" id="d-box-trivia"><h2 style="display:flex;justify-content:space-between;align-items:center;">TRIVIA<span class="proto-cycle-btn desktop-readonly" style="vertical-align:initial;">ALL</span></h2><div id="d-trivia" class="d-content"></div></div>
         <div class="d-box" id="d-box-jokes"><h2>KNOCK-KNOCK JOKES</h2><div id="d-jokes" class="d-content" style="color:var(--neon-green); line-height:1.6;"></div></div>
         <div class="d-box"><h2>ABOUT</h2><div class="d-content" style="color:var(--neon-green); line-height:1.6;">
-            <div style="font-size:1.4em; font-weight:bold; margin-bottom:20px;">KNOCK-KNOCK.NET</div>
-	    <p>Set up an unprotected server on the net, and the bots start swarming!</p><p> This site shows bots attempting (unsuccessfully) to break into an ordinary internet server.</p>
-            <p>This constant chatter of bots knocking on the doors of machines on the net has been referred to as <em>"the background radiation of the Internet".</em></p>
-	    <p>Knock-knock.net is a visualization of this bot traffic.
-	    It shows the bot activity in real-time, and provides historic stats of the bot attacks over time: where they are coming from, the most common usernames and passwords attempted, the worst offending ISPs, and in some cases, why the password or username was chosen.</p>
-            <p>Have fun! Send questions or comments to:<br><a class="contact-email" href="#" style="color:var(--data-blue)"></a></p>
+	    <p>Set up an unprotected server on the net, and the bots start swarming! This site shows their break-in attempts in real-time: where they come from, what credentials they try, and why.</p>
+            <p>Questions and comments to: <a class="contact-email" href="#" style="color:var(--data-blue)"></a></p>
+            <div id="d-about-server-info" style="color:var(--ui-grey-dim); font-size:0.9em; margin-top:15px; margin-bottom:15px;"></div>
             <div style="text-align:center; margin-top:30px;">
               <a href="https://www.abuseipdb.com/user/270949" title="AbuseIPDB is an IP address blacklist for webmasters and sysadmins to report IP addresses engaging in abusive behavior on their networks" target="_blank" rel="noopener">
                 <img src="https://www.abuseipdb.com/contributor/270949.svg" alt="AbuseIPDB Contributor Badge" style="width:200px; border-radius:5px; border:1px solid #333; padding:8px; background:var(--data-blue); box-shadow:0 0 8px rgba(0,251,255,0.3);">
@@ -672,12 +670,9 @@
         <div class="m-pane" id="m-pane-trivia"><h2 style="display:flex;justify-content:space-between;align-items:center;">TRIVIA<span class="proto-cycle-btn" onclick="cycleProto(event)" style="vertical-align:initial;">⟳ ALL</span></h2><div id="m-trivia" class="m-content"></div></div>
         <div class="m-pane" id="m-pane-jokes"><h2>KNOCK-KNOCK JOKES</h2><div id="m-jokes" class="m-content" style="color:var(--neon-green); line-height:1.6;"></div></div>
         <div class="m-pane" id="m-pane-about"><h2>ABOUT</h2><div class="m-content" style="color:var(--neon-green); line-height:1.6;">
-            <div style="font-size:1.4em; font-weight:bold; margin-bottom:20px;">KNOCK-KNOCK.NET</div>
-	    <p>Set up an unprotected server on the net, and the bots start swarming!</p><p> This site shows bots attempting (unsuccessfully) to break into an ordinary internet server.</p>
-            <p>This constant chatter of bots knocking on the doors of machines on the net has been referred to as <em>"the background radiation of the Internet".</em></p>
-	    <p>Knock-knock.net is a visualization of this bot traffic.
-	    It shows the bot activity in real-time, and provides historic stats of the bot attacks over time: where they are coming from, the most common usernames and passwords attempted, the worst offending ISPs, and in some cases, why the password or username was chosen.</p>
-            <p>Have fun! Send questions or comments to:<br><a class="contact-email" href="#" style="color:var(--data-blue)"></a></p>
+	    <p>Set up an unprotected server on the net, and the bots start swarming! This site shows their break-in attempts in real-time: where they come from, what credentials they try, and why.</p>
+            <p>Questions and comments to: <a class="contact-email" href="#" style="color:var(--data-blue)"></a></p>
+            <div id="m-about-server-info" style="color:var(--ui-grey-dim); font-size:0.9em; margin-top:15px; margin-bottom:15px;"></div>
             <div style="text-align:center; margin-top:30px;">
               <a href="https://www.abuseipdb.com/user/270949" title="AbuseIPDB is an IP address blacklist for webmasters and sysadmins to report IP addresses engaging in abusive behavior on their networks" target="_blank" rel="noopener">
                 <img src="https://www.abuseipdb.com/contributor/270949.svg" alt="AbuseIPDB Contributor Badge" style="width:275px; border-radius:5px; border:1px solid #333; padding:8px; background:var(--data-blue); box-shadow:0 0 8px rgba(0,251,255,0.3);">
@@ -891,6 +886,40 @@
     let showPasswordPanel     = true;
     const lastKnockTimeByProto = {};
 
+    function formatUptimeCompact(minutes) {
+        const m = Math.floor(minutes);
+        if (m < 60) return `${m}m`;
+        const d = Math.floor(m / 1440);
+        const h = Math.floor((m % 1440) / 60);
+        const rm = m % 60;
+        return (d > 0 ? `${d}d ` : '') + (h > 0 ? `${h}h ` : '') + `${rm}m`;
+    }
+
+    function colorProtoList(protocols) {
+        return protocols.map(p => {
+            const c = PROTO_COLORS[p] || PROTO_COLORS.ALL;
+            return `<span style="color:${c}">${escapeHtml(p)}</span>`;
+        }).join('<span style="color:var(--neon-green)">, </span>');
+    }
+
+    function updateAboutServerInfo() {
+        const L = 'color:var(--ui-label)';
+        const G = 'color:var(--neon-green)';
+        const LW = 'display:inline-block;width:6em;flex-shrink:0;';
+        const ROW = 'display:flex;';
+        const lines = [];
+        lines.push(`<div style="${ROW}"><span style="${L};${LW}">Uptime:</span><span style="${G}">${formatUptimeCompact(uptimeMinutesCache)}</span></div>`);
+        lines.push(`<div style="${ROW}"><span style="${L};${LW}">Monitoring:</span><span style="${G}">${TRACKED_PROTOCOLS.map(escapeHtml).join(', ')}</span></div>`);
+        if (isFiltered) {
+            lines.push(`<div style="${ROW}"><span style="${L};${LW}">Viewing:</span><span style="${G}">${activeProtocols.map(escapeHtml).join(', ')} only</span></div>`);
+        }
+        const html = lines.join('');
+        ['d-about-server-info', 'm-about-server-info'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.innerHTML = html;
+        });
+    }
+
     function getFilteredTotal() {
         let sum = 0;
         activeProtocols.forEach(p => { sum += Number(protoBreakdownCache?.[p]?.count || 0); });
@@ -898,8 +927,17 @@
     }
 
     function getFilteredKpm() {
-        const mins = Number(uptimeMinutesCache) || 0;
-        return mins > 0 ? (getFilteredTotal() / mins).toFixed(2) : '0.00';
+        if (activeProtocols.length === TRACKED_PROTOCOLS.length) {
+            const mins = Number(uptimeMinutesCache) || 0;
+            return mins > 0 ? (getFilteredTotal() / mins).toFixed(2) : '0.00';
+        }
+        let totalKpm = 0;
+        activeProtocols.forEach(p => {
+            const uptime = Number(protoBreakdownCache?.[p]?.uptime || 0);
+            const count = Number(protoBreakdownCache?.[p]?.count || 0);
+            if (uptime > 0) totalKpm += count / uptime;
+        });
+        return totalKpm.toFixed(2);
     }
 
     function getFilteredLastKnockTime() {
@@ -1410,7 +1448,9 @@
             if (totalGlobal !== null && totalGlobal > 0) {
                 pct = Number(((count * 100) / totalGlobal).toFixed(2));
             }
-            out[proto] = { count, pct };
+            const uptimeRaw = Number(row.uptime);
+            const uptime = Number.isFinite(uptimeRaw) ? Math.max(0, Math.floor(uptimeRaw)) : 0;
+            out[proto] = { count, pct, uptime };
         });
         return out;
     }
@@ -1419,15 +1459,20 @@
         const proto = (d?.proto || '').toUpperCase();
         if (!TRACKED_PROTOCOLS.includes(proto)) return;
         if (!protoBreakdownCache[proto]) {
-            protoBreakdownCache[proto] = { count: 0, pct: 0 };
+            protoBreakdownCache[proto] = { count: 0, pct: 0, uptime: 0 };
         }
         protoBreakdownCache[proto].count += 1;
+        const protoUptime = Number(d?.proto_uptime);
+        if (Number.isFinite(protoUptime) && protoUptime > 0) {
+            protoBreakdownCache[proto].uptime = protoUptime;
+        }
         const total = Number(d?.total_global);
         if (Number.isFinite(total) && total > 0) {
             TRACKED_PROTOCOLS.forEach(name => {
                 const count = Number(protoBreakdownCache[name]?.count || 0);
+                const uptime = Number(protoBreakdownCache[name]?.uptime || 0);
                 protoBreakdownCache[name] = {
-                    count,
+                    count, uptime,
                     pct: Number(((count * 100) / total).toFixed(2))
                 };
             });
@@ -1435,11 +1480,11 @@
     }
 
     function renderProtoStats() {
-        const uptimeMinutes = Number(uptimeMinutesCache) || 0;
         const rows = TRACKED_PROTOCOLS.map(proto => {
             const count = Number(protoBreakdownCache?.[proto]?.count || 0);
             const pct = Number(protoBreakdownCache?.[proto]?.pct || 0);
-            const kpm = uptimeMinutes > 0 ? (count / uptimeMinutes) : 0;
+            const protoUptime = Number(protoBreakdownCache?.[proto]?.uptime || 0);
+            const kpm = protoUptime > 0 ? (count / protoUptime) : 0;
             return { proto, count, pct, kpm };
         })
             .sort((a, b) => (b.kpm - a.kpm) || (b.count - a.count) || a.proto.localeCompare(b.proto));
@@ -1458,7 +1503,7 @@
             </div>
         `).join('');
 
-        const footer = `<div style="margin-top:8px;color:var(--ui-grey-dim);font-size:0.9em;">Uptime basis: ${uptimeMinutes.toLocaleString()} min</div>`;
+        const footer = '';
         const html = header + body + footer;
         ['d-proto-stats', 'm-proto-stats'].forEach(id => {
             const el = document.getElementById(id);
@@ -2460,8 +2505,8 @@
         },
         {
             name: 'mail_envelope',
-            match: (d, proto) => proto === 'MAIL',
-            render: d => renderFromToBlock(d, 'mail_from', 'mail_to', true),
+            match: (d, proto) => proto === 'MAIL' && SMTP_MESSAGE_STAGES.has(String(d.smtp_stage || '')),
+            render: d => renderFromToBlock(d, 'smtp_mail_from', 'smtp_rcpt_to', true),
         },
         {
             name: 'rdp_username',
@@ -2763,14 +2808,14 @@
             const d = msg.data;
             if (msg.type === 'new_knock') {
                 knockCount++;
+                const knockProto = (d.proto || 'SSH').toUpperCase();
                 debugLog(`Knock #${knockCount} from ${d.iso || '??'}`);
-                playClick();
+                if (activeProtocols.includes(knockProto)) playClick();
                 if (showProtoChip) {
                     pulseProtoChip(d.proto, DESKTOP_LATEST_PROTO_CHIP);
                     pulseProtoChip(d.proto, MOBILE_LATEST_PROTO_CHIP);
                 }
                 if (knockMatchesFilter(d)) pulseGlobeAtmosphere();
-                const knockProto = (d.proto || 'SSH').toUpperCase();
                 const now = Math.floor(Date.now() / 1000);
                 lastKnockTime = now;
                 lastKnockTimeByProto[knockProto] = now;
@@ -2796,8 +2841,8 @@
                     if (hasUserField(d)) incrementAndSort('user', d.user);
                     incrementAndSort('ip', d.ip);
                 }
-                refreshStatsAndTrivia();
                 if (knockMatchesFilter(d)) {
+                    refreshStatsAndTrivia();
                     updateGlobeLocation(d);
                     rotateGlobeToLocation(d.lat, d.lng);
                 }
@@ -2818,16 +2863,11 @@
                 if (d.proto_stats) protoStatsCache = d.proto_stats;
                 protoBreakdownCache = normalizeProtoBreakdown(d.proto_breakdown || {}, d.total || 0);
 
-                // Seed per-protocol last knock times from history
-                const ph = d.proto_histories || {};
+                // Seed per-protocol last knock times from backend
+                const plt = d.proto_last_times || {};
                 activeProtocols.forEach(p => {
-                    const first = (ph[p.toLowerCase()] || [])[0];
-                    if (first?.timestamp) {
-                        const ts = typeof first.timestamp === 'string'
-                            ? Math.floor(new Date(first.timestamp).getTime() / 1000)
-                            : Number(first.timestamp);
-                        if (Number.isFinite(ts)) lastKnockTimeByProto[p] = ts;
-                    }
+                    const t = plt[p.toLowerCase()];
+                    if (t) lastKnockTimeByProto[p] = t;
                 });
 
                 // Update header stats (filtered or global)
@@ -2849,7 +2889,11 @@
                 }
                 applyProtoButtons(getCurrentMode());
                 applyProtocolPanelVisibility();
+                document.querySelector('.d-nav').style.visibility = 'visible';
+                document.querySelector('.m-nav').style.visibility = 'visible';
+                document.querySelector('.m-dots').style.visibility = 'visible';
                 renderProtoStats();
+                updateAboutServerInfo();
                 // Refresh Heat extrusion colors/heights without re-setting image or polygon data
                 refreshHeatGlobe(getActiveLeaderboards().loc);
 
@@ -2876,8 +2920,8 @@
                     } else {
                         hideGlobeDot();
                     }
+                    refreshStatsAndTrivia();
                 }
-                refreshStatsAndTrivia();
             }
         };
     }

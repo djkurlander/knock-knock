@@ -168,11 +168,10 @@ def reset_all():
             print(f"   [!] Error deleting {DB_PATH}: {e}")
     try:
         r = redis.Redis(host=os.environ.get('REDIS_HOST', 'localhost'), port=6379, db=0, decode_responses=True)
-        keys_to_clear = ["knock:total_global", "knock:proto_counts", "knock:uptime_minutes", "knock:last_time", "knock:last_lat", "knock:last_lng", "knock:recent",
-                         "knock:recent:ssh", "knock:recent:tnet", "knock:recent:smtp", "knock:recent:rdp", "knock:recent:mail", "knock:recent:ftp",
-                         "knock:recent:sip", "knock:diag:smtp587:no_knock", "knock:diag:smtp587:last", "knock:diag:smtp587:reason_counts",
-                         "knock:forensics:mail_raw", "knock:config:enabled_protocols", "knock:config:protocol_meta"]
-        for key in keys_to_clear:
+        preserve = {'knock:blocked', 'knock:alerted:'}
+        for key in r.scan_iter('knock:*'):
+            if any(key == p or key.startswith(p) for p in preserve):
+                continue
             r.delete(key)
         print("   [+] Cleared Redis keys")
     except Exception as e:
@@ -187,11 +186,12 @@ def init_db():
         ip_address TEXT, iso_code TEXT, city TEXT, region TEXT, country TEXT, isp TEXT, asn INTEGER,
         username TEXT, password TEXT, proto INTEGER
     )""")
-    # Migrate: add proto column to existing databases
+    # Migrate v1 (SSH-only) → v2 (multi-protocol): add proto column
     knock_cols = [row[1] for row in cur.execute("PRAGMA table_info(knocks)").fetchall()]
-    if 'proto' not in knock_cols:
+    v1_migration = 'proto' not in knock_cols
+    if v1_migration:
         cur.execute("ALTER TABLE knocks ADD COLUMN proto INTEGER")
-        print("✅ Migrated knocks: added proto column")
+        cur.execute("UPDATE knocks SET proto = 0 WHERE proto IS NULL")
     cur.execute("CREATE TABLE IF NOT EXISTS user_intel (username TEXT PRIMARY KEY, hits INTEGER, last_seen DATETIME)")
     cur.execute("CREATE TABLE IF NOT EXISTS pass_intel (password TEXT PRIMARY KEY, hits INTEGER, last_seen DATETIME)")
     cur.execute("CREATE TABLE IF NOT EXISTS country_intel (iso_code TEXT PRIMARY KEY, country TEXT, hits INTEGER, last_seen DATETIME)")
@@ -207,6 +207,26 @@ def init_db():
         cur.execute("INSERT INTO monitor_heartbeats (id, uptime_minutes) VALUES (1, ?)", (old_count,))
         conn.commit()
         print(f"✅ Migrated monitor_heartbeats: {old_count} rows → uptime_minutes={old_count}")
+    # Add per-protocol uptime columns (one per known protocol)
+    hb_cols = [row[1] for row in cur.execute("PRAGMA table_info(monitor_heartbeats)").fetchall()]
+    added_uptime_cols = False
+    for proto_name in PROTO:
+        col = f"uptime_{proto_name.lower()}"
+        if col not in hb_cols:
+            cur.execute(f"ALTER TABLE monitor_heartbeats ADD COLUMN {col} INTEGER NOT NULL DEFAULT 0")
+            added_uptime_cols = True
+    if added_uptime_cols:
+        # Seed uptime for any protocol that has recorded knocks (it was running)
+        active_protos = [row[0] for row in cur.execute(
+            "SELECT DISTINCT proto FROM ip_intel_proto").fetchall()]
+        seeded = []
+        for proto_int in active_protos:
+            name = PROTO_NAME.get(proto_int)
+            if name:
+                col = f"uptime_{name.lower()}"
+                cur.execute(f"UPDATE monitor_heartbeats SET {col} = uptime_minutes WHERE id = 1")
+                seeded.append(name)
+        print(f"✅ Added per-protocol uptime tracking (seeded from total uptime: {', '.join(seeded) or 'none'})")
     # Indexes for fast top-N queries
     cur.execute("CREATE INDEX IF NOT EXISTS idx_user_intel_hits ON user_intel(hits DESC)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_pass_intel_hits ON pass_intel(hits DESC)")
@@ -224,19 +244,31 @@ def init_db():
     cur.execute("CREATE INDEX IF NOT EXISTS idx_country_intel_proto_hits ON country_intel_proto(proto, hits DESC)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_isp_intel_proto_hits ON isp_intel_proto(proto, hits DESC)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_ip_intel_proto_hits ON ip_intel_proto(proto, hits DESC)")
+    # Seed _proto tables from ALL tables (v1 data was all SSH, proto=0)
+    if v1_migration:
+        cur.execute("INSERT OR IGNORE INTO user_intel_proto (username, proto, hits, last_seen) SELECT username, 0, hits, last_seen FROM user_intel")
+        cur.execute("INSERT OR IGNORE INTO pass_intel_proto (password, proto, hits, last_seen) SELECT password, 0, hits, last_seen FROM pass_intel")
+        cur.execute("INSERT OR IGNORE INTO country_intel_proto (iso_code, proto, country, hits, last_seen) SELECT iso_code, 0, country, hits, last_seen FROM country_intel")
+        cur.execute("INSERT OR IGNORE INTO isp_intel_proto (isp, proto, hits, last_seen, asn) SELECT isp, 0, hits, last_seen, asn FROM isp_intel")
+        cur.execute("INSERT OR IGNORE INTO ip_intel_proto (ip, proto, hits, last_seen, lat, lng) SELECT ip, 0, hits, last_seen, lat, lng FROM ip_intel")
+        print("✅ Migrated v1 → v2: all existing data tagged as SSH (proto=0)")
     cur.execute("PRAGMA journal_mode=WAL")
     conn.commit()
     conn.close()
 
-def heartbeat_worker(redis_conn):
+def heartbeat_worker(redis_conn, enabled_protocols):
+    proto_cols = [f"uptime_{p.lower()}" for p in enabled_protocols]
+    proto_set_clause = ", ".join(f"{col} = {col} + 1" for col in proto_cols)
     while True:
         try:
             conn = sqlite3.connect(DB_PATH, timeout=10)
             cur = conn.cursor()
-            cur.execute("INSERT INTO monitor_heartbeats (id, uptime_minutes) VALUES (1, 1) ON CONFLICT(id) DO UPDATE SET uptime_minutes = uptime_minutes + 1")
+            cur.execute(f"INSERT INTO monitor_heartbeats (id, uptime_minutes) VALUES (1, 1) ON CONFLICT(id) DO UPDATE SET uptime_minutes = uptime_minutes + 1, {proto_set_clause}")
             conn.commit()
             conn.close()
             redis_conn.incr("knock:uptime_minutes")
+            for p in enabled_protocols:
+                redis_conn.incr(f"knock:uptime:{p.lower()}")
         except Exception as e:
             print(f"❌ Heartbeat Error: {e}")
         time.sleep(60)
@@ -341,7 +373,7 @@ def sanitize_body(s, max_len=2000):
 
 def build_smtp_diag(knock):
     return {
-        "proto": "SMTP",
+        "proto": knock.get("proto", "SMTP"),
         "ip": knock.get("ip"),
         "session_id": knock.get("session_id"),
         "event": sanitize_credential(str(knock.get("event", ""))),
@@ -362,13 +394,15 @@ def build_smtp_diag(knock):
     }
 
 def store_smtp_diag(redis_conn, diag):
-    redis_conn.lpush("knock:diag:smtp587:no_knock", json.dumps(diag))
-    redis_conn.ltrim("knock:diag:smtp587:no_knock", 0, 499)
-    redis_conn.set("knock:diag:smtp587:last", json.dumps(diag))
+    proto = diag.get("proto", "SMTP").lower()
+    redis_conn.lpush(f"knock:diag:{proto}:no_knock", json.dumps(diag))
+    redis_conn.ltrim(f"knock:diag:{proto}:no_knock", 0, 499)
+    redis_conn.set(f"knock:diag:{proto}:last", json.dumps(diag))
     if diag["no_knock_reason"]:
-        redis_conn.hincrby("knock:diag:smtp587:reason_counts", diag["no_knock_reason"], 1)
+        redis_conn.hincrby(f"knock:diag:{proto}:reason_counts", diag["no_knock_reason"], 1)
+    label = "SMTP25" if proto == "mail" else "SMTP587"
     print(
-        f"🧪 SMTP587 no-knock {diag['ip']} | reason={diag['no_knock_reason']} "
+        f"🧪 {label} no-knock {diag['ip']} | reason={diag['no_knock_reason']} "
         f"stop={diag['stop_reason']} cmds={diag['commands_seen']}",
         flush=True,
     )
@@ -480,8 +514,16 @@ def monitor(save_knocks=False, max_knocks=None):
     try:
         conn = sqlite3.connect(DB_PATH, timeout=10)
         total = conn.execute("SELECT SUM(hits) FROM ip_intel").fetchone()[0] or 0
-        uptime = conn.execute("SELECT uptime_minutes FROM monitor_heartbeats WHERE id=1").fetchone()
-        uptime = uptime[0] if uptime else 0
+        hb_row = conn.execute("SELECT * FROM monitor_heartbeats WHERE id=1").fetchone()
+        hb_cols = [desc[0] for desc in conn.execute("SELECT * FROM monitor_heartbeats LIMIT 0").description] if hb_row else []
+        uptime = 0
+        proto_uptimes = {}
+        if hb_row and hb_cols:
+            col_map = dict(zip(hb_cols, hb_row))
+            uptime = col_map.get('uptime_minutes', 0) or 0
+            for proto_name in PROTO:
+                col = f"uptime_{proto_name.lower()}"
+                proto_uptimes[proto_name] = col_map.get(col, 0) or 0
         proto_rows = conn.execute("SELECT proto, SUM(hits) AS c FROM ip_intel_proto GROUP BY proto").fetchall()
         conn.close()
         r.set("knock:total_global", total)
@@ -493,8 +535,9 @@ def monitor(save_knocks=False, max_knocks=None):
         for proto_name in PROTO.keys():
             if not r.hexists("knock:proto_counts", proto_name):
                 r.hset("knock:proto_counts", proto_name, 0)
-        if not r.get("knock:uptime_minutes"):
-            r.set("knock:uptime_minutes", uptime)
+        r.set("knock:uptime_minutes", uptime)
+        for proto_name, proto_up in proto_uptimes.items():
+            r.set(f"knock:uptime:{proto_name.lower()}", proto_up)
     except Exception as e:
         print(f"⚠️ Could not seed totals from SQLite: {e}")
 
@@ -505,8 +548,9 @@ def monitor(save_knocks=False, max_knocks=None):
         if not script:
             print(f"⚠️ No honeypot script configured for protocol {proto}; skipping", flush=True)
             continue
+        extra_args = PROTOCOL_META.get(proto, {}).get("honeypot_args", [])
         honeypots[proto] = subprocess.Popen(
-            [sys.executable, "-u", script],
+            [sys.executable, "-u", script] + extra_args,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
@@ -535,7 +579,7 @@ def monitor(save_knocks=False, max_knocks=None):
     signal.signal(signal.SIGTERM, cleanup)
     signal.signal(signal.SIGINT, cleanup)
 
-    threading.Thread(target=heartbeat_worker, args=(r,), daemon=True).start()
+    threading.Thread(target=heartbeat_worker, args=(r, enabled_protocols), daemon=True).start()
 
     print("🚀 Knock-Knock Monitor Active...")
 
@@ -612,6 +656,7 @@ def monitor(save_knocks=False, max_knocks=None):
             r.incr("knock:total_global")
             r.hincrby("knock:proto_counts", package['proto'], 1)
             r.set("knock:last_time", int(time.time()))
+            r.set(f"knock:last_time:{package['proto'].lower()}", int(time.time()))
             if geo['lat'] is not None:
                 r.set("knock:last_lat", geo['lat'])
                 r.set("knock:last_lng", geo['lng'])

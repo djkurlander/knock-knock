@@ -163,7 +163,7 @@ class GlobalStatsCache:
                 await self._refresh_cache()
                 print(f"📊 Stats Cache Updated: {self.last_updated}")
 
-                payload = await manager.get_initial_data(include_protocol_config=False)
+                payload = await manager.get_initial_data(include_protocol_config=False, include_history=False)
                 await manager.broadcast(json.dumps({"type": "init_stats", "data": payload}))
             except Exception as e:
                 print(f"❌ Cache Update Error: {e}")
@@ -222,7 +222,7 @@ class ConnectionManager:
             print(f"Error fetching history ({key}): {e}")
             return []
 
-    async def get_initial_data(self, include_protocol_config=True):
+    async def get_initial_data(self, include_protocol_config=True, include_history=True):
         total_val = await r.get("knock:total_global")
         uptime_val = await r.get("knock:uptime_minutes")
         last_knock_val = await r.get("knock:last_time")
@@ -239,12 +239,9 @@ class ConnectionManager:
         for name in PROTO.keys():
             count = int(proto_counts_raw.get(name, 0))
             pct = round((count * 100.0 / total_count), 2) if total_count > 0 else 0.0
-            proto_breakdown[name] = {"count": count, "pct": pct}
-
-        history = await self.get_recent_knocks("knock:recent")
-        proto_histories = {}
-        for name in PROTO_NAME.values():
-            proto_histories[name.lower()] = await self.get_recent_knocks(f"knock:recent:{name.lower()}")
+            proto_uptime_val = await r.get(f"knock:uptime:{name.lower()}")
+            proto_uptime = int(proto_uptime_val) if proto_uptime_val else 0
+            proto_breakdown[name] = {"count": count, "pct": pct, "uptime": proto_uptime}
 
         payload = {
             "top_locations": stats_cache.top_locations,
@@ -260,10 +257,22 @@ class ConnectionManager:
             "top_ips": stats_cache.top_ips,
             "proto_stats": {str(k): v for k, v in stats_cache.proto_stats.items()},
             "proto_breakdown": proto_breakdown,
-            "proto_histories": proto_histories,
-            "history": history,
             "cache_ts": stats_cache.last_updated
         }
+
+        if include_history:
+            history = await self.get_recent_knocks("knock:recent")
+            proto_histories = {}
+            proto_last_times = {}
+            for name in PROTO_NAME.values():
+                proto_histories[name.lower()] = await self.get_recent_knocks(f"knock:recent:{name.lower()}")
+                lt = await r.get(f"knock:last_time:{name.lower()}")
+                if lt:
+                    proto_last_times[name.lower()] = int(lt)
+            payload["history"] = history
+            payload["proto_histories"] = proto_histories
+            payload["proto_last_times"] = proto_last_times
+
         if include_protocol_config:
             payload["enabled_protocols"] = enabled_protocols
             payload["protocol_meta"] = protocol_meta
@@ -299,6 +308,7 @@ class ConnectionManager:
                     "enabled_protocols": stats.get("enabled_protocols", []),
                     "protocol_meta": stats.get("protocol_meta", {}),
                     "proto_histories": stats.get("proto_histories", {}),
+                    "proto_last_times": stats.get("proto_last_times", {}),
                     "cache_ts": stats.get("cache_ts"),
                     "last_knock_stats": history[0] if history else None
                 }
@@ -332,6 +342,10 @@ async def redis_listener():
             uptime_val = await r.get("knock:uptime_minutes")
             data["total_global"] = int(total_val) if total_val else 0
             data["uptime_minutes"] = int(uptime_val) if uptime_val else 0
+            proto_name = data.get("proto", "").upper()
+            if proto_name:
+                pu = await r.get(f"knock:uptime:{proto_name.lower()}")
+                data["proto_uptime"] = int(pu) if pu else 0
             payload = json.dumps({"type": "new_knock", "data": data})
             await manager.broadcast(payload)
 

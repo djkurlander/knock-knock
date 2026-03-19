@@ -107,6 +107,8 @@ def b64decode(s):
     except Exception:
         return ''
 
+_PROTO_LABEL = "SMTP"  # overridden by --proto arg
+
 def emit_smtp_knock(
     client_ip,
     *,
@@ -118,7 +120,7 @@ def emit_smtp_knock(
     subject=None,
     body=None,
 ):
-    knock = {"type": "KNOCK", "proto": "SMTP", "ip": client_ip, "smtp_stage": stage}
+    knock = {"type": "KNOCK", "proto": _PROTO_LABEL, "ip": client_ip, "smtp_stage": stage}
     if username is not None:
         knock["user"] = username
     if password is not None:
@@ -136,7 +138,7 @@ def emit_smtp_knock(
 def emit_smtp_diag(client_ip, session_id, **fields):
     payload = {
         "type": "SMTP_DIAG",
-        "proto": "SMTP",
+        "proto": _PROTO_LABEL,
         "ip": client_ip,
         "session_id": session_id,
     }
@@ -473,10 +475,12 @@ def handle_connection(client_sock, client_ip):
         except:
             pass
 
-def start_honeypot():
+def start_honeypot(port=587, proto_label="SMTP"):
+    global _PROTO_LABEL
+    _PROTO_LABEL = proto_label
     ensure_smtp_cert(_SMTP_HOSTNAME, SMTP_TLS_CERT_PATH, SMTP_TLS_KEY_PATH)
-    sock = create_dualstack_tcp_listener(587, backlog=100)
-    print(f"🚀 SMTP Honeypot Active on Port 587 (IPv4+IPv6) [{SMTP_FINGERPRINT}]. Collecting radiation...", flush=True)
+    sock = create_dualstack_tcp_listener(port, backlog=100)
+    print(f"🚀 {proto_label} Honeypot Active on Port {port} (IPv4+IPv6) [{SMTP_FINGERPRINT}]. Collecting radiation...", flush=True)
 
     while True:
         client, addr = sock.accept()
@@ -488,4 +492,9 @@ def start_honeypot():
         threading.Thread(target=handle_connection, args=(client, client_ip), daemon=True).start()
 
 if __name__ == "__main__":
-    start_honeypot()
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--port", type=int, default=587)
+    parser.add_argument("--proto", default="SMTP")
+    args = parser.parse_args()
+    start_honeypot(port=args.port, proto_label=args.proto)

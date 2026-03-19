@@ -65,7 +65,7 @@ if [ "$RESET" = true ]; then
         REDIS_CMD="redis-cli"
     fi
 
-    $REDIS_CMD del knock:total_global knock:uptime_minutes knock:last_time knock:last_lat knock:last_lng knock:recent knock:recent:ssh knock:recent:tnet knock:recent:smtp knock:recent:mail knock:recent:rdp knock:recent:ftp knock:recent:sip knock:recent:smb knock:blocked > /dev/null
+    $REDIS_CMD keys 'knock:*' | grep -v '^knock:blocked$' | grep -v '^knock:alerted:' | xargs -r $REDIS_CMD del > /dev/null
     echo "  [+] Cleared Redis keys"
 
     # Clear persisted blocklist so monitor doesn't reload banned IPs on boot

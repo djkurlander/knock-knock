@@ -30,7 +30,28 @@ ssh -p 2222 user@your-server
 
 ### Open Firewall Ports
 
-You must open up your firewall (if present) to expose ports 22, 80 or 443, and potentially your real SSH port. This is specific to your network configuration, so the exact steps are not presented here.
+Open the ports for whichever honeypots you plan to run, plus the web dashboard. For example, with UFW:
+
+```bash
+# Web dashboard (pick one)
+ufw allow 80/tcp     # HTTP
+ufw allow 443/tcp    # HTTPS
+
+# Honeypot ports (enable as needed)
+ufw allow 21/tcp     # FTP
+ufw allow 22/tcp     # SSH
+ufw allow 23/tcp     # Telnet
+ufw allow 25/tcp     # SMTP (MAIL)
+ufw allow 445/tcp    # SMB
+ufw allow 587/tcp    # SMTP
+ufw allow 3389/tcp   # RDP
+ufw allow 5060       # SIP (TCP + UDP)
+
+# Your real SSH port
+ufw allow 2222/tcp   # or whatever you chose
+```
+
+If you're not using UFW, open the equivalent ports in your firewall.
 
 ### MaxMind Account (GeoIP)
 

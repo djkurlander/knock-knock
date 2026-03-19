@@ -1497,7 +1497,7 @@
         const body = rows.map(r => `
             <div class="proto-stats-row" data-proto="${escapeHtml(r.proto)}" style="display:grid;grid-template-columns:1fr 0.82fr 1.45fr 0.73fr;gap:8px;padding:4px 0;border-bottom:1px solid #222;">
                 <span style="font-weight:bold;color:${escapeHtml(PROTO_COLORS[r.proto] || PROTO_COLORS.ALL)};padding-left:6px;">${escapeHtml(r.proto)}</span>
-                <span style="color:var(--neon-green);text-align:center;">${r.pct.toFixed(1)}%</span>
+                <span style="color:var(--neon-green);text-align:center;">${r.pct === 100 ? '100' : r.pct.toFixed(1)}%</span>
                 <span style="color:var(--data-blue);text-align:center;">${r.count.toLocaleString()}</span>
                 <span style="color:var(--neon-green);text-align:center;">${r.kpm.toFixed(1)}</span>
             </div>

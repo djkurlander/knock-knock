@@ -1830,7 +1830,7 @@
             });
             const logMax = Math.log(1 + maxHits);
             globe.hexPolygonsData([]);
-            globe.polygonsData([...countriesData]);
+            globe.polygonsData(countriesData);
             globe.polygonCapColor(d => {
                 const h = hitsMap[d.properties.ISO_A2] || 0;
                 if (!h) return 'rgba(0, 255, 65, 0.05)';

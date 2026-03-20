@@ -255,6 +255,7 @@ def init_db():
         cur.execute("INSERT OR REPLACE INTO ip_intel_proto (ip, proto, hits, last_seen, lat, lng) SELECT ip, 0, hits, last_seen, lat, lng FROM ip_intel")
         print("✅ Seeded _proto tables from ALL tables (existing data tagged as SSH)")
     cur.execute("PRAGMA journal_mode=WAL")
+    cur.fetchone()  # consume PRAGMA result to avoid "statements in progress" error
     conn.commit()
     conn.close()
 

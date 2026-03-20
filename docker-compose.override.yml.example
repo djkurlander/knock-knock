@@ -13,6 +13,13 @@ services:
   # honeypot-monitor:
   #   command: python -u monitor.py --max-knocks 5000
 
+  ## Select which honeypots to run (default: all)
+  ## Protocols: SSH, TNET, FTP, RDP, SMB, SIP, SMTP, MAIL
+  # honeypot-monitor:
+  #   environment:
+  #     - ENABLED_PROTOCOLS=SSH
+  #     # or: ENABLED_PROTOCOLS=SSH,TNET,SMTP
+
   ## HTTPS — uncomment the block below, then place certs in certs/
   # web:
   #   environment:

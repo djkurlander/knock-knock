@@ -5,9 +5,13 @@ After=network.target redis-server.service
 [Service]
 User=root
 WorkingDirectory=/root/knock-knock
-ExecStart=/root/knock-knock/.venv/bin/python -u monitor.py
 # Add --save-knocks to store individual knock records in SQLite
 # Add --max-knocks N to auto-add IPs to blocklist.txt after N total hits (disabled by default)
+# To select which honeypots to run, uncomment and edit the Environment line below (default: all).
+# Protocols: SSH, TNET, FTP, RDP, SMB, SIP, SMTP, MAIL
+# Environment=ENABLED_PROTOCOLS=SSH
+# Environment=ENABLED_PROTOCOLS=SSH,TNET,SMTP
+ExecStart=/root/knock-knock/.venv/bin/python -u monitor.py
 Restart=always
 RestartSec=5
 

@@ -315,6 +315,23 @@ systemctl daemon-reload
 systemctl restart knock-monitor
 ```
 
+### Selecting Protocols (`ENABLED_PROTOCOLS`)
+
+By default, all honeypots run (SSH, TNET, FTP, RDP, SMB, SIP, SMTP, MAIL). To run only specific protocols, set the `ENABLED_PROTOCOLS` environment variable to a comma-separated list.
+
+**Docker:** Copy the example override file (if you haven't already) and uncomment the `ENABLED_PROTOCOLS` setting:
+```bash
+cp docker-compose.override.yml.example docker-compose.override.yml
+# Edit docker-compose.override.yml and uncomment/edit the ENABLED_PROTOCOLS line
+docker compose up -d
+```
+
+**Systemd:** Uncomment and edit the `Environment=ENABLED_PROTOCOLS=` line in `/etc/systemd/system/knock-monitor.service`, then reload:
+```bash
+systemctl daemon-reload
+systemctl restart knock-monitor
+```
+
 ### Enabling HTTPS
 
 Place your SSL certificate and private key in the `certs/` directory:

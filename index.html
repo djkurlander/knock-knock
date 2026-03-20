@@ -911,6 +911,7 @@
         if (isFiltered) {
             lines.push(`<div style="${ROW}"><span style="${L};${LW}">Viewing:</span><span style="${G}">${activeProtocols.map(escapeHtml).join(', ')} only</span></div>`);
         }
+        lines.push(`<div style="${ROW}"><span style="${L};${LW}">Version:</span><span style="${G}">2.0.0-beta.1</span></div>`);
         const html = lines.join('');
         ['d-about-server-info', 'm-about-server-info'].forEach(id => {
             const el = document.getElementById(id);

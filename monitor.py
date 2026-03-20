@@ -210,23 +210,14 @@ def init_db():
     # Add per-protocol uptime columns (one per known protocol)
     hb_cols = [row[1] for row in cur.execute("PRAGMA table_info(monitor_heartbeats)").fetchall()]
     added_uptime_cols = False
+    _seed_uptime_cols = False
     for proto_name in PROTO:
         col = f"uptime_{proto_name.lower()}"
         if col not in hb_cols:
             cur.execute(f"ALTER TABLE monitor_heartbeats ADD COLUMN {col} INTEGER NOT NULL DEFAULT 0")
             added_uptime_cols = True
     if added_uptime_cols:
-        # Seed uptime for any protocol that has recorded knocks (it was running)
-        active_protos = [row[0] for row in cur.execute(
-            "SELECT DISTINCT proto FROM ip_intel_proto").fetchall()]
-        seeded = []
-        for proto_int in active_protos:
-            name = PROTO_NAME.get(proto_int)
-            if name:
-                col = f"uptime_{name.lower()}"
-                cur.execute(f"UPDATE monitor_heartbeats SET {col} = uptime_minutes WHERE id = 1")
-                seeded.append(name)
-        print(f"✅ Added per-protocol uptime tracking (seeded from total uptime: {', '.join(seeded) or 'none'})")
+        _seed_uptime_cols = True  # deferred until after proto tables are created
     # Indexes for fast top-N queries
     cur.execute("CREATE INDEX IF NOT EXISTS idx_user_intel_hits ON user_intel(hits DESC)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_pass_intel_hits ON pass_intel(hits DESC)")
@@ -244,6 +235,18 @@ def init_db():
     cur.execute("CREATE INDEX IF NOT EXISTS idx_country_intel_proto_hits ON country_intel_proto(proto, hits DESC)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_isp_intel_proto_hits ON isp_intel_proto(proto, hits DESC)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_ip_intel_proto_hits ON ip_intel_proto(proto, hits DESC)")
+    # Seed per-protocol uptime columns (deferred from above — proto tables now exist)
+    if _seed_uptime_cols:
+        active_protos = [row[0] for row in cur.execute(
+            "SELECT DISTINCT proto FROM ip_intel_proto").fetchall()]
+        seeded = []
+        for proto_int in active_protos:
+            name = PROTO_NAME.get(proto_int)
+            if name:
+                col = f"uptime_{name.lower()}"
+                cur.execute(f"UPDATE monitor_heartbeats SET {col} = uptime_minutes WHERE id = 1")
+                seeded.append(name)
+        print(f"✅ Added per-protocol uptime tracking (seeded from total uptime: {', '.join(seeded) or 'none'})")
     # Seed _proto tables from ALL tables (v1 single-protocol data → proto=0)
     has_all = cur.execute("SELECT 1 FROM ip_intel LIMIT 1").fetchone()
     has_proto = cur.execute("SELECT 1 FROM ip_intel_proto LIMIT 1").fetchone()

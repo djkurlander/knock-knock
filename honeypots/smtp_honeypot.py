@@ -207,7 +207,7 @@ def handle_connection(client_sock, client_ip):
 
     try:
         client_sock.settimeout(30)
-        print(f"🔌 SMTP connect {client_ip}", flush=True)
+        print(f"🔌 {_PROTO_LABEL} connect {client_ip}", flush=True)
         trace(session_id, client_ip, 'connect', require_auth=SMTP587_REQUIRE_AUTH, fingerprint=SMTP_FINGERPRINT)
         client_sock.sendall(_BANNER)
 

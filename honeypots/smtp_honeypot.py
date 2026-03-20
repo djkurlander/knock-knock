@@ -101,11 +101,11 @@ def trace(session_id, client_ip, stage, **fields):
     print(f"{base} {suffix}".rstrip(), flush=True)
 
 def b64decode(s):
-    """Decode a base64 string, returning '' on any error."""
+    """Decode a base64 string, returning '<cryptic binary>' on any error."""
     try:
         return base64.b64decode(s.strip()).decode('utf-8', errors='replace')
     except Exception:
-        return ''
+        return '<cryptic binary>'
 
 _PROTO_LABEL = "SMTP"  # overridden by --proto arg
 

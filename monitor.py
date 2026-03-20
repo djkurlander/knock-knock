@@ -235,7 +235,17 @@ def init_db():
     cur.execute("CREATE INDEX IF NOT EXISTS idx_country_intel_proto_hits ON country_intel_proto(proto, hits DESC)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_isp_intel_proto_hits ON isp_intel_proto(proto, hits DESC)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_ip_intel_proto_hits ON ip_intel_proto(proto, hits DESC)")
-    # Seed per-protocol uptime columns (deferred from above — proto tables now exist)
+    # Seed _proto tables from ALL tables (v1 single-protocol data → proto=0)
+    has_all = cur.execute("SELECT 1 FROM ip_intel LIMIT 1").fetchone()
+    has_proto = cur.execute("SELECT 1 FROM ip_intel_proto LIMIT 1").fetchone()
+    if has_all and not has_proto:
+        cur.execute("INSERT OR REPLACE INTO user_intel_proto (username, proto, hits, last_seen) SELECT username, 0, hits, last_seen FROM user_intel")
+        cur.execute("INSERT OR REPLACE INTO pass_intel_proto (password, proto, hits, last_seen) SELECT password, 0, hits, last_seen FROM pass_intel")
+        cur.execute("INSERT OR REPLACE INTO country_intel_proto (iso_code, proto, country, hits, last_seen) SELECT iso_code, 0, country, hits, last_seen FROM country_intel")
+        cur.execute("INSERT OR REPLACE INTO isp_intel_proto (isp, proto, hits, last_seen, asn) SELECT isp, 0, hits, last_seen, asn FROM isp_intel")
+        cur.execute("INSERT OR REPLACE INTO ip_intel_proto (ip, proto, hits, last_seen, lat, lng) SELECT ip, 0, hits, last_seen, lat, lng FROM ip_intel")
+        print("✅ Seeded _proto tables from ALL tables (existing data tagged as SSH)")
+    # Seed per-protocol uptime columns (deferred from above — must run after proto tables are populated)
     if _seed_uptime_cols:
         active_protos = [row[0] for row in cur.execute(
             "SELECT DISTINCT proto FROM ip_intel_proto").fetchall()]
@@ -247,16 +257,6 @@ def init_db():
                 cur.execute(f"UPDATE monitor_heartbeats SET {col} = uptime_minutes WHERE id = 1")
                 seeded.append(name)
         print(f"✅ Added per-protocol uptime tracking (seeded from total uptime: {', '.join(seeded) or 'none'})")
-    # Seed _proto tables from ALL tables (v1 single-protocol data → proto=0)
-    has_all = cur.execute("SELECT 1 FROM ip_intel LIMIT 1").fetchone()
-    has_proto = cur.execute("SELECT 1 FROM ip_intel_proto LIMIT 1").fetchone()
-    if has_all and not has_proto:
-        cur.execute("INSERT OR REPLACE INTO user_intel_proto (username, proto, hits, last_seen) SELECT username, 0, hits, last_seen FROM user_intel")
-        cur.execute("INSERT OR REPLACE INTO pass_intel_proto (password, proto, hits, last_seen) SELECT password, 0, hits, last_seen FROM pass_intel")
-        cur.execute("INSERT OR REPLACE INTO country_intel_proto (iso_code, proto, country, hits, last_seen) SELECT iso_code, 0, country, hits, last_seen FROM country_intel")
-        cur.execute("INSERT OR REPLACE INTO isp_intel_proto (isp, proto, hits, last_seen, asn) SELECT isp, 0, hits, last_seen, asn FROM isp_intel")
-        cur.execute("INSERT OR REPLACE INTO ip_intel_proto (ip, proto, hits, last_seen, lat, lng) SELECT ip, 0, hits, last_seen, lat, lng FROM ip_intel")
-        print("✅ Seeded _proto tables from ALL tables (existing data tagged as SSH)")
     cur.execute("PRAGMA journal_mode=WAL")
     cur.fetchone()  # consume PRAGMA result to avoid "statements in progress" error
     conn.commit()

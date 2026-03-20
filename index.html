@@ -262,14 +262,12 @@
             }
             .d-proto-switch-btn {
                 color: var(--mode-color, var(--warning-yellow)); font-size: 0.88em; cursor: pointer;
-                border: 1px solid var(--mode-color, var(--warning-yellow)); border-radius: 0;
+                border: 1px solid color-mix(in srgb, var(--mode-color, var(--warning-yellow)) 35%, transparent); border-radius: 0;
                 padding: 2px 8px; font-family: monospace; letter-spacing: 1px;
                 text-transform: uppercase; background: transparent;
-                line-height: 1.1; transition: opacity 0.2s, box-shadow 0.2s, background-color 0.2s, transform 0.2s;
-                opacity: 0.75;
+                line-height: 1.1; transition: border-color 0.2s, box-shadow 0.2s, background-color 0.2s, transform 0.2s;
             }
             .d-proto-switch-btn.is-active {
-                opacity: 1;
                 color: #050505;
                 background: var(--mode-color, var(--warning-yellow));
                 border-color: var(--mode-color, var(--warning-yellow));
@@ -279,7 +277,7 @@
             }
             @media (hover: hover) {
                 .d-proto-switch-btn:hover {
-                    opacity: 1;
+                    border-color: var(--mode-color, var(--warning-yellow));
                     box-shadow: 0 0 4px 1px var(--mode-glow, rgba(255, 204, 0, 0.6));
                 }
             }

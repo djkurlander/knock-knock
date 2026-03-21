@@ -2491,14 +2491,17 @@
 
     function renderSipAccountBlock(d) {
         const uriUser = sipUriUser(d.sip_request_uri);
-        const ext = d.sip_extension || d.sip_auth_user || d.sip_uri_user || uriUser || null;
-        const account = ext ? displayUsername(ext) : NA_INLINE;
-        const label = d.sip_method === 'INVITE' ? 'dialing' : 'extension';
-        let html = `<span style="color:var(--ui-label)">${label}:</span> <span>${account}</span>`;
-        if (d.sip_dial_country_name) {
-            html += `<br><span style="color:var(--ui-label)">toll call to:</span> <span>${escapeHtml(d.sip_dial_country_name)}</span> <span style="font-size:0.75em;vertical-align:middle">${getFlag(d.sip_dial_country)}</span>`;
+        const lines = [];
+        const ext = d.sip_extension || d.sip_auth_user || d.sip_uri_user || null;
+        if (ext) {
+            lines.push(`<span style="color:var(--ui-label)">from:</span> <span>${displayUsername(ext)}</span>`);
         }
-        return html;
+        const dialTarget = uriUser ? displayUsername(uriUser) : NA_INLINE;
+        lines.push(`<span style="color:var(--ui-label)">dialing:</span> <span>${dialTarget}</span>`);
+        if (d.sip_dial_country_name) {
+            lines.push(`<span style="color:var(--ui-label)">toll call to:</span> <span>${escapeHtml(d.sip_dial_country_name)}</span> <span style="font-size:0.75em;vertical-align:middle">${getFlag(d.sip_dial_country)}</span>`);
+        }
+        return lines.join('<br>');
     }
 
     const PROTOCOL_FEED_SCHEMAS = [

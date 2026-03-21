@@ -37,6 +37,8 @@ _dedup_lock = threading.Lock()
 _dedup_seen = {}
 _ack_lock = threading.Lock()
 _ack_seen = {}
+_reg_lock = threading.Lock()
+_registered_extensions = {}
 
 
 def trace(session_id, client_ip, stage, **fields):
@@ -319,6 +321,7 @@ def parse_dial_country(dial_string):
     s = re.sub(r'^sips?:', '', dial_string)
     s = s.split('@')[0]
     s = s.lstrip('*#')
+    s = s.replace('.', '')
     # PBX external line prefix before + (e.g. 0+421..., 00+421...)
     plus = s.find('+')
     if plus > 0 and s[:plus].isdigit():
@@ -504,109 +507,41 @@ def process_sip_request(req, client_ip):
     auth_h = _header_first(headers, 'authorization') or _header_first(headers, 'proxy-authorization')
     scheme, auth = parse_auth_header(auth_h)
 
-    # Capture URI userinfo candidates for fallback identity extraction.
-    uri_candidates = []
-    for field_name, candidate in [
-        ('request_uri', req.get('uri')),
-        ('from', _header_first(headers, 'from')),
-        ('contact', _header_first(headers, 'contact')),
-        ('to', _header_first(headers, 'to')),
-    ]:
-        u, p = extract_user_pass_from_sip_uri(candidate)
-        if u:
-            uri_candidates.append((field_name, u, p))
+    # Extract extension from auth header, request URI, or From header.
+    ext = auth.get('username') if auth.get('username') else None
+    if not ext:
+        ext, _ = extract_user_pass_from_sip_uri(req.get('uri'))
+    if not ext:
+        ext, _ = extract_user_pass_from_sip_uri(_header_first(headers, 'from'))
 
-    if scheme == 'basic' and auth.get('username') is not None:
-        emit_knock(
-            client_ip,
-            extra={
-                **common,
-                'sip_stage': 'auth',
-                'sip_auth_scheme': 'basic',
-                'sip_auth_user': auth.get('username', ''),
-                'sip_auth_password': auth.get('password', ''),
-                'sip_cred_source': 'authorization',
-                'sip_extension': auth.get('username', ''),
-            },
-            dedup_key=dedup_key,
-        )
-        return 403, 'Forbidden', None
-
-    if scheme == 'digest' and auth.get('username') is not None:
-        # SIP Digest auth does not expose plaintext passwords.
-        emit_knock(
-            client_ip,
-            extra={
-                **common,
-                'sip_stage': 'auth',
-                'sip_auth_scheme': 'digest',
-                'sip_auth_user': auth.get('username', ''),
-                'sip_auth_password': '',
-                'sip_digest_username': auth.get('username', ''),
-                'sip_digest_realm': auth.get('realm', ''),
-                'sip_digest_nonce': auth.get('nonce', ''),
-                'sip_digest_uri': auth.get('uri', ''),
-                'sip_digest_response': auth.get('response', ''),
-                'sip_digest_algorithm': auth.get('algorithm', ''),
-                'sip_digest_qop': auth.get('qop', ''),
-                'sip_digest_nc': auth.get('nc', ''),
-                'sip_digest_cnonce': auth.get('cnonce', ''),
-                'sip_cred_source': 'authorization',
-                'sip_extension': auth.get('username', ''),
-            },
-            dedup_key=dedup_key,
-        )
-        return 403, 'Forbidden', None
-
-    # No auth supplied yet. Capture any username hints from URI/From.
-    u, _ = extract_user_pass_from_sip_uri(req.get('uri'))
-    if not u:
-        u, _ = extract_user_pass_from_sip_uri(_header_first(headers, 'from'))
-
-    if method in ('REGISTER', 'INVITE', 'SUBSCRIBE', 'MESSAGE', 'OPTIONS'):
+    # --- REGISTER: never emit a knock; store extension, accept or challenge ---
+    if method == 'REGISTER':
+        if scheme in ('basic', 'digest') and auth.get('username') is not None:
+            if ext:
+                with _reg_lock:
+                    _registered_extensions[client_ip] = ext
+            return 200, 'OK', None
+        # No auth yet — challenge so they send credentials.
         challenge = build_digest_challenge(req)
         status_code, status_reason, auth_header_name = choose_challenge()
-        if u:
-            emit_knock(
-                client_ip,
-                extra={
-                    **common,
-                    'sip_stage': 'hint',
-                    'sip_cred_source': 'username_hint',
-                    'sip_extension': u,
-                    'sip_challenge_mode': str(status_code),
-                },
-                dedup_key=dedup_key,
-            )
-        elif uri_candidates:
-            field_name, uri_user, uri_pass = uri_candidates[0]
-            extra = {
-                **common,
-                'sip_stage': 'uri',
-                'sip_cred_source': f'uri:{field_name}',
-                'sip_uri_user': uri_user,
-                'sip_extension': uri_user,
-                'sip_challenge_mode': str(status_code),
-            }
-            if uri_pass:
-                extra['sip_uri_password'] = uri_pass
-                extra['sip_uri_userinfo'] = f'{uri_user}:{uri_pass}'
-            emit_knock(client_ip, extra=extra, dedup_key=dedup_key)
         return status_code, status_reason, [f'{auth_header_name}: {challenge}']
 
-    if uri_candidates:
-        field_name, uri_user, uri_pass = uri_candidates[0]
-        extra = {
-            **common,
-            'sip_stage': 'uri',
-            'sip_cred_source': f'uri:{field_name}',
-            'sip_uri_user': uri_user,
-            'sip_extension': uri_user,
-        }
-        if uri_pass:
-            extra['sip_uri_password'] = uri_pass
-            extra['sip_uri_userinfo'] = f'{uri_user}:{uri_pass}'
-        emit_knock(client_ip, extra=extra, dedup_key=dedup_key)
+    # --- INVITE: always emit a knock with extension + dial target ---
+    if method == 'INVITE':
+        with _reg_lock:
+            reg_ext = _registered_extensions.get(client_ip)
+        if not common.get('sip_extension'):
+            common['sip_extension'] = ext or reg_ext or ''
+        emit_knock(client_ip, extra=common, dedup_key=dedup_key)
+        return 486, 'Busy Here', None
+
+    # --- Other methods: challenge or accept, no knock ---
+    if scheme in ('basic', 'digest') and auth.get('username') is not None:
+        return 200, 'OK', None
+    if method in ('SUBSCRIBE', 'MESSAGE', 'OPTIONS'):
+        challenge = build_digest_challenge(req)
+        status_code, status_reason, auth_header_name = choose_challenge()
+        return status_code, status_reason, [f'{auth_header_name}: {challenge}']
 
     return 200, 'OK', None
 

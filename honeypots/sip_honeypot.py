@@ -236,8 +236,9 @@ def parse_dial_country(dial_string):
 
     def _result(pn):
         iso = phonenumbers.region_code_for_number(pn)
+        country = pn_geocoder.country_name_for_number(pn, 'en') or iso
         desc = pn_geocoder.description_for_number(pn, 'en')
-        name = desc or pn_geocoder.country_name_for_number(pn, 'en') or iso
+        name = f'{desc}, {country}' if desc and desc != country else country
         return iso, name
 
     if s.startswith('+'):

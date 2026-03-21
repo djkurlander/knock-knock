@@ -10,6 +10,9 @@ import threading
 import time
 import uuid
 
+import phonenumbers
+from phonenumbers import geocoder as pn_geocoder
+
 from common import (
     create_dualstack_tcp_listener,
     create_dualstack_udp_listener,
@@ -223,6 +226,63 @@ def extract_user_pass_from_sip_uri(value):
     return userinfo or None, None
 
 
+def parse_dial_country(dial_string):
+    """Extract target country (iso, name) from a SIP INVITE dial string."""
+    if not dial_string:
+        return None, None
+    s = re.sub(r'^sips?:', '', dial_string)
+    s = s.split('@')[0]
+    s = s.lstrip('*#')
+
+    def _result(pn):
+        iso = phonenumbers.region_code_for_number(pn)
+        desc = pn_geocoder.description_for_number(pn, 'en')
+        name = desc or pn_geocoder.country_name_for_number(pn, 'en') or iso
+        return iso, name
+
+    if s.startswith('+'):
+        try:
+            pn = phonenumbers.parse(s, None)
+            if phonenumbers.is_valid_number(pn) or phonenumbers.is_possible_number(pn):
+                return _result(pn)
+        except Exception:
+            pass
+        return None, None
+    if not re.match(r'^\d+$', s):
+        return None, None
+    if len(s) < 7:
+        return None, None
+    # North American long-distance: 1 + 10 digits
+    if re.match(r'^1\d{10}$', s):
+        try:
+            pn = phonenumbers.parse('+' + s, None)
+            if phonenumbers.is_valid_number(pn):
+                return _result(pn)
+        except Exception:
+            pass
+        return None, None
+    for prefix in ('011', '00'):
+        idx = s.find(prefix)
+        if idx >= 0:
+            remainder = s[idx + len(prefix):]
+            if len(remainder) >= 7:
+                try:
+                    pn = phonenumbers.parse('+' + remainder, None)
+                    if phonenumbers.is_valid_number(pn) or phonenumbers.is_possible_number(pn):
+                        return _result(pn)
+                except Exception:
+                    pass
+    max_strip = min(8, len(s) - 7)
+    for i in range(1, max_strip + 1):
+        try:
+            pn = phonenumbers.parse('+' + s[i:], None)
+            if phonenumbers.is_valid_number(pn):
+                return _result(pn)
+        except Exception:
+            continue
+    return None, None
+
+
 def parse_auth_header(auth_value):
     if not auth_value:
         return None, {}
@@ -340,6 +400,11 @@ def process_sip_request(req, client_ip):
     }
     if ack_age_ms is not None:
         common['sip_ack_age_ms'] = ack_age_ms
+    if method == 'INVITE':
+        dial_iso, dial_name = parse_dial_country(uri)
+        if dial_iso:
+            common['sip_dial_country'] = dial_iso
+            common['sip_dial_country_name'] = dial_name
 
     auth_h = _header_first(headers, 'authorization') or _header_first(headers, 'proxy-authorization')
     scheme, auth = parse_auth_header(auth_h)

@@ -6,7 +6,8 @@ RUN pip install --no-cache-dir \
     geoip2 \
     redis \
     fastapi \
-    "uvicorn[standard]"
+    "uvicorn[standard]" \
+    phonenumbers
 
 WORKDIR /app
 COPY monitor.py main.py constants.py index.html ./

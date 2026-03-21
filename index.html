@@ -2494,7 +2494,11 @@
         const ext = d.sip_extension || d.sip_auth_user || d.sip_uri_user || uriUser || null;
         const account = ext ? displayUsername(ext) : NA_INLINE;
         const label = d.sip_method === 'INVITE' ? 'dialing' : 'extension';
-        return `<span style="color:var(--ui-label)">${label}:</span> <span>${account}</span>`;
+        let html = `<span style="color:var(--ui-label)">${label}:</span> <span>${account}</span>`;
+        if (d.sip_dial_country_name) {
+            html += `<br><span style="color:var(--ui-label)">toll call to:</span> <span>${escapeHtml(d.sip_dial_country_name)}</span> <span style="font-size:0.75em;vertical-align:middle">${getFlag(d.sip_dial_country)}</span>`;
+        }
+        return html;
     }
 
     const PROTOCOL_FEED_SCHEMAS = [

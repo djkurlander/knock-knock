@@ -177,7 +177,7 @@ cd knock-knock
 
 uv venv
 source .venv/bin/activate
-uv pip install paramiko geoip2 redis fastapi uvicorn[standard] python-dotenv impacket
+uv pip install paramiko geoip2 redis fastapi uvicorn[standard] python-dotenv impacket phonenumbers
 ```
 
 ### Install Systemd Services
@@ -259,7 +259,7 @@ cd knock-knock
 
 uv venv
 source .venv/bin/activate
-uv pip install paramiko geoip2 redis fastapi uvicorn[standard] python-dotenv impacket
+uv pip install paramiko geoip2 redis fastapi uvicorn[standard] python-dotenv impacket phonenumbers
 ```
 
 ### Install Systemd Services

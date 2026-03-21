@@ -535,7 +535,7 @@ def process_sip_request(req, client_ip):
         if reg_ext:
             common['sip_extension'] = reg_ext
         emit_knock(client_ip, extra=common, dedup_key=dedup_key)
-        return 486, 'Busy Here', None
+        return 484, 'Address Incomplete', None
 
     # --- Other methods: challenge or accept, no knock ---
     if scheme in ('basic', 'digest') and auth.get('username') is not None:

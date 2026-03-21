@@ -526,9 +526,10 @@ def process_sip_request(req, client_ip):
         status_code, status_reason, auth_header_name = choose_challenge()
         return status_code, status_reason, [f'{auth_header_name}: {challenge}']
 
-    # --- INVITE: emit a knock only if there's a dial target to show ---
+    # --- INVITE: emit a knock if there's a number being dialed ---
     if method == 'INVITE':
-        if not common.get('sip_dial_country'):
+        dial_user, _ = extract_user_pass_from_sip_uri(uri)
+        if not dial_user:
             return 404, 'Not Found', None
         with _reg_lock:
             reg_ext = _registered_extensions.get(client_ip)

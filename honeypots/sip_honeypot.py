@@ -319,6 +319,10 @@ def parse_dial_country(dial_string):
     s = re.sub(r'^sips?:', '', dial_string)
     s = s.split('@')[0]
     s = s.lstrip('*#')
+    # PBX external line prefix before + (e.g. 0+421..., 00+421...)
+    plus = s.find('+')
+    if plus > 0 and s[:plus].isdigit():
+        s = s[plus:]
 
     def _result(pn):
         iso = phonenumbers.region_code_for_number(pn)

@@ -2493,7 +2493,8 @@
         const uriUser = sipUriUser(d.sip_request_uri);
         const ext = d.sip_extension || d.sip_auth_user || d.sip_uri_user || uriUser || null;
         const account = ext ? displayUsername(ext) : NA_INLINE;
-        return `<span style="color:var(--ui-label)">account:</span> <span>${account}</span>`;
+        const label = d.sip_method === 'INVITE' ? 'dialing' : 'extension';
+        return `<span style="color:var(--ui-label)">${label}:</span> <span>${account}</span>`;
     }
 
     const PROTOCOL_FEED_SCHEMAS = [

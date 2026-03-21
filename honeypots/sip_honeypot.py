@@ -532,8 +532,8 @@ def process_sip_request(req, client_ip):
             return 404, 'Not Found', None
         with _reg_lock:
             reg_ext = _registered_extensions.get(client_ip)
-        if not common.get('sip_extension'):
-            common['sip_extension'] = ext or reg_ext or ''
+        if reg_ext:
+            common['sip_extension'] = reg_ext
         emit_knock(client_ip, extra=common, dedup_key=dedup_key)
         return 486, 'Busy Here', None
 

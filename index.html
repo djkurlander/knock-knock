@@ -428,20 +428,15 @@
             .m-stat-row:first-of-type { margin-top: 10px; }
             .m-stat-row .stat-label { font-size: 1em; }
             .m-stat-row .stat-value { font-size: 1em; }
-            .m-pane h2 { font-size: 1.02em; }
-            .m-pane .proto-cycle-btn {
+            .m-pane h2 { font-size: 1.02em; position: relative; z-index: 10; }
+            .m-pane .proto-dropdown { transform: translateY(-2px); }
+            .m-pane .proto-dropdown-trigger {
                 font-size: 0.98em;
                 padding: 2px 6px;
-                transform: translateY(-2px);
             }
-            .m-pane .proto-cycle-btn-label {
-                gap: 0.2em;
-                transform: translateY(0.03em);
-            }
-            .m-pane .proto-cycle-arrow {
-                font-size: 1.35em;
-                line-height: 0.8;
-                transform: translateY(-0.02em);
+            .m-pane .proto-dropdown-option {
+                font-size: 0.98em;
+                padding: 8px 12px;
             }
 
             .m-progress-container { height: 4px; background: #000; width: 100%; }
@@ -561,6 +556,35 @@
         .proto-cycle-btn.desktop-readonly:hover {
             box-shadow: none !important;
         }
+
+        .proto-dropdown {
+            position: relative; display: inline-block; margin-left: 8px;
+            vertical-align: initial; z-index: 100;
+        }
+        .proto-dropdown-trigger {
+            display: inline-block; cursor: pointer;
+            color: var(--ui-label); font-size: 0.85em;
+            border: 1px solid rgba(255,204,0,0.85); border-radius: 0;
+            padding: 1px 4px; font-family: monospace; letter-spacing: 0.6px;
+            text-transform: uppercase; font-style: normal;
+            user-select: none; transition: border-color 0.2s;
+            white-space: nowrap; line-height: 1;
+        }
+        .proto-dropdown-menu {
+            display: none; position: absolute; right: 0; top: calc(100% + 2px);
+            background: #0f0f0f; border: 1px solid #2a2a2a;
+            z-index: 100; min-width: 100%; white-space: nowrap;
+        }
+        .proto-dropdown.open .proto-dropdown-menu { display: block; }
+        .proto-dropdown-option {
+            display: flex; justify-content: space-between; padding: 6px 10px; cursor: pointer;
+            font-family: monospace; font-size: 0.85em; letter-spacing: 1px;
+            text-transform: uppercase; white-space: nowrap;
+            transition: background 0.15s;
+        }
+        .proto-dropdown-option:active { background: rgba(255,255,255,0.08); }
+        .proto-dropdown-check { opacity: 0; margin-left: 6px; }
+        .proto-dropdown-option.active .proto-dropdown-check { opacity: 1; }
     </style>
 </head>
 <body>
@@ -656,16 +680,16 @@
     </div>
     <div class="m-progress-container"><div id="m-progress-bar"></div></div>
     <div class="m-viewport" id="m-viewport">
-        <div class="m-pane" id="m-pane-feed"><h2 style="display:flex;justify-content:space-between;align-items:center;">LIVE FEED: LOGIN ATTEMPTS<span id="m-feed-proto-btn" class="proto-cycle-btn" onclick="cycleProto(event)" style="vertical-align:initial;">⟳ ALL</span></h2><div id="m-feed" class="m-content"></div></div>
-        <div class="m-pane" id="m-pane-globe"><h2 style="display:flex;justify-content:space-between;align-items:center;">GLOBE VIEW<span class="proto-cycle-btn" onclick="cycleProto(event)" style="vertical-align:initial;">⟳ ALL</span></h2><div id="m-globe-location" style="text-align:center; margin-bottom:10px;"><div id="m-globe-loc-text" style="color:var(--neon-green);"></div><div id="m-globe-loc-isp" style="color:var(--data-blue); font-size:0.85em;"></div></div><div id="m-globe-pane" class="m-content globe-pane" style="display:flex; justify-content:center; align-items:center;"></div></div>
-        <div class="m-pane" id="m-pane-loc"><h2 style="display:flex;justify-content:space-between;align-items:center;">LOCATION<span class="proto-cycle-btn" onclick="cycleProto(event)" style="vertical-align:initial;">⟳ ALL</span></h2><div id="m-loc" class="m-content"></div></div>
-        <div class="m-pane" id="m-pane-user"><h2 style="display:flex;justify-content:space-between;align-items:center;">USERNAME<span class="proto-cycle-btn" onclick="cycleProto(event)" style="vertical-align:initial;">⟳ ALL</span></h2><div id="m-user" class="m-content"></div></div>
-        <div class="m-pane" id="m-pane-pass"><h2 style="display:flex;justify-content:space-between;align-items:center;">PASSWORD<span class="proto-cycle-btn" onclick="cycleProto(event)" style="vertical-align:initial;">⟳ ALL</span></h2><div id="m-pass" class="m-content"></div></div>
-        <div class="m-pane" id="m-pane-prov"><h2 style="display:flex;justify-content:space-between;align-items:center;">ISP<span class="proto-cycle-btn" onclick="cycleProto(event)" style="vertical-align:initial;">⟳ ALL</span></h2><div id="m-prov" class="m-content"></div></div>
-        <div class="m-pane" id="m-pane-ip"><h2 style="display:flex;justify-content:space-between;align-items:center;">IP ADDRESS<span class="proto-cycle-btn" onclick="cycleProto(event)" style="vertical-align:initial;">⟳ ALL</span></h2><div id="m-ip" class="m-content"></div></div>
-        <div class="m-pane" id="m-pane-details"><h2 style="display:flex;justify-content:space-between;align-items:center;">LAST KNOCK<span class="proto-cycle-btn" onclick="cycleProto(event)" style="vertical-align:initial;">⟳ ALL</span></h2><div id="m-details" class="m-content"></div></div>
+        <div class="m-pane" id="m-pane-feed"><h2 style="display:flex;justify-content:space-between;align-items:center;">LIVE FEED: LOGIN ATTEMPTS<span id="m-feed-proto-btn" class="proto-dropdown"><span class="proto-dropdown-trigger">ALL<span style="letter-spacing:0;margin-left:3px;font-size:1.2em">▾</span></span><span class="proto-dropdown-menu"></span></span></h2><div id="m-feed" class="m-content"></div></div>
+        <div class="m-pane" id="m-pane-globe"><h2 style="display:flex;justify-content:space-between;align-items:center;">GLOBE VIEW<span class="proto-dropdown"><span class="proto-dropdown-trigger">ALL<span style="letter-spacing:0;margin-left:3px;font-size:1.2em">▾</span></span><span class="proto-dropdown-menu"></span></span></h2><div id="m-globe-location" style="text-align:center; margin-bottom:10px;"><div id="m-globe-loc-text" style="color:var(--neon-green);"></div><div id="m-globe-loc-isp" style="color:var(--data-blue); font-size:0.85em;"></div></div><div id="m-globe-pane" class="m-content globe-pane" style="display:flex; justify-content:center; align-items:center;"></div></div>
+        <div class="m-pane" id="m-pane-loc"><h2 style="display:flex;justify-content:space-between;align-items:center;">LOCATION<span class="proto-dropdown"><span class="proto-dropdown-trigger">ALL<span style="letter-spacing:0;margin-left:3px;font-size:1.2em">▾</span></span><span class="proto-dropdown-menu"></span></span></h2><div id="m-loc" class="m-content"></div></div>
+        <div class="m-pane" id="m-pane-user"><h2 style="display:flex;justify-content:space-between;align-items:center;">USERNAME<span class="proto-dropdown"><span class="proto-dropdown-trigger">ALL<span style="letter-spacing:0;margin-left:3px;font-size:1.2em">▾</span></span><span class="proto-dropdown-menu"></span></span></h2><div id="m-user" class="m-content"></div></div>
+        <div class="m-pane" id="m-pane-pass"><h2 style="display:flex;justify-content:space-between;align-items:center;">PASSWORD<span class="proto-dropdown"><span class="proto-dropdown-trigger">ALL<span style="letter-spacing:0;margin-left:3px;font-size:1.2em">▾</span></span><span class="proto-dropdown-menu"></span></span></h2><div id="m-pass" class="m-content"></div></div>
+        <div class="m-pane" id="m-pane-prov"><h2 style="display:flex;justify-content:space-between;align-items:center;">ISP<span class="proto-dropdown"><span class="proto-dropdown-trigger">ALL<span style="letter-spacing:0;margin-left:3px;font-size:1.2em">▾</span></span><span class="proto-dropdown-menu"></span></span></h2><div id="m-prov" class="m-content"></div></div>
+        <div class="m-pane" id="m-pane-ip"><h2 style="display:flex;justify-content:space-between;align-items:center;">IP ADDRESS<span class="proto-dropdown"><span class="proto-dropdown-trigger">ALL<span style="letter-spacing:0;margin-left:3px;font-size:1.2em">▾</span></span><span class="proto-dropdown-menu"></span></span></h2><div id="m-ip" class="m-content"></div></div>
+        <div class="m-pane" id="m-pane-details"><h2 style="display:flex;justify-content:space-between;align-items:center;">LAST KNOCK<span class="proto-dropdown"><span class="proto-dropdown-trigger">ALL<span style="letter-spacing:0;margin-left:3px;font-size:1.2em">▾</span></span><span class="proto-dropdown-menu"></span></span></h2><div id="m-details" class="m-content"></div></div>
         <div class="m-pane" id="m-pane-proto"><h2>PROTO STATS</h2><div id="m-proto-stats" class="m-content"></div></div>
-        <div class="m-pane" id="m-pane-trivia"><h2 style="display:flex;justify-content:space-between;align-items:center;">TRIVIA<span class="proto-cycle-btn" onclick="cycleProto(event)" style="vertical-align:initial;">⟳ ALL</span></h2><div id="m-trivia" class="m-content"></div></div>
+        <div class="m-pane" id="m-pane-trivia"><h2 style="display:flex;justify-content:space-between;align-items:center;">TRIVIA<span class="proto-dropdown"><span class="proto-dropdown-trigger">ALL<span style="letter-spacing:0;margin-left:3px;font-size:1.2em">▾</span></span><span class="proto-dropdown-menu"></span></span></h2><div id="m-trivia" class="m-content"></div></div>
         <div class="m-pane" id="m-pane-jokes"><h2>KNOCK-KNOCK JOKES</h2><div id="m-jokes" class="m-content" style="color:var(--neon-green); line-height:1.6;"></div></div>
         <div class="m-pane" id="m-pane-about"><h2>ABOUT</h2><div class="m-content" style="color:var(--neon-green); line-height:1.6;">
 	    <p>Set up an unprotected server on the net, and the bots start swarming! This site shows their break-in attempts in real-time: where they come from, what credentials they try, and why.</p>
@@ -1053,20 +1077,31 @@
     function applyProtoButtons(mode = getCurrentMode()) {
         if (!showProtoCycleButtons) {
             document.querySelectorAll('.proto-cycle-btn').forEach(el => el.style.display = 'none');
+            document.querySelectorAll('.proto-dropdown').forEach(el => el.style.display = 'none');
             return;
         }
         const modeColor = PROTO_COLORS[mode] || PROTO_COLORS.ALL;
         const glowColor = hexToRgba(modeColor, 0.7);
+        // Desktop readonly buttons
         document.querySelectorAll('.proto-cycle-btn').forEach(el => {
-            const readonlyDesktop = el.classList.contains('desktop-readonly');
-            const labelHtml = readonlyDesktop
-                ? `<span class="proto-cycle-btn-label">${mode}</span>`
-                : `<span class="proto-cycle-btn-label"><span class="proto-cycle-arrow">⟳</span><span class="proto-cycle-mode">${mode}</span></span>`;
-            el.innerHTML = labelHtml;
+            el.style.display = '';
+            el.innerHTML = `<span class="proto-cycle-btn-label">${mode}</span>`;
             el.style.color = modeColor;
             el.style.borderColor = modeColor;
             el.style.setProperty('--btn-glow', glowColor);
         });
+        // Mobile dropdowns
+        document.querySelectorAll('.proto-dropdown').forEach(el => {
+            el.style.display = '';
+            const trigger = el.querySelector('.proto-dropdown-trigger');
+            if (trigger) {
+                trigger.innerHTML = mode + '<span style="letter-spacing:0;margin-left:3px;font-size:1.2em">▾</span>';
+                trigger.style.color = modeColor;
+                trigger.style.borderColor = modeColor;
+                trigger.style.setProperty('--btn-glow', glowColor);
+            }
+        });
+        closeAllProtoDropdowns();
         updateDesktopProtocolSwitcher(mode);
     }
 
@@ -1359,22 +1394,61 @@
         setProtocolMode(mode, { preferredIdx: getDesktopActiveIndex(), playSound: true });
     }
 
-    function cycleProto(e) {
-        e.stopPropagation();  // don't trigger toggleSound() on the parent div
-        const preferredIdx = getPanelIndexFromTarget(e.target);
-        const nextMode = PROTO_MODES[(protoModeIdx + 1) % PROTO_MODES.length];
-        setProtocolMode(nextMode, { preferredIdx, playSound: true });
+    function closeAllProtoDropdowns() {
+        document.querySelectorAll('.proto-dropdown.open').forEach(el => el.classList.remove('open'));
     }
 
-    // Ensure initial protocol cycle buttons use the same optical-centering wrapper.
+    function openProtoDropdown(e) {
+        e.stopPropagation();
+        const trigger = e.currentTarget;
+        const dropdown = trigger.closest('.proto-dropdown');
+        const wasOpen = dropdown.classList.contains('open');
+        closeAllProtoDropdowns();
+        if (wasOpen) return;
+        const menu = dropdown.querySelector('.proto-dropdown-menu');
+        const currentMode = getCurrentMode();
+        menu.innerHTML = PROTO_MODES.map(m => {
+            const color = PROTO_COLORS[m] || PROTO_COLORS.ALL;
+            const active = m === currentMode ? ' active' : '';
+            return `<span class="proto-dropdown-option${active}" data-mode="${m}" style="color:${color};">${m}<span class="proto-dropdown-check">✓</span></span>`;
+        }).join('');
+        dropdown.classList.add('open');
+        setTimeout(() => {
+            document.addEventListener('click', function closeDropdown(ev) {
+                if (!dropdown.contains(ev.target)) closeAllProtoDropdowns();
+                document.removeEventListener('click', closeDropdown);
+            }, { once: true });
+        }, 0);
+    }
+
+    function selectProtoFromDropdown(e) {
+        e.stopPropagation();
+        const option = e.target.closest('.proto-dropdown-option');
+        if (!option) return;
+        const mode = option.dataset.mode;
+        const preferredIdx = getPanelIndexFromTarget(e.target);
+        closeAllProtoDropdowns();
+        setProtocolMode(mode, { preferredIdx, playSound: true });
+    }
+
+    // Wire up mobile dropdown triggers and menus
+    document.querySelectorAll('.proto-dropdown-trigger').forEach(el => {
+        el.addEventListener('click', openProtoDropdown);
+    });
+    document.querySelectorAll('.proto-dropdown-menu').forEach(el => {
+        el.addEventListener('click', selectProtoFromDropdown);
+    });
+    const mViewport = document.getElementById('m-viewport');
+    if (mViewport) mViewport.addEventListener('scroll', closeAllProtoDropdowns);
+    window.addEventListener('resize', closeAllProtoDropdowns);
+
+    // Ensure initial protocol cycle buttons use the same optical-centering wrapper (desktop only).
     document.querySelectorAll('.proto-cycle-btn').forEach(el => {
         const txt = (el.textContent || '').trim();
         const mode = (txt.split(/\s+/).pop() || 'ALL').toUpperCase();
         const readonlyDesktop = el.classList.contains('desktop-readonly');
-        const labelHtml = readonlyDesktop
-            ? `<span class="proto-cycle-btn-label">${mode}</span>`
-            : `<span class="proto-cycle-btn-label"><span class="proto-cycle-arrow">⟳</span><span class="proto-cycle-mode">${mode}</span></span>`;
-        el.innerHTML = labelHtml;
+        if (!readonlyDesktop) return;
+        el.innerHTML = `<span class="proto-cycle-btn-label">${mode}</span>`;
     });
 
     function initAudio() {

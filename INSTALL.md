@@ -300,7 +300,9 @@ See [Optional Configuration](#optional-configuration) for various site-specific 
 
 ### Saving Individual Knocks (`--save-knocks`)
 
-By default, the monitor only updates aggregated intel tables (top usernames, passwords, countries, ISPs, IPs). To also store every individual knock in SQLite for later analysis, enable the `--save-knocks` flag. This uses more disk space (~600 MB/year at typical traffic levels).
+By default, the monitor only updates aggregated intel tables (top usernames, passwords, countries, ISPs, IPs). To also store every individual knock in per-protocol SQLite tables for later analysis, enable the `--save-knocks` flag. This uses more disk space (~600 MB/year at typical traffic levels).
+
+To save only specific protocols, pass a comma-separated list: `--save-knocks=SIP,SMTP`. Only the specified protocols will get knock tables created.
 
 **Docker:** Copy the example override file and uncomment the `--save-knocks` command:
 ```bash

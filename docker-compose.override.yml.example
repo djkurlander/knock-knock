@@ -5,6 +5,7 @@
 services:
 
   ## Store every individual knock in SQLite (uses ~600 MB/year)
+  ## Use --save-knocks for all protocols, or --save-knocks=SIP,SMTP for selective
   # honeypot-monitor:
   #   command: python -u monitor.py --save-knocks
 

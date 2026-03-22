@@ -6,6 +6,7 @@ import random
 import re
 import socket
 import string
+import sys
 import threading
 import time
 import uuid
@@ -503,8 +504,9 @@ def process_sip_request(req, client_ip):
         common['sip_ack_age_ms'] = ack_age_ms
     if method == 'INVITE':
         dial_iso, dial_name = parse_dial_country(uri)
+        if not dial_iso:
+            print(f'SIP: no location for INVITE uri={uri}', file=sys.stderr)
         if dial_iso:
-            common['sip_dial_country'] = dial_iso
             common['sip_dial_country_name'] = dial_name
             coords = COUNTRY_COORDS.get(dial_iso)
             if coords:

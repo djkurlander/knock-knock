@@ -157,6 +157,60 @@ def _build_self_redaction_patterns():
 
 SELF_REDACTION_PATTERNS = _build_self_redaction_patterns()
 
+# --- Per-protocol knock table definitions ---
+# Common columns for all knock tables (after id and timestamp)
+_COMMON_KNOCK_COLS = [
+    'ip_address TEXT', 'iso_code TEXT', 'city TEXT', 'region TEXT',
+    'country TEXT', 'isp TEXT', 'asn TEXT',
+]
+
+# Protocol-specific extra columns
+_KNOCK_EXTRA_COLS = {
+    'SSH':  ['username TEXT', 'password TEXT'],
+    'TNET': ['username TEXT', 'password TEXT'],
+    'FTP':  ['username TEXT', 'password TEXT'],
+    'SMTP': ['username TEXT', 'password TEXT', 'smtp_stage TEXT',
+             'smtp_mail_from TEXT', 'smtp_rcpt_to TEXT',
+             'subject TEXT', 'body TEXT'],
+    'MAIL': ['username TEXT', 'password TEXT', 'smtp_stage TEXT',
+             'smtp_mail_from TEXT', 'smtp_rcpt_to TEXT',
+             'subject TEXT', 'body TEXT'],
+    'SIP':  ['sip_method TEXT', 'sip_request_uri TEXT', 'sip_call_id TEXT',
+             'sip_cseq TEXT', 'sip_extension TEXT',
+             'sip_dial_country TEXT', 'sip_dial_country_name TEXT',
+             'sip_dial_lat REAL', 'sip_dial_lng REAL'],
+    'SMB':  ['username TEXT', 'smb_share TEXT', 'smb_version TEXT',
+             'smb_domain TEXT', 'smb_host TEXT'],
+    'RDP':  ['username TEXT', 'rdp_source TEXT', 'domain TEXT'],
+}
+
+# Maps JSON knock data keys -> column names for common fields
+_COMMON_KEY_MAP = [
+    ('ip', 'ip_address'), ('iso', 'iso_code'), ('city', 'city'),
+    ('region', 'region'), ('country', 'country'), ('isp', 'isp'), ('asn', 'asn'),
+]
+
+# Maps JSON knock data keys -> column names for protocol-specific fields
+_PROTO_KEY_MAP = {
+    'SSH':  [('user', 'username'), ('pass', 'password')],
+    'TNET': [('user', 'username'), ('pass', 'password')],
+    'FTP':  [('user', 'username'), ('pass', 'password')],
+    'SMTP': [('user', 'username'), ('pass', 'password'), ('smtp_stage', 'smtp_stage'),
+             ('smtp_mail_from', 'smtp_mail_from'), ('smtp_rcpt_to', 'smtp_rcpt_to'),
+             ('subject', 'subject'), ('body', 'body')],
+    'MAIL': [('user', 'username'), ('pass', 'password'), ('smtp_stage', 'smtp_stage'),
+             ('smtp_mail_from', 'smtp_mail_from'), ('smtp_rcpt_to', 'smtp_rcpt_to'),
+             ('subject', 'subject'), ('body', 'body')],
+    'SIP':  [('sip_method', 'sip_method'), ('sip_request_uri', 'sip_request_uri'),
+             ('sip_call_id', 'sip_call_id'), ('sip_cseq', 'sip_cseq'),
+             ('sip_extension', 'sip_extension'), ('sip_dial_country', 'sip_dial_country'),
+             ('sip_dial_country_name', 'sip_dial_country_name'),
+             ('sip_dial_lat', 'sip_dial_lat'), ('sip_dial_lng', 'sip_dial_lng')],
+    'SMB':  [('user', 'username'), ('smb_share', 'smb_share'), ('smb_version', 'smb_version'),
+             ('smb_domain', 'smb_domain'), ('smb_host', 'smb_host')],
+    'RDP':  [('user', 'username'), ('rdp_source', 'rdp_source'), ('domain', 'domain')],
+}
+
 def reset_all():
     """Wipes the SQLite database and clears relevant Redis keys."""
     print("🧹 Resetting all data as requested...")
@@ -177,21 +231,56 @@ def reset_all():
     except Exception as e:
         print(f"   [!] Error clearing Redis: {e}")
 
-def init_db():
+def init_db(save_protos=None):
+    """save_protos: None=all, False/empty=none, set=specific protocols"""
     conn = sqlite3.connect(DB_PATH, timeout=10)
     cur = conn.cursor()
-    cur.execute("""CREATE TABLE IF NOT EXISTS knocks (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-        ip_address TEXT, iso_code TEXT, city TEXT, region TEXT, country TEXT, isp TEXT, asn INTEGER,
-        username TEXT, password TEXT, proto INTEGER
-    )""")
-    # Migrate v1 (SSH-only) → v2 (multi-protocol): add proto column
-    knock_cols = [row[1] for row in cur.execute("PRAGMA table_info(knocks)").fetchall()]
-    v1_migration = 'proto' not in knock_cols
-    if v1_migration:
-        cur.execute("ALTER TABLE knocks ADD COLUMN proto INTEGER")
-        cur.execute("UPDATE knocks SET proto = 0 WHERE proto IS NULL")
+    # Create per-protocol knock tables (only for protocols being saved)
+    if save_protos is None:
+        protos_to_create = list(_KNOCK_EXTRA_COLS.keys())
+    elif save_protos:
+        protos_to_create = [p for p in save_protos if p in _KNOCK_EXTRA_COLS]
+    else:
+        protos_to_create = []
+    for proto_name in protos_to_create:
+        extra_cols = _KNOCK_EXTRA_COLS[proto_name]
+        table = f"knocks_{proto_name.lower()}"
+        cols = ['id INTEGER PRIMARY KEY AUTOINCREMENT',
+                "timestamp TEXT DEFAULT (strftime('%Y-%m-%d %H:%M:%S','now'))"]
+        cols += _COMMON_KNOCK_COLS + extra_cols
+        cur.execute(f"CREATE TABLE IF NOT EXISTS {table} ({', '.join(cols)})")
+    # Migrate old generic knocks table -> per-protocol tables
+    # Old schema only had username+password (no protocol-specific fields), so only
+    # SSH/TNET/FTP rows (user+pass protocols) get meaningful data. Non-user/pass
+    # protocols (SIP, etc.) had their specific fields discarded by the old schema.
+    cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='knocks'")
+    if cur.fetchone():
+        # Check if proto column exists (v2) or not (v1 = all SSH)
+        knock_cols = [row[1] for row in cur.execute("PRAGMA table_info(knocks)").fetchall()]
+        has_proto = 'proto' in knock_cols
+        # Migrate each protocol's rows to its per-protocol table
+        _user_pass_protos = {'SSH': 0, 'TNET': 1, 'FTP': 5}
+        migrated = 0
+        for pname, pidx in _user_pass_protos.items():
+            table = f"knocks_{pname.lower()}"
+            # Ensure target table exists
+            extra_cols = _KNOCK_EXTRA_COLS[pname]
+            cols_def = ['id INTEGER PRIMARY KEY AUTOINCREMENT',
+                        "timestamp TEXT DEFAULT (strftime('%Y-%m-%d %H:%M:%S','now'))"]
+            cols_def += _COMMON_KNOCK_COLS + extra_cols
+            cur.execute(f"CREATE TABLE IF NOT EXISTS {table} ({', '.join(cols_def)})")
+            if has_proto:
+                where = f"WHERE proto = {pidx}"
+            else:
+                where = "" if pname == 'SSH' else "WHERE 0"  # v1 = all SSH
+            cur.execute(f"""INSERT INTO {table} (timestamp, ip_address, iso_code, city, region, country, isp, asn, username, password)
+                            SELECT timestamp, ip_address, iso_code, city, region, country, isp, asn, username, password FROM knocks {where}""")
+            migrated += cur.rowcount
+        conn.commit()
+        if migrated > 0:
+            print(f"✅ Migrated {migrated} rows from knocks → per-protocol tables", file=sys.stderr)
+        cur.execute("DROP TABLE knocks")
+        conn.commit()
     cur.execute("CREATE TABLE IF NOT EXISTS user_intel (username TEXT PRIMARY KEY, hits INTEGER, last_seen DATETIME)")
     cur.execute("CREATE TABLE IF NOT EXISTS pass_intel (password TEXT PRIMARY KEY, hits INTEGER, last_seen DATETIME)")
     cur.execute("CREATE TABLE IF NOT EXISTS country_intel (iso_code TEXT PRIMARY KEY, country TEXT, hits INTEGER, last_seen DATETIME)")
@@ -279,15 +368,23 @@ def heartbeat_worker(redis_conn, enabled_protocols):
             print(f"❌ Heartbeat Error: {e}")
         time.sleep(60)
 
-def log_to_enriched_db(data, save_knocks=True):
+def log_to_enriched_db(data, save_protos=None):
+    """save_protos: None=save all, False=save none, set=save only those protos"""
     conn = sqlite3.connect(DB_PATH, timeout=10)
     cur = conn.cursor()
     try:
-        if save_knocks:
-            cur.execute("""INSERT INTO knocks (ip_address, iso_code, city, region, country, isp, asn, username, password, proto)
-                           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                        (data['ip'], data['iso'], data['city'], data.get('region'), data['country'], data['isp'], data.get('asn'), data.get('user'), data.get('pass'),
-                         PROTO.get(data.get('proto', 'SSH'), 0)))
+        proto_name = data.get('proto', 'SSH')
+        should_save = (save_protos is None or
+                       (save_protos and proto_name in save_protos))
+        if should_save and proto_name in _PROTO_KEY_MAP:
+            table = f"knocks_{proto_name.lower()}"
+            col_names = [col for _, col in _COMMON_KEY_MAP]
+            values = [data.get(key) for key, _ in _COMMON_KEY_MAP]
+            for key, col in _PROTO_KEY_MAP[proto_name]:
+                col_names.append(col)
+                values.append(data.get(key))
+            placeholders = ', '.join(['?'] * len(col_names))
+            cur.execute(f"INSERT INTO {table} ({', '.join(col_names)}) VALUES ({placeholders})", values)
         now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         proto_int = PROTO.get(data.get('proto', 'SSH'), 0)
         if data.get('user') is not None:
@@ -489,8 +586,15 @@ def add_to_blocklist(ip, r):
     except Exception as e:
         print(f"⚠️ Could not write blocklist: {e}")
 
-def monitor(save_knocks=False, max_knocks=None):
-    init_db()
+def monitor(save_knocks=None, max_knocks=None):
+    # Parse save_knocks: None from no flag, 'ALL' from bare --save-knocks, 'SIP,SMTP' from --save-knocks=SIP,SMTP
+    if save_knocks == 'ALL':
+        save_protos = None  # None means save all
+    elif save_knocks:
+        save_protos = set(p.strip().upper() for p in save_knocks.split(','))
+    else:
+        save_protos = False  # --save-knocks not passed at all
+    init_db(save_protos=save_protos)
     r = redis.Redis(host=os.environ.get('REDIS_HOST', 'localhost'), port=6379, db=0, decode_responses=True)
     enabled_protocols = parse_enabled_protocols()
     publish_protocol_config(r, enabled_protocols)
@@ -650,7 +754,7 @@ def monitor(save_knocks=False, max_knocks=None):
                 if is_over_limit_and_block(r, ip, projected_hits, max_knocks):
                     continue
                 store_mail_forensic(r, forensic)
-                log_to_enriched_db(package, save_knocks=save_knocks)
+                log_to_enriched_db(package, save_protos=save_protos)
             except Exception as e:
                 print(f"⚠️ DB error (knock dropped): {e}", flush=True)
                 continue
@@ -680,7 +784,8 @@ def monitor(save_knocks=False, max_knocks=None):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Knock-Knock Monitor")
     parser.add_argument("--reset-all", action="store_true", help="Delete DB and clear Redis")
-    parser.add_argument("--save-knocks", action="store_true", help="Save individual knocks to SQLite (off by default)")
+    parser.add_argument("--save-knocks", nargs='?', const='ALL', default=None, metavar='PROTOS',
+                        help="Save individual knocks to SQLite. Optional: comma-separated protocols (e.g. SIP,SMTP). Default: ALL")
     parser.add_argument("--max-knocks", type=int, default=None, metavar="N",
                         help="Auto-add IP to blocklist after N knocks (default: disabled)")
     args = parser.parse_args()

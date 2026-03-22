@@ -38,7 +38,8 @@ python telnet_honeypot.py
 python smtp_honeypot.py
 
 # Log monitor + geo-enricher — spawns all three honeypots as subprocesses
-# Add --save-knocks to store individual knocks in SQLite
+# Add --save-knocks to store individual knocks in SQLite (all protocols)
+# Add --save-knocks=SIP,SMTP to store only specific protocols
 python monitor.py
 
 # Web server (HTTP, port 80)
@@ -91,7 +92,7 @@ SMTP Attacker → smtp_honeypot.py (port 587) ─┘        (GeoIP, DB, Redis)
 ```
 
 **Two Services:**
-- `monitor.py`: Spawns all three honeypots as subprocesses, merges their stdout via a shared `queue.Queue`, performs GeoIP lookups, updates SQLite intel tables, publishes to Redis. Individual knocks saved to SQLite only with `--save-knocks`. Honeypots check `knock:blocked` Redis set on each connection to reject blocked IPs instantly.
+- `monitor.py`: Spawns all three honeypots as subprocesses, merges their stdout via a shared `queue.Queue`, performs GeoIP lookups, updates SQLite intel tables, publishes to Redis. Individual knocks saved to per-protocol SQLite tables with `--save-knocks` (all) or `--save-knocks=SIP,SMTP` (selective). Honeypots check `knock:blocked` Redis set on each connection to reject blocked IPs instantly.
 - `main.py`: FastAPI server with WebSocket endpoint `/ws`, subscribes to Redis, broadcasts to all connected browsers.
 
 **Data Flow:**
@@ -152,8 +153,16 @@ PROTO_NAME = {v: k for k, v in PROTO.items()}
 ## Database Schema
 
 ```sql
--- Main attack log (only populated with --save-knocks)
-knocks(id, timestamp, ip_address, iso_code, city, region, country, isp, asn, username, password, proto INTEGER)
+-- Per-protocol knock tables (only populated with --save-knocks; only saved protocols get tables)
+-- Common columns: id, timestamp, ip_address, iso_code, city, region, country, isp, asn
+knocks_ssh(... username, password)
+knocks_tnet(... username, password)
+knocks_ftp(... username, password)
+knocks_smtp(... username, password, smtp_stage, smtp_mail_from, smtp_rcpt_to, subject, body)
+knocks_mail(... username, password, smtp_stage, smtp_mail_from, smtp_rcpt_to, subject, body)
+knocks_sip(... sip_method, sip_request_uri, sip_call_id, sip_cseq, sip_extension, sip_dial_country, sip_dial_country_name, sip_dial_lat, sip_dial_lng)
+knocks_smb(... username, smb_share, smb_version, smb_domain, smb_host)
+knocks_rdp(... username, rdp_source, domain)
 
 -- ALL intel tables (aggregated counts, indexed hits for fast top-N queries)
 user_intel(username PRIMARY KEY, hits, last_seen)               -- INDEX on hits DESC

@@ -17,8 +17,18 @@ def main():
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
 
-    cur.execute("SELECT COUNT(*) FROM knocks")
-    knocks = cur.fetchone()[0]
+    total_knocks = 0
+    proto_counts = {}
+    for proto_name in ['ssh', 'tnet', 'ftp', 'smtp', 'mail', 'sip', 'smb', 'rdp']:
+        table = f'knocks_{proto_name}'
+        try:
+            cur.execute(f"SELECT COUNT(*) FROM {table}")
+            count = cur.fetchone()[0]
+            if count > 0:
+                proto_counts[proto_name.upper()] = count
+                total_knocks += count
+        except sqlite3.OperationalError:
+            pass
 
     cur.execute("SELECT COUNT(*) FROM country_intel")
     countries = cur.fetchone()[0]
@@ -35,8 +45,12 @@ def main():
     cur.execute("SELECT COUNT(*) FROM ip_intel")
     ips = cur.fetchone()[0]
 
-    cur.execute("SELECT COUNT(*) FROM monitor_heartbeats")
-    minutes = cur.fetchone()[0]
+    try:
+        cur.execute("SELECT uptime_minutes FROM monitor_heartbeats WHERE id=1")
+        row = cur.fetchone()
+        minutes = row[0] if row else 0
+    except sqlite3.OperationalError:
+        minutes = 0
 
     # Min/max counts if requested
     tables = [
@@ -75,7 +89,9 @@ def main():
             return f"{parts[0]} ({', '.join(parts[1:])})"
         return parts[0]
 
-    print(f"Knocks:    {knocks:,}")
+    print(f"Knocks:    {total_knocks:,}")
+    for proto, count in sorted(proto_counts.items(), key=lambda x: -x[1]):
+        print(f"  {proto:6s} {count:,}")
     print(f"Countries: {format_stat('countries', countries)}")
     print(f"Usernames: {format_stat('usernames', usernames)}")
     print(f"Passwords: {format_stat('passwords', passwords)}")

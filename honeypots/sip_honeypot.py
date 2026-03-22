@@ -364,7 +364,8 @@ def parse_dial_country(dial_string):
                 return iso, name, e164
         except Exception:
             pass
-        return None, None, None
+        # Failed as E.164 — strip + and try as digits (e.g. ++011972... → 011972...)
+        s = s.lstrip('+')
     if not re.match(r'^\d+$', s):
         return None, None, None
     if len(s) < 7:

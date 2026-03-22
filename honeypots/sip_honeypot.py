@@ -507,6 +507,7 @@ def process_sip_request(req, client_ip):
         if not dial_iso:
             print(f'SIP: no location for INVITE uri={uri}', file=sys.stderr)
         if dial_iso:
+            common['sip_dial_country'] = dial_iso
             common['sip_dial_country_name'] = dial_name
             coords = COUNTRY_COORDS.get(dial_iso)
             if coords:

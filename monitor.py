@@ -235,21 +235,7 @@ def init_db(save_protos=None):
     """save_protos: None=all, False/empty=none, set=specific protocols"""
     conn = sqlite3.connect(DB_PATH, timeout=10)
     cur = conn.cursor()
-    # Create per-protocol knock tables (only for protocols being saved)
-    if save_protos is None:
-        protos_to_create = list(_KNOCK_EXTRA_COLS.keys())
-    elif save_protos:
-        protos_to_create = [p for p in save_protos if p in _KNOCK_EXTRA_COLS]
-    else:
-        protos_to_create = []
-    for proto_name in protos_to_create:
-        extra_cols = _KNOCK_EXTRA_COLS[proto_name]
-        table = f"knocks_{proto_name.lower()}"
-        cols = ['id INTEGER PRIMARY KEY AUTOINCREMENT',
-                "timestamp TEXT DEFAULT (strftime('%Y-%m-%d %H:%M:%S','now'))"]
-        cols += _COMMON_KNOCK_COLS + extra_cols
-        cur.execute(f"CREATE TABLE IF NOT EXISTS {table} ({', '.join(cols)})")
-    # Migrate old generic knocks table -> per-protocol tables
+    # Migrate old generic knocks table -> per-protocol tables (before creating new tables)
     # Old schema only had username+password (no protocol-specific fields), so only
     # SSH/TNET/FTP rows (user+pass protocols) get meaningful data. Non-user/pass
     # protocols (SIP, etc.) had their specific fields discarded by the old schema.
@@ -284,6 +270,20 @@ def init_db(save_protos=None):
             print(f"✅ Migrated {migrated} rows from knocks → per-protocol tables", file=sys.stderr)
         cur.execute("DROP TABLE knocks")
         conn.commit()
+    # Create per-protocol knock tables (only for protocols being saved)
+    if save_protos is None:
+        protos_to_create = list(_KNOCK_EXTRA_COLS.keys())
+    elif save_protos:
+        protos_to_create = [p for p in save_protos if p in _KNOCK_EXTRA_COLS]
+    else:
+        protos_to_create = []
+    for proto_name in protos_to_create:
+        extra_cols = _KNOCK_EXTRA_COLS[proto_name]
+        table = f"knocks_{proto_name.lower()}"
+        cols = ['id INTEGER PRIMARY KEY AUTOINCREMENT',
+                "timestamp TEXT DEFAULT (strftime('%Y-%m-%d %H:%M:%S','now'))"]
+        cols += _COMMON_KNOCK_COLS + extra_cols
+        cur.execute(f"CREATE TABLE IF NOT EXISTS {table} ({', '.join(cols)})")
     cur.execute("CREATE TABLE IF NOT EXISTS user_intel (username TEXT PRIMARY KEY, hits INTEGER, last_seen DATETIME)")
     cur.execute("CREATE TABLE IF NOT EXISTS pass_intel (password TEXT PRIMARY KEY, hits INTEGER, last_seen DATETIME)")
     cur.execute("CREATE TABLE IF NOT EXISTS country_intel (iso_code TEXT PRIMARY KEY, country TEXT, hits INTEGER, last_seen DATETIME)")

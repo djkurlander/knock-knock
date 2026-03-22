@@ -397,7 +397,7 @@ def parse_dial_country(dial_string):
             return _result(pn)
     except Exception:
         pass
-    max_strip = min(8, len(s) - 7)
+    max_strip = min(10, len(s) - 7)
     for i in range(1, max_strip + 1):
         try:
             pn = phonenumbers.parse('+' + s[i:], None)

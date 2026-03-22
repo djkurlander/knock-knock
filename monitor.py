@@ -262,17 +262,20 @@ def init_db(save_protos=None):
         _user_pass_protos = {'SSH': 0, 'TNET': 1, 'FTP': 5}
         migrated = 0
         for pname, pidx in _user_pass_protos.items():
+            if has_proto:
+                where = f"WHERE proto = {pidx}"
+            else:
+                where = "" if pname == 'SSH' else "WHERE 0"  # v1 = all SSH
+            cur.execute(f"SELECT COUNT(*) FROM knocks {where}")
+            count = cur.fetchone()[0]
+            if count == 0:
+                continue
             table = f"knocks_{pname.lower()}"
-            # Ensure target table exists
             extra_cols = _KNOCK_EXTRA_COLS[pname]
             cols_def = ['id INTEGER PRIMARY KEY AUTOINCREMENT',
                         "timestamp TEXT DEFAULT (strftime('%Y-%m-%d %H:%M:%S','now'))"]
             cols_def += _COMMON_KNOCK_COLS + extra_cols
             cur.execute(f"CREATE TABLE IF NOT EXISTS {table} ({', '.join(cols_def)})")
-            if has_proto:
-                where = f"WHERE proto = {pidx}"
-            else:
-                where = "" if pname == 'SSH' else "WHERE 0"  # v1 = all SSH
             cur.execute(f"""INSERT INTO {table} (timestamp, ip_address, iso_code, city, region, country, isp, asn, username, password)
                             SELECT timestamp, ip_address, iso_code, city, region, country, isp, asn, username, password FROM knocks {where}""")
             migrated += cur.rowcount

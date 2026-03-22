@@ -37,6 +37,7 @@ def backup_db(db_path, name):
     conn = sqlite3.connect(db_path)
     dest_conn = sqlite3.connect(dest)
     conn.backup(dest_conn)
+    dest_conn.execute("VACUUM")
     dest_conn.close()
     conn.close()
     size = os.path.getsize(dest)

@@ -321,7 +321,7 @@ def parse_dial_country(dial_string):
     s = re.sub(r'^sips?:', '', dial_string)
     s = s.split('@')[0]
     s = s.lstrip('*#')
-    s = s.replace('.', '')
+    s = s.replace('.', '').replace('-', '')
     # PBX external line prefix before + (e.g. 0+421..., 00+421...)
     plus = s.find('+')
     if plus > 0 and s[:plus].isdigit():

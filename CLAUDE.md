@@ -121,6 +121,7 @@ SMTP Attacker → smtp_honeypot.py (port 587) ─┘        (GeoIP, DB, Redis)
 | `Dockerfile` | Single image for honeypot-monitor and web containers |
 | `docker-compose.yml` | Docker deployment (Redis, honeypot+monitor, web) |
 | `stats.py` | CLI utility for printing database statistics |
+| `dbtool.py` | DB management: `--list-tables`, `--backup`, `--remove-knocks` |
 | `extras/` | Optional utilities (Cloudflare UFW rules, texture generation, visitor reports) |
 
 ## Data Directory

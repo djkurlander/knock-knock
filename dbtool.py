@@ -45,7 +45,7 @@ def backup_db(db_path, name):
     else:
         print(f"Backed up to {dest} ({size / 1024:.0f} KB)")
 
-def remove_knocks(db_path, protos):
+def remove_knocks(db_path, protos, skip_confirm=False):
     conn = sqlite3.connect(db_path)
     cur = conn.cursor()
     # Find existing knock tables
@@ -72,11 +72,12 @@ def remove_knocks(db_path, protos):
         total_rows += count
         print(f"  DROP {table} ({count:,} rows)")
     print(f"\nThis will delete {total_rows:,} rows across {len(targets)} table(s).")
-    answer = input("Proceed? [y/N] ").strip().lower()
-    if answer != 'y':
-        print("Aborted.")
-        conn.close()
-        return
+    if not skip_confirm:
+        answer = input("Proceed? [y/N] ").strip().lower()
+        if answer != 'y':
+            print("Aborted.")
+            conn.close()
+            return
     for table in targets:
         cur.execute(f"DROP TABLE [{table}]")
     conn.commit()
@@ -97,6 +98,8 @@ def main():
                         help='Backup database to data/NAME (safe with concurrent writers)')
     parser.add_argument('--remove-knocks', nargs='?', const=None, default=False, metavar='PROTOS',
                         help='Remove knock tables and VACUUM. Optional: comma-separated protocols (e.g. SIP,SMTP). Default: all')
+    parser.add_argument('--yes', '-y', action='store_true',
+                        help='Skip confirmation prompts')
     args = parser.parse_args()
 
     if not os.path.exists(DB_PATH):
@@ -111,7 +114,7 @@ def main():
         backup_db(DB_PATH, args.backup)
 
     if args.remove_knocks is not False:
-        remove_knocks(DB_PATH, args.remove_knocks)
+        remove_knocks(DB_PATH, args.remove_knocks, skip_confirm=args.yes)
 
     if args.list_tables:
         list_tables(DB_PATH)

@@ -366,6 +366,13 @@ def parse_dial_country(dial_string):
                         return _result(pn)
                 except Exception:
                     pass
+    # Raw E.164 without '+' (some PBXes accept country code directly)
+    try:
+        pn = phonenumbers.parse('+' + s, None)
+        if phonenumbers.is_valid_number(pn):
+            return _result(pn)
+    except Exception:
+        pass
     max_strip = min(8, len(s) - 7)
     for i in range(1, max_strip + 1):
         try:

@@ -337,14 +337,6 @@ def parse_dial_country(dial_string):
         country = pn_geocoder.country_name_for_number(pn, 'en') or iso
         desc = pn_geocoder.description_for_number(pn, 'en')
         name = f'{desc}, {country}' if desc and desc != country else country
-        e164 = phonenumbers.format_number(pn, phonenumbers.PhoneNumberFormat.E164)
-        digits = e164.lstrip('+')
-        with _dial_cache_lock:
-            _dial_cache[:] = [(d, i, n) for d, i, n in _dial_cache if d != digits]
-            _dial_cache.append((digits, iso, name))
-            if len(_dial_cache) > 50:
-                _dial_cache.pop(0)
-        print(f'SIP CACHE: stored +{digits} -> {iso} ({name})', file=sys.stderr)
         return iso, name
 
     # Check suffix against recently seen valid numbers (catches arbitrary PBX prefixes)
@@ -360,7 +352,15 @@ def parse_dial_country(dial_string):
         try:
             pn = phonenumbers.parse(s, None)
             if phonenumbers.is_valid_number(pn) or phonenumbers.is_possible_number(pn):
-                return _result(pn)
+                iso, name = _result(pn)
+                digits = s.lstrip('+')
+                with _dial_cache_lock:
+                    _dial_cache[:] = [(d, i, n) for d, i, n in _dial_cache if d != digits]
+                    _dial_cache.append((digits, iso, name))
+                    if len(_dial_cache) > 50:
+                        _dial_cache.pop(0)
+                print(f'SIP CACHE: stored +{digits} -> {iso} ({name})', file=sys.stderr)
+                return iso, name
         except Exception:
             pass
         return None, None

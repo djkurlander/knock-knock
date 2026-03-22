@@ -2515,14 +2515,8 @@
         return `<span class="proto-badge proto-${cls}" style="color:${escapeHtml(color)}"><span class="proto-badge-label">${escapeHtml(label)}</span></span>`;
     }
 
-    function sipUriUser(uri) {
-        if (!uri) return null;
-        const m = String(uri).match(/^\s*sips?:([^@;>\s]+)/i);
-        if (!m) return null;
-        const userInfo = m[1];
-        if (!userInfo) return null;
-        const colon = userInfo.indexOf(':');
-        return colon >= 0 ? userInfo.slice(0, colon) : userInfo;
+    function sipDialString(d) {
+        return d.sip_dial_string || null;
     }
 
     function oneLinePreview(v, maxLen = 140) {
@@ -2564,7 +2558,7 @@
     }
 
     function renderSipAccountBlock(d) {
-        const uriUser = sipUriUser(d.sip_request_uri);
+        const uriUser = sipDialString(d);
         const lines = [];
         const ext = d.sip_extension || d.sip_auth_user || d.sip_uri_user || null;
         if (ext) {

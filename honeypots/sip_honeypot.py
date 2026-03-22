@@ -318,9 +318,9 @@ COUNTRY_COORDS = {
 
 
 def parse_dial_country(dial_string):
-    """Extract target country (iso, name) from a SIP INVITE dial string."""
+    """Extract target country (iso, name, e164) from a SIP INVITE dial string."""
     if not dial_string:
-        return None, None
+        return None, None, None
     s = re.sub(r'^sips?:', '', dial_string)
     s = s.split('@')[0]
     s = s.lstrip('*#')
@@ -337,7 +337,8 @@ def parse_dial_country(dial_string):
         country = pn_geocoder.country_name_for_number(pn, 'en') or iso
         desc = pn_geocoder.description_for_number(pn, 'en')
         name = f'{desc}, {country}' if desc and desc != country else country
-        return iso, name
+        e164 = phonenumbers.format_number(pn, phonenumbers.PhoneNumberFormat.E164)
+        return iso, name, e164
 
     # Check suffix against recently seen valid numbers (catches arbitrary PBX prefixes)
     digits_only = s.lstrip('+')
@@ -346,28 +347,28 @@ def parse_dial_country(dial_string):
             for cached_digits, cached_iso, cached_name in _dial_cache:
                 if digits_only.endswith(cached_digits):
                     print(f'SIP CACHE: hit {digits_only} matched +{cached_digits} -> {cached_iso} ({cached_name})', file=sys.stderr)
-                    return cached_iso, cached_name
+                    return cached_iso, cached_name, f'+{cached_digits}'
 
     if s.startswith('+'):
         try:
             pn = phonenumbers.parse(s, None)
             if phonenumbers.is_valid_number(pn) or phonenumbers.is_possible_number(pn):
-                iso, name = _result(pn)
-                digits = s.lstrip('+')
+                iso, name, e164 = _result(pn)
+                digits = e164.lstrip('+')
                 with _dial_cache_lock:
                     _dial_cache[:] = [(d, i, n) for d, i, n in _dial_cache if d != digits]
                     _dial_cache.append((digits, iso, name))
                     if len(_dial_cache) > 50:
                         _dial_cache.pop(0)
                 print(f'SIP CACHE: stored +{digits} -> {iso} ({name})', file=sys.stderr)
-                return iso, name
+                return iso, name, e164
         except Exception:
             pass
-        return None, None
+        return None, None, None
     if not re.match(r'^\d+$', s):
-        return None, None
+        return None, None, None
     if len(s) < 7:
-        return None, None
+        return None, None, None
     # North American long-distance: 1 + 10 digits
     if re.match(r'^1\d{10}$', s):
         try:
@@ -376,7 +377,7 @@ def parse_dial_country(dial_string):
                 return _result(pn)
         except Exception:
             pass
-        return None, None
+        return None, None, None
     for prefix in ('011', '00'):
         idx = s.find(prefix)
         if idx >= 0:
@@ -403,7 +404,7 @@ def parse_dial_country(dial_string):
                 return _result(pn)
         except Exception:
             continue
-    return None, None
+    return None, None, None
 
 
 def parse_auth_header(auth_value):
@@ -514,9 +515,11 @@ def process_sip_request(req, client_ip):
         return 200, 'OK', None
     dedup_key = _dedup_key(client_ip, req)
     ack_seen, ack_age_ms = get_ack_state(client_ip, req)
+    # Extract raw dial string from URI (strip sip: scheme and @host)
+    dial_string = re.sub(r'^sips?:', '', uri).split('@')[0] if uri else ''
     common = {
         'sip_method': method,
-        'sip_request_uri': uri,
+        'sip_dial_string': dial_string,
         'sip_call_id': _header_first(headers, 'call-id') or '',
         'sip_cseq': _header_first(headers, 'cseq') or '',
         'sip_ack_seen': ack_seen,
@@ -524,12 +527,12 @@ def process_sip_request(req, client_ip):
     if ack_age_ms is not None:
         common['sip_ack_age_ms'] = ack_age_ms
     if method == 'INVITE':
-        dial_iso, dial_name = parse_dial_country(uri)
+        dial_iso, dial_name, dial_e164 = parse_dial_country(uri)
         if not dial_iso:
             print(f'SIP: no location for INVITE uri={uri}', file=sys.stderr)
         if dial_iso:
-            num = re.sub(r'^sips?:', '', uri).split('@')[0]
-            print(f'SIP DIAL: {num} → {dial_iso} ({dial_name})', file=sys.stderr)
+            print(f'SIP DIAL: {dial_string} → {dial_e164} → {dial_iso} ({dial_name})', file=sys.stderr)
+            common['sip_dial_number'] = dial_e164
             common['sip_dial_country'] = dial_iso
             common['sip_dial_country_name'] = dial_name
             coords = COUNTRY_COORDS.get(dial_iso)

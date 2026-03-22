@@ -567,6 +567,10 @@ def process_sip_request(req, client_ip):
         dial_user, _ = extract_user_pass_from_sip_uri(uri)
         if not dial_user:
             return 404, 'Not Found', None
+        # Skip short extension probes (< 7 digits) — not toll fraud
+        digits_only = re.sub(r'\D', '', dial_user)
+        if len(digits_only) < 7:
+            return 404, 'Not Found', None
         with _reg_lock:
             reg_ext = _registered_extensions.get(client_ip)
         if reg_ext:

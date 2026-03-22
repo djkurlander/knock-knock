@@ -597,9 +597,14 @@ def monitor(save_knocks=None, max_knocks=None):
         save_protos = set(p.strip().upper() for p in save_knocks.split(','))
     else:
         save_protos = False  # --save-knocks not passed at all
+    enabled_protocols = parse_enabled_protocols()
+    # Intersect save_protos with enabled protocols — never create tables for disabled protocols
+    if save_protos is None:
+        save_protos = set(enabled_protocols)
+    elif save_protos:
+        save_protos = save_protos & set(enabled_protocols)
     init_db(save_protos=save_protos)
     r = redis.Redis(host=os.environ.get('REDIS_HOST', 'localhost'), port=6379, db=0, decode_responses=True)
-    enabled_protocols = parse_enabled_protocols()
     publish_protocol_config(r, enabled_protocols)
     print(f"🧭 Enabled protocols: {', '.join(enabled_protocols)}", flush=True)
     while True:

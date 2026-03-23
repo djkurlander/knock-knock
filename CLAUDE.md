@@ -141,6 +141,7 @@ All persistent data lives in `data/`:
 | `DB_DIR` | `data` | Directory for SQLite databases and blocklist |
 | `ENABLE_SSL` | unset | Set to `true` in `docker-compose.yml` for HTTPS |
 | `LOG_VISITORS` | unset | Set to `true` to log dashboard visitors to `visitors.db` |
+| `SMTP_HOSTNAME` | reverse DNS | Override SMTP banner/cert hostname (default: reverse DNS of server IP) |
 
 ## Protocol Enum
 

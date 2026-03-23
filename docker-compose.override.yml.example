@@ -14,6 +14,11 @@ services:
   # honeypot-monitor:
   #   command: python -u monitor.py --max-knocks 5000
 
+  ## Override SMTP banner hostname (default: reverse DNS of server IP)
+  # honeypot-monitor:
+  #   environment:
+  #     - SMTP_HOSTNAME=mail.local
+
   ## Select which honeypots to run (default: all)
   ## Protocols: SSH, TNET, FTP, RDP, SMB, SIP, SMTP, MAIL
   # honeypot-monitor:

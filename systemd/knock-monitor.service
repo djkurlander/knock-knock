@@ -12,6 +12,8 @@ WorkingDirectory=/root/knock-knock
 # Protocols: SSH, TNET, FTP, RDP, SMB, SIP, SMTP, MAIL
 # Environment=ENABLED_PROTOCOLS=SSH
 # Environment=ENABLED_PROTOCOLS=SSH,TNET,SMTP
+# Override SMTP banner hostname (default: reverse DNS of server IP)
+# Environment=SMTP_HOSTNAME=mail.local
 ExecStart=/root/knock-knock/.venv/bin/python -u monitor.py
 Restart=always
 RestartSec=5

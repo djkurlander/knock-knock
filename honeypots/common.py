@@ -71,7 +71,10 @@ def smtp_recv_line(sock, timeout=30):
 
 
 def get_smtp_hostname():
-    """Resolve our own reverse DNS for a realistic SMTP banner; fall back to IP."""
+    """Return SMTP_HOSTNAME env var if set, otherwise resolve reverse DNS; fall back to IP."""
+    override = os.environ.get('SMTP_HOSTNAME', '').strip()
+    if override:
+        return override
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         s.connect(('8.8.8.8', 80))

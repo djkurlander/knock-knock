@@ -180,6 +180,9 @@ country_intel_proto(iso_code, proto INTEGER, country, hits, last_seen)
 isp_intel_proto(isp, proto INTEGER, hits, last_seen, asn)
 ip_intel_proto(ip, proto INTEGER, hits, last_seen, lat, lng)
 
+-- SIP toll fraud destination tracking (only created when SIP is enabled)
+dial_intel(number TEXT PRIMARY KEY, hits, first_seen, last_seen, country, country_name, lat, lng)
+
 -- Uptime tracking for KPM calculation
 monitor_heartbeats(id, uptime_minutes)
 ```

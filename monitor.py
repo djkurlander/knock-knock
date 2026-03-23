@@ -231,7 +231,7 @@ def reset_all():
     except Exception as e:
         print(f"   [!] Error clearing Redis: {e}")
 
-def init_db(save_protos=None):
+def init_db(save_protos=None, enabled_protocols=None):
     """save_protos: None=all, False/empty=none, set=specific protocols"""
     conn = sqlite3.connect(DB_PATH, timeout=10)
     cur = conn.cursor()
@@ -289,6 +289,10 @@ def init_db(save_protos=None):
     cur.execute("CREATE TABLE IF NOT EXISTS country_intel (iso_code TEXT PRIMARY KEY, country TEXT, hits INTEGER, last_seen DATETIME)")
     cur.execute("CREATE TABLE IF NOT EXISTS isp_intel (isp TEXT PRIMARY KEY, hits INTEGER, last_seen DATETIME, asn INTEGER)")
     cur.execute("CREATE TABLE IF NOT EXISTS ip_intel (ip TEXT PRIMARY KEY, hits INTEGER, last_seen DATETIME, lat REAL, lng REAL)")
+    if enabled_protocols and 'SIP' in enabled_protocols:
+        cur.execute("""CREATE TABLE IF NOT EXISTS dial_intel
+            (number TEXT PRIMARY KEY, hits INTEGER, first_seen DATETIME, last_seen DATETIME,
+             country TEXT, country_name TEXT, lat REAL, lng REAL)""")
     cur.execute("CREATE TABLE IF NOT EXISTS monitor_heartbeats (id INTEGER PRIMARY KEY, uptime_minutes INTEGER NOT NULL DEFAULT 0)")
     # Migrate old schema (many timestamp rows) to single uptime_minutes row
     cols = [row[1] for row in cur.execute("PRAGMA table_info(monitor_heartbeats)").fetchall()]
@@ -404,6 +408,12 @@ def log_to_enriched_db(data, save_protos=None):
         cur.execute("INSERT INTO isp_intel_proto VALUES (?, ?, 1, ?, ?) ON CONFLICT(isp, proto) DO UPDATE SET hits=hits+1, last_seen=?, asn=?", (data['isp'], proto_int, now, data.get('asn'), now, data.get('asn')))
         cur.execute("INSERT INTO ip_intel_proto VALUES (?, ?, 1, ?, ?, ?) ON CONFLICT(ip, proto) DO UPDATE SET hits=hits+1, last_seen=?, lat=?, lng=?",
                     (data['ip'], proto_int, now, data.get('lat'), data.get('lng'), now, data.get('lat'), data.get('lng')))
+        dial_number = data.get('sip_dial_number')
+        if dial_number:
+            cur.execute("""INSERT INTO dial_intel VALUES (?, 1, ?, ?, ?, ?, ?, ?)
+                           ON CONFLICT(number) DO UPDATE SET hits=hits+1, last_seen=?, country_name=?""",
+                        (dial_number, now, now, data.get('sip_dial_country'), data.get('sip_dial_country_name'),
+                         data.get('sip_dial_lat'), data.get('sip_dial_lng'), now, data.get('sip_dial_country_name')))
         conn.commit()
     finally:
         conn.close()
@@ -603,7 +613,7 @@ def monitor(save_knocks=None, max_knocks=None):
         save_protos = set(enabled_protocols)
     elif save_protos:
         save_protos = save_protos & set(enabled_protocols)
-    init_db(save_protos=save_protos)
+    init_db(save_protos=save_protos, enabled_protocols=enabled_protocols)
     r = redis.Redis(host=os.environ.get('REDIS_HOST', 'localhost'), port=6379, db=0, decode_responses=True)
     publish_protocol_config(r, enabled_protocols)
     print(f"🧭 Enabled protocols: {', '.join(enabled_protocols)}", flush=True)

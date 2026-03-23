@@ -31,8 +31,16 @@ ufw default allow outgoing
 ### 3. Allow required ports
 
 ```bash
-# Honeypot SSH (public — this is the whole point)
-ufw allow 22/tcp
+# Honeypot ports (public — this is the whole point)
+ufw allow 22/tcp    # SSH
+ufw allow 23/tcp    # Telnet
+ufw allow 21/tcp    # FTP
+ufw allow 587/tcp   # SMTP (submission)
+ufw allow 25/tcp    # MAIL (SMTP)
+ufw allow 3389/tcp  # RDP
+ufw allow 445/tcp   # SMB
+ufw allow 5060/udp  # SIP (UDP)
+ufw allow 5060/tcp  # SIP (TCP)
 
 # Your real SSH port (replace 2222 with yours)
 ufw allow 2222/tcp

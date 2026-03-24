@@ -1751,20 +1751,30 @@
      * Remove this function and its call sites once upstream fixes land:
      *   - pointsData(): CylinderGeometry + materials created per update, never disposed
      *   - globeImageUrl(): old texture never disposed when URL changes
-     * Tags: __globeObjType 'point'|'points' for point meshes, 'globe' for globe mesh
+     *   - polygonsData() / hexPolygonsData(): partial cleanup on dataset swap
+     * Tags: 'point'|'points', 'globe', 'polygon', 'hexPolygon'|'hexBinPoints'
      */
+    const _DISPOSE_TAGS = {
+        points:   ['point', 'points'],
+        texture:  ['globe'],
+        polygons: ['polygon'],
+        hex:      ['hexPolygon', 'hexBinPoints'],
+    };
     function _disposeLeakedGlobeMemory(globe, what) {
         if (!globe) return;
+        const tags = _DISPOSE_TAGS[what];
+        if (!tags) return;
         try {
             globe.scene().traverse(obj => {
-                if (what === 'points' && (obj.__globeObjType === 'points' || obj.__globeObjType === 'point')) {
+                if (!tags.includes(obj.__globeObjType)) return;
+                if (what === 'texture') {
+                    if (obj.material?.map) obj.material.map.dispose();
+                } else {
                     if (obj.geometry) obj.geometry.dispose();
                     if (obj.material) {
                         if (obj.material.map) obj.material.map.dispose();
                         obj.material.dispose();
                     }
-                } else if (what === 'texture' && obj.__globeObjType === 'globe' && obj.material?.map) {
-                    obj.material.map.dispose();
                 }
             });
         } catch (e) { /* best-effort cleanup */ }
@@ -1901,6 +1911,8 @@
             _disposeLeakedGlobeMemory(globe, 'texture');
             globe.globeImageUrl(style.img);
         }
+        _disposeLeakedGlobeMemory(globe, 'polygons');
+        _disposeLeakedGlobeMemory(globe, 'hex');
         if (style.hex && countriesData) {
             globe.hexPolygonsData(countriesData);
             globe.hexPolygonResolution(3);

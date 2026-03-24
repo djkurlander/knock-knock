@@ -327,10 +327,22 @@ def parse_dial_country(dial_string):
     s = s.replace('.', '').replace('-', '')
     if s.startswith('++'):
         s = s[1:]
-    # PBX external line prefix before + (e.g. 0+421..., 00+421...)
-    plus = s.find('+')
-    if plus > 0 and s[:plus].isdigit():
-        s = s[plus:]
+    # PBX external line prefix separator (e.g. 9*442038076211, 900~254..., 011!972...)
+    # Split on rightmost non-digit; if right side is ≥7 digits, treat it as the number
+    sep = None
+    for i in range(len(s) - 1, -1, -1):
+        if not s[i].isdigit():
+            sep = i
+            break
+    if sep is not None:
+        right = s[sep + 1:]
+        ch = s[sep]
+        if len(right) >= 7 and right.isdigit():
+            # '+' means E.164 — keep it; other separators just take the digits
+            s = ('+' + right) if ch == '+' else right
+        elif ch == '+':
+            # Original logic: strip prefix before + even if short
+            s = s[sep:]
 
     def _result(pn):
         iso = phonenumbers.region_code_for_number(pn)
@@ -530,7 +542,13 @@ def process_sip_request(req, client_ip):
     if method == 'INVITE':
         dial_iso, dial_name, dial_e164 = parse_dial_country(uri)
         if not dial_iso:
-            print(f'SIP: no location for INVITE uri={uri}', file=sys.stderr)
+            # Distinguish extension probes from real parse failures
+            stripped = re.sub(r'^sips?:', '', uri).split('@')[0]
+            digits = re.sub(r'\D', '', stripped)
+            if len(digits) < 7:
+                print(f'SIP: extension probe uri={uri}', file=sys.stderr)
+            else:
+                print(f'SIP: no location for INVITE uri={uri}', file=sys.stderr)
         if dial_iso:
             print(f'SIP DIAL: {dial_string} → {dial_e164} → {dial_iso} ({dial_name})', file=sys.stderr)
             common['sip_dial_number'] = dial_e164

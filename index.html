@@ -2208,10 +2208,12 @@
             const desktopContainer = document.getElementById('d-globe-container');
 
             if (isMobile && !mobileGlobe && mobileContainer && !noHeaderGlobe) {
+                if (desktopGlobe) { desktopGlobe._destructor(); desktopGlobe = null; }
                 mobileContainer.innerHTML = '';
                 mobileGlobe = createGlobe(mobileContainer, 85);
                 if (lastLat !== null) rotateGlobeToLocation(lastLat, lastLng);
             } else if (!isMobile && !desktopGlobe && desktopContainer) {
+                if (mobileGlobe) { mobileGlobe._destructor(); mobileGlobe = null; }
                 desktopContainer.innerHTML = '';
                 desktopGlobe = createGlobe(desktopContainer, 110);
                 if (lastLat !== null) rotateGlobeToLocation(lastLat, lastLng);

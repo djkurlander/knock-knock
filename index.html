@@ -1760,6 +1760,13 @@
         polygons: ['polygon'],
         hex:      ['hexPolygon', 'hexBinPoints'],
     };
+    function _disposeObj(obj) {
+        if (obj.geometry) obj.geometry.dispose();
+        if (obj.material) {
+            if (obj.material.map) obj.material.map.dispose();
+            obj.material.dispose();
+        }
+    }
     function _disposeLeakedGlobeMemory(globe, what) {
         if (!globe) return;
         const tags = _DISPOSE_TAGS[what];
@@ -1770,11 +1777,9 @@
                 if (what === 'texture') {
                     if (obj.material?.map) obj.material.map.dispose();
                 } else {
-                    if (obj.geometry) obj.geometry.dispose();
-                    if (obj.material) {
-                        if (obj.material.map) obj.material.map.dispose();
-                        obj.material.dispose();
-                    }
+                    // Dispose the tagged object and all its untagged children
+                    _disposeObj(obj);
+                    obj.traverse(child => { if (child !== obj) _disposeObj(child); });
                 }
             });
         } catch (e) { /* best-effort cleanup */ }

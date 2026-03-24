@@ -7,7 +7,7 @@ User=root
 WorkingDirectory=/root/knock-knock
 # Add --save-knocks to store individual knock records in SQLite (all protocols)
 # Add --save-knocks=SIP,SMTP to store only specific protocols
-# Add --max-knocks N to auto-add IPs to blocklist.txt after N total hits (disabled by default)
+# Add --max-knocks to auto-block IPs: --max-knocks 5000 (global), --max-knocks RDP:500, --max-knocks 5000,RDP:500
 # To select which honeypots to run, uncomment and edit the Environment line below (default: all).
 # Protocols: SSH, TNET, FTP, RDP, SMB, SIP, SMTP, MAIL
 # Environment=ENABLED_PROTOCOLS=SSH

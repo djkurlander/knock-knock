@@ -549,14 +549,18 @@ def store_mail_forensic(redis_conn, forensic):
     redis_conn.lpush("knock:forensics:mail_raw", json.dumps(forensic))
     redis_conn.ltrim("knock:forensics:mail_raw", 0, max(0, MAIL_FORENSICS_MAX - 1))
 
-def is_over_limit_and_block(redis_conn, ip, projected_hits, max_knocks):
+def is_over_limit_and_block(redis_conn, ip, projected_hits, proto_hits, proto, max_knocks):
     if not max_knocks:
         return False
-    if projected_hits <= max_knocks:
+    limit = max_knocks.get(proto) or max_knocks.get(None)
+    if not limit:
+        return False
+    hits = proto_hits if proto in max_knocks else projected_hits
+    if hits <= limit:
         return False
     if not redis_conn.sismember("knock:blocked", ip):
         add_to_blocklist(ip, redis_conn)
-    print(f"⛔ Dropped knock from over-limit IP {ip} ({projected_hits}>{max_knocks})", flush=True)
+    print(f"⛔ Dropped knock from over-limit IP {ip} ({hits}>{limit} {proto})", flush=True)
     return True
 
 def format_cred_summary(user, pw):
@@ -769,7 +773,8 @@ def monitor(save_knocks=None, max_knocks=None):
             try:
                 package.update(get_intel_stats_before_update(package))
                 projected_hits = int(package.get('ip_hits', 0) or 0)
-                if is_over_limit_and_block(r, ip, projected_hits, max_knocks):
+                proto_hits = int(package.get('ip_hits_proto', 0) or 0)
+                if is_over_limit_and_block(r, ip, projected_hits, proto_hits, proto, max_knocks):
                     continue
                 store_mail_forensic(r, forensic)
                 log_to_enriched_db(package, save_protos=save_protos)
@@ -796,16 +801,30 @@ def monitor(save_knocks=None, max_knocks=None):
             else:
                 cred = format_cred_summary(user, pw)
                 print(f"📡 {proto} {geo['iso']} | {cred} via {geo['isp']}")
-            if max_knocks and int(package.get('ip_hits', 0) or 0) >= max_knocks and not r.sismember("knock:blocked", ip):
-                add_to_blocklist(ip, r)
+            if max_knocks and not r.sismember("knock:blocked", ip):
+                limit = max_knocks.get(proto) or max_knocks.get(None)
+                hits = proto_hits if proto in max_knocks else projected_hits
+                if limit and hits >= limit:
+                    add_to_blocklist(ip, r)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Knock-Knock Monitor")
     parser.add_argument("--reset-all", action="store_true", help="Delete DB and clear Redis")
     parser.add_argument("--save-knocks", nargs='?', const='ALL', default=None, metavar='PROTOS',
                         help="Save individual knocks to SQLite. Optional: comma-separated protocols (e.g. SIP,SMTP). Default: ALL")
-    parser.add_argument("--max-knocks", type=int, default=None, metavar="N",
-                        help="Auto-add IP to blocklist after N knocks (default: disabled)")
+    parser.add_argument("--max-knocks", default=None, metavar="LIMIT",
+                        help="Auto-block IP after N knocks. Examples: 5000, RDP:500, 5000,RDP:500")
     args = parser.parse_args()
     if args.reset_all: reset_all()
-    monitor(save_knocks=args.save_knocks, max_knocks=args.max_knocks)
+    # Parse --max-knocks: "5000" → {None: 5000}, "RDP:500" → {'RDP': 500}, "5000,RDP:500" → {None: 5000, 'RDP': 500}
+    max_knocks = None
+    if args.max_knocks:
+        max_knocks = {}
+        for part in args.max_knocks.split(','):
+            part = part.strip()
+            if ':' in part:
+                proto_name, val = part.split(':', 1)
+                max_knocks[proto_name.strip().upper()] = int(val.strip())
+            else:
+                max_knocks[None] = int(part)
+    monitor(save_knocks=args.save_knocks, max_knocks=max_knocks)

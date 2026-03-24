@@ -13,6 +13,7 @@ services:
   ## Note: counts all-time hits, so existing high-hit IPs will be blocked on their next knock
   # honeypot-monitor:
   #   command: python -u monitor.py --max-knocks 5000
+  ## Per-protocol: --max-knocks RDP:500  or  --max-knocks 5000,RDP:500
 
   ## Override SMTP banner hostname (default: reverse DNS of server IP)
   # honeypot-monitor:

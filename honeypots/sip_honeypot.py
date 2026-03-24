@@ -352,7 +352,9 @@ def parse_dial_country(dial_string):
         e164 = phonenumbers.format_number(pn, phonenumbers.PhoneNumberFormat.E164)
         digits = e164.lstrip('+')
         with _dial_cache_lock:
-            _dial_cache[:] = [(d, i, n) for d, i, n in _dial_cache if d != digits]
+            # Evict exact match and longer entries that end with this number (misdials)
+            _dial_cache[:] = [(d, i, n) for d, i, n in _dial_cache
+                              if d != digits and not d.endswith(digits)]
             _dial_cache.append((digits, iso, name))
             if len(_dial_cache) > 50:
                 _dial_cache.pop(0)
@@ -360,18 +362,13 @@ def parse_dial_country(dial_string):
         return iso, name, e164
 
     # Check suffix against recently seen valid numbers (catches arbitrary PBX prefixes)
-    # Prefer shortest match — most prefix digits stripped = closest to real E.164
     digits_only = s.lstrip('+')
     if re.match(r'^\d{7,}$', digits_only):
         with _dial_cache_lock:
-            best = None
             for cached_digits, cached_iso, cached_name in _dial_cache:
                 if digits_only.endswith(cached_digits):
-                    if best is None or len(cached_digits) < len(best[0]):
-                        best = (cached_digits, cached_iso, cached_name)
-            if best:
-                print(f'SIP CACHE: hit {digits_only} matched +{best[0]} -> {best[1]} ({best[2]})', file=sys.stderr)
-                return best[1], best[2], f'+{best[0]}'
+                    print(f'SIP CACHE: hit {digits_only} matched +{cached_digits} -> {cached_iso} ({cached_name})', file=sys.stderr)
+                    return cached_iso, cached_name, f'+{cached_digits}'
 
     if s.startswith('+'):
         try:

@@ -360,13 +360,18 @@ def parse_dial_country(dial_string):
         return iso, name, e164
 
     # Check suffix against recently seen valid numbers (catches arbitrary PBX prefixes)
+    # Prefer shortest match — most prefix digits stripped = closest to real E.164
     digits_only = s.lstrip('+')
     if re.match(r'^\d{7,}$', digits_only):
         with _dial_cache_lock:
+            best = None
             for cached_digits, cached_iso, cached_name in _dial_cache:
                 if digits_only.endswith(cached_digits):
-                    print(f'SIP CACHE: hit {digits_only} matched +{cached_digits} -> {cached_iso} ({cached_name})', file=sys.stderr)
-                    return cached_iso, cached_name, f'+{cached_digits}'
+                    if best is None or len(cached_digits) < len(best[0]):
+                        best = (cached_digits, cached_iso, cached_name)
+            if best:
+                print(f'SIP CACHE: hit {digits_only} matched +{best[0]} -> {best[1]} ({best[2]})', file=sys.stderr)
+                return best[1], best[2], f'+{best[0]}'
 
     if s.startswith('+'):
         try:

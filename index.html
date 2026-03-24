@@ -12,7 +12,7 @@
     <meta property="og:type" content="website">
     <meta name="twitter:card" content="summary_large_image">
     <script src="https://cdn.jsdelivr.net/npm/@twemoji/api@latest/dist/twemoji.min.js" crossorigin="anonymous"></script>
-    <script src="https://unpkg.com/globe.gl"></script>
+    <script src="https://unpkg.com/globe.gl@2.45.1"></script>
     <script src="https://unpkg.com/topojson-client@3"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -1659,6 +1659,7 @@
         [mobileGlobe, desktopGlobe, paneGlobeDesktop, paneGlobeMobile].forEach(g => {
             if (!g) return;
             g._pointData[0]._hidden = true;
+            _disposeLeakedGlobeMemory(g, 'points');
             g.pointsData(g._pointData);
         });
     }
@@ -1744,6 +1745,30 @@
             if (paneGlobeDesktop) applyGlobeStyle(paneGlobeDesktop, paneGlobeStyleIdx);
             if (paneGlobeMobile) applyGlobeStyle(paneGlobeMobile, paneGlobeStyleIdx);
         });
+
+    /**
+     * WORKAROUND: globe.gl@2.45.1 / three-globe@2.45.1 memory leaks.
+     * Remove this function and its call sites once upstream fixes land:
+     *   - pointsData(): CylinderGeometry + materials created per update, never disposed
+     *   - globeImageUrl(): old texture never disposed when URL changes
+     * Tags: __globeObjType 'point'|'points' for point meshes, 'globe' for globe mesh
+     */
+    function _disposeLeakedGlobeMemory(globe, what) {
+        if (!globe) return;
+        try {
+            globe.scene().traverse(obj => {
+                if (what === 'points' && (obj.__globeObjType === 'points' || obj.__globeObjType === 'point')) {
+                    if (obj.geometry) obj.geometry.dispose();
+                    if (obj.material) {
+                        if (obj.material.map) obj.material.map.dispose();
+                        obj.material.dispose();
+                    }
+                } else if (what === 'texture' && obj.__globeObjType === 'globe' && obj.material?.map) {
+                    obj.material.map.dispose();
+                }
+            });
+        } catch (e) { /* best-effort cleanup */ }
+    }
 
     function createGlobe(container, size) {
         const g = Globe()
@@ -1872,7 +1897,10 @@
 
     function applyGlobeStyle(globe, idx) {
         const style = GLOBE_STYLES[idx];
-        if (globe.globeImageUrl() !== style.img) globe.globeImageUrl(style.img);
+        if (globe.globeImageUrl() !== style.img) {
+            _disposeLeakedGlobeMemory(globe, 'texture');
+            globe.globeImageUrl(style.img);
+        }
         if (style.hex && countriesData) {
             globe.hexPolygonsData(countriesData);
             globe.hexPolygonResolution(3);
@@ -2191,6 +2219,7 @@
             g._pointData[0].lng = lng;
             g._pointData[0].alt = 0.01;
             g._pointData[0]._hidden = false;
+            _disposeLeakedGlobeMemory(g, 'points');
             g.pointsData(g._pointData);
             g.pointOfView({ lat, lng, altitude: alt }, 1000);
         });

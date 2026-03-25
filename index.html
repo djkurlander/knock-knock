@@ -2635,10 +2635,8 @@
             render: d => {
                 const u = hasUserField(d) ? displayUsername(d.user) : NA_INLINE;
                 const domain = d.rdp_domain ? escapeHtml(d.rdp_domain) : '';
-                const ws = d.rdp_workstation ? escapeHtml(d.rdp_workstation) : '';
                 let html = `<span style="color:var(--ui-label)">user:</span> <span>${u}</span>`;
                 if (domain) html += ` <span style="color:var(--ui-label); margin-left:10px;">domain:</span> <span>${domain}</span>`;
-                if (ws) html += ` <span style="color:var(--ui-label); margin-left:10px;">host:</span> <span>${ws}</span>`;
                 return html;
             },
         },

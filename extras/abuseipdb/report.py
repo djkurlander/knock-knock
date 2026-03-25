@@ -65,6 +65,8 @@ PROTO_CATEGORIES = {
     3: ({18},     'RDP'),
     4: ({11, 18}, 'MAIL'),
     5: ({5, 18},  'FTP'),
+    6: ({18, 15}, 'SIP'),    # 15=Hacking
+    7: ({18},     'SMB'),
 }
 
 API_URL = 'https://api.abuseipdb.com/api/v2/bulk-report'

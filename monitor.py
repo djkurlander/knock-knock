@@ -181,7 +181,7 @@ _KNOCK_EXTRA_COLS = {
              'sip_dial_lat REAL', 'sip_dial_lng REAL'],
     'SMB':  ['username TEXT', 'smb_share TEXT', 'smb_version TEXT',
              'smb_domain TEXT', 'smb_host TEXT'],
-    'RDP':  ['username TEXT', 'rdp_source TEXT', 'domain TEXT'],
+    'RDP':  ['username TEXT', 'rdp_source TEXT', 'domain TEXT', 'rdp_workstation TEXT'],
 }
 
 # Maps JSON knock data keys -> column names for common fields
@@ -208,7 +208,7 @@ _PROTO_KEY_MAP = {
              ('sip_dial_lat', 'sip_dial_lat'), ('sip_dial_lng', 'sip_dial_lng')],
     'SMB':  [('user', 'username'), ('smb_share', 'smb_share'), ('smb_version', 'smb_version'),
              ('smb_domain', 'smb_domain'), ('smb_host', 'smb_host')],
-    'RDP':  [('user', 'username'), ('rdp_source', 'rdp_source'), ('domain', 'domain')],
+    'RDP':  [('user', 'username'), ('rdp_source', 'rdp_source'), ('domain', 'domain'), ('rdp_workstation', 'rdp_workstation')],
 }
 
 def reset_all():

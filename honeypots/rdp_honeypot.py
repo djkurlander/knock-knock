@@ -368,7 +368,7 @@ def build_ntlm_challenge():
 def parse_ntlm_authenticate(data):
     """
     Parse NTLM AUTHENTICATE (Type 3) message using impacket.
-    Returns (username, domain) strings, or (None, None) on failure.
+    Returns (username, domain, workstation) strings, or (None, None, None) on failure.
     """
     def _read_secbuf(buf, off):
         if len(buf) < off + 8:
@@ -401,29 +401,36 @@ def parse_ntlm_authenticate(data):
             username = username.decode('utf-16-le', errors='replace').strip('\x00')
         if isinstance(domain, bytes):
             domain = domain.decode('utf-16-le', errors='replace').strip('\x00')
+        # impacket may expose host_name / workstation
+        workstation = resp.fields.get('host_name') or resp.fields.get('workstation')
+        if isinstance(workstation, bytes):
+            workstation = workstation.decode('utf-16-le', errors='replace').strip('\x00')
+        workstation = workstation or None
         username = username or None
         domain = domain or None
         if username:
-            return username, domain
+            return username, domain, workstation
     except Exception:
         pass
 
     # Fallback parser for Type-3 variants impacket doesn't decode cleanly.
-    # AUTH message layout: secbuf(domain @28), secbuf(user @36), flags @60.
+    # AUTH message layout: secbuf(domain @28), secbuf(user @36), secbuf(workstation @44), flags @60.
     try:
         if len(data) < 64 or not data.startswith(b'NTLMSSP\x00'):
-            return None, None
+            return None, None, None
         msg_type = struct.unpack_from('<I', data, 8)[0]
         if msg_type != 3:
-            return None, None
+            return None, None, None
         flags = struct.unpack_from('<I', data, 60)[0]
         domain_raw = _read_secbuf(data, 28)
         user_raw = _read_secbuf(data, 36)
+        workstation_raw = _read_secbuf(data, 44)
         username = _decode_ntlm_text(user_raw, flags)
         domain = _decode_ntlm_text(domain_raw, flags)
-        return username or None, domain or None
+        workstation = _decode_ntlm_text(workstation_raw, flags)
+        return username or None, domain or None, workstation or None
     except Exception:
-        return None, None
+        return None, None, None
 
 # --- NLA handshake ---
 
@@ -545,7 +552,7 @@ def do_nla(raw_sock, client_ip, session_id='-'):
                     return [], 'nla_no_ntlm_step3'
                 return captures, f'nla_attempts:{len(captures)}'
 
-            username, domain = parse_ntlm_authenticate(ntlm_auth)
+            username, domain, workstation = parse_ntlm_authenticate(ntlm_auth)
             if not username and data:
                 # Some clients deliver fragmented/auth-variant payloads.
                 original_timeout = tls.gettimeout()
@@ -561,16 +568,16 @@ def do_nla(raw_sock, client_ip, session_id='-'):
                         ntlm_auth = find_ntlmssp(data)
                         if not ntlm_auth:
                             continue
-                        username, domain = parse_ntlm_authenticate(ntlm_auth)
+                        username, domain, workstation = parse_ntlm_authenticate(ntlm_auth)
                         if username:
                             break
                 except (socket.timeout, TimeoutError):
                     pass
                 finally:
                     tls.settimeout(original_timeout)
-            trace(session_id, client_ip, 'nla_step3_parsed', attempt=attempt, user=username, domain=domain)
+            trace(session_id, client_ip, 'nla_step3_parsed', attempt=attempt, user=username, domain=domain, workstation=workstation)
             if username:
-                captures.append((username, domain))
+                captures.append((username, domain, workstation))
 
             # Step 4: send STATUS_LOGON_FAILURE
             try:
@@ -737,13 +744,15 @@ def handle_connection(client_sock, client_ip):
             final_stage = f'nla_outer_exception:{reason}'
 
         if captures:
-            for i, (username, domain) in enumerate(captures, start=1):
+            for i, (username, domain, workstation) in enumerate(captures, start=1):
                 emit_user = normalize_knock_username(username)
-                trace(session_id, client_ip, 'emit_nla_knock', attempt=i, user=username, domain=domain)
+                trace(session_id, client_ip, 'emit_nla_knock', attempt=i, user=username, domain=domain, workstation=workstation)
                 knock = {"type": "KNOCK", "proto": "RDP",
                          "ip": client_ip, "user": emit_user, "rdp_source": "nla"}
                 if domain:
                     knock["domain"] = domain
+                if workstation:
+                    knock["rdp_workstation"] = workstation
                 print(json.dumps(knock), flush=True)
             final_stage = f'nla_knocks_emitted:{len(captures)}'
             creds_captured = True

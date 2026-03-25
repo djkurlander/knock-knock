@@ -280,6 +280,7 @@ def install_session_setup_hooks(server):
                 packet_len=len(_packet_bytes(recvPacket)),
                 share=share or '-',
             )
+            _emit_pending_knock(connData, share)
             return original_smb1_tree(connId, smbServer, SMBCommand, recvPacket)
         smb_server.hookSmbCommand(smb.SMB.SMB_COM_TREE_CONNECT_ANDX, wrapped_smb1_tree)
 
@@ -332,6 +333,7 @@ def install_session_setup_hooks(server):
                 packet_len=len(_packet_bytes(recvPacket)),
                 share=share or '-',
             )
+            _emit_pending_knock(connData, share)
             return original_smb2_tree(connId, smbServer, recvPacket)
         smb_server.hookSmb2Command(smb2.SMB2_TREE_CONNECT, wrapped_smb2_tree)
 
@@ -407,22 +409,39 @@ def auth_callback(smbServer, connData, domain_name, user_name, host_name):
         trace(client_ip, 'auth_dedup_skip', user=user_name, smb_version=smb_version, domain=domain_name, host=host_name)
         return
 
+    # Stash auth data for emission at Tree Connect (when share is known)
+    connData['_knock_pending'] = {
+        'ip': client_ip,
+        'user': user_name,
+        'smb_version': smb_version,
+        'domain': domain_name,
+        'host': host_name,
+    }
+    trace(client_ip, 'auth_stashed', user=user_name, smb_version=smb_version, domain=domain_name, host=host_name)
+
+
+def _emit_pending_knock(connData, share):
+    """Emit a stashed knock from auth_callback, now with share info from Tree Connect."""
+    pending = connData.get('_knock_pending')
+    if not pending:
+        return
     knock = {
         'type': 'KNOCK',
         'proto': 'SMB',
-        'ip': client_ip,
-        'user': user_name,
+        'ip': pending['ip'],
+        'user': pending['user'],
     }
-    if smb_share:
-        knock['smb_share'] = smb_share
-    if smb_version:
-        knock['smb_version'] = smb_version
-    if domain_name:
-        knock['smb_domain'] = domain_name
-    if host_name:
-        knock['smb_host'] = host_name
+    if share:
+        knock['smb_share'] = share
+    if pending['smb_version']:
+        knock['smb_version'] = pending['smb_version']
+    if pending['domain']:
+        knock['smb_domain'] = pending['domain']
+    if pending['host']:
+        knock['smb_host'] = pending['host']
     print(json.dumps(knock), flush=True)
-    trace(client_ip, 'knock_emitted', user=user_name, smb_share=smb_share, smb_version=smb_version, domain=domain_name, host=host_name)
+    trace(pending['ip'], 'knock_emitted', user=pending['user'], smb_share=share,
+          smb_version=pending['smb_version'], domain=pending['domain'], host=pending['host'])
 
 
 def build_server():

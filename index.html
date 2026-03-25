@@ -1771,7 +1771,6 @@
         const tags = _DISPOSE_TAGS[what];
         if (!tags) return;
         try {
-            const toRemove = [];
             globe.scene().traverse(obj => {
                 if (!tags.includes(obj.__globeObjType)) return;
                 if (what === 'texture') {
@@ -1779,11 +1778,8 @@
                 } else {
                     _disposeObj(obj);
                     obj.traverse(child => { if (child !== obj) _disposeObj(child); });
-                    toRemove.push(obj);
                 }
             });
-            // Remove disposed nodes from scene graph so JS objects can be GC'd
-            toRemove.forEach(obj => { if (obj.parent) obj.parent.remove(obj); });
         } catch (e) { /* best-effort cleanup */ }
     }
 

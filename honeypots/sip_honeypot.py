@@ -645,6 +645,11 @@ def process_sip_request(req, client_ip):
             digits = re.sub(r'\D', '', stripped)
             if len(digits) < 7:
                 print(f'SIP: extension probe uri={uri}', file=sys.stderr)
+            elif len(digits) == 10:
+                # Last resort: bots often send 10-digit US/Canada numbers without +1 prefix
+                dial_iso, dial_name, dial_e164, dial_lat, dial_lng = parse_dial_country('+1' + digits)
+                if not dial_iso:
+                    print(f'SIP: no location for INVITE uri={uri}', file=sys.stderr)
             else:
                 print(f'SIP: no location for INVITE uri={uri}', file=sys.stderr)
         if dial_iso:

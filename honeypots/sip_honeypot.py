@@ -648,7 +648,7 @@ def process_sip_request(req, client_ip):
             else:
                 print(f'SIP: no location for INVITE uri={uri}', file=sys.stderr)
         if dial_iso:
-            print(f'SIP DIAL: {dial_string} → {dial_e164} → {dial_iso} ({dial_name})', file=sys.stderr)
+            if TRACE_ENABLED: print(f'SIP DIAL: {dial_string} → {dial_e164} → {dial_iso} ({dial_name})', file=sys.stderr)
             common['sip_dial_number'] = dial_e164
             common['sip_dial_country'] = dial_iso
             common['sip_dial_country_name'] = dial_name

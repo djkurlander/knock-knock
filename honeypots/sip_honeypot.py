@@ -9,6 +9,9 @@ import string
 import sys
 import threading
 import time
+import urllib.request
+import urllib.error
+import urllib.parse
 import uuid
 
 import phonenumbers
@@ -41,7 +44,95 @@ _ack_seen = {}
 _reg_lock = threading.Lock()
 _registered_extensions = {}
 _dial_cache_lock = threading.Lock()
-_dial_cache = []  # list of (digits_str, iso, name), max 50 entries
+_dial_cache = []  # list of (digits_str, iso, name, lat, lng), max 50 entries
+
+# ---------------------------------------------------------------------------
+# Nominatim geocoding cache — city-level coordinates for SIP dial descriptions
+# ---------------------------------------------------------------------------
+_GEOCODE_CACHE_FILE = os.path.join(os.environ.get('DB_DIR', 'data'), 'geocode_cache.json')
+_GEOCODE_SEED_FILE = os.path.join(os.path.dirname(__file__), 'geocode_cache_seed.json')
+_geocode_cache = {}        # description string -> [lat, lng] or None
+_geocode_cache_lock = threading.Lock()
+_last_nominatim_ts = 0.0
+
+
+def _load_geocode_cache():
+    """Load geocode cache from disk (seed file first, then runtime cache on top)."""
+    global _geocode_cache
+    # Load seed file shipped with repo
+    if os.path.isfile(_GEOCODE_SEED_FILE):
+        try:
+            with open(_GEOCODE_SEED_FILE, 'r') as f:
+                _geocode_cache = json.load(f)
+        except Exception:
+            pass
+    # Layer runtime cache on top (has any new entries from Nominatim calls)
+    if os.path.isfile(_GEOCODE_CACHE_FILE):
+        try:
+            with open(_GEOCODE_CACHE_FILE, 'r') as f:
+                _geocode_cache.update(json.load(f))
+        except Exception:
+            pass
+
+
+def _save_geocode_cache():
+    """Flush runtime geocode cache to disk."""
+    try:
+        with open(_GEOCODE_CACHE_FILE, 'w') as f:
+            json.dump(_geocode_cache, f, ensure_ascii=False, indent=1)
+    except Exception as e:
+        print(f'SIP GEOCODE: cache save error: {e}', file=sys.stderr)
+
+
+def _clean_description(desc):
+    """Strip Brazilian-style state abbreviations that confuse Nominatim."""
+    return re.sub(r' - [A-Z]{2}(?=,)', '', desc)
+
+
+def geocode_description(desc):
+    """Look up (lat, lng) for a phonenumbers geocoder description string.
+    Returns (lat, lng) or (None, None). Thread-safe, cached to disk."""
+    global _last_nominatim_ts
+    if not desc:
+        return None, None
+    with _geocode_cache_lock:
+        if desc in _geocode_cache:
+            cached = _geocode_cache[desc]
+            return (cached[0], cached[1]) if cached else (None, None)
+    # Cache miss — call Nominatim
+    query = _clean_description(desc)
+    url = f'https://nominatim.openstreetmap.org/search?q={urllib.parse.quote(query)}&format=json&limit=1'
+    headers = {'User-Agent': 'knock-knock-honeypot/1.0'}
+    result = None
+    try:
+        # Rate limit: max 1 req/sec
+        now = time.time()
+        wait = 1.0 - (now - _last_nominatim_ts)
+        if wait > 0:
+            time.sleep(wait)
+        _last_nominatim_ts = time.time()
+        req = urllib.request.Request(url, headers=headers)
+        t0 = time.time()
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            data = json.loads(resp.read().decode())
+            ms = (time.time() - t0) * 1000
+            if data and len(data) > 0:
+                result = [float(data[0]['lat']), float(data[0]['lon'])]
+                print(f'SIP GEOCODE: "{desc}" -> ({result[0]:.4f}, {result[1]:.4f}) [{ms:.0f}ms]', file=sys.stderr)
+            else:
+                print(f'SIP GEOCODE: "{desc}" -> no results [{ms:.0f}ms]', file=sys.stderr)
+    except Exception as e:
+        # Transient error — don't cache, retry next time
+        print(f'SIP GEOCODE: "{desc}" -> error: {e}', file=sys.stderr)
+        return None, None
+    with _geocode_cache_lock:
+        _geocode_cache[desc] = result
+    _save_geocode_cache()
+    return (result[0], result[1]) if result else (None, None)
+
+
+_load_geocode_cache()
+# ---------------------------------------------------------------------------
 
 
 def trace(session_id, client_ip, stage, **fields):
@@ -318,9 +409,9 @@ COUNTRY_COORDS = {
 
 
 def parse_dial_country(dial_string):
-    """Extract target country (iso, name, e164) from a SIP INVITE dial string."""
+    """Extract target country (iso, name, e164, lat, lng) from a SIP INVITE dial string."""
     if not dial_string:
-        return None, None, None
+        return None, None, None, None, None
     s = re.sub(r'^sips?:', '', dial_string)
     s = s.split('@')[0]
     s = s.lstrip('*#')
@@ -350,25 +441,31 @@ def parse_dial_country(dial_string):
         desc = pn_geocoder.description_for_number(pn, 'en')
         name = f'{desc}, {country}' if desc and desc != country else country
         e164 = phonenumbers.format_number(pn, phonenumbers.PhoneNumberFormat.E164)
+        # Geocode description to city-level coordinates
+        lat, lng = geocode_description(name)
+        if lat is None:
+            coords = COUNTRY_COORDS.get(iso)
+            if coords:
+                lat, lng = coords
         digits = e164.lstrip('+')
         with _dial_cache_lock:
             # Evict exact match and longer entries that end with this number (misdials)
-            _dial_cache[:] = [(d, i, n) for d, i, n in _dial_cache
+            _dial_cache[:] = [(d, i, n, la, ln) for d, i, n, la, ln in _dial_cache
                               if d != digits and not d.endswith(digits)]
-            _dial_cache.append((digits, iso, name))
+            _dial_cache.append((digits, iso, name, lat, lng))
             if len(_dial_cache) > 50:
                 _dial_cache.pop(0)
         print(f'SIP CACHE: stored +{digits} -> {iso} ({name})', file=sys.stderr)
-        return iso, name, e164
+        return iso, name, e164, lat, lng
 
     # Check suffix against recently seen valid numbers (catches arbitrary PBX prefixes)
     digits_only = s.lstrip('+')
     if re.match(r'^\d{7,}$', digits_only):
         with _dial_cache_lock:
-            for cached_digits, cached_iso, cached_name in _dial_cache:
+            for cached_digits, cached_iso, cached_name, cached_lat, cached_lng in _dial_cache:
                 if digits_only.endswith(cached_digits):
                     print(f'SIP CACHE: hit {digits_only} matched +{cached_digits} -> {cached_iso} ({cached_name})', file=sys.stderr)
-                    return cached_iso, cached_name, f'+{cached_digits}'
+                    return cached_iso, cached_name, f'+{cached_digits}', cached_lat, cached_lng
 
     if s.startswith('+'):
         try:
@@ -380,9 +477,9 @@ def parse_dial_country(dial_string):
         # Failed as E.164 — strip + and try as digits (e.g. ++011972... → 011972...)
         s = s.lstrip('+')
     if not re.match(r'^\d+$', s):
-        return None, None, None
+        return None, None, None, None, None
     if len(s) < 7:
-        return None, None, None
+        return None, None, None, None, None
     # North American long-distance: 1 + 10 digits
     if re.match(r'^1\d{10}$', s):
         try:
@@ -391,7 +488,7 @@ def parse_dial_country(dial_string):
                 return _result(pn)
         except Exception:
             pass
-        return None, None, None
+        return None, None, None, None, None
     for prefix in ('011', '00'):
         idx = s.find(prefix)
         if idx >= 0:
@@ -418,7 +515,7 @@ def parse_dial_country(dial_string):
                 return _result(pn)
         except Exception:
             continue
-    return None, None, None
+    return None, None, None, None, None
 
 
 def parse_auth_header(auth_value):
@@ -541,7 +638,7 @@ def process_sip_request(req, client_ip):
     if ack_age_ms is not None:
         common['sip_ack_age_ms'] = ack_age_ms
     if method == 'INVITE':
-        dial_iso, dial_name, dial_e164 = parse_dial_country(uri)
+        dial_iso, dial_name, dial_e164, dial_lat, dial_lng = parse_dial_country(uri)
         if not dial_iso:
             # Distinguish extension probes from real parse failures
             stripped = re.sub(r'^sips?:', '', uri).split('@')[0]
@@ -555,10 +652,9 @@ def process_sip_request(req, client_ip):
             common['sip_dial_number'] = dial_e164
             common['sip_dial_country'] = dial_iso
             common['sip_dial_country_name'] = dial_name
-            coords = COUNTRY_COORDS.get(dial_iso)
-            if coords:
-                common['sip_dial_lat'] = coords[0]
-                common['sip_dial_lng'] = coords[1]
+            if dial_lat is not None:
+                common['sip_dial_lat'] = dial_lat
+                common['sip_dial_lng'] = dial_lng
 
     auth_h = _header_first(headers, 'authorization') or _header_first(headers, 'proxy-authorization')
     scheme, auth = parse_auth_header(auth_h)

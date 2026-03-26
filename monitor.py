@@ -552,7 +552,10 @@ def store_mail_forensic(redis_conn, forensic):
 def is_over_limit_and_block(redis_conn, ip, projected_hits, proto_hits, proto, max_knocks):
     if not max_knocks:
         return False
-    limit = max_knocks.get(proto) or max_knocks.get(None)
+    if proto in max_knocks:
+        limit = max_knocks[proto]
+    else:
+        limit = max_knocks.get(None)
     if not limit:
         return False
     hits = proto_hits if proto in max_knocks else projected_hits
@@ -813,7 +816,7 @@ if __name__ == "__main__":
     parser.add_argument("--save-knocks", nargs='?', const='ALL', default=None, metavar='PROTOS',
                         help="Save individual knocks to SQLite. Optional: comma-separated protocols (e.g. SIP,SMTP). Default: ALL")
     parser.add_argument("--max-knocks", default=None, metavar="LIMIT",
-                        help="Auto-block IP after N knocks. Examples: 5000, RDP:500, 5000,RDP:500")
+                        help="Auto-block IP after N knocks. Examples: 5000, RDP:500, 5000,RDP:500,SIP:NONE")
     args = parser.parse_args()
     if args.reset_all: reset_all()
     # Parse --max-knocks: "5000" → {None: 5000}, "RDP:500" → {'RDP': 500}, "5000,RDP:500" → {None: 5000, 'RDP': 500}
@@ -824,7 +827,8 @@ if __name__ == "__main__":
             part = part.strip()
             if ':' in part:
                 proto_name, val = part.split(':', 1)
-                max_knocks[proto_name.strip().upper()] = int(val.strip())
+                val = val.strip().upper()
+                max_knocks[proto_name.strip().upper()] = None if val == 'NONE' else int(val)
             else:
                 max_knocks[None] = int(part)
     monitor(save_knocks=args.save_knocks, max_knocks=max_knocks)

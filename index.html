@@ -1380,7 +1380,7 @@
         const topKnock = feedData[newMode]?.[0];
         if (topKnock) {
             updateGlobeLocation(topKnock);
-            if (topKnock.lat != null) rotateGlobeToLocation(topKnock.lat, topKnock.lng);
+            if (topKnock.lat != null) rotateGlobeToLocation(topKnock);
         } else {
             hideGlobeDot();
             clearGlobeLocation();
@@ -1486,6 +1486,7 @@
     let desktopGlobe = null;
     let lastLat = null;
     let lastLng = null;
+    let lastGlobeKnock = null;
     let countriesData = null;
     let paneGlobeDesktop = null;
     let paneGlobeMobile = null;
@@ -1655,11 +1656,17 @@
     }
 
     function hideGlobeDot() {
+        paneGlobeArcActive = false;
         [mobileGlobe, desktopGlobe, paneGlobeDesktop, paneGlobeMobile].forEach(g => {
             if (!g) return;
             g._pointData[0]._hidden = true;
+            if (g._pointData[1]) g._pointData[1]._hidden = true;
             _disposeLeakedGlobeMemory(g, 'points');
             g.pointsData(g._pointData);
+            if (g.arcsData) {
+                _disposeLeakedGlobeMemory(g, 'arcs');
+                g.arcsData([]);
+            }
         });
     }
 
@@ -1758,6 +1765,7 @@
         texture:  ['globe'],
         polygons: ['polygon'],
         hex:      ['hexPolygon', 'hexBinPoints'],
+        arcs:     ['arc', 'arcs'],
     };
     function _disposeObj(obj) {
         if (obj.geometry) obj.geometry.dispose();
@@ -1836,6 +1844,8 @@
     let headerGlobePauseTimeout = null;
     let paneGlobeVisible = { desktop: false, mobile: false };
     let paneGlobePauseTimeout = null;
+    let paneGlobeArcActive = false;
+    let paneGlobePointAlt = 0.01;
     let paneGlobeObserver = null;
     let paneGlobeControlHandlers = [];
 
@@ -1979,7 +1989,7 @@
             globe.labelsData(citiesData)
                 .labelLat(d => d.properties.latitude)
                 .labelLng(d => d.properties.longitude)
-                .labelText(d => top50.has(d) ? d.properties.name : '')
+                .labelText(d => top50.has(d) ? (d.properties.nameascii || d.properties.name) : '')
                 .labelSize(d => Math.sqrt(d.properties.pop_max) * 6e-4)
                 .labelDotRadius(d => Math.sqrt(d.properties.pop_max) * 4e-4)
                 .labelColor(() => '#00ff41')
@@ -1995,8 +2005,14 @@
             schedulePaneGlobePause();
         };
         globe.renderer().domElement.addEventListener('mousemove', globe._paneMousemoveHandler);
-        globe.pointAltitude(style.extruded ? 0.15 : style.cities ? 0.025 : 0.01);
-        globe.pointColor(() => style.extruded ? '#00fbff' : '#ff0000');
+        paneGlobePointAlt = style.extruded ? 0.15 : style.cities ? 0.025 : 0.01;
+        globe.pointAltitude(paneGlobePointAlt);
+        globe.pointColor(d => d._dest ? '#ff00ff' : (style.extruded ? '#00fbff' : '#ff0000'));
+        // Re-trigger arc altitude accessors with current data
+        if (paneGlobeArcActive && globe.arcsData) {
+            const current = globe.arcsData();
+            if (current.length) globe.arcsData([...current]);
+        }
         const pov = globe.pointOfView();
         const isDesktop = globe === paneGlobeDesktop;
         const baseAlt = isDesktop ? 1.5 : 1.8;
@@ -2048,11 +2064,28 @@
             .width(size).height(size)
             .pointsData([])
             .pointAltitude(d => d.alt ?? 0.01)
-            .pointColor(() => '#ff0000')
+            .pointColor(d => d._dest ? '#ff00ff' : '#ff0000')
             .pointRadius(d => d._hidden ? 0 : 1.5)
             .pointsTransitionDuration(0)
+            .arcsData([])
+            .arcStartLat(d => d.startLat)
+            .arcStartLng(d => d.startLng)
+            .arcEndLat(d => d.endLat)
+            .arcEndLng(d => d.endLng)
+            .arcColor(() => 'rgba(255,255,0,0.9)')
+            .arcStartAltitude(() => paneGlobePointAlt)
+            .arcEndAltitude(() => paneGlobePointAlt)
+            .arcDashLength(0.4)
+            .arcDashGap(0.2)
+            .arcDashAnimateTime(1500)
+            .arcStroke(0.5)
+            .arcAltitudeAutoScale(0.25)
+            .arcsTransitionDuration(0)
             (pane);
-        globe._pointData = [{ lat: 0, lng: 0, alt: 0.01, _hidden: true }];
+        globe._pointData = [
+            { lat: 0, lng: 0, alt: 0.01, _hidden: true },
+            { lat: 0, lng: 0, alt: 0.01, _hidden: true, _dest: true },
+        ];
         globe.controls().enableZoom = false;
         globe.controls().autoRotate = false;
         if (which === 'desktop') paneGlobeDesktop = globe; else paneGlobeMobile = globe;
@@ -2101,7 +2134,7 @@
     function initPaneGlobes() {
         setTimeout(() => {
             if (window.innerWidth > 800) createPaneGlobe('desktop');
-            else if (!DEBUG) createPaneGlobe('mobile');
+            else createPaneGlobe('mobile');
             setupPaneGlobeVisibility();
         }, 100);
     }
@@ -2182,6 +2215,7 @@
 
     function schedulePaneGlobePause() {
         if (paneGlobePauseTimeout) clearTimeout(paneGlobePauseTimeout);
+        if (paneGlobeArcActive) return; // keep animation running for arc dashes
         paneGlobePauseTimeout = setTimeout(() => {
             if (paneGlobeDesktop && paneGlobeVisible.desktop) {
                 paneGlobeDesktop.pauseAnimation();
@@ -2213,29 +2247,59 @@
         });
         ['d-globe-loc-isp', 'm-globe-loc-isp'].forEach(id => {
             const el = document.getElementById(id);
-            if (el) el.innerText = d.isp || '';
+            if (d.sip_dial_country_name) {
+                el.innerHTML = `<span style="color:var(--ui-label)">toll call to:</span> <span style="font-size:0.75em;vertical-align:middle">${getFlag(d.sip_dial_country)}</span> ${escapeHtml(d.sip_dial_country_name)}`;
+                twemoji.parse(el);
+            } else {
+                el.innerText = d.isp || '';
+            }
         });
     }
 
-    function rotateGlobeToLocation(lat, lng) {
+    function rotateGlobeToLocation(d) {
+        const lat = d.lat, lng = d.lng;
         if (lat === null || lng === null) return;
         lastLat = lat;
         lastLng = lng;
+        lastGlobeKnock = d;
+        const hasDial = d.sip_dial_lat != null && d.sip_dial_lng != null;
+        paneGlobeArcActive = hasDial;
 
         animateGlobesOnKnock();
 
         [
-            { g: mobileGlobe, alt: 1.4 }, { g: desktopGlobe, alt: 1.4 },
-            { g: paneGlobeDesktop, alt: 1.5 + (GLOBE_STYLES[paneGlobeStyleIdx].viewAltDesktop != null ? GLOBE_STYLES[paneGlobeStyleIdx].viewAltDesktop : (GLOBE_STYLES[paneGlobeStyleIdx].viewAlt || 0)) },
-            { g: paneGlobeMobile, alt: 1.8 + (GLOBE_STYLES[paneGlobeStyleIdx].viewAlt || 0) },
-        ].forEach(({ g, alt }) => {
+            { g: mobileGlobe, alt: 1.4, pane: false }, { g: desktopGlobe, alt: 1.4, pane: false },
+            { g: paneGlobeDesktop, alt: 1.5 + (GLOBE_STYLES[paneGlobeStyleIdx].viewAltDesktop != null ? GLOBE_STYLES[paneGlobeStyleIdx].viewAltDesktop : (GLOBE_STYLES[paneGlobeStyleIdx].viewAlt || 0)), pane: true },
+            { g: paneGlobeMobile, alt: 1.8 + (GLOBE_STYLES[paneGlobeStyleIdx].viewAlt || 0), pane: true },
+        ].forEach(({ g, alt, pane }) => {
             if (!g) return;
+            // Origin point
             g._pointData[0].lat = lat;
             g._pointData[0].lng = lng;
             g._pointData[0].alt = 0.01;
             g._pointData[0]._hidden = false;
+            // Destination point (pane globes only)
+            if (g._pointData[1]) {
+                if (pane && hasDial) {
+                    g._pointData[1].lat = d.sip_dial_lat;
+                    g._pointData[1].lng = d.sip_dial_lng;
+                    g._pointData[1].alt = 0.01;
+                    g._pointData[1]._hidden = false;
+                } else {
+                    g._pointData[1]._hidden = true;
+                }
+            }
             _disposeLeakedGlobeMemory(g, 'points');
             g.pointsData(g._pointData);
+            // Arc (pane globes only)
+            if (pane && g.arcsData) {
+                _disposeLeakedGlobeMemory(g, 'arcs');
+                if (hasDial) {
+                    g.arcsData([{ startLat: lat, startLng: lng, endLat: d.sip_dial_lat, endLng: d.sip_dial_lng }]);
+                } else {
+                    g.arcsData([]);
+                }
+            }
             g.pointOfView({ lat, lng, altitude: alt }, 1000);
         });
     }
@@ -2255,12 +2319,12 @@
                 if (desktopGlobe) { desktopGlobe._destructor(); desktopGlobe = null; }
                 mobileContainer.innerHTML = '';
                 mobileGlobe = createGlobe(mobileContainer, 85);
-                if (lastLat !== null) rotateGlobeToLocation(lastLat, lastLng);
+                if (lastLat !== null) rotateGlobeToLocation(lastGlobeKnock || { lat: lastLat, lng: lastLng });
             } else if (!isMobile && !desktopGlobe && desktopContainer) {
                 if (mobileGlobe) { mobileGlobe._destructor(); mobileGlobe = null; }
                 desktopContainer.innerHTML = '';
                 desktopGlobe = createGlobe(desktopContainer, 110);
-                if (lastLat !== null) rotateGlobeToLocation(lastLat, lastLng);
+                if (lastLat !== null) rotateGlobeToLocation(lastGlobeKnock || { lat: lastLat, lng: lastLng });
             }
         }
         lastWidth = window.innerWidth;
@@ -2960,7 +3024,7 @@
                 if (knockMatchesFilter(d)) {
                     refreshStatsAndTrivia();
                     updateGlobeLocation(d);
-                    rotateGlobeToLocation(d.lat, d.lng);
+                    rotateGlobeToLocation(d);
                 }
             }
             else if (msg.type === 'init_stats') {
@@ -3032,7 +3096,7 @@
                     const topKnock = feedData[activeMode]?.[0];
                     if (topKnock) {
                         updateGlobeLocation(topKnock);
-                        if (topKnock.lat != null) rotateGlobeToLocation(topKnock.lat, topKnock.lng);
+                        if (topKnock.lat != null) rotateGlobeToLocation(topKnock);
                     } else {
                         hideGlobeDot();
                     }

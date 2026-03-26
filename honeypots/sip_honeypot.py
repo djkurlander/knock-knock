@@ -28,7 +28,7 @@ SIP_PORT = int(os.environ.get('SIP_PORT', '5060'))
 SIP_REALM = os.environ.get('SIP_REALM', 'asterisk')
 SIP_MAX_MESSAGES_PER_CONN = max(1, int(os.environ.get('SIP_MAX_MESSAGES_PER_CONN', '6')))
 SIP_CONN_TIMEOUT = max(2.0, float(os.environ.get('SIP_CONN_TIMEOUT', '20')))
-TRACE_ENABLED = os.environ.get('SIP_TRACE', '1').lower() not in ('0', 'false', 'no')
+TRACE_ENABLED = os.environ.get('SIP_TRACE', '0').lower() not in ('0', 'false', 'no')
 TRACE_IP = os.environ.get('SIP_TRACE_IP', '').strip()
 SIP_AUTH_CHALLENGE_MODE = os.environ.get('SIP_AUTH_CHALLENGE_MODE', 'mixed').strip().lower()
 SIP_THROTTLE_PER_SEC = 10
@@ -455,7 +455,7 @@ def parse_dial_country(dial_string):
             _dial_cache.append((digits, iso, name, lat, lng))
             if len(_dial_cache) > 50:
                 _dial_cache.pop(0)
-        print(f'SIP CACHE: stored +{digits} -> {iso} ({name})', file=sys.stderr)
+        if TRACE_ENABLED: print(f'SIP CACHE: stored +{digits} -> {iso} ({name})', file=sys.stderr)
         return iso, name, e164, lat, lng
 
     # Check suffix against recently seen valid numbers (catches arbitrary PBX prefixes)
@@ -464,7 +464,7 @@ def parse_dial_country(dial_string):
         with _dial_cache_lock:
             for cached_digits, cached_iso, cached_name, cached_lat, cached_lng in _dial_cache:
                 if digits_only.endswith(cached_digits):
-                    print(f'SIP CACHE: hit {digits_only} matched +{cached_digits} -> {cached_iso} ({cached_name})', file=sys.stderr)
+                    if TRACE_ENABLED: print(f'SIP CACHE: hit {digits_only} matched +{cached_digits} -> {cached_iso} ({cached_name})', file=sys.stderr)
                     return cached_iso, cached_name, f'+{cached_digits}', cached_lat, cached_lng
 
     if s.startswith('+'):

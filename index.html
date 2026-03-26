@@ -3352,11 +3352,14 @@
     document.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'visible') {
             // Resume all globes briefly so they render after being hidden
-            [mobileGlobe, desktopGlobe, paneGlobeDesktop, paneGlobeMobile].forEach(g => {
+            [mobileGlobe, desktopGlobe].forEach(g => {
                 if (!g) return;
                 g.resumeAnimation();
                 setTimeout(() => g.pauseAnimation(), 2000);
             });
+            if (paneGlobeDesktop) paneGlobeDesktop.resumeAnimation();
+            if (paneGlobeMobile) paneGlobeMobile.resumeAnimation();
+            schedulePaneGlobePause();
             // Force layout recalculation by briefly changing height
             const ml = document.getElementById('mobile-layout');
             if (ml && window.innerWidth <= 800) {

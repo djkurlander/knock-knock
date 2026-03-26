@@ -801,10 +801,10 @@ def monitor(save_knocks=None, max_knocks=None):
                 left = user if user is not None else package.get("mail_from", package.get("smtp_mail_from", "<none>"))
                 right = pw if pw is not None else package.get("mail_to", package.get("smtp_rcpt_to", "<none>"))
                 print(f"📧 MAIL {geo['iso']} | {left} → {right} | {package['subject'][:60]} via {geo['isp']}")
-            elif proto == 'SIP' and data.get('sip_dial_number'):
-                dial_raw = data.get('sip_dial_string', '')
-                dial_e164 = data.get('sip_dial_number', '')
-                dial_dest = data.get('sip_dial_country_name', '')
+            elif proto == 'SIP' and package.get('sip_dial_number'):
+                dial_raw = package.get('sip_dial_string', '')
+                dial_e164 = package.get('sip_dial_number', '')
+                dial_dest = package.get('sip_dial_country_name', '')
                 print(f"📡 SIP {geo['iso']} | {dial_raw} → {dial_e164} → {dial_dest} via {geo['isp']}")
             else:
                 cred = format_cred_summary(user, pw)

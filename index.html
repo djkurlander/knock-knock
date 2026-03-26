@@ -1668,6 +1668,9 @@
                 g.arcsData([]);
             }
         });
+        if (paneGlobeDesktop && paneGlobeVisible.desktop) paneGlobeDesktop.resumeAnimation();
+        if (paneGlobeMobile && paneGlobeVisible.mobile) paneGlobeMobile.resumeAnimation();
+        schedulePaneGlobePause();
     }
 
     function refreshHeatGlobe(locData) {

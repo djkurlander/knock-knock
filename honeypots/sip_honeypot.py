@@ -89,7 +89,7 @@ def _clean_description(desc):
     return re.sub(r' - [A-Z]{2}(?=,)', '', desc)
 
 
-def geocode_description(desc):
+def geocode_description(desc, country_iso=None):
     """Look up (lat, lng) for a phonenumbers geocoder description string.
     Returns (lat, lng) or (None, None). Thread-safe, cached to disk."""
     global _last_nominatim_ts
@@ -101,7 +101,9 @@ def geocode_description(desc):
             return (cached[0], cached[1]) if cached else (None, None)
     # Cache miss — call Nominatim
     query = _clean_description(desc)
-    url = f'https://nominatim.openstreetmap.org/search?q={urllib.parse.quote(query)}&format=json&limit=1'
+    cc = (country_iso or '').strip().lower()
+    cc_param = f'&countrycodes={urllib.parse.quote(cc)}' if cc else ''
+    url = f'https://nominatim.openstreetmap.org/search?q={urllib.parse.quote(query)}&format=json&limit=1{cc_param}'
     headers = {'User-Agent': 'knock-knock-honeypot/1.0'}
     result = None
     try:
@@ -442,7 +444,7 @@ def parse_dial_country(dial_string):
         name = f'{desc}, {country}' if desc and desc != country else country
         e164 = phonenumbers.format_number(pn, phonenumbers.PhoneNumberFormat.E164)
         # Geocode description to city-level coordinates
-        lat, lng = geocode_description(name)
+        lat, lng = geocode_description(name, iso)
         if lat is None:
             coords = COUNTRY_COORDS.get(iso)
             if coords:

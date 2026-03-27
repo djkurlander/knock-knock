@@ -409,6 +409,26 @@ def auth_callback(smbServer, connData, domain_name, user_name, host_name):
         trace(client_ip, 'auth_dedup_skip', user=user_name, smb_version=smb_version, domain=domain_name, host=host_name)
         return
 
+    # Emit immediately at auth time (legacy behavior) so we don't miss
+    # sessions that never reach a hooked Tree Connect.
+    auth_knock = {
+        'type': 'KNOCK',
+        'proto': 'SMB',
+        'ip': client_ip,
+        'user': user_name,
+    }
+    if smb_share:
+        auth_knock['smb_share'] = smb_share
+    if smb_version:
+        auth_knock['smb_version'] = smb_version
+    if domain_name:
+        auth_knock['smb_domain'] = domain_name
+    if host_name:
+        auth_knock['smb_host'] = host_name
+    print(json.dumps(auth_knock), flush=True)
+    trace(client_ip, 'knock_emitted_auth', user=user_name, smb_share=smb_share,
+          smb_version=smb_version, domain=domain_name, host=host_name)
+
     # Stash auth data for emission at Tree Connect (when share is known)
     connData['_knock_pending'] = {
         'ip': client_ip,
@@ -440,7 +460,7 @@ def _emit_pending_knock(connData, share):
     if pending['host']:
         knock['smb_host'] = pending['host']
     print(json.dumps(knock), flush=True)
-    trace(pending['ip'], 'knock_emitted', user=pending['user'], smb_share=share,
+    trace(pending['ip'], 'knock_emitted_tree', user=pending['user'], smb_share=share,
           smb_version=pending['smb_version'], domain=pending['domain'], host=pending['host'])
 
 

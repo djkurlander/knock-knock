@@ -1959,7 +1959,7 @@
         } else if (style.extruded && countriesData) {
             const hitsMap = {};
             let maxHits = 1;
-            leaderboards.loc.forEach(c => {
+            getActiveLeaderboards().loc.forEach(c => {
                 hitsMap[c.iso] = c.count;
                 if (c.count > maxHits) maxHits = c.count;
             });

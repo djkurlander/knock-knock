@@ -2595,7 +2595,7 @@
 
     function displayCredential(v) {
         const raw = String(v ?? '');
-        if (raw === '') return '&lt;blank&gt;';
+        if (raw === '') return '&lt;none&gt;';
         if (raw.trim() === '') {
             const n = raw.length;
             return n === 1 ? '&lt;space&gt;' : `&lt;spaces x${n}&gt;`;
@@ -2722,15 +2722,15 @@
                 const domain = d.smb_domain ? escapeHtml(d.smb_domain) : '';
                 const host = d.smb_host ? escapeHtml(d.smb_host) : '';
                 const version = d.smb_version ? escapeHtml(d.smb_version) : '';
-                const userLine = domain
-                    ? `<span style="color:var(--ui-label)">user:</span> <span>${u}</span> <span style="color:var(--ui-label); margin-left:10px;">domain:</span> <span>${domain}</span>`
-                    : `<span style="color:var(--ui-label)">user:</span> <span>${u}</span>`;
+                const line1Parts = [`<span style="color:var(--ui-label)">user:</span> <span>${u}</span>`];
+                if (share) line1Parts.push(`<span style="color:var(--ui-label)">share:</span> <span>${share}</span>`);
+                if (version) line1Parts.push(`<span style="color:var(--ui-label)">version:</span> <span>${version}</span>`);
+                const line1 = line1Parts.map((part, i) => i ? `<span style="margin-left:10px;"></span>${part}` : part).join('');
                 const line2Parts = [];
-                if (share) line2Parts.push(`<span style="color:var(--ui-label)">share:</span> <span>${share}</span>`);
+                if (domain) line2Parts.push(`<span style="color:var(--ui-label)">domain:</span> <span>${domain}</span>`);
                 if (host) line2Parts.push(`<span style="color:var(--ui-label)">host:</span> <span>${host}</span>`);
-                if (version) line2Parts.push(`<span style="color:var(--ui-label)">version:</span> <span>${version}</span>`);
                 const line2 = line2Parts.length ? `<br>${line2Parts.map((part, i) => i ? `<span style="margin-left:10px;"></span>${part}` : part).join('')}` : '';
-                return `${userLine}${line2}`;
+                return `${line1}${line2}`;
             },
         },
         {

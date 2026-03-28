@@ -363,13 +363,14 @@ def should_emit(ip, user, domain, host, version):
         return True
 
 
-def _build_knock(ip, user, smb_share=None, smb_version=None, smb_domain=None, smb_host=None):
+def _build_knock(ip, user=None, smb_share=None, smb_version=None, smb_domain=None, smb_host=None):
     knock = {
         'type': 'KNOCK',
         'proto': 'SMB',
         'ip': ip,
-        'user': user,
     }
+    if user:
+        knock['user'] = user
     if smb_share:
         knock['smb_share'] = smb_share
     if smb_version:
@@ -381,13 +382,34 @@ def _build_knock(ip, user, smb_share=None, smb_version=None, smb_domain=None, sm
     return knock
 
 
+def _conn_meta(connData):
+    ip = normalize_ip(connData.get('ClientIP')) if isinstance(connData, dict) else None
+    smb_version = (connData.get('knock_smb_version') if isinstance(connData, dict) else None) or ''
+    return ip, smb_version.strip()
+
+
+def _build_pending_knock_data(ip, user, smb_version, domain, host):
+    return {
+        'ip': ip,
+        'user': user,
+        'smb_version': smb_version,
+        'domain': domain,
+        'host': host,
+    }
+
+
+def _emit_knock_with_trace(trace_stage, ip, user=None, smb_share=None, smb_version=None, smb_domain=None, smb_host=None):
+    knock = _build_knock(ip, user, smb_share, smb_version, smb_domain, smb_host)
+    print(json.dumps(knock), flush=True)
+    trace(ip, trace_stage, user=user, smb_share=smb_share,
+          smb_version=smb_version, domain=smb_domain, host=smb_host)
+
+
 def auth_callback(smbServer, connData, domain_name, user_name, host_name):
-    client_ip = normalize_ip(connData.get('ClientIP'))
+    client_ip, smb_version = _conn_meta(connData)
     domain_name = (domain_name or '').strip()
     host_name = (host_name or '').strip()
     smb_share = _extract_share_from_conn_data(connData)
-    smb_version = (connData.get('knock_smb_version') if isinstance(connData, dict) else None) or ''
-    smb_version = smb_version.strip()
     raw_user = user_name
     user_kind = _username_kind(raw_user)
     user_name = normalize_username(raw_user)
@@ -429,38 +451,35 @@ def auth_callback(smbServer, connData, domain_name, user_name, host_name):
 
     # Emit immediately at auth time (legacy behavior) so we don't miss
     # sessions that never reach a hooked Tree Connect.
-    auth_knock = _build_knock(client_ip, user_name, smb_share, smb_version, domain_name, host_name)
-    print(json.dumps(auth_knock), flush=True)
-    trace(client_ip, 'knock_emitted_auth', user=user_name, smb_share=smb_share,
-          smb_version=smb_version, domain=domain_name, host=host_name)
+    _emit_knock_with_trace('knock_emitted_auth', client_ip, user_name, smb_share, smb_version, domain_name, host_name)
 
     # Stash auth data for emission at Tree Connect (when share is known)
-    connData['_knock_pending'] = {
-        'ip': client_ip,
-        'user': user_name,
-        'smb_version': smb_version,
-        'domain': domain_name,
-        'host': host_name,
-    }
+    connData['_knock_pending'] = _build_pending_knock_data(client_ip, user_name, smb_version, domain_name, host_name)
     trace(client_ip, 'auth_stashed', user=user_name, smb_version=smb_version, domain=domain_name, host=host_name)
 
 
 def _emit_pending_knock(connData, share):
-    """Emit a stashed knock from auth_callback, now with share info from Tree Connect."""
+    """Emit a stashed knock from auth_callback, now with share info from Tree Connect.
+    If no auth was stashed, still emit a minimal tree-connect knock.
+    """
     pending = connData.get('_knock_pending')
-    if not pending:
+    if pending:
+        _emit_knock_with_trace(
+            'knock_emitted_tree',
+            pending['ip'],
+            pending['user'],
+            share,
+            pending['smb_version'],
+            pending['domain'],
+            pending['host'],
+        )
         return
-    knock = _build_knock(
-        pending['ip'],
-        pending['user'],
-        share,
-        pending['smb_version'],
-        pending['domain'],
-        pending['host'],
-    )
-    print(json.dumps(knock), flush=True)
-    trace(pending['ip'], 'knock_emitted_tree', user=pending['user'], smb_share=share,
-          smb_version=pending['smb_version'], domain=pending['domain'], host=pending['host'])
+
+    # No stashed auth context (blank/anonymous user path) — still emit tree-connect telemetry.
+    ip, smb_version = _conn_meta(connData)
+    if not ip:
+        return
+    _emit_knock_with_trace('knock_emitted_tree_noauth', ip, None, share, smb_version)
 
 
 def build_server():

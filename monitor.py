@@ -60,26 +60,37 @@ def publish_protocol_config(redis_conn, enabled_protocols):
     redis_conn.set("knock:config:enabled_protocols", json.dumps(enabled))
     redis_conn.set("knock:config:protocol_meta", json.dumps(meta))
 
+def _registrable_domain(host):
+    host = (host or '').strip().lower().rstrip('.')
+    if not host or '.' not in host:
+        return None
+    labels = [part for part in host.split('.') if part]
+    if len(labels) < 2:
+        return None
+    # Heuristic for common ccTLD second-level patterns (e.g. example.co.uk).
+    if len(labels) >= 3 and len(labels[-1]) == 2 and labels[-2] in {'co', 'com', 'net', 'org', 'gov', 'edu', 'ac'}:
+        return '.'.join(labels[-3:])
+    return '.'.join(labels[-2:])
+
 def _discover_self_identifiers():
     ips = set()
     hosts = set()
     host_suffixes = set()
 
-    # Explicit operator-provided aliases are always honored.
-    for key in ('REDACT_SELF_IPS', 'SERVER_IP', 'PUBLIC_IP', 'HOST_IP', 'HONEYPOT_IP'):
-        for v in os.environ.get(key, '').split(','):
-            v = v.strip()
-            if v:
-                ips.add(v)
-    for key in ('REDACT_SELF_HOSTS', 'SERVER_HOST', 'PUBLIC_HOST', 'HOST_FQDN', 'HONEYPOT_HOST'):
-        for v in os.environ.get(key, '').split(','):
-            v = v.strip().lower()
-            if v:
-                hosts.add(v)
-    for v in os.environ.get('REDACT_SELF_HOST_SUFFIXES', '').split(','):
-        v = v.strip().lower().lstrip('.')
+    # Explicit operator-provided redaction inputs.
+    for v in os.environ.get('REDACT_SELF_IPS', '').split(','):
+        v = v.strip()
         if v:
-            host_suffixes.add(v)
+            ips.add(v)
+    for v in os.environ.get('REDACT_SELF_HOSTS', '').split(','):
+        v = v.strip().lower()
+        if v:
+            hosts.add(v)
+    for key in ('REDACT_SELF_DOMAINS', 'REDACT_SELF_HOST_SUFFIXES'):
+        for v in os.environ.get(key, '').split(','):
+            v = v.strip().lower().lstrip('.')
+            if v:
+                host_suffixes.add(v)
 
     # Auto-discover local hostnames.
     try:
@@ -136,16 +147,25 @@ def _discover_self_identifiers():
         except Exception:
             pass
 
+    # Derive registrable domains from discovered hostnames/PTRs by default.
+    for host in list(hosts):
+        domain = _registrable_domain(host)
+        if domain:
+            host_suffixes.add(domain)
+
     return ips, hosts, host_suffixes
 
 def _build_self_redaction_patterns():
     ips, hosts, host_suffixes = _discover_self_identifiers()
     pats = []
-    # Hostnames first, then IPs, to avoid partial replacements inside host tokens.
+    # Hostnames first, then domains, then IPs to avoid partial overlap artifacts.
     for host in sorted(hosts, key=len, reverse=True):
         pats.append((re.compile(re.escape(host), re.IGNORECASE), "<target-host>"))
     for suffix in sorted(host_suffixes, key=len, reverse=True):
-        pats.append((re.compile(rf"[A-Za-z0-9._-]+\.{re.escape(suffix)}", re.IGNORECASE), "<target-host>"))
+        pats.append((
+            re.compile(rf"(?<![A-Za-z0-9_-])(?:[A-Za-z0-9_-]+\.)*{re.escape(suffix)}(?![A-Za-z0-9_-])", re.IGNORECASE),
+            "<target-domain>",
+        ))
     # Longest-first replacement avoids partial overlap artifacts.
     for ip in sorted(ips, key=len, reverse=True):
         pats.append((re.compile(re.escape(ip)), "<target-ip>"))

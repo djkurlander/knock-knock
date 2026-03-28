@@ -2717,7 +2717,7 @@
             name: 'smb_username',
             match: (d, proto) => proto === 'SMB',
             render: d => {
-                const u = hasUserField(d) ? displayUsername(d.user) : NA_INLINE;
+                const u = displayUsername(hasUserField(d) ? d.user : '');
                 const share = d.smb_share ? escapeHtml(d.smb_share) : '';
                 const domain = d.smb_domain ? escapeHtml(d.smb_domain) : '';
                 const host = d.smb_host ? escapeHtml(d.smb_host) : '';
@@ -2725,18 +2725,12 @@
                 const userLine = domain
                     ? `<span style="color:var(--ui-label)">user:</span> <span>${u}</span> <span style="color:var(--ui-label); margin-left:10px;">domain:</span> <span>${domain}</span>`
                     : `<span style="color:var(--ui-label)">user:</span> <span>${u}</span>`;
-                const shareLine = share
-                    ? `<br><span style="color:var(--ui-label)">share:</span> <span>${share}</span>`
-                    : '';
-                let hostVersionLine = '';
-                if (host && version) {
-                    hostVersionLine = `<br><span style="color:var(--ui-label)">host:</span> <span>${host}</span> <span style="color:var(--ui-label); margin-left:10px;">version:</span> <span>${version}</span>`;
-                } else if (host) {
-                    hostVersionLine = `<br><span style="color:var(--ui-label)">host:</span> <span>${host}</span>`;
-                } else if (version) {
-                    hostVersionLine = `<br><span style="color:var(--ui-label)">version:</span> <span>${version}</span>`;
-                }
-                return `${userLine}${shareLine}${hostVersionLine}`;
+                const line2Parts = [];
+                if (share) line2Parts.push(`<span style="color:var(--ui-label)">share:</span> <span>${share}</span>`);
+                if (host) line2Parts.push(`<span style="color:var(--ui-label)">host:</span> <span>${host}</span>`);
+                if (version) line2Parts.push(`<span style="color:var(--ui-label)">version:</span> <span>${version}</span>`);
+                const line2 = line2Parts.length ? `<br>${line2Parts.map((part, i) => i ? `<span style="margin-left:10px;"></span>${part}` : part).join('')}` : '';
+                return `${userLine}${line2}`;
             },
         },
         {

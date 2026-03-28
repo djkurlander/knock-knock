@@ -582,7 +582,7 @@ def is_over_limit_and_block(redis_conn, ip, projected_hits, proto_hits, proto, m
     if hits <= limit:
         return False
     if not redis_conn.sismember("knock:blocked", ip):
-        add_to_blocklist(ip, redis_conn)
+        add_to_blocklist(ip, redis_conn, proto=proto, knock_count=hits)
     print(f"⛔ Dropped knock from over-limit IP {ip} ({hits}>{limit} {proto})", flush=True)
     return True
 
@@ -616,11 +616,14 @@ def get_geo_enriched(ip, city_reader, asn_reader):
         pass
     return geo
 
-def add_to_blocklist(ip, r):
+def add_to_blocklist(ip, r, proto=None, knock_count=None):
     """Append ip to blocklist.txt and add to Redis knock:blocked set."""
     try:
+        ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        proto_label = (proto or 'UNKNOWN').upper()
+        count_label = int(knock_count) if knock_count is not None else '?'
         with open(BLOCKLIST_FILE, 'a') as f:
-            f.write(f"{ip}  # auto-blocked {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+            f.write(f"{ip}  # autoblocked {ts}, {proto_label}, {count_label}\n")
         r.sadd("knock:blocked", ip)
         print(f"🚫 Auto-blocked {ip}", flush=True)
     except Exception as e:
@@ -833,7 +836,7 @@ def monitor(save_knocks=None, max_knocks=None):
                 limit = max_knocks.get(proto) or max_knocks.get(None)
                 hits = proto_hits if proto in max_knocks else projected_hits
                 if limit and hits >= limit:
-                    add_to_blocklist(ip, r)
+                    add_to_blocklist(ip, r, proto=proto, knock_count=hits)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Knock-Knock Monitor")

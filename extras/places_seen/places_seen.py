@@ -20,20 +20,15 @@ def _load_cache(cache_path, geoip_path):
     try:
         with open(cache_path, 'r', encoding='utf-8') as f:
             cached = json.load(f)
-        st = os.stat(geoip_path)
-        if (
-            cached.get('geoip_path') == os.path.abspath(geoip_path)
-            and int(cached.get('geoip_mtime', -1)) == int(st.st_mtime)
-            and int(cached.get('geoip_size', -1)) == int(st.st_size)
-        ):
-            countries = cached.get('countries') or []
-            by_iso = {}
-            for item in countries:
-                iso = str(item.get('iso') or '').strip().upper()
-                if not iso:
-                    continue
-                name = str(item.get('name') or '').strip()
-                by_iso[iso] = name
+        countries = cached.get('countries') or []
+        by_iso = {}
+        for item in countries:
+            iso = str(item.get('iso') or '').strip().upper()
+            if not iso:
+                continue
+            name = str(item.get('name') or '').strip()
+            by_iso[iso] = name
+        if by_iso:
             return by_iso
     except Exception:
         return None

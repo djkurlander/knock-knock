@@ -39,13 +39,21 @@ class SSHHoneypot(paramiko.ServerInterface):
 
 def handle_connection(client_sock, addr, host_key):
     client_sock.settimeout(20)
-    transport = paramiko.Transport(client_sock)
+    transport = paramiko.Transport(
+        client_sock,
+        disabled_algorithms={
+            'kex': ['diffie-hellman-group1-sha1', 'diffie-hellman-group-exchange-sha1'],
+            'ciphers': ['3des-cbc', 'aes128-cbc', 'aes192-cbc', 'aes256-cbc'],
+            'macs': ['hmac-md5', 'hmac-sha1', 'hmac-sha1-96', 'hmac-md5-96'],
+        },
+        strict_kex=False,
+    )
     transport.add_server_key(host_key)
     transport.banner_timeout = 30
-    
+
     server = SSHHoneypot(addr[0])
     try:
-        transport.local_version = "SSH-2.0-OpenSSH_8.2p1 Ubuntu-4ubuntu0.11"
+        transport.local_version = "SSH-2.0-OpenSSH_8.9p1 Ubuntu-3ubuntu0.14"
         transport.start_server(server=server)
         
         # --- THE FIX IS HERE ---

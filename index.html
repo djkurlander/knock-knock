@@ -2393,6 +2393,7 @@
         slider.addEventListener('mousedown', e => {
             if (e.button !== 0) return;
             if (e.target.tagName === 'CANVAS') return;
+            if (e.target.closest('a, button, input, textarea, select, label, .proto-dropdown, .proto-cycle-btn')) return;
             isDragging = true; dragMoved = false;
             startX = e.pageX; startScrollLeft = slider.scrollLeft;
             slider.style.cursor = 'grabbing';
@@ -2409,6 +2410,10 @@
             if (!isDragging) return;
             isDragging = false;
             slider.style.cursor = '';
+            if (!dragMoved) {
+                slider.style.scrollSnapType = '';
+                return;
+            }
             const containerLeft = slider.getBoundingClientRect().left;
             const boxes = Array.from(slider.children);
             const nearest = boxes.reduce((best, box) => {
@@ -2417,6 +2422,7 @@
             });
             const targetLeft = slider.scrollLeft + nearest.getBoundingClientRect().left - containerLeft - 1;
             slider.scrollTo({ left: targetLeft, behavior: 'smooth' });
+            slider.style.scrollSnapType = '';
         });
         slider.addEventListener('click', e => {
             if (dragMoved) { e.stopPropagation(); dragMoved = false; }

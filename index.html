@@ -43,6 +43,8 @@
             height: -webkit-fill-available;  /* iOS fallback */
             overflow: hidden;
             font-size: 16px;
+            -webkit-user-select: none;
+            user-select: none;
         }
         
         img.emoji { height: 1.4em; width: 1.4em; margin: 0 .1em; vertical-align: -0.2em; }
@@ -63,6 +65,8 @@
             line-height: 1.5;
             position: relative;
             overflow: visible;
+            -webkit-user-select: text;
+            user-select: text;
         }
         .knock::before {
             content: '';

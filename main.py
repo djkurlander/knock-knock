@@ -379,3 +379,13 @@ async def websocket_endpoint(websocket: WebSocket):
 @app.get("/")
 async def get():
     return HTMLResponse(content=open("index.html").read(), headers={"Cache-Control": "no-cache"})
+
+@app.head("/summary")
+@app.get("/summary")
+async def get_summary():
+    return HTMLResponse(content=open("summary.html").read(), headers={"Cache-Control": "no-cache"})
+
+@app.head("/summary.html")
+@app.get("/summary.html")
+async def get_summary_html():
+    return HTMLResponse(content=open("summary.html").read(), headers={"Cache-Control": "no-cache"})

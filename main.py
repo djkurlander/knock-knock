@@ -2,7 +2,7 @@ import asyncio, json, sqlite3, os
 import redis.asyncio as redis
 import geoip2.database
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, Response
 from datetime import datetime
 from fastapi.staticfiles import StaticFiles
 from constants import PROTO, PROTO_NAME, PROTOCOL_META, DEFAULT_ENABLED_PROTOCOLS, sort_protocols_for_ui
@@ -389,3 +389,21 @@ async def get_summary():
 @app.get("/summary.html")
 async def get_summary_html():
     return HTMLResponse(content=open("summary.html").read(), headers={"Cache-Control": "no-cache"})
+
+@app.head("/sitemap.xml")
+@app.get("/sitemap.xml")
+async def get_sitemap():
+    return Response(
+        content=open("sitemap.xml").read(),
+        media_type="application/xml",
+        headers={"Cache-Control": "no-cache"},
+    )
+
+@app.head("/robots.txt")
+@app.get("/robots.txt")
+async def get_robots():
+    return Response(
+        content=open("robots.txt").read(),
+        media_type="text/plain",
+        headers={"Cache-Control": "no-cache"},
+    )

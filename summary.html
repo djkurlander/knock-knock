@@ -6,7 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0">
     <meta name="format-detection" content="telephone=no,email=no,address=no">
     <meta name="description" content="Knock-Knock.net is a live honeypot dashboard showing real-time bot attacks by protocol, source country, ISP, username, password, and IP across SSH, Telnet, FTP, RDP, SMB, SIP, and SMTP services.">
-    <link rel="canonical" href="https://knock-knock.net">
+    <link rel="canonical" href="https://knock-knock.net/summary">
     <meta property="og:title" content="Knock-Knock.net | Live Honeypot Attack Dashboard">
     <meta property="og:description" content="Track real-time bot attacks against a multi-protocol honeypot with globe view, protocol stats, credential leaderboards, and attacker source intelligence.">
     <meta property="og:image" content="https://knock-knock.net/static/og-image.jpg">
@@ -42,13 +42,10 @@
             color: var(--neon-green);
             font-family: 'Inter', sans-serif;
             margin: 0; padding: 0;
-            width: 100vw;
-            height: 100dvh;
-            height: -webkit-fill-available;  /* iOS fallback */
-            overflow: hidden;
+            width: 100%;
+            min-height: 100dvh;
             font-size: 16px;
-            -webkit-user-select: none;
-            user-select: none;
+            overflow-anchor: none;
         }
         
         img.emoji { height: 1.4em; width: 1.4em; margin: 0 .1em; vertical-align: -0.2em; }
@@ -69,8 +66,6 @@
             line-height: 1.5;
             position: relative;
             overflow: visible;
-            -webkit-user-select: text;
-            user-select: text;
         }
         .knock::before {
             content: '';
@@ -201,19 +196,16 @@
             #desktop-layout {
                 display: flex;
                 flex-direction: column;
-                height: 100dvh;
+                min-height: 100dvh;
                 padding: 15px 30px 30px 30px;
                 box-sizing: border-box;
-                overflow: hidden;
             }
 
-            .d-header { flex: 0 0 auto; margin-bottom: 0; }
-            .d-header h1 { font-size: 2.2em; margin: 0 0 5px 0; }
+            .d-header { flex: 0 0 auto; margin-bottom: 0; display: none; }
+            .d-header h1, .header-panel h1 { font-size: 1.65em; margin: 0 0 5px 0; }
 
             .d-nav {
-                display: flex; flex-wrap: wrap; gap: 16px 26px; margin-bottom: 10px;
-                border-bottom: 1px solid #222; padding-bottom: 10px;
-                visibility: hidden;
+                display: none !important;
             }
             .d-nav-item {
                 color: var(--ui-grey-dim); font-size: 1.6em; cursor: pointer;
@@ -258,7 +250,7 @@
 
             .d-header-content { position: relative; display: flex; justify-content: space-between; align-items: flex-start; }
             .d-header-left { flex: 1; min-width: 0; -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; }
-            .d-header-mid { position: absolute; left: 0; top: 0; z-index: 2; display: none; }
+            .d-header-mid { display: none !important; }
             .d-header-proto-switcher { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; width: fit-content; max-width: 420px; }
             .d-header-proto-label {
                 color: var(--warning-yellow);
@@ -300,23 +292,16 @@
             #d-globe-container canvas { width: 100% !important; height: 100% !important; }
 
             .d-grid {
-                flex: 1;
-                display: flex; gap: 15px; width: 100%;
-                overflow-x: auto; overflow-y: hidden; margin-top: 25px;
-                min-height: 0; /* Flexbox scroll fix */
-                scroll-snap-type: x proximity;
-                scroll-padding-left: 4px;
-                -webkit-overflow-scrolling: touch;
-                scrollbar-width: none;
-                -ms-overflow-style: none;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                gap: 15px;
+                width: 100%;
+                margin-top: 25px;
             }
-            .d-grid::-webkit-scrollbar { display: none; }
 
             .d-box {
-                flex: 0 0 250px;
-                min-width: 0;
-                scroll-snap-align: start;
-                height: 100%;
+                width: 250px;
                 border: 1px solid #333;
                 background: #0f0f0f;
                 padding: 16px;
@@ -327,21 +312,14 @@
                 transition: all 0.2s;
             }
 
-            #d-box-feed {
-                flex: 0 0 425px;
-            }
-            #d-box-info {
-                flex: 0 0 340px;
-            }
-            #d-box-globe {
-                flex: 0 0 420px;
-            }
-            #d-box-jokes {
-                flex: 0 0 275px;
-            }
-            #d-box-trivia {
-                flex: 0 0 300px;
-            }
+            #d-box-feed { width: 425px; }
+            #d-box-info { width: 340px; height: 440px; overflow-y: auto; }
+            #d-box-globe { width: 473px; height: 563px; }
+
+            #d-box-trivia { width: 300px; height: 400px; overflow-y: auto; }
+            #d-box-proto { }
+            /* Feed + intel panels: ~5 items tall, scrollable */
+            #d-feed, #d-loc, #d-user, #d-pass, #d-prov, #d-ip { max-height: 320px; }
             #d-globe-pane {
                 display: flex;
                 justify-content: center;
@@ -397,14 +375,12 @@
             
             #mobile-layout {
                 display: flex;
-                width: 100vw;
-                height: 100dvh;
-                min-height: -webkit-fill-available;  /* iOS fallback */
+                width: 100%;
+                min-height: 100dvh;
                 flex-direction: column;
-                overflow: hidden;
             }
             
-            .m-header { flex: 0 0 auto; padding: 15px; background: #0a0a0a; border-bottom: 1px solid #222; }
+            .m-header { flex: 0 0 auto; padding: 0; background: #0a0a0a; border-bottom: none; }
             .m-header-content { position: relative; display: flex; justify-content: space-between; align-items: flex-start; }
             .m-header-left { flex: 1; -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; }
             .m-header-right { flex: 0 0 80px; display: flex; align-items: center; justify-content: center; }
@@ -436,8 +412,8 @@
             }
             #globe-container { width: 85px; height: 85px; cursor: pointer; }
             #globe-container canvas { width: 100% !important; height: 100% !important; }
-            .m-header h1 { font-size: 1.36em; margin: 0; }
-            .m-header .status-dot { vertical-align: 0.075em; }
+            .m-header h1, .header-panel h1 { font-size: 1.36em; margin: 0; }
+            .m-header .status-dot, .header-panel .status-dot { vertical-align: 0.075em; }
             .m-stat-row { display: flex; font-size: 0.85em; }
             .m-stat-row:first-of-type { margin-top: 10px; }
             .m-stat-row .stat-label { font-size: 1em; }
@@ -453,11 +429,10 @@
                 padding: 8px 12px;
             }
 
-            .m-progress-container { height: 4px; background: #000; width: 100%; }
-            #m-progress-bar { height: 100%; width: 0%; background: var(--neon-green); box-shadow: 0 0 12px var(--neon-green); }
+            .m-progress-container { display: none !important; }
 
-            .m-viewport { flex: 1; display: flex; overflow-x: auto; scroll-snap-type: x mandatory; scroll-behavior: smooth; -webkit-overflow-scrolling: touch; }
-            .m-pane { width: 100vw; height: 100%; flex-shrink: 0; scroll-snap-align: start; display: flex; flex-direction: column; padding: 20px 10px 20px 20px; box-sizing: border-box; background: #0f0f0f; border-right: 1px solid #1a1a1a; }
+            .m-viewport { display: flex; flex-direction: column; }
+            .m-pane { width: 100%; flex-shrink: 0; display: flex; flex-direction: column; padding: 20px 10px 20px 20px; box-sizing: border-box; background: #0f0f0f; border: 1px solid #3d3d3d; }
             
             .m-content {
                 flex: 1;
@@ -486,8 +461,10 @@
             .m-content::-webkit-scrollbar { display: none !important; width: 0; height: 0; }
 
             #m-viewport::-webkit-scrollbar { display: none !important; }
+            /* Feed + intel panels: ~5 items tall, scrollable */
+            #m-feed, #m-loc, #m-user, #m-pass, #m-prov, #m-ip, #m-details { max-height: 320px; }
 
-            .m-footer { flex: 0 0 auto; background: #0a0a0a; border-top: 1px solid #222; padding-bottom: env(safe-area-inset-bottom); }
+            .m-footer { display: none !important; }
             .m-dots { display: flex; justify-content: center; gap: 15px; padding: 12px 0; visibility: hidden; }
             .dot { width: 10px; height: 10px; border-radius: 50%; background: #222; transition: 0.3s; cursor: pointer; }
             .dot.active { background: var(--neon-green); transform: scale(1.4); box-shadow: 0 0 8px var(--neon-green); }
@@ -523,6 +500,93 @@
         @keyframes globe-glow-pulse {
             0%   { opacity: 1; }
             100% { opacity: 0; }
+        }
+
+        .panel-intro {
+            color: #d0d0d0;
+            font-family: Georgia, 'Times New Roman', serif;
+            font-size: 1.05em;
+            line-height: 1.6;
+            max-width: 812px;
+            width: 100%;
+            padding: 10px 20px 0 20px;
+            box-sizing: border-box;
+            align-self: center;
+        }
+        .panel-intro a {
+            color: var(--data-blue);
+            text-decoration: underline;
+        }
+        .panel-intro a:hover {
+            color: #8ef7ff;
+        }
+        .proto-guide-panel {
+            border: 1px solid #333;
+            background: #101010;
+            padding: 12px 14px;
+            font-family: 'Inter', sans-serif;
+        }
+        .proto-guide-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: #d8dde3;
+            font-weight: 500;
+            line-height: 1.35;
+            margin-bottom: 4px;
+        }
+        .proto-guide-row:last-child { margin-bottom: 0; }
+        .proto-guide-row + .proto-guide-row {
+            border-top: 1px solid #1f1f1f;
+            padding-top: 6px;
+        }
+        .proto-guide-row .proto-badge {
+            margin-top: 1px;
+            flex-shrink: 0;
+        }
+        .proto-port-tag {
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 0.72em;
+            font-weight: bold;
+            display: inline-grid;
+            place-items: center;
+            width: 9ch;
+            height: 1.3em;
+            padding: 0 2px;
+            border: 1px solid currentColor;
+            line-height: 1;
+            box-sizing: content-box;
+            flex-shrink: 0;
+        }
+        .proto-port-tag-label {
+            display: block;
+            line-height: 1;
+            transform: translateY(0.06em);
+        }
+        .header-panel {
+            max-width: 626px;
+            width: 100%;
+            border: 1px solid #333;
+            background: #0f0f0f;
+            padding: 16px;
+            box-sizing: border-box;
+            align-self: center;
+        }
+        .summary-title {
+            color: #e8e8e8;
+            font-family: Georgia, 'Times New Roman', serif;
+            font-size: 1.6em;
+            font-weight: bold;
+            line-height: 1.4;
+            max-width: 812px;
+            width: 100%;
+            padding: 20px 20px 0 20px;
+            box-sizing: border-box;
+            align-self: center;
+            text-align: center;
+        }
+        @media (max-width: 800px) {
+            .panel-intro, .summary-title, .header-panel { max-width: 100%; }
         }
 
         .pane-globe-style-label {
@@ -573,7 +637,7 @@
 
         .proto-dropdown {
             position: relative; display: inline-block; margin-left: 8px;
-            vertical-align: initial; z-index: 100;
+            vertical-align: initial; z-index: 100; top: -2px;
         }
         .proto-dropdown-trigger {
             display: inline-block; cursor: pointer;
@@ -616,54 +680,79 @@
             <div class="d-nav-item" onclick="dJump(7)">📋<span>LAST</span></div>
             <div class="d-nav-item" onclick="dJump(8)">📊<span>PROTO</span></div>
             <div class="d-nav-item" onclick="dJump(9)">🎲<span>TRIVIA</span></div>
-            <div class="d-nav-item" onclick="dJump(10)">😂<span>JOKES</span></div>
             <div class="d-nav-item" onclick="dJump(11)">ℹ️<span>ABOUT</span></div>
         </nav>
 
-        <div class="d-header-content">
-            <div class="d-header-left" onclick="toggleSound()" style="cursor:pointer;">
-                <h1>BOTS ARE KNOCKING <span class="status-dot"></span></h1>
-                <div id="d-header-tagline" style="font-size: 1em; color: var(--neon-green); margin-top: -8px; margin-bottom: 7px; font-style: italic;">... BUT THEY CAN'T COME IN. &nbsp;<span id="d-header-sound" style="font-style:normal; cursor:pointer;">🔈</span></div>
-                <div class="d-stats-wrap">
-                    <div class="d-stats-block">
-                        <div class="d-stats">
-                            <span id="d-total-label" class="stat-label">Total Knocks:</span>&nbsp;<span id="d-total" class="stat-value">0</span>
+    </div>
+
+    <div class="d-grid" id="d-slider-container">
+        <h1 class="summary-title">KNOCK-KNOCK.NET<br>Monitoring Hostile Internet Threats</h1>
+        <div class="panel-intro" data-intro="feed"></div>
+        <div class="header-panel">
+            <div class="d-header-content">
+                <div class="d-header-left" onclick="toggleSound()" style="cursor:pointer;">
+                    <h1>BOTS ARE KNOCKING <span class="status-dot"></span></h1>
+                    <div id="d-header-tagline" style="font-size: 1em; color: var(--neon-green); margin-top: -8px; margin-bottom: 7px; font-style: italic;">... BUT THEY CAN'T COME IN. &nbsp;<span id="d-header-sound" style="font-style:normal; cursor:pointer;">🔈</span></div>
+                    <div class="d-stats-wrap">
+                        <div class="d-stats-block">
+                            <div class="d-stats">
+                                <span id="d-total-label" class="stat-label">Total Knocks:</span>&nbsp;<span id="d-total" class="stat-value">0</span>
+                            </div>
+                            <div class="d-stats">
+                                <span class="stat-label">Per Min:</span>&nbsp;<span id="d-kpm" class="stat-value">0.00</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="stat-label">LAST:</span>&nbsp;<span id="d-since" class="stat-value">-</span>
+                            </div>
                         </div>
-                        <div class="d-stats">
-                            <span class="stat-label">Per Min:</span>&nbsp;<span id="d-kpm" class="stat-value">0.00</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="stat-label">LAST:</span>&nbsp;<span id="d-since" class="stat-value">-</span>
-                        </div>
+                        <div id="d-latest-proto-chip" class="d-latest-proto-chip" aria-live="polite"></div>
                     </div>
-                    <div id="d-latest-proto-chip" class="d-latest-proto-chip" aria-live="polite"></div>
                 </div>
-            </div>
-            <div class="d-header-mid">
-                <div class="d-header-proto-switcher" id="d-header-proto-switcher">
-                    <div class="d-header-proto-label">Filter by protocol:</div>
-                    <div id="d-header-proto-buttons" class="d-header-proto-buttons"></div>
+                <div class="d-header-mid">
+                    <div class="d-header-proto-switcher" id="d-header-proto-switcher">
+                        <div class="d-header-proto-label">Filter by protocol:</div>
+                        <div id="d-header-proto-buttons" class="d-header-proto-buttons"></div>
+                    </div>
                 </div>
-            </div>
-            <div class="d-header-right">
-                <div id="d-globe-container"></div>
+                <div class="d-header-right">
+                    <div id="d-globe-container"></div>
+                </div>
             </div>
         </div>
-    </div>
-    
-    <div class="d-grid" id="d-slider-container">
-        <div class="d-box" id="d-box-feed"><h2 style="display:flex;justify-content:space-between;align-items:center;">LIVE FEED: LOGIN ATTEMPTS<span id="d-feed-proto-btn" class="proto-cycle-btn desktop-readonly" style="vertical-align:initial;">ALL</span></h2><div id="d-feed" class="d-content"></div></div>
-        <div class="d-box" id="d-box-globe"><h2 style="display:flex;justify-content:space-between;align-items:center;">GLOBE VIEW<span class="proto-cycle-btn desktop-readonly" style="vertical-align:initial;">ALL</span></h2><div id="d-globe-location" style="text-align:center; margin-bottom:10px; min-height:44px;"><div id="d-globe-loc-text" style="color:var(--neon-green);"></div><div id="d-globe-loc-isp" style="color:var(--data-blue); font-size:0.85em;"></div></div><div id="d-globe-pane" class="d-content globe-pane"></div></div>
-        <div class="d-box"><h2 style="display:flex;justify-content:space-between;align-items:center;">LOCATION<span class="proto-cycle-btn desktop-readonly" style="vertical-align:initial;">ALL</span></h2><div id="d-loc" class="d-content"></div></div>
-        <div class="d-box" id="d-box-user"><h2 style="display:flex;justify-content:space-between;align-items:center;">USERNAME<span class="proto-cycle-btn desktop-readonly" style="vertical-align:initial;">ALL</span></h2><div id="d-user" class="d-content"></div></div>
-        <div class="d-box" id="d-box-pass"><h2 style="display:flex;justify-content:space-between;align-items:center;">PASSWORD<span class="proto-cycle-btn desktop-readonly" style="vertical-align:initial;">ALL</span></h2><div id="d-pass" class="d-content"></div></div>
-        <div class="d-box"><h2 style="display:flex;justify-content:space-between;align-items:center;">ISP<span class="proto-cycle-btn desktop-readonly" style="vertical-align:initial;">ALL</span></h2><div id="d-prov" class="d-content"></div></div>
-        <div class="d-box"><h2 style="display:flex;justify-content:space-between;align-items:center;">IP ADDRESS<span class="proto-cycle-btn desktop-readonly" style="vertical-align:initial;">ALL</span></h2><div id="d-ip" class="d-content"></div></div>
-        <div class="d-box" id="d-box-info"><h2 style="display:flex;justify-content:space-between;align-items:center;">LAST KNOCK<span class="proto-cycle-btn desktop-readonly" style="vertical-align:initial;">ALL</span></h2><div id="d-details" class="d-content"></div></div>
+        <div class="panel-intro" data-intro="feed2"></div>
+        <div class="d-box" id="d-box-feed"><h2 style="display:flex;justify-content:space-between;align-items:center;">LIVE FEED: LOGIN ATTEMPTS<span id="d-feed-proto-btn" class="proto-dropdown"><span class="proto-dropdown-trigger">ALL<span style="letter-spacing:0;margin-left:3px;font-size:1.2em">▾</span></span><span class="proto-dropdown-menu"></span></span></h2><div id="d-feed" class="d-content"></div></div>
+        <div class="panel-intro" data-intro="feed3"></div>
+        <div class="panel-intro"><div class="proto-guide-panel"><div class="proto-guide-row"><span class="proto-badge" style="color:#00ff41"><span class="proto-badge-label">SSH</span></span><span class="proto-port-tag" style="color:#00ff41"><span class="proto-port-tag-label">PORT 22</span></span><span>SSH allows humans and bots to log into remote servers.</span></div><div class="proto-guide-row"><span class="proto-badge" style="color:#00fbff"><span class="proto-badge-label">TNET</span></span><span class="proto-port-tag" style="color:#00fbff"><span class="proto-port-tag-label">PORT 23</span></span><span>TELNET is an older protocol for logging into remote machines.</span></div><div class="proto-guide-row"><span class="proto-badge" style="color:#FFFF77"><span class="proto-badge-label">FTP</span></span><span class="proto-port-tag" style="color:#FFFF77"><span class="proto-port-tag-label">PORT 21</span></span><span>FTP is a legacy protocol, allowing files to be accessed remotely.</span></div><div class="proto-guide-row"><span class="proto-badge" style="color:#ff1a1a"><span class="proto-badge-label">RDP</span></span><span class="proto-port-tag" style="color:#ff1a1a"><span class="proto-port-tag-label">PORT 3389</span></span><span>RDP supports logging in with a virtual desktop (usually on Windows).</span></div><div class="proto-guide-row"><span class="proto-badge" style="color:#d6d9df"><span class="proto-badge-label">SMB</span></span><span class="proto-port-tag" style="color:#d6d9df"><span class="proto-port-tag-label">PORT 445</span></span><span>SMB is a remote file access protocol, introduced by Windows.</span></div><div class="proto-guide-row"><span class="proto-badge" style="color:#ff7a00"><span class="proto-badge-label">SIP</span></span><span class="proto-port-tag" style="color:#ff7a00"><span class="proto-port-tag-label">PORT 5060</span></span><span>SIP allows humans and bots to make phone calls.</span></div><div class="proto-guide-row"><span class="proto-badge" style="color:#ff00ff"><span class="proto-badge-label">SMTP</span></span><span class="proto-port-tag" style="color:#ff00ff"><span class="proto-port-tag-label">PORT 587</span></span><span>SMTP is used to send email.</span></div><div class="proto-guide-row"><span class="proto-badge" style="color:#00ffaa"><span class="proto-badge-label">MAIL</span></span><span class="proto-port-tag" style="color:#00ffaa"><span class="proto-port-tag-label">PORT 25</span></span><span>MAIL is simply SMTP on a different port, typically not requiring authentication.</span></div></div></div>
+
+        <div class="panel-intro" data-intro="globe"></div>
+        <div class="d-box" id="d-box-globe"><h2 style="display:flex;justify-content:space-between;align-items:center;">GLOBE VIEW<span class="proto-dropdown"><span class="proto-dropdown-trigger">ALL<span style="letter-spacing:0;margin-left:3px;font-size:1.2em">▾</span></span><span class="proto-dropdown-menu"></span></span></h2><div id="d-globe-location" style="text-align:center; margin-bottom:10px; min-height:44px;"><div id="d-globe-loc-text" style="color:var(--neon-green);"></div><div id="d-globe-loc-isp" style="color:var(--data-blue); font-size:0.85em;"></div></div><div id="d-globe-pane" class="d-content globe-pane"></div></div>
+
+        <div class="panel-intro" data-intro="loc"></div>
+        <div class="d-box"><h2 style="display:flex;justify-content:space-between;align-items:center;">LOCATION<span class="proto-dropdown"><span class="proto-dropdown-trigger">ALL<span style="letter-spacing:0;margin-left:3px;font-size:1.2em">▾</span></span><span class="proto-dropdown-menu"></span></span></h2><div id="d-loc" class="d-content"></div></div>
+
+        <div class="panel-intro" data-intro="user"></div>
+        <div class="d-box" id="d-box-user"><h2 style="display:flex;justify-content:space-between;align-items:center;">USERNAME<span class="proto-dropdown"><span class="proto-dropdown-trigger">ALL<span style="letter-spacing:0;margin-left:3px;font-size:1.2em">▾</span></span><span class="proto-dropdown-menu"></span></span></h2><div id="d-user" class="d-content"></div></div>
+
+        <div class="panel-intro" data-intro="pass"></div>
+        <div class="d-box" id="d-box-pass"><h2 style="display:flex;justify-content:space-between;align-items:center;">PASSWORD<span class="proto-dropdown"><span class="proto-dropdown-trigger">ALL<span style="letter-spacing:0;margin-left:3px;font-size:1.2em">▾</span></span><span class="proto-dropdown-menu"></span></span></h2><div id="d-pass" class="d-content"></div></div>
+
+        <div class="panel-intro" data-intro="isp"></div>
+        <div class="d-box"><h2 style="display:flex;justify-content:space-between;align-items:center;">ISP<span class="proto-dropdown"><span class="proto-dropdown-trigger">ALL<span style="letter-spacing:0;margin-left:3px;font-size:1.2em">▾</span></span><span class="proto-dropdown-menu"></span></span></h2><div id="d-prov" class="d-content"></div></div>
+
+        <div class="panel-intro" data-intro="ip"></div>
+        <div class="d-box"><h2 style="display:flex;justify-content:space-between;align-items:center;">IP ADDRESS<span class="proto-dropdown"><span class="proto-dropdown-trigger">ALL<span style="letter-spacing:0;margin-left:3px;font-size:1.2em">▾</span></span><span class="proto-dropdown-menu"></span></span></h2><div id="d-ip" class="d-content"></div></div>
+
+        <div class="panel-intro" data-intro="info"></div>
+        <div class="d-box" id="d-box-info"><h2 style="display:flex;justify-content:space-between;align-items:center;">LAST KNOCK<span class="proto-dropdown"><span class="proto-dropdown-trigger">ALL<span style="letter-spacing:0;margin-left:3px;font-size:1.2em">▾</span></span><span class="proto-dropdown-menu"></span></span></h2><div id="d-details" class="d-content"></div></div>
+
+        <div class="panel-intro" data-intro="proto"></div>
         <div class="d-box" id="d-box-proto"><h2>PROTO STATS</h2><div id="d-proto-stats" class="d-content"></div></div>
-        <div class="d-box" id="d-box-trivia"><h2 style="display:flex;justify-content:space-between;align-items:center;">TRIVIA<span class="proto-cycle-btn desktop-readonly" style="vertical-align:initial;">ALL</span></h2><div id="d-trivia" class="d-content"></div></div>
-        <div class="d-box" id="d-box-jokes"><h2>KNOCK-KNOCK JOKES</h2><div id="d-jokes" class="d-content" style="color:var(--neon-green); line-height:1.6;"></div></div>
-	        <div class="d-box"><h2>ABOUT</h2><div class="d-content" style="color:var(--neon-green); line-height:1.6;">
-		    <p>Set up an unprotected server on the net, and the bots start swarming! This site shows their break-in attempts in real-time: where they come from, what credentials they try, and why.</p>
-	            <p><a href="/summary" style="color:var(--data-blue)">Click here for a tutorial</a></p>
-	            <p>Questions and comments to: <a class="contact-email" href="#" style="color:var(--data-blue)"></a></p>
+
+        <div class="panel-intro" data-intro="trivia"></div>
+        <div class="d-box" id="d-box-trivia"><h2 style="display:flex;justify-content:space-between;align-items:center;">TRIVIA<span class="proto-dropdown"><span class="proto-dropdown-trigger">ALL<span style="letter-spacing:0;margin-left:3px;font-size:1.2em">▾</span></span><span class="proto-dropdown-menu"></span></span></h2><div id="d-trivia" class="d-content"></div></div>
+
+
+        <div class="panel-intro" data-intro="about"></div>
+        <div class="d-box"><h2>ABOUT</h2><div class="d-content" style="color:var(--neon-green); line-height:1.6;">
+            <p><a href="/" style="color:var(--data-blue)">Click here for the control panel</a></p>
+            <p>Questions and comments to: <a class="contact-email" href="#" style="color:var(--data-blue)"></a></p>
             <div id="d-about-server-info" style="color:var(--ui-grey-dim); font-size:0.9em; margin-top:15px; margin-bottom:15px;"></div>
             <div style="text-align:center; margin-top:30px;">
               <a href="https://www.abuseipdb.com/user/270949" title="AbuseIPDB is an IP address blacklist for webmasters and sysadmins to report IP addresses engaging in abusive behavior on their networks" target="_blank" rel="noopener">
@@ -675,41 +764,55 @@
 </div>
 
 <div id="mobile-layout">
-    <div class="m-header">
-        <div class="m-header-content">
-            <div class="m-header-left" onclick="toggleSound()" style="cursor:pointer;">
-                <h1>BOTS ARE KNOCKING <span class="status-dot"></span></h1>
-                <div style="font-size: 0.85em; color: var(--neon-green); margin-top: -2px; margin-bottom: 8px; font-style: italic;">... BUT THEY CAN'T COME IN. &nbsp;<span id="m-header-sound" style="font-style:normal; cursor:pointer;">🔈</span></div>
-                <div class="m-stat-row">
-                    <span id="m-total-label" class="stat-label">Total Knocks:</span>&nbsp;<span id="m-total" class="stat-value">0</span>
-                </div>
-                <div class="m-stat-row">
-                    <span class="stat-label">Per Min:</span>&nbsp;<span id="m-kpm" class="stat-value">0.00</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="stat-label">LAST:</span>&nbsp;<span id="m-since" class="stat-value">-</span>
-                </div>
-            </div>
-            <div class="m-header-right">
-                <div id="globe-container"></div>
-            </div>
-            <div id="m-fixed-proto-chip" class="m-fixed-proto-chip" aria-live="polite">ALL</div>
-        </div>
-    </div>
+    <div class="m-header"></div>
     <div class="m-progress-container"><div id="m-progress-bar"></div></div>
     <div class="m-viewport" id="m-viewport">
+        <h1 class="summary-title">KNOCK-KNOCK.NET<br>Monitoring Hostile Internet Threats</h1>
+        <div class="panel-intro" data-intro="feed"></div>
+        <div class="header-panel">
+            <div class="m-header-content">
+                <div class="m-header-left" onclick="toggleSound()" style="cursor:pointer;">
+                    <h1>BOTS ARE KNOCKING <span class="status-dot"></span></h1>
+                    <div style="font-size: 0.85em; color: var(--neon-green); margin-top: -2px; margin-bottom: 8px; font-style: italic;">... BUT THEY CAN'T COME IN. &nbsp;<span id="m-header-sound" style="font-style:normal; cursor:pointer;">🔈</span></div>
+                    <div class="m-stat-row">
+                        <span id="m-total-label" class="stat-label">Total Knocks:</span>&nbsp;<span id="m-total" class="stat-value">0</span>
+                    </div>
+                    <div class="m-stat-row">
+                        <span class="stat-label">Per Min:</span>&nbsp;<span id="m-kpm" class="stat-value">0.00</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="stat-label">LAST:</span>&nbsp;<span id="m-since" class="stat-value">-</span>
+                    </div>
+                </div>
+                <div class="m-header-right">
+                    <div id="globe-container"></div>
+                </div>
+                <div id="m-fixed-proto-chip" class="m-fixed-proto-chip" aria-live="polite">ALL</div>
+            </div>
+        </div>
+        <div class="panel-intro" data-intro="feed2"></div>
         <div class="m-pane" id="m-pane-feed"><h2 style="display:flex;justify-content:space-between;align-items:center;">LIVE FEED: LOGIN ATTEMPTS<span id="m-feed-proto-btn" class="proto-dropdown"><span class="proto-dropdown-trigger">ALL<span style="letter-spacing:0;margin-left:3px;font-size:1.2em">▾</span></span><span class="proto-dropdown-menu"></span></span></h2><div id="m-feed" class="m-content"></div></div>
+        <div class="panel-intro" data-intro="feed3"></div>
+        <div class="panel-intro"><div class="proto-guide-panel"><div class="proto-guide-row"><span class="proto-badge" style="color:#00ff41"><span class="proto-badge-label">SSH</span></span><span class="proto-port-tag" style="color:#00ff41"><span class="proto-port-tag-label">PORT 22</span></span><span>SSH allows humans and bots to log into remote servers.</span></div><div class="proto-guide-row"><span class="proto-badge" style="color:#00fbff"><span class="proto-badge-label">TNET</span></span><span class="proto-port-tag" style="color:#00fbff"><span class="proto-port-tag-label">PORT 23</span></span><span>TELNET is an older protocol for logging into remote machines.</span></div><div class="proto-guide-row"><span class="proto-badge" style="color:#FFFF77"><span class="proto-badge-label">FTP</span></span><span class="proto-port-tag" style="color:#FFFF77"><span class="proto-port-tag-label">PORT 21</span></span><span>FTP is a legacy protocol, allowing files to be accessed remotely.</span></div><div class="proto-guide-row"><span class="proto-badge" style="color:#ff1a1a"><span class="proto-badge-label">RDP</span></span><span class="proto-port-tag" style="color:#ff1a1a"><span class="proto-port-tag-label">PORT 3389</span></span><span>RDP supports logging in with a virtual desktop (usually on Windows).</span></div><div class="proto-guide-row"><span class="proto-badge" style="color:#d6d9df"><span class="proto-badge-label">SMB</span></span><span class="proto-port-tag" style="color:#d6d9df"><span class="proto-port-tag-label">PORT 445</span></span><span>SMB is a remote file access protocol, introduced by Windows.</span></div><div class="proto-guide-row"><span class="proto-badge" style="color:#ff7a00"><span class="proto-badge-label">SIP</span></span><span class="proto-port-tag" style="color:#ff7a00"><span class="proto-port-tag-label">PORT 5060</span></span><span>SIP allows humans and bots to make phone calls.</span></div><div class="proto-guide-row"><span class="proto-badge" style="color:#ff00ff"><span class="proto-badge-label">SMTP</span></span><span class="proto-port-tag" style="color:#ff00ff"><span class="proto-port-tag-label">PORT 587</span></span><span>SMTP is used to send email.</span></div><div class="proto-guide-row"><span class="proto-badge" style="color:#00ffaa"><span class="proto-badge-label">MAIL</span></span><span class="proto-port-tag" style="color:#00ffaa"><span class="proto-port-tag-label">PORT 25</span></span><span>MAIL is simply SMTP on a different port, typically not requiring authentication.</span></div></div></div>
+        <div class="panel-intro" data-intro="globe"></div>
         <div class="m-pane" id="m-pane-globe"><h2 style="display:flex;justify-content:space-between;align-items:center;">GLOBE VIEW<span class="proto-dropdown"><span class="proto-dropdown-trigger">ALL<span style="letter-spacing:0;margin-left:3px;font-size:1.2em">▾</span></span><span class="proto-dropdown-menu"></span></span></h2><div id="m-globe-location" style="text-align:center; margin-bottom:10px; min-height:44px;"><div id="m-globe-loc-text" style="color:var(--neon-green);"></div><div id="m-globe-loc-isp" style="color:var(--data-blue); font-size:0.85em;"></div></div><div id="m-globe-pane" class="m-content globe-pane" style="display:flex; justify-content:center; align-items:center;"></div></div>
+        <div class="panel-intro" data-intro="loc"></div>
         <div class="m-pane" id="m-pane-loc"><h2 style="display:flex;justify-content:space-between;align-items:center;">LOCATION<span class="proto-dropdown"><span class="proto-dropdown-trigger">ALL<span style="letter-spacing:0;margin-left:3px;font-size:1.2em">▾</span></span><span class="proto-dropdown-menu"></span></span></h2><div id="m-loc" class="m-content"></div></div>
+        <div class="panel-intro" data-intro="user"></div>
         <div class="m-pane" id="m-pane-user"><h2 style="display:flex;justify-content:space-between;align-items:center;">USERNAME<span class="proto-dropdown"><span class="proto-dropdown-trigger">ALL<span style="letter-spacing:0;margin-left:3px;font-size:1.2em">▾</span></span><span class="proto-dropdown-menu"></span></span></h2><div id="m-user" class="m-content"></div></div>
+        <div class="panel-intro" data-intro="pass"></div>
         <div class="m-pane" id="m-pane-pass"><h2 style="display:flex;justify-content:space-between;align-items:center;">PASSWORD<span class="proto-dropdown"><span class="proto-dropdown-trigger">ALL<span style="letter-spacing:0;margin-left:3px;font-size:1.2em">▾</span></span><span class="proto-dropdown-menu"></span></span></h2><div id="m-pass" class="m-content"></div></div>
+        <div class="panel-intro" data-intro="isp"></div>
         <div class="m-pane" id="m-pane-prov"><h2 style="display:flex;justify-content:space-between;align-items:center;">ISP<span class="proto-dropdown"><span class="proto-dropdown-trigger">ALL<span style="letter-spacing:0;margin-left:3px;font-size:1.2em">▾</span></span><span class="proto-dropdown-menu"></span></span></h2><div id="m-prov" class="m-content"></div></div>
+        <div class="panel-intro" data-intro="ip"></div>
         <div class="m-pane" id="m-pane-ip"><h2 style="display:flex;justify-content:space-between;align-items:center;">IP ADDRESS<span class="proto-dropdown"><span class="proto-dropdown-trigger">ALL<span style="letter-spacing:0;margin-left:3px;font-size:1.2em">▾</span></span><span class="proto-dropdown-menu"></span></span></h2><div id="m-ip" class="m-content"></div></div>
+        <div class="panel-intro" data-intro="info"></div>
         <div class="m-pane" id="m-pane-details"><h2 style="display:flex;justify-content:space-between;align-items:center;">LAST KNOCK<span class="proto-dropdown"><span class="proto-dropdown-trigger">ALL<span style="letter-spacing:0;margin-left:3px;font-size:1.2em">▾</span></span><span class="proto-dropdown-menu"></span></span></h2><div id="m-details" class="m-content"></div></div>
+        <div class="panel-intro" data-intro="proto"></div>
         <div class="m-pane" id="m-pane-proto"><h2>PROTO STATS</h2><div id="m-proto-stats" class="m-content"></div></div>
+        <div class="panel-intro" data-intro="trivia"></div>
         <div class="m-pane" id="m-pane-trivia"><h2 style="display:flex;justify-content:space-between;align-items:center;">TRIVIA<span class="proto-dropdown"><span class="proto-dropdown-trigger">ALL<span style="letter-spacing:0;margin-left:3px;font-size:1.2em">▾</span></span><span class="proto-dropdown-menu"></span></span></h2><div id="m-trivia" class="m-content"></div></div>
-        <div class="m-pane" id="m-pane-jokes"><h2>KNOCK-KNOCK JOKES</h2><div id="m-jokes" class="m-content" style="color:var(--neon-green); line-height:1.6;"></div></div>
-	        <div class="m-pane" id="m-pane-about"><h2>ABOUT</h2><div class="m-content" style="color:var(--neon-green); line-height:1.6;">
-		    <p>Set up an unprotected server on the net, and the bots start swarming! This site shows their break-in attempts in real-time: where they come from, what credentials they try, and why.</p>
-	            <p><a href="/summary" style="color:var(--data-blue)">Click here for a tutorial</a></p>
-	            <p>Questions and comments to: <a class="contact-email" href="#" style="color:var(--data-blue)"></a></p>
+        <div class="panel-intro" data-intro="about"></div>
+        <div class="m-pane" id="m-pane-about"><h2>ABOUT</h2><div class="m-content" style="color:var(--neon-green); line-height:1.6;">
+            <p><a href="/" style="color:var(--data-blue)">Click here for the control panel</a></p>
+            <p>Questions and comments to: <a class="contact-email" href="#" style="color:var(--data-blue)"></a></p>
             <div id="m-about-server-info" style="color:var(--ui-grey-dim); font-size:0.9em; margin-top:15px; margin-bottom:15px;"></div>
             <div style="text-align:center; margin-top:30px;">
               <a href="https://www.abuseipdb.com/user/270949" title="AbuseIPDB is an IP address blacklist for webmasters and sysadmins to report IP addresses engaging in abusive behavior on their networks" target="_blank" rel="noopener">
@@ -734,7 +837,6 @@
             <div class="nav-item" onclick="jump(7)">📋<span>LAST</span></div>
             <div class="nav-item" onclick="jump(8)">📊<span>PROTO</span></div>
             <div class="nav-item" onclick="jump(9)">🎲<span>TRIVIA</span></div>
-            <div class="nav-item" onclick="jump(10)">😂<span>JOKES</span></div>
             <div class="nav-item" onclick="jump(11)">ℹ️<span>ABOUT</span></div>
         </nav>
         </div>
@@ -742,6 +844,27 @@
 </div>
 
 <script>
+    // --- PANEL INTRO TEXT (single source of truth for both layouts) ---
+    const PANEL_INTROS = {
+        feed:   '<p>Set up an unprotected server on the net, and the bots start swarming. This site shows their break-in and exploitation attempts in real-time: where the bots come from, what credentials they try, and why. We have deployed a seemingly unprotected server on the internet, and on this page you will see all of the hostile infiltration attempts, live! You\'ll see brute force attacks, where bots rely on dictionary attacks or credential stuffing to try to break in. You\'ll see email spam bots trying to hijack this server as a relay for their malevolent goals. You\'ll see mercenary bots attempting to commandeer this server to place phone calls around the world for internet revenue sharing fraud. AND THAT\'S NOT ALL! Watch it here, as it happens.</p><p>Want the raw live view instead? <a href="/">Open the Live Control Panel</a>. Otherwise, continue below for the full guided explanation.</p>',
+        feed2:  '<p>Each bot attempt to infiltrate this server is referred to as a \'knock\'. In the box above you can see the number of knocks, the knocks per minute, and how long ago the last knock occurred. Every time a knock comes in, you\'ll see a badge immediately to the right, showing the protocol of the knock received. The globe spins to display the origin of the knock.</p><p>In the panel below, we see a scrollable history of the last 100 knocks received on this server. You can use the protocol drop down menu,at the right of the header, to filter the knocks to a specific protocol.</p>',
+        feed3:  '<p>Each of the live knocks above has a protocol badge to the right. Protocols are used to gain access to services on a remote computer, and the protocols monitored here are listed below.</p>',
+        globe:  '<p>Half the fun (at least for me) is seeing where all these knocks originate. This project started when I showed my kids raw login-attempt logs (initially SSH), and they asked: where are all these bots coming from? In the globe view, each knock is plotted as a dot on a 3D globe to show the bot\'s origin. Take it out for a spin (literally, you can spin it interactively). You can also cycle through multiple visual styles with the Style button at the bottom of the panel. One of the most interesting is HEAT, a 3D heatmap that highlights the worst-offending countries and territories.</p>',
+        loc:    '<p>To see these origins in a textual leaderboard, check out the LOCATION panel below. Here you can see the worst-offending bot origin countries. Technically, just because a bot is hosted there does not mean it is controlled by bad actors in that country; the attackers may be elsewhere, using servers they rent or infect. Again, feel free to select a specific protocol using the protocol selector in the panel header.</p>',
+        user:   '<p>Many bots try to log in with username/password credentials. These are often pulled from dictionaries of common credentials, which is why this is called dictionary-based attack traffic and credential stuffing. Check out the live leaderboard below for the most commonly attempted usernames. Usually, root leads by a wide margin: on Unix/Linux systems, it\'s the superuser account with full control of the server.</p>',
+        pass:   '<p>The next panel shows the most frequent passwords attempted by bots. Life Pro Tip: do not use one of these passwords. Almost always, the Space Balls \'12345\' password is in the top 10. It may be hard to imagine that people actually use these passwords, but they do, and many of the bots attempting these passwords are running on servers they broke into using these same passwords. Note that common passwords differ somewhat by protocol, so try filtering on that.</p>',
+        isp:    '<p>Internet Service Providers (ISPs) provide network access that enables bots to attack other machines. ISPs can suspend or revoke access for abusive servers, but enforcement varies widely. Below is the ISP Wall of Shame.</p>',
+        ip:     '<p>Each bot reveals its IP address, a unique network identifier, when attacking our server. Because we\'re interested in attack patterns, we often let bots continue for a while. Occasionally, we cap a bot at a fixed number of attacks before banning it; when that happens, you\'ll see some IPs max out at that fixed count.</p>',
+        info:   '<p>The LAST KNOCK panel shows details from the most recent bot attack: country, user, password, ISP, and IP address. For each value, it shows how long ago it was last seen, total sightings, and a rank badge: gold for top 10, silver for 11-50, and red for 51-100. The data shown follows the protocol filter selected in the header.</p>',
+        proto:  '<p>As described earlier, this site monitors multiple protocols, and bots target some protocols much more than others. The panel below shows each monitored protocol, along with its percentage of total knocks, raw knock count, and knocks per minute.</p>',
+        trivia: '<p>It\'s fascinating why some usernames or passwords are chosen, sometimes rooted in system administration history, other times drawn from credential leaks. The Trivia panel explains why the latest username or password may have been used in a credential-stuffing attack. It also includes a bit of trivia about the country of origin of the latest knock.</p>',
+        about:  '<p>Now that you understand the interface, you may prefer to use the <a href="/">streamlined control panel</a>. Feel free to send questions or comments to the email address in the panel below. Also included is information on service uptime, monitored protocols, and the service version. Knock-knock installations can report offending bot IPs to AbuseIPDB, which helps system administrators and ISPs identify bad actors. The badge at the bottom shows how many malevolent bot IPs knock-knock servers have identified and reported so far.</p>',
+    };
+    document.querySelectorAll('.panel-intro[data-intro]').forEach(el => {
+        const html = PANEL_INTROS[el.dataset.intro];
+        if (html) el.innerHTML = html;
+    });
+
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsUrl = `${protocol}//${window.location.host}/ws`;
     let ws;
@@ -2067,7 +2190,7 @@
 
     const PANE_GLOBE_CFG = {
         desktop: { paneId: 'd-globe-pane', btnParentId: 'd-box-globe', fallbackSize: 300, altitude: 1.5, glowCap: 15 },
-        mobile:  { paneId: 'm-globe-pane', btnParentId: 'm-pane-globe', fallbackSize: 250, altitude: 1.8, glowCap: 25 },
+        mobile:  { paneId: 'm-globe-pane', btnParentId: 'm-pane-globe', fallbackSize: 300, altitude: 1.8, glowCap: 25 },
     };
 
     function createPaneGlobe(which) {
@@ -3252,114 +3375,6 @@
         targets.forEach(t => observer.observe(t));
     }
 
-    // --- JOKES PANE LOGIC ---
-    let jokesData = null;
-    let jokeIndex = 0;
-    let jokeTimeouts = [];
-    let jokesVisible = false;
-
-    function shuffleArray(arr) {
-        for (let i = arr.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1));
-            [arr[i], arr[j]] = [arr[j], arr[i]];
-        }
-        return arr;
-    }
-
-    function clearJokeTimeouts() {
-        jokeTimeouts.forEach(t => clearTimeout(t));
-        jokeTimeouts = [];
-    }
-
-    function displayJoke() {
-        if (!jokesData || !jokesVisible) return;
-        clearJokeTimeouts();
-
-        const joke = jokesData[jokeIndex];
-        const intro = `<p style="margin-bottom:15px;">Here are some knock knock jokes, courtesy of ChatGPT. You may not find them funny, but to an LLM they are hilarious.</p>`;
-
-        ['d-jokes', 'm-jokes'].forEach(id => {
-            const el = document.getElementById(id);
-            if (el) el.innerHTML = intro + `<div id="${id}-content" style="font-size:1.2em;"></div>`;
-        });
-
-        const updateContent = (html) => {
-            ['d-jokes-content', 'm-jokes-content'].forEach(id => {
-                const el = document.getElementById(id);
-                if (el) el.innerHTML = html;
-            });
-        };
-
-        let lines = '';
-        // Line 1: "Knock Knock"
-        lines = `<div style="color:var(--warning-yellow);">Knock Knock</div>`;
-        updateContent(lines);
-
-        // Line 2: "Who's there?" after 2 seconds
-        jokeTimeouts.push(setTimeout(() => {
-            if (!jokesVisible) return;
-            lines += `<div style="color:var(--neon-green);">Who's there?</div>`;
-            updateContent(lines);
-        }, 2000));
-
-        // Line 3: The "who" after 2 more seconds (4 total)
-        jokeTimeouts.push(setTimeout(() => {
-            if (!jokesVisible) return;
-            lines += `<div style="color:var(--warning-yellow);">${joke.who}</div>`;
-            updateContent(lines);
-        }, 4000));
-
-        // Line 4: "{who}, who?" after 2 more seconds (6 total)
-        jokeTimeouts.push(setTimeout(() => {
-            if (!jokesVisible) return;
-            lines += `<div style="color:var(--neon-green);">${joke.who}, who?</div>`;
-            updateContent(lines);
-        }, 6000));
-
-        // Line 5: The punchline after 3 more seconds (9 total)
-        jokeTimeouts.push(setTimeout(() => {
-            if (!jokesVisible) return;
-            lines += `<div style="color:var(--warning-yellow); margin-top:10px; font-style:italic;">${joke.joke}</div>`;
-            updateContent(lines);
-        }, 9000));
-
-        // Next joke after 5 more seconds (14 total)
-        jokeTimeouts.push(setTimeout(() => {
-            if (!jokesVisible) return;
-            jokeIndex = (jokeIndex + 1) % jokesData.length;
-            displayJoke();
-        }, 14000));
-    }
-
-    function initJokes() {
-        if (jokesData) {
-            displayJoke();
-            return;
-        }
-        fetch('/static/chatgpt-knock-knock.json')
-            .then(res => res.json())
-            .then(data => {
-                jokesData = shuffleArray(data);
-                jokeIndex = 0;
-                displayJoke();
-            })
-            .catch(err => console.error('Failed to load jokes:', err));
-    }
-
-    function setupJokesObserver() {
-        const targets = [document.getElementById('d-jokes'), document.getElementById('m-jokes')].filter(el => el);
-        const observer = new IntersectionObserver((entries) => {
-            const isVisible = entries.some(e => e.isIntersecting);
-            if (isVisible && !jokesVisible) {
-                jokesVisible = true;
-                initJokes();
-            } else if (!isVisible && jokesVisible) {
-                jokesVisible = false;
-                clearJokeTimeouts();
-            }
-        }, { threshold: 0.3 });
-        targets.forEach(t => observer.observe(t));
-    }
 
     // iOS Safari/Chrome tab restoration fix: force layout recalc on visibility change
     document.addEventListener('visibilitychange', () => {
@@ -3391,7 +3406,6 @@
         applyProtocolPanelVisibility();
         initGlobes();
         initPaneGlobes();
-        setupJokesObserver();
         setupTriviaObserver();
         updateSoundIcon();
 

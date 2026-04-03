@@ -101,7 +101,7 @@ def start_honeypot():
     # Dual-stack socket: accepts both IPv4 and IPv6
     sock = create_dualstack_tcp_listener(23, backlog=100)
 
-    print("🚀 Telnet Honeypot Active on Port 23 (IPv4+IPv6). Collecting radiation...", flush=True)
+    print("🚀 Telnet Honeypot Active on Port 23 (IPv4+IPv6). Collecting knocks...", flush=True)
 
     while True:
         client, addr = sock.accept()

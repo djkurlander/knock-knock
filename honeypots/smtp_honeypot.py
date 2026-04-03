@@ -480,7 +480,7 @@ def start_honeypot(port=587, proto_label="SMTP"):
     _PROTO_LABEL = proto_label
     ensure_smtp_cert(_SMTP_HOSTNAME, SMTP_TLS_CERT_PATH, SMTP_TLS_KEY_PATH)
     sock = create_dualstack_tcp_listener(port, backlog=100)
-    print(f"🚀 {proto_label} Honeypot Active on Port {port} (IPv4+IPv6) [{SMTP_FINGERPRINT}]. Collecting radiation...", flush=True)
+    print(f"🚀 {proto_label} Honeypot Active on Port {port} (IPv4+IPv6) [{SMTP_FINGERPRINT}]. Collecting knocks...", flush=True)
 
     while True:
         client, addr = sock.accept()

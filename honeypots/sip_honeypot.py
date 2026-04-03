@@ -854,7 +854,7 @@ def start_honeypot():
 
     tcp_sock = create_dualstack_tcp_listener(SIP_PORT, backlog=200)
 
-    print(f'🚀 SIP Honeypot Active on Port {SIP_PORT} (UDP+TCP IPv4+IPv6). Collecting radiation...', flush=True)
+    print(f'🚀 SIP Honeypot Active on Port {SIP_PORT} (UDP+TCP IPv4+IPv6). Collecting knocks...', flush=True)
 
     threading.Thread(target=udp_loop, args=(udp_sock,), daemon=True).start()
     tcp_loop(tcp_sock)

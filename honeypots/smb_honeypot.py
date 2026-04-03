@@ -506,7 +506,7 @@ def main():
     )
     try:
         server = build_server()
-        print(f"🚀 SMB Honeypot Active on Port {SMB_PORT} (SMB2/NTLM). Collecting radiation...", flush=True)
+        print(f"🚀 SMB Honeypot Active on Port {SMB_PORT} (SMB2/NTLM). Collecting knocks...", flush=True)
         server.start()
     except Exception as e:
         print(f"❌ SMB server failed: {type(e).__name__}: {e}", flush=True)

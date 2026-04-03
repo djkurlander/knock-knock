@@ -808,7 +808,7 @@ def start_honeypot():
     else:
         print("🧪 RDP classic capture disabled (set RDP_CLASSIC_CAPTURE=1 to enable)", flush=True)
     sock = create_dualstack_tcp_listener(3389, backlog=100)
-    print("🚀 RDP Honeypot Active on Port 3389 (NLA/NTLM). Collecting radiation...", flush=True)
+    print("🚀 RDP Honeypot Active on Port 3389 (NLA/NTLM). Collecting knocks...", flush=True)
     while True:
         client, addr = sock.accept()
         client_ip = normalize_ip(addr[0])

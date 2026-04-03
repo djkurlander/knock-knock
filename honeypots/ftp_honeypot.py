@@ -53,7 +53,7 @@ def handle_connection(client_sock, client_ip):
 
 def start_honeypot():
     sock = create_dualstack_tcp_listener(21, backlog=100)
-    print("🚀 FTP Honeypot Active on Port 21 (IPv4+IPv6). Collecting radiation...", flush=True)
+    print("🚀 FTP Honeypot Active on Port 21 (IPv4+IPv6). Collecting knocks...", flush=True)
     while True:
         client, addr = sock.accept()
         client_ip = normalize_ip(addr[0])

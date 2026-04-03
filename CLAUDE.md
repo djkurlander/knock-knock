@@ -98,7 +98,7 @@ SMTP Attacker → smtp_honeypot.py (port 587) ─┘        (GeoIP, DB, Redis)
 **Data Flow:**
 - Monitor spawns honeypots as subprocesses and reads their stdout (both systemd and Docker)
 - Each honeypot emits JSON: `{"type": "KNOCK", "proto": "SSH"|"TNET"|"SMTP", "ip": ..., "user": ..., "pass": ...}`
-- Inter-service communication via Redis pub/sub channel `radiation_stream`
+- Inter-service communication via Redis pub/sub channel `knocks_stream`
 - Stats cached in memory, refreshed every 60 seconds and broadcast to all clients
 - SQLite databases in `data/` directory for persistence
 
@@ -201,7 +201,7 @@ Each knock writes 10 upserts: 5 to ALL tables + 5 to `_proto` tables. ALL tables
 - `knock:recent:tnet` - Last 100 Telnet knocks
 - `knock:recent:smtp` - Last 100 SMTP knocks
 - `knock:blocked` - Set of blocked IPs (seeded from `blocklist.txt` on startup; checked by honeypot on each connection)
-- `radiation_stream` - Pub/sub channel for real-time events
+- `knocks_stream` - Pub/sub channel for real-time events
 
 ## Globe Rendering Rules
 

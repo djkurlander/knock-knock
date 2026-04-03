@@ -819,7 +819,7 @@ def monitor(save_knocks=None, max_knocks=None):
             if geo['lat'] is not None:
                 r.set("knock:last_lat", geo['lat'])
                 r.set("knock:last_lng", geo['lng'])
-            r.publish("radiation_stream", json.dumps(package))
+            r.publish("knocks_stream", json.dumps(package))
             if package.get("subject"):
                 left = user if user is not None else package.get("mail_from", package.get("smtp_mail_from", "<none>"))
                 right = pw if pw is not None else package.get("mail_to", package.get("smtp_rcpt_to", "<none>"))

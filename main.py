@@ -333,7 +333,7 @@ manager = ConnectionManager()
 
 async def redis_listener():
     pubsub = r.pubsub()
-    await pubsub.subscribe("radiation_stream")
+    await pubsub.subscribe("knocks_stream")
     async for message in pubsub.listen():
         if message["type"] == "message":
             data = json.loads(message["data"])

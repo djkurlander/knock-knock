@@ -419,6 +419,7 @@ def parse_dial_country(dial_string):
     s = s.split('@')[0]
     s = s.lstrip('*#')
     s = s.replace('.', '').replace('-', '')
+    s = re.sub(r'\D+$', '', s)
     if s.startswith('++'):
         s = s[1:]
     # PBX external line prefix separator (e.g. 9*442038076211, 900~254..., 011!972...)

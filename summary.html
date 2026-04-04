@@ -46,6 +46,8 @@
             min-height: 100dvh;
             font-size: 16px;
             overflow-anchor: none;
+            -webkit-user-select: none;
+            user-select: none;
         }
         
         img.emoji { height: 1.4em; width: 1.4em; margin: 0 .1em; vertical-align: -0.2em; }
@@ -2516,6 +2518,7 @@
         slider.addEventListener('mousedown', e => {
             if (e.button !== 0) return;
             if (e.target.tagName === 'CANVAS') return;
+            if (e.target.closest('.d-content')) return;
             isDragging = true; dragMoved = false;
             startX = e.pageX; startScrollLeft = slider.scrollLeft;
             slider.style.cursor = 'grabbing';
@@ -2544,6 +2547,68 @@
         slider.addEventListener('click', e => {
             if (dragMoved) { e.stopPropagation(); dragMoved = false; }
         }, true);
+    })();
+
+    // DESKTOP PANEL VERTICAL DRAG-SCROLL (summary only experiment)
+    (function() {
+        const contents = Array.from(document.querySelectorAll('#d-slider-container .d-content'));
+        let active = null;
+        let startX = 0;
+        let startY = 0;
+        let startTop = 0;
+        let mode = ''; // '' | 'vertical' | 'horizontal'
+
+        function clearState() {
+            active = null;
+            mode = '';
+            document.body.style.cursor = '';
+        }
+
+        contents.forEach((el) => {
+            el.addEventListener('mousedown', (e) => {
+                if (e.button !== 0) return;
+                if (e.target.closest('a, button, input, textarea, select, label, .proto-dropdown, .proto-cycle-btn')) return;
+                if (el.scrollHeight <= el.clientHeight) return;
+                active = el;
+                startX = e.clientX;
+                startY = e.clientY;
+                startTop = el.scrollTop;
+                mode = '';
+                el.dataset.dragScrolled = '0';
+            });
+
+            el.addEventListener('click', (e) => {
+                if (el.dataset.dragScrolled === '1') {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    el.dataset.dragScrolled = '0';
+                }
+            }, true);
+        });
+
+        window.addEventListener('mousemove', (e) => {
+            if (!active) return;
+            const dx = e.clientX - startX;
+            const dy = e.clientY - startY;
+
+            if (!mode) {
+                if (Math.abs(dx) < 4 && Math.abs(dy) < 4) return;
+                mode = Math.abs(dy) >= Math.abs(dx) ? 'vertical' : 'horizontal';
+                if (mode !== 'vertical') {
+                    clearState();
+                    return;
+                }
+                document.body.style.cursor = 'ns-resize';
+            }
+
+            if (mode === 'vertical') {
+                e.preventDefault();
+                active.scrollTop = startTop - dy;
+                active.dataset.dragScrolled = '1';
+            }
+        }, { passive: false });
+
+        window.addEventListener('mouseup', clearState);
     })();
 
     Array.from(document.getElementById('d-slider-container').children)

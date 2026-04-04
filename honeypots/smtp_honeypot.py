@@ -77,7 +77,7 @@ _EHLO_RESP_TLS = build_ehlo_response(_SMTP_HOSTNAME, _FP['ehlo_tls'])
 
 MAX_MESSAGES_PER_SESSION = 10
 SMTP587_REQUIRE_AUTH = os.environ.get('SMTP587_REQUIRE_AUTH', '0').lower() in ('1', 'true', 'yes', 'on')
-SMTP_TRACE_ENABLED = os.environ.get('SMTP_TRACE', '1').lower() not in ('0', 'false', 'no')
+SMTP_TRACE_ENABLED = os.environ.get('SMTP_TRACE', '0').lower() not in ('0', 'false', 'no')
 SMTP_TRACE_IP = os.environ.get('SMTP_TRACE_IP', '').strip()
 SMTP_TLS_CERT_PATH = os.environ.get('SMTP_TLS_CERT_PATH', 'data/smtp.crt')
 SMTP_TLS_KEY_PATH = os.environ.get('SMTP_TLS_KEY_PATH', 'data/smtp.key')

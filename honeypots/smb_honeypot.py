@@ -15,7 +15,7 @@ from common import is_blocked, normalize_ip
 
 
 SMB_PORT = int(os.environ.get('SMB_PORT', '445'))
-TRACE_ENABLED = os.environ.get('SMB_TRACE', '1').lower() not in ('0', 'false', 'no')
+TRACE_ENABLED = os.environ.get('SMB_TRACE', '0').lower() not in ('0', 'false', 'no')
 TRACE_IP = os.environ.get('SMB_TRACE_IP', '').strip()
 EMIT_DEDUP_WINDOW_SEC = max(1, int(os.environ.get('SMB_DEDUP_WINDOW_SEC', '60')))
 SMB_SERVER_NAME = os.environ.get('SMB_SERVER_NAME', 'Windows Server 2019 Standard 10.0').strip() or 'Windows Server 2019 Standard 10.0'

@@ -31,7 +31,7 @@ CERT_FILE = os.environ.get('DB_DIR', 'data') + '/rdp.crt'
 KEY_FILE  = os.environ.get('DB_DIR', 'data') + '/rdp.key'
 
 _r = get_redis_client()
-TRACE_ENABLED = os.environ.get('RDP_TRACE', '1').lower() not in ('0', 'false', 'no')
+TRACE_ENABLED = os.environ.get('RDP_TRACE', '0').lower() not in ('0', 'false', 'no')
 TRACE_IP = os.environ.get('RDP_TRACE_IP', '').strip()
 # Compatibility-first TLS policy for honeypot capture fidelity.
 TLS_MIN_VERSION = '1.0'
@@ -457,7 +457,6 @@ def do_nla(raw_sock, client_ip, session_id='-'):
     except Exception as e:
         reason = classify_socket_error(e)
         trace(session_id, client_ip, 'tls_handshake_fail', error=type(e).__name__, reason=reason, detail=str(e))
-        print(f"🔍 RDP {client_ip} TLS failed: {e}", flush=True)
         return [], f'tls_handshake_fail:{reason}'
 
     try:
@@ -505,7 +504,6 @@ def do_nla(raw_sock, client_ip, session_id='-'):
                 extra_reads=extra_reads,
             )
             if not ntlm_step1:
-                print(f"🔍 RDP NLA: no NTLMSSP in step 1 ({total_bytes} bytes: {data[:32].hex()})", flush=True)
                 if attempt == 1:
                     return [], 'nla_no_ntlm_step1'
                 return captures, f'nla_attempts:{len(captures)}'
@@ -662,7 +660,6 @@ def handle_connection(client_sock, client_ip):
             return False
 
         trace(session_id, client_ip, 'connect')
-        print(f"🔌 RDP connect {client_ip}", flush=True)
 
         # Read X.224 Connection Request
         data = read_x224_packet(client_sock)
@@ -682,7 +679,6 @@ def handle_connection(client_sock, client_ip):
         force_classic = should_force_classic(client_ip)
         trace(session_id, client_ip, 'req_protocols', value=f'0x{req_protocols:08x}')
         trace(session_id, client_ip, 'force_classic_check', enabled=force_classic)
-        print(f"🔍 RDP {client_ip} req_protocols=0x{req_protocols:08x} cookie={cookie_user!r}", flush=True)
         if force_classic and RDP_CLASSIC_CAPTURE and _classic_import_error is None:
             if try_classic_path('forced_after_nla_failures'):
                 return
@@ -730,17 +726,11 @@ def handle_connection(client_sock, client_ip):
         try:
             client_sock.sendall(X224_CC_SSL)
             trace(session_id, client_ip, 'x224_cc_ssl_sent')
-            print(f"🔍 RDP {client_ip} sent X224_CC_SSL, starting NLA", flush=True)
             captures, nla_status = do_nla(client_sock, client_ip, session_id=session_id)
-            if captures:
-                print(f"🔍 RDP {client_ip} NLA result: captures={captures!r}", flush=True)
-            else:
-                print(f"🔍 RDP {client_ip} NLA result: captures=[]", flush=True)
             final_stage = nla_status or 'nla_completed'
         except Exception as e:
             reason = classify_socket_error(e)
             trace(session_id, client_ip, 'nla_outer_exception', error=type(e).__name__, reason=reason, detail=str(e))
-            print(f"🔍 RDP {client_ip} NLA outer exception: {type(e).__name__}: {e}", flush=True)
             final_stage = f'nla_outer_exception:{reason}'
 
         if captures:

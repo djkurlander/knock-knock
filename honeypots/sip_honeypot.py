@@ -31,6 +31,7 @@ SIP_CONN_TIMEOUT = max(2.0, float(os.environ.get('SIP_CONN_TIMEOUT', '20')))
 TRACE_ENABLED = os.environ.get('SIP_TRACE', '0').lower() not in ('0', 'false', 'no')
 TRACE_IP = os.environ.get('SIP_TRACE_IP', '').strip()
 SIP_AUTH_CHALLENGE_MODE = os.environ.get('SIP_AUTH_CHALLENGE_MODE', 'mixed').strip().lower()
+SIP_INVITE_MODE = os.environ.get('SIP_INVITE_MODE', 'reject').strip().lower()
 SIP_THROTTLE_PER_SEC = 10
 SIP_DEDUP_WINDOW_SEC = int(os.environ.get('SIP_DEDUP_WINDOW_SEC', '60'))
 
@@ -578,7 +579,26 @@ def choose_challenge():
     return 407, 'Proxy Authentication Required', 'Proxy-Authenticate'
 
 
-def build_response(req, code, reason, extra_headers=None):
+def build_fake_sdp():
+    """Minimal SDP body for faking a ringing/answered call."""
+    try:
+        ip = socket.gethostbyname(socket.gethostname())
+    except Exception:
+        ip = '0.0.0.0'
+    session_id = random.randint(1000000000, 9999999999)
+    return (
+        f'v=0\r\n'
+        f'o=- {session_id} {session_id} IN IP4 {ip}\r\n'
+        f's=Asterisk\r\n'
+        f'c=IN IP4 {ip}\r\n'
+        f't=0 0\r\n'
+        f'm=audio 0 RTP/AVP 0 8\r\n'
+        f'a=rtpmap:0 PCMU/8000\r\n'
+        f'a=rtpmap:8 PCMA/8000\r\n'
+    )
+
+
+def build_response(req, code, reason, extra_headers=None, body=None):
     headers = req.get('headers', {})
     via = _header_first(headers, 'via') or f'SIP/2.0/UDP 0.0.0.0:5060;branch=z9hG4bK{_sip_tag(12)}'
     from_h = _header_first(headers, 'from') or f'<sip:unknown@unknown>;tag={_sip_tag(10)}'
@@ -588,6 +608,7 @@ def build_response(req, code, reason, extra_headers=None):
     call_id = _header_first(headers, 'call-id') or _nonce(12)
     cseq = _header_first(headers, 'cseq') or '1 REGISTER'
 
+    body_bytes = body.encode() if body else b''
     lines = [
         f'SIP/2.0 {code} {reason}',
         f'Via: {via}',
@@ -596,11 +617,13 @@ def build_response(req, code, reason, extra_headers=None):
         f'Call-ID: {call_id}',
         f'CSeq: {cseq}',
         'Server: Asterisk PBX 18.0.0',
-        'Content-Length: 0',
     ]
+    if body:
+        lines.append('Content-Type: application/sdp')
+    lines.append(f'Content-Length: {len(body_bytes)}')
     if extra_headers:
         lines[1:1] = extra_headers
-    return ('\r\n'.join(lines) + '\r\n\r\n').encode()
+    return ('\r\n'.join(lines) + '\r\n\r\n').encode() + body_bytes
 
 
 def emit_knock(client_ip, extra=None, dedup_key=None):
@@ -699,6 +722,8 @@ def process_sip_request(req, client_ip):
         if reg_ext:
             common['sip_extension'] = reg_ext
         emit_knock(client_ip, extra=common, dedup_key=dedup_key)
+        if SIP_INVITE_MODE in ('ring', 'answer'):
+            return 'INVITE_FAKE', req, None
         return 484, 'Address Incomplete', None
 
     # --- Other methods: challenge or accept, no knock ---
@@ -710,6 +735,17 @@ def process_sip_request(req, client_ip):
         return status_code, status_reason, [f'{auth_header_name}: {challenge}']
 
     return 200, 'OK', None
+
+
+def _send_invite_sequence(req, send_fn):
+    """Send 100 Trying → 183 Session Progress → 200 OK with realistic delays."""
+    sdp = build_fake_sdp()
+    send_fn(build_response(req, 100, 'Trying'))
+    time.sleep(random.uniform(0.05, 0.2))
+    send_fn(build_response(req, 183, 'Session Progress', body=sdp))
+    if SIP_INVITE_MODE == 'answer':
+        time.sleep(random.uniform(2.0, 5.0))
+        send_fn(build_response(req, 200, 'OK', body=sdp))
 
 
 def udp_loop(sock):
@@ -727,7 +763,13 @@ def udp_loop(sock):
                 trace(session_id, client_ip, 'udp_parse_invalid')
                 continue
             trace(session_id, client_ip, 'udp_parsed', method=req.get('method'), uri=req.get('uri'))
-            code, reason, extra_headers = process_sip_request(req, client_ip)
+            result = process_sip_request(req, client_ip)
+            if result[0] == 'INVITE_FAKE':
+                def udp_send(resp, _addr=addr): sock.sendto(resp, _addr)
+                threading.Thread(target=_send_invite_sequence, args=(result[1], udp_send), daemon=True).start()
+                trace(session_id, client_ip, 'udp_invite_fake', mode=SIP_INVITE_MODE)
+                continue
+            code, reason, extra_headers = result[:3]
             resp = build_response(req, code, reason, extra_headers=extra_headers)
             try:
                 sock.sendto(resp, addr)
@@ -803,7 +845,17 @@ def handle_tcp_client(client_sock, client_ip):
                 trace(session_id, client_ip, 'tcp_parse_invalid', index=message_count)
                 break
             trace(session_id, client_ip, 'tcp_parsed', index=message_count, method=req.get('method'), uri=req.get('uri'))
-            code, reason, extra_headers = process_sip_request(req, client_ip)
+            result = process_sip_request(req, client_ip)
+            if result[0] == 'INVITE_FAKE':
+                try:
+                    _send_invite_sequence(result[1], client_sock.sendall)
+                    trace(session_id, client_ip, 'tcp_invite_fake', index=message_count, mode=SIP_INVITE_MODE)
+                except Exception:
+                    stop_reason = 'send_failed'
+                    trace(session_id, client_ip, 'tcp_invite_fake_send_failed', index=message_count)
+                    break
+                continue
+            code, reason, extra_headers = result[:3]
             resp = build_response(req, code, reason, extra_headers=extra_headers)
             try:
                 client_sock.sendall(resp)

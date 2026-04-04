@@ -5,7 +5,7 @@ PROTO = {'SSH': 0, 'TNET': 1, 'SMTP': 2, 'RDP': 3, 'MAIL': 4, 'FTP': 5, 'SIP': 6
 PROTO_NAME = {v: k for k, v in PROTO.items()}  # reverse lookup: 0->'SSH' etc.
 
 # Canonical protocol order for UI controls and displays.
-PROTOCOL_UI_ORDER = ['SSH', 'TNET', 'FTP', 'RDP', 'SMB', 'SIP', 'SMTP', 'MAIL']
+PROTOCOL_UI_ORDER = ['SSH', 'TNET', 'FTP', 'RDP', 'SMB', 'SIP', 'MAIL', 'SMTP']
 
 SSH_IMPL = os.environ.get('SSH_IMPL', 'asyncssh').strip().lower()
 if SSH_IMPL not in {'paramiko', 'asyncssh'}:

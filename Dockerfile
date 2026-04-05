@@ -1,7 +1,6 @@
 FROM python:3.12-slim
 
 RUN pip install --no-cache-dir \
-    paramiko \
     asyncssh==2.22.0 \
     impacket \
     geoip2 \

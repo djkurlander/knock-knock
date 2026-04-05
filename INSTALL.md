@@ -177,7 +177,7 @@ cd knock-knock
 
 uv venv
 source .venv/bin/activate
-uv pip install paramiko asyncssh==2.22.0 geoip2 redis fastapi uvicorn[standard] python-dotenv impacket phonenumbers
+uv pip install asyncssh==2.22.0 geoip2 redis fastapi uvicorn[standard] python-dotenv impacket phonenumbers
 ```
 
 ### Install Systemd Services
@@ -259,7 +259,7 @@ cd knock-knock
 
 uv venv
 source .venv/bin/activate
-uv pip install paramiko asyncssh==2.22.0 geoip2 redis fastapi uvicorn[standard] python-dotenv impacket phonenumbers
+uv pip install asyncssh==2.22.0 geoip2 redis fastapi uvicorn[standard] python-dotenv impacket phonenumbers
 ```
 
 ### Install Systemd Services
@@ -325,7 +325,6 @@ By default, all honeypots run (SSH, TNET, FTP, RDP, SMB, SIP, SMTP, MAIL). To ru
 ```bash
 cp docker-compose.override.yml.example docker-compose.override.yml
 # Edit docker-compose.override.yml and uncomment/edit the ENABLED_PROTOCOLS line
-# Optional: uncomment SSH_IMPL there to choose paramiko vs asyncssh for SSH
 docker compose up -d
 ```
 

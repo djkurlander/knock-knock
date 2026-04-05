@@ -110,7 +110,7 @@ SMTP Attacker → smtp_honeypot.py (port 587) ─┘        (GeoIP, DB, Redis)
 
 | File | Purpose |
 |------|---------|
-| `ssh_honeypot.py` | SSH honeypot (port 22) using paramiko |
+| `ssh_honeypot.py` | SSH honeypot (port 22) — legacy paramiko version (unused, kept as fallback) |
 | `telnet_honeypot.py` | Telnet honeypot (port 23), raw socket with IAC negotiation |
 | `smtp_honeypot.py` | SMTP honeypot (port 587), AUTH LOGIN + AUTH PLAIN |
 | `monitor.py` | Spawns honeypots, GeoIP enrichment, DB writes, Redis publish |

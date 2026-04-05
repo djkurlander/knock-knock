@@ -27,12 +27,6 @@ services:
   #     - ENABLED_PROTOCOLS=SSH
   #     # or: ENABLED_PROTOCOLS=SSH,TNET,SMTP
 
-  ## Select SSH engine (default: paramiko)
-  ## Values: paramiko, asyncssh
-  # honeypot-monitor:
-  #   environment:
-  #     - SSH_IMPL=asyncssh
-
   ## HTTPS — uncomment the block below, then place certs in certs/
   # web:
   #   environment:

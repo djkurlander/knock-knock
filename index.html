@@ -16,7 +16,7 @@
     <meta name="twitter:title" content="Knock-Knock.net | Live Honeypot Attack Dashboard">
     <meta name="twitter:description" content="Real-time bot attack telemetry across SSH, Telnet, FTP, RDP, SMB, SIP, and SMTP honeypot services.">
     <script src="https://cdn.jsdelivr.net/npm/@twemoji/api@latest/dist/twemoji.min.js" crossorigin="anonymous"></script>
-    <script src="https://unpkg.com/globe.gl@2.45.1"></script>
+    <script src="https://unpkg.com/globe.gl@2.45.2"></script>
     <script src="https://unpkg.com/topojson-client@3"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -1677,12 +1677,8 @@
             if (!g) return;
             g._pointData[0]._hidden = true;
             if (g._pointData[1]) g._pointData[1]._hidden = true;
-            _disposeLeakedGlobeMemory(g, 'points');
             g.pointsData(g._pointData);
-            if (g.arcsData) {
-                _disposeLeakedGlobeMemory(g, 'arcs');
-                g.arcsData([]);
-            }
+            if (g.arcsData) g.arcsData([]);
         });
         if (paneGlobeDesktop && paneGlobeVisible.desktop) paneGlobeDesktop.resumeAnimation();
         if (paneGlobeMobile && paneGlobeVisible.mobile) paneGlobeMobile.resumeAnimation();
@@ -1770,45 +1766,6 @@
             if (paneGlobeDesktop) applyGlobeStyle(paneGlobeDesktop, paneGlobeStyleIdx);
             if (paneGlobeMobile) applyGlobeStyle(paneGlobeMobile, paneGlobeStyleIdx);
         });
-
-    /**
-     * WORKAROUND: globe.gl@2.45.1 / three-globe@2.45.1 memory leaks.
-     * Remove this function and its call sites once upstream fixes land:
-     *   - pointsData(): CylinderGeometry + materials created per update, never disposed
-     *   - globeImageUrl(): old texture never disposed when URL changes
-     *   - polygonsData() / hexPolygonsData(): partial cleanup on dataset swap
-     * Tags: 'point'|'points', 'globe', 'polygon', 'hexPolygon'|'hexBinPoints'
-     */
-    const _DISPOSE_TAGS = {
-        points:   ['point', 'points'],
-        texture:  ['globe'],
-        polygons: ['polygon'],
-        hex:      ['hexPolygon', 'hexBinPoints'],
-        arcs:     ['arc', 'arcs'],
-    };
-    function _disposeObj(obj) {
-        if (obj.geometry) obj.geometry.dispose();
-        if (obj.material) {
-            if (obj.material.map) obj.material.map.dispose();
-            obj.material.dispose();
-        }
-    }
-    function _disposeLeakedGlobeMemory(globe, what) {
-        if (!globe) return;
-        const tags = _DISPOSE_TAGS[what];
-        if (!tags) return;
-        try {
-            globe.scene().traverse(obj => {
-                if (!tags.includes(obj.__globeObjType)) return;
-                if (what === 'texture') {
-                    if (obj.material?.map) obj.material.map.dispose();
-                } else {
-                    _disposeObj(obj);
-                    obj.traverse(child => { if (child !== obj) _disposeObj(child); });
-                }
-            });
-        } catch (e) { /* best-effort cleanup */ }
-    }
 
     function createGlobe(container, size) {
         const g = Globe()
@@ -1940,11 +1897,8 @@
     function applyGlobeStyle(globe, idx) {
         const style = GLOBE_STYLES[idx];
         if (globe.globeImageUrl() !== style.img) {
-            _disposeLeakedGlobeMemory(globe, 'texture');
             globe.globeImageUrl(style.img);
         }
-        _disposeLeakedGlobeMemory(globe, 'polygons');
-        _disposeLeakedGlobeMemory(globe, 'hex');
         if (style.hex && countriesData) {
             globe.hexPolygonsData(countriesData);
             globe.hexPolygonResolution(3);
@@ -2308,11 +2262,9 @@
                     g._pointData[1]._hidden = true;
                 }
             }
-            _disposeLeakedGlobeMemory(g, 'points');
             g.pointsData(g._pointData);
             // Arc (pane globes only)
             if (pane && g.arcsData) {
-                _disposeLeakedGlobeMemory(g, 'arcs');
                 if (hasDial) {
                     g.arcsData([{ startLat: lat, startLng: lng, endLat: d.sip_dial_lat, endLng: d.sip_dial_lng }]);
                 } else {

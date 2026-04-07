@@ -2685,20 +2685,28 @@
             name: 'smb_username',
             match: (d, proto) => proto === 'SMB',
             render: d => {
-                const u = displayUsername(hasUserField(d) ? d.user : '');
-                const share = d.smb_share ? escapeHtml(d.smb_share) : '';
-                const domain = d.smb_domain ? escapeHtml(d.smb_domain) : '';
-                const host = d.smb_host ? escapeHtml(d.smb_host) : '';
+                const L = 'color:var(--ui-label)';
+                const sep = `<span style="margin-left:10px;"></span>`;
+                const action  = escapeHtml(d.smb_action || 'UNKNOWN');
                 const version = d.smb_version ? escapeHtml(d.smb_version) : '';
-                const line1Parts = [`<span style="color:var(--ui-label)">user:</span> <span>${u}</span>`];
-                if (share) line1Parts.push(`<span style="color:var(--ui-label)">share:</span> <span>${share}</span>`);
-                if (version) line1Parts.push(`<span style="color:var(--ui-label)">version:</span> <span>${version}</span>`);
-                const line1 = line1Parts.map((part, i) => i ? `<span style="margin-left:10px;"></span>${part}` : part).join('');
-                const line2Parts = [];
-                if (domain) line2Parts.push(`<span style="color:var(--ui-label)">domain:</span> <span>${domain}</span>`);
-                if (host) line2Parts.push(`<span style="color:var(--ui-label)">host:</span> <span>${host}</span>`);
-                const line2 = line2Parts.length ? `<br>${line2Parts.map((part, i) => i ? `<span style="margin-left:10px;"></span>${part}` : part).join('')}` : '';
-                return `${line1}${line2}`;
+                const u       = displayUsername(hasUserField(d) ? d.user : '');
+                const share   = d.smb_share  ? escapeHtml(d.smb_share)  : '';
+                const file    = d.smb_file   ? escapeHtml(d.smb_file)   : '';
+                const domain  = d.smb_domain ? escapeHtml(d.smb_domain) : '';
+                const host    = d.smb_host   ? escapeHtml(d.smb_host)   : '';
+
+                let line1 = `<span style="${L}">action:</span> <span>${action}</span>`;
+                if (version) line1 += `${sep}<span style="${L}">version:</span> <span>${version}</span>`;
+
+                const line2Parts = [`<span style="${L}">user:</span> <span>${u}</span>`];
+                const shareLabel = d.smb_action === 'ENUM' ? 'shares:' : 'share:';
+                if (share)  line2Parts.push(`<span style="${L}">${shareLabel}</span> <span>${share}</span>`);
+                if (file)   line2Parts.push(`<span style="${L}">file:</span> <span>${file}</span>`);
+                if (domain) line2Parts.push(`<span style="${L}">domain:</span> <span>${domain}</span>`);
+                if (host)   line2Parts.push(`<span style="${L}">host:</span> <span>${host}</span>`);
+                const line2 = line2Parts.map((p, i) => i ? `${sep}${p}` : p).join('');
+
+                return `${line1}<br>${line2}`;
             },
         },
         {

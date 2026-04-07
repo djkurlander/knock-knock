@@ -455,13 +455,13 @@ def _emit_knock(ip, user=None, smb_share=None, smb_version=None,
                 smb_domain=None, smb_host=None,
                 smb_file=None, smb_action=None, trace_stage='knock'):
     knock = {'type': 'KNOCK', 'proto': 'SMB', 'ip': ip}
-    if user:        knock['user']        = user.lower()
-    if smb_share:   knock['smb_share']   = smb_share
-    if smb_file:    knock['smb_file']    = smb_file
-    if smb_action:  knock['smb_action']  = smb_action
-    if smb_version: knock['smb_version'] = smb_version
-    if smb_domain:  knock['smb_domain']  = smb_domain
-    if smb_host:    knock['smb_host']    = smb_host
+    if user:          knock['user']        = user.lower()
+    if smb_share:     knock['smb_share']   = smb_share
+    if smb_file:      knock['smb_file']    = smb_file
+    knock['smb_action'] = smb_action or 'UNKNOWN'
+    if smb_version:   knock['smb_version'] = smb_version
+    if smb_domain:    knock['smb_domain']  = smb_domain
+    if smb_host:      knock['smb_host']    = smb_host
     print(json.dumps(knock), flush=True)
     trace(ip, trace_stage, user=user, smb_share=smb_share, smb_file=smb_file,
           smb_version=smb_version, domain=smb_domain, host=smb_host)
@@ -928,10 +928,12 @@ def _parse_netr_share_enum_level(stub):
     return struct.unpack_from('<I', stub, off)[0]
 
 
-def _handle_dcerpc(data, client_ip):
+def _handle_dcerpc(data, client_ip, user=None, smb_version=None,
+                   smb_domain=None, smb_host=None):
     """
     Parse an incoming DCERPC PDU and return the response bytes, or None if unhandled.
     BIND → BIND_ACK.  REQUEST opnum 15 (NetrShareEnum) level 1 → share list response.
+    NetrShareEnum always emits a knock (any level, even unsupported ones).
     Other opnums and levels are traced and return None (caller sends NOT_SUPPORTED).
     """
     if len(data) < 16:
@@ -955,7 +957,12 @@ def _handle_dcerpc(data, client_ip):
             trace(client_ip, 'srvsvc_netr_share_enum', call_id=call_id, level=level)
             if level == 1:
                 shares = [(name, 0, '') for name in _DECOYS]
+                share_names = ','.join(name for name, _, _ in shares)
+                _emit_knock(client_ip, user, share_names, smb_version, smb_domain, smb_host,
+                            smb_action='ENUM', trace_stage='knock_emitted_enum')
                 return _srvsvc_netr_share_enum_response(call_id, ctx_id, shares)
+            _emit_knock(client_ip, user, None, smb_version, smb_domain, smb_host,
+                        smb_action='ENUM', trace_stage='knock_emitted_enum')
             trace(client_ip, 'srvsvc_unsupported_level', opnum=opnum, level=level)
             return None
         trace(client_ip, 'srvsvc_unsupported_opnum', opnum=opnum)
@@ -1102,7 +1109,7 @@ def _smb2_post_negotiate(client_sock, client_ip, smb_version):
 
                 if user:
                     _emit_knock(client_ip, user, None, smb_version, domain, host,
-                                trace_stage='knock_emitted_auth')
+                                smb_action='AUTH', trace_stage='knock_emitted_auth')
                 else:
                     trace(client_ip, 'smb2_session_anon')
 
@@ -1126,7 +1133,7 @@ def _smb2_post_negotiate(client_sock, client_ip, smb_version):
                 if user:
                     if should_emit(client_ip, user, domain, host, smb_version, share):
                         _emit_knock(client_ip, user, share, smb_version, domain, host,
-                                    trace_stage='knock_emitted_tree')
+                                    smb_action='CONNECT', trace_stage='knock_emitted_tree')
                     else:
                         trace(client_ip, 'knock_dedup', user=user, share=share,
                               smb_version=smb_version)
@@ -1143,7 +1150,7 @@ def _smb2_post_negotiate(client_sock, client_ip, smb_version):
                 if user:
                     if should_emit(client_ip, user, domain, host, smb_version, share):
                         _emit_knock(client_ip, user, share, smb_version, domain, host,
-                                    trace_stage='knock_emitted_tree')
+                                    smb_action='CONNECT', trace_stage='knock_emitted_tree')
                     else:
                         trace(client_ip, 'knock_dedup', user=user, share=share,
                               smb_version=smb_version)
@@ -1221,7 +1228,9 @@ def _smb2_post_negotiate(client_sock, client_ip, smb_version):
                 dcerpc  = payload[in_off:in_off + in_cnt]
                 trace(client_ip, 'smb2_pipe_transceive',
                       fid=fid_pair[0], data_len=len(dcerpc))
-                rpc_resp = _handle_dcerpc(dcerpc, client_ip)
+                rpc_resp = _handle_dcerpc(dcerpc, client_ip,
+                                          user=user, smb_version=smb_version,
+                                          smb_domain=domain, smb_host=host)
                 if rpc_resp:
                     send_nbss(client_sock, build_smb2_ioctl_pipe_response(
                         hdr, session_id, hdr['tree_id'], ctl_code, fid_pair, rpc_resp))
@@ -1935,7 +1944,7 @@ def handle_smb1(client_sock, client_ip, first_payload):
                           has_ntlm=ntlm3 is not None)
                     if user:
                         _emit_knock(client_ip, user, None, 'SMB1', domain, host,
-                                    trace_stage='knock_emitted_auth')
+                                    smb_action='AUTH', trace_stage='knock_emitted_auth')
                     uid = (int.from_bytes(os.urandom(2), 'little') or 1)
                     send_nbss(client_sock, build_smb1_session_setup_r2_response(hdr, uid))
                 else:
@@ -1948,7 +1957,7 @@ def handle_smb1(client_sock, client_ip, first_payload):
                       user=user, domain=domain)
                 if user:
                     _emit_knock(client_ip, user, None, 'SMB1', domain, None,
-                                trace_stage='knock_emitted_auth')
+                                smb_action='AUTH', trace_stage='knock_emitted_auth')
                 uid = (int.from_bytes(os.urandom(2), 'little') or 1)
                 send_nbss(client_sock, _build_smb1_session_setup_nonext_response(hdr, uid))
 
@@ -1969,7 +1978,7 @@ def handle_smb1(client_sock, client_ip, first_payload):
             if user:
                 if should_emit(client_ip, user, domain, host, 'SMB1', share):
                     _emit_knock(client_ip, user, share, 'SMB1', domain, host,
-                                trace_stage='knock_emitted_tree')
+                                smb_action='CONNECT', trace_stage='knock_emitted_tree')
                 else:
                     trace(client_ip, 'knock_dedup', user=user, share=share,
                           smb_version='SMB1')
@@ -2002,7 +2011,9 @@ def handle_smb1(client_sock, client_ip, first_payload):
                     data_cnt = struct.unpack_from('<H', payload, 43)[0] if len(payload) >= 45 else 0
                     dcerpc   = payload[data_off:data_off + data_cnt]
                     trace(client_ip, 'smb1_pipe_write', fid=fid, data_len=len(dcerpc))
-                    pipe_fids[fid]['pending'] = _handle_dcerpc(dcerpc, client_ip)
+                    pipe_fids[fid]['pending'] = _handle_dcerpc(dcerpc, client_ip,
+                                                               user=user, smb_version='SMB1',
+                                                               smb_domain=domain, smb_host=host)
                     # Acknowledge the write
                     ack_body = (struct.pack('<B', 6)        # WC=6
                                 + struct.pack('<B', 0xFF)   # AndXCmd=none

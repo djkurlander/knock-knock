@@ -199,8 +199,8 @@ _KNOCK_EXTRA_COLS = {
              'sip_call_id TEXT', 'sip_cseq TEXT', 'sip_extension TEXT',
              'sip_dial_country TEXT', 'sip_dial_country_name TEXT',
              'sip_dial_lat REAL', 'sip_dial_lng REAL'],
-    'SMB':  ['username TEXT', 'smb_share TEXT', 'smb_version TEXT',
-             'smb_domain TEXT', 'smb_host TEXT'],
+    'SMB':  ['username TEXT', 'smb_action TEXT', 'smb_share TEXT', 'smb_file TEXT',
+             'smb_version TEXT', 'smb_domain TEXT', 'smb_host TEXT'],
     'RDP':  ['username TEXT', 'rdp_source TEXT', 'domain TEXT', 'rdp_workstation TEXT'],
 }
 
@@ -226,7 +226,8 @@ _PROTO_KEY_MAP = {
              ('sip_cseq', 'sip_cseq'), ('sip_extension', 'sip_extension'),
              ('sip_dial_country', 'sip_dial_country'), ('sip_dial_country_name', 'sip_dial_country_name'),
              ('sip_dial_lat', 'sip_dial_lat'), ('sip_dial_lng', 'sip_dial_lng')],
-    'SMB':  [('user', 'username'), ('smb_share', 'smb_share'), ('smb_version', 'smb_version'),
+    'SMB':  [('user', 'username'), ('smb_action', 'smb_action'), ('smb_share', 'smb_share'),
+             ('smb_file', 'smb_file'), ('smb_version', 'smb_version'),
              ('smb_domain', 'smb_domain'), ('smb_host', 'smb_host')],
     'RDP':  [('user', 'username'), ('rdp_source', 'rdp_source'), ('domain', 'domain'), ('rdp_workstation', 'rdp_workstation')],
 }

@@ -164,7 +164,7 @@ knocks_ftp(... username, password)
 knocks_smtp(... username, password, smtp_stage, smtp_mail_from, smtp_rcpt_to, subject, body)
 knocks_mail(... username, password, smtp_stage, smtp_mail_from, smtp_rcpt_to, subject, body)
 knocks_sip(... sip_method, sip_dial_string, sip_dial_number, sip_call_id, sip_cseq, sip_extension, sip_dial_country, sip_dial_country_name, sip_dial_lat, sip_dial_lng)
-knocks_smb(... username, smb_share, smb_version, smb_domain, smb_host)
+knocks_smb(... username, smb_action, smb_share, smb_file, smb_version, smb_domain, smb_host)
 knocks_rdp(... username, rdp_source, domain)
 
 -- ALL intel tables (aggregated counts, indexed hits for fast top-N queries)

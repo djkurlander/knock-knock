@@ -142,6 +142,7 @@ All persistent data lives in `data/`:
 | `ENABLE_SSL` | unset | Set to `true` in `docker-compose.yml` for HTTPS |
 | `LOG_VISITORS` | unset | Set to `true` to log dashboard visitors to `visitors.db` |
 | `SMTP_HOSTNAME` | reverse DNS | Override SMTP banner/cert hostname (default: reverse DNS of server IP) |
+| `SMB_DECOY_DIR` | `honeypots/decoys` | Directory of decoy share folders (e.g. `honeypots/decoys/PUBLIC/passwords.txt`). Defaults to `decoys/` next to the script. Loaded at startup; zero FS access after that. Falls back to hardcoded `PUBLIC/passwords.txt` if directory is missing or empty. |
 
 ## Protocol Enum
 

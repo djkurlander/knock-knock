@@ -28,6 +28,8 @@ SMB_SERVER_NAME       = (os.environ.get('SMB_SERVER_NAME', '').strip()
                          or 'Windows Server 2019 Standard 10.0')
 SMB_SERVER_DOMAIN     = (os.environ.get('SMB_SERVER_DOMAIN', '').strip()
                          or 'WORKGROUP')
+SMB_NATIVE_OS         = 'Windows Server 2019 Standard 17763'
+SMB_NATIVE_LAN_MAN    = 'Windows Server 2019 Standard 17763'
 
 # Decoy shares: loaded at startup from SMB_DECOY_DIR folder (or hardcoded default).
 # Structure: dict[share_name_upper -> dict[filename -> bytes]]
@@ -1594,8 +1596,9 @@ def _build_smb1_session_setup_response(hdr, status, sec_buf, uid=0):
         + struct.pack('<H', 0)             # Action = 0 (not guest)
         + struct.pack('<H', len(sec_buf))  # SecurityBlobLength
     )
-    # Minimal native strings (UTF-16LE null-terminated) to satisfy strict clients
-    native = b'\x00\x00\x00\x00'   # NativeOS='' + NativeLanMan='' (each = one UTF-16LE NUL)
+    # NativeOS + NativeLanMan — UTF-16LE null-terminated, matching Windows Server 2019 banner
+    native = (SMB_NATIVE_OS.encode('utf-16-le')      + b'\x00\x00'
+            + SMB_NATIVE_LAN_MAN.encode('utf-16-le') + b'\x00\x00')
     body = (
         struct.pack('<B', 4)               # WordCount
         + params
@@ -1710,7 +1713,9 @@ def _build_smb1_session_setup_nonext_response(hdr, uid):
               + struct.pack('<B', 0)    # AndXReserved
               + struct.pack('<H', 0)    # AndXOffset
               + struct.pack('<H', 0))   # Action = 0 (not guest)
-    body   = struct.pack('<B', 3) + params + struct.pack('<H', 0)   # WC=3, 3×2-byte params, BC=0
+    native = (SMB_NATIVE_OS.encode('utf-16-le')      + b'\x00\x00'
+            + SMB_NATIVE_LAN_MAN.encode('utf-16-le') + b'\x00\x00')
+    body   = struct.pack('<B', 3) + params + struct.pack('<H', len(native)) + native
     flags2 = hdr['flags2'] | SMB1_FLAGS2_UNICODE
     return build_smb1_response_header(
         SMB1_COM_SESSION_SETUP, STATUS_SUCCESS, flags2, uid=uid, mid=hdr['mid'],

@@ -2704,6 +2704,8 @@
                 if (file)   line2Parts.push(`<span style="${L}">file:</span> <span>${file}</span>`);
                 if (domain) line2Parts.push(`<span style="${L}">domain:</span> <span>${domain}</span>`);
                 if (host)   line2Parts.push(`<span style="${L}">host:</span> <span>${host}</span>`);
+                if (d.smb_action === 'PROBE') return line1;
+
                 const line2 = line2Parts.map((p, i) => i ? `${sep}${p}` : p).join('');
 
                 return `${line1}<br>${line2}`;

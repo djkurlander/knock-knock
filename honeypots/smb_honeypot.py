@@ -181,7 +181,9 @@ def build_ntlm_challenge(domain=None, computer=None):
     target_info += av(2, domain_enc)                           # MsvAvNbDomainName
     target_info += av(3, computer_enc)                         # MsvAvDnsComputerName
     target_info += av(4, domain_enc)                           # MsvAvDnsDomainName
+    target_info += av(6, struct.pack('<I', 0x00000002))        # MsvAvFlags (MIC supported)
     target_info += av(7, struct.pack('<Q', filetime))          # MsvAvTimestamp
+    target_info += av(10, b'\x00' * 16)                        # MsvAvChannelBindings (empty)
     target_info += struct.pack('<HH', 0, 0)                    # MsvAvEOL
 
     flags = (
@@ -330,6 +332,7 @@ STATUS_ACCESS_DENIED         = 0xC0000022
 STATUS_LOGON_FAILURE         = 0xC000006D
 STATUS_NO_MORE_FILES         = 0x80000006
 STATUS_END_OF_FILE           = 0xC0000011
+STATUS_INVALID_PARAMETER     = 0xC000000D
 STATUS_OBJECT_NAME_NOT_FOUND = 0xC0000034
 STATUS_NOT_SUPPORTED         = 0xC00000BB
 STATUS_BAD_NETWORK_NAME      = 0xC00000CC
@@ -375,6 +378,7 @@ _SMB1_MAGIC = b'\xffSMB'
 
 # SMB1 command codes
 SMB1_COM_CLOSE          = 0x04
+SMB1_COM_TRANSACTION    = 0x25
 SMB1_COM_WRITE_ANDX     = 0x2F
 SMB1_COM_READ_ANDX      = 0x2E
 SMB1_COM_TRANSACTION2   = 0x32
@@ -772,8 +776,24 @@ def build_smb2_query_info_response(hdr, session_id, tree_id, info_type, file_inf
     ) + body
 
 
+def build_smb2_write_response(hdr, session_id, tree_id, count):
+    """SMB2 WRITE success response — acknowledges `count` bytes written."""
+    body = (
+        struct.pack('<H', 17)    # StructureSize
+        + struct.pack('<H', 0)   # Reserved
+        + struct.pack('<I', count)  # Count (bytes written)
+        + struct.pack('<I', 0)   # Remaining
+        + struct.pack('<H', 0)   # WriteChannelInfoOffset
+        + struct.pack('<H', 0)   # WriteChannelInfoLength
+    )
+    return build_smb2_response_header(
+        SMB2_WRITE, STATUS_SUCCESS, hdr['message_id'],
+        session_id=session_id, tree_id=tree_id,
+    ) + body
+
+
 def build_smb2_read_response(hdr, session_id, tree_id, data):
-    """Return a chunk of fake file content."""
+    """Return a chunk of fake file content or pipe data."""
     # DataOffset = 64 (header) + 16 (fixed body) = 80
     body = (
         struct.pack('<H', 17)            # StructureSize
@@ -928,6 +948,31 @@ def _parse_netr_share_enum_level(stub):
     return struct.unpack_from('<I', stub, off)[0]
 
 
+def _handle_dcerpc_multi(data, client_ip, user=None, smb_version=None,
+                         smb_domain=None, smb_host=None):
+    """
+    Handle one or more concatenated DCERPC PDUs in a single buffer.
+    Walks the buffer using frag_length (at offset 8 in each PDU header),
+    calls _handle_dcerpc on each PDU, and concatenates the responses.
+    Returns combined response bytes, or None if nothing was handled.
+    """
+    responses = []
+    offset    = 0
+    while offset < len(data):
+        if offset + 10 > len(data):
+            break
+        frag_length = struct.unpack_from('<H', data, offset + 8)[0]
+        if frag_length < 16 or offset + frag_length > len(data):
+            break
+        pdu  = data[offset:offset + frag_length]
+        resp = _handle_dcerpc(pdu, client_ip, user=user, smb_version=smb_version,
+                              smb_domain=smb_domain, smb_host=smb_host)
+        if resp:
+            responses.append(resp)
+        offset += frag_length
+    return b''.join(responses) if responses else None
+
+
 def _handle_dcerpc(data, client_ip, user=None, smb_version=None,
                    smb_domain=None, smb_host=None):
     """
@@ -1076,13 +1121,14 @@ def _smb2_post_negotiate(client_sock, client_ip, smb_version):
     # pipe_fids: {(persistent, volatile): {'pending': bytes|None}} for \\PIPE\\srvsvc handles
     pipe_fids    = {}
     next_fid     = 1     # monotonic counter for allocating unique FileId values
+    got_auth     = False
 
     for _ in range(_MAX_MSG - 1):
         try:
             payload = recv_nbss(client_sock)
         except Exception as e:
             trace(client_ip, 'smb2_recv_error', error=f'{type(e).__name__}: {e}')
-            return
+            break
         hdr = parse_smb2_header(payload)
         if not hdr:
             trace(client_ip, 'smb2_bad_header')
@@ -1107,11 +1153,9 @@ def _smb2_post_negotiate(client_sock, client_ip, smb_version):
                 trace(client_ip, 'smb2_session_setup_r2',
                       user=user, domain=domain, host=host, has_ntlm=ntlm3 is not None)
 
-                if user:
-                    _emit_knock(client_ip, user, None, smb_version, domain, host,
-                                smb_action='AUTH', trace_stage='knock_emitted_auth')
-                else:
-                    trace(client_ip, 'smb2_session_anon')
+                _emit_knock(client_ip, user, None, smb_version, domain, host,
+                            smb_action='AUTH', trace_stage='knock_emitted_auth')
+                got_auth = True
 
                 session_id = int.from_bytes(os.urandom(8), 'little') & 0x7FFFFFFFFFFFFFFF
                 send_nbss(client_sock, build_smb2_session_setup_r2_response(hdr, session_id))
@@ -1130,13 +1174,12 @@ def _smb2_post_negotiate(client_sock, client_ip, smb_version):
                 decoy_trees[new_tree_id] = share_upper
                 trace(client_ip, 'smb2_tree_connect', share=share,
                       tid=hex(new_tree_id), type='decoy')
-                if user:
-                    if should_emit(client_ip, user, domain, host, smb_version, share):
-                        _emit_knock(client_ip, user, share, smb_version, domain, host,
-                                    smb_action='CONNECT', trace_stage='knock_emitted_tree')
-                    else:
-                        trace(client_ip, 'knock_dedup', user=user, share=share,
-                              smb_version=smb_version)
+                if should_emit(client_ip, user, domain, host, smb_version, share):
+                    _emit_knock(client_ip, user, share, smb_version, domain, host,
+                                smb_action='CONNECT', trace_stage='knock_emitted_tree')
+                else:
+                    trace(client_ip, 'knock_dedup', user=user, share=share,
+                          smb_version=smb_version)
                 send_nbss(client_sock, build_smb2_tree_connect_response_ok(
                     hdr, session_id, new_tree_id, 0x01))   # DISK
             else:
@@ -1147,13 +1190,12 @@ def _smb2_post_negotiate(client_sock, client_ip, smb_version):
                 tree_type = 'ipc' if share_upper == 'IPC$' else 'unknown'
                 trace(client_ip, 'smb2_tree_connect', share=share,
                       tid=hex(new_tree_id), type=tree_type)
-                if user:
-                    if should_emit(client_ip, user, domain, host, smb_version, share):
-                        _emit_knock(client_ip, user, share, smb_version, domain, host,
-                                    smb_action='CONNECT', trace_stage='knock_emitted_tree')
-                    else:
-                        trace(client_ip, 'knock_dedup', user=user, share=share,
-                              smb_version=smb_version)
+                if should_emit(client_ip, user, domain, host, smb_version, share):
+                    _emit_knock(client_ip, user, share, smb_version, domain, host,
+                                smb_action='CONNECT', trace_stage='knock_emitted_tree')
+                else:
+                    trace(client_ip, 'knock_dedup', user=user, share=share,
+                          smb_version=smb_version)
                 share_type = 0x02 if share_upper == 'IPC$' else 0x01
                 send_nbss(client_sock, build_smb2_tree_connect_response_ok(
                     hdr, session_id, new_tree_id, share_type))
@@ -1228,9 +1270,9 @@ def _smb2_post_negotiate(client_sock, client_ip, smb_version):
                 dcerpc  = payload[in_off:in_off + in_cnt]
                 trace(client_ip, 'smb2_pipe_transceive',
                       fid=fid_pair[0], data_len=len(dcerpc))
-                rpc_resp = _handle_dcerpc(dcerpc, client_ip,
-                                          user=user, smb_version=smb_version,
-                                          smb_domain=domain, smb_host=host)
+                rpc_resp = _handle_dcerpc_multi(dcerpc, client_ip,
+                                               user=user, smb_version=smb_version,
+                                               smb_domain=domain, smb_host=host)
                 if rpc_resp:
                     send_nbss(client_sock, build_smb2_ioctl_pipe_response(
                         hdr, session_id, hdr['tree_id'], ctl_code, fid_pair, rpc_resp))
@@ -1299,7 +1341,22 @@ def _smb2_post_negotiate(client_sock, client_ip, smb_version):
                 file_size=fsize, share_label=share_upper))
 
         elif cmd == SMB2_READ:
-            tree_id     = hdr['tree_id']
+            tree_id              = hdr['tree_id']
+            offset, length, fid_pair = _parse_read_params(payload)
+            # ── Pipe read (WRITE+READ DCERPC path) ───────────────────────────
+            if fid_pair in pipe_fids:
+                rpc_resp = pipe_fids[fid_pair]['pending']
+                if rpc_resp:
+                    pipe_fids[fid_pair]['pending'] = None
+                    trace(client_ip, 'smb2_pipe_read',
+                          fid=fid_pair[0], data_len=len(rpc_resp))
+                    send_nbss(client_sock, build_smb2_read_response(
+                        hdr, session_id, tree_id, rpc_resp))
+                else:
+                    send_nbss(client_sock, build_smb2_error_response(
+                        hdr, session_id, tree_id, STATUS_END_OF_FILE, SMB2_READ))
+                continue
+            # ── Decoy file read ───────────────────────────────────────────────
             share_upper = decoy_trees.get(tree_id)
             if share_upper is None:
                 trace(client_ip, 'smb2_read_denied', tree_id=hex(tree_id))
@@ -1331,21 +1388,34 @@ def _smb2_post_negotiate(client_sock, client_ip, smb_version):
                         hdr, session_id, tree_id, chunk))
 
         elif cmd == SMB2_WRITE:
-            tree_id     = hdr['tree_id']
-            share_upper = decoy_trees.get(tree_id)
-            # FileId at body+16 = payload[80]
-            fid_pair    = _parse_file_id_at(payload, 80) if len(payload) >= 96 else (0, 0)
-            fh          = open_files.get(fid_pair)
-            fname       = fh['filename'] if fh else None
-            write_share = share_upper or (fh['share'] if fh else None)
-            trace(client_ip, 'smb2_write',
-                  tree_id=hex(tree_id), fid=fid_pair[0],
-                  file=fname, on_decoy=share_upper is not None)
-            _emit_knock(client_ip, user, write_share, smb_version, domain, host,
-                        smb_file=fname, smb_action='WRITE',
-                        trace_stage='knock_emitted_write')
-            send_nbss(client_sock, build_smb2_error_response(
-                hdr, session_id, tree_id, STATUS_ACCESS_DENIED, SMB2_WRITE))
+            tree_id  = hdr['tree_id']
+            fid_pair = _parse_file_id_at(payload, 80) if len(payload) >= 96 else (0, 0)
+            # ── Pipe write (WRITE+READ DCERPC path) ──────────────────────────
+            if fid_pair in pipe_fids:
+                data_offset = struct.unpack_from('<H', payload, 66)[0] if len(payload) >= 68 else 0
+                data_length = struct.unpack_from('<I', payload, 68)[0] if len(payload) >= 72 else 0
+                dcerpc = payload[data_offset:data_offset + data_length] if data_offset else b''
+                trace(client_ip, 'smb2_pipe_write',
+                      fid=fid_pair[0], data_len=len(dcerpc))
+                pipe_fids[fid_pair]['pending'] = _handle_dcerpc_multi(
+                    dcerpc, client_ip, user=user, smb_version=smb_version,
+                    smb_domain=domain, smb_host=host)
+                send_nbss(client_sock, build_smb2_write_response(
+                    hdr, session_id, tree_id, data_length))
+            else:
+                # ── Decoy file write (deny + emit) ───────────────────────────
+                share_upper = decoy_trees.get(tree_id)
+                fh          = open_files.get(fid_pair)
+                fname       = fh['filename'] if fh else None
+                write_share = share_upper or (fh['share'] if fh else None)
+                trace(client_ip, 'smb2_write',
+                      tree_id=hex(tree_id), fid=fid_pair[0],
+                      file=fname, on_decoy=share_upper is not None)
+                _emit_knock(client_ip, user, write_share, smb_version, domain, host,
+                            smb_file=fname, smb_action='WRITE',
+                            trace_stage='knock_emitted_write')
+                send_nbss(client_sock, build_smb2_error_response(
+                    hdr, session_id, tree_id, STATUS_ACCESS_DENIED, SMB2_WRITE))
 
         elif cmd == SMB2_CLOSE:
             fid_pair = _parse_file_id_at(payload, 72)   # CLOSE: FileId at body+8 = abs 72
@@ -1374,6 +1444,10 @@ def _smb2_post_negotiate(client_sock, client_ip, smb_version):
             trace(client_ip, 'smb2_unexpected_cmd',
                   command=hex(cmd), setup_round=setup_round)
             break
+
+    if not got_auth and should_emit(client_ip, None, None, None, smb_version, None):
+        _emit_knock(client_ip, None, None, smb_version, None, None,
+                    smb_action='PROBE', trace_stage='knock_emitted_probe')
 
 
 def handle_smb2(client_sock, client_ip, first_payload):
@@ -1853,6 +1927,94 @@ def build_smb1_close_response(hdr, uid, tid):
     ) + body
 
 
+def _smb1_parse_transaction(payload, flags2):
+    """
+    Parse an SMB1 TRANSACTION (0x25) request.
+    Returns (pipe_name_upper, dcerpc_bytes).
+    pipe_name_upper: last path component of the Name field (e.g. 'SRVSVC'), or None.
+    dcerpc_bytes: raw Data section bytes (may be empty).
+    Returns (None, None) on parse failure.
+
+    Layout after 32-byte SMB1 header:
+      [32]    WordCount
+      [33-54] Fixed parameter words (always present regardless of SetupCount)
+      [55-56] DataCount
+      [57-58] DataOffset  ← offset from start of SMB header into payload
+      [59]    SetupCount
+      [60]    Reserved
+      [61+]   Setup[0..SetupCount-1] words
+      [32+1+WordCount*2]    ByteCount (2 bytes)
+      [32+1+WordCount*2+2]  Name field (null-terminated, ASCII or UTF-16LE)
+    """
+    if len(payload) < 60:
+        return None, None
+    try:
+        wc          = payload[32]
+        data_count  = struct.unpack_from('<H', payload, 55)[0]
+        data_offset = struct.unpack_from('<H', payload, 57)[0]
+
+        # ByteCount is right after the Setup words
+        bc_off     = 32 + 1 + wc * 2
+        if len(payload) < bc_off + 2:
+            return None, None
+
+        # Name field follows ByteCount; align to 2-byte boundary for Unicode
+        name_start = bc_off + 2
+        pipe_name  = None
+        if name_start < len(payload):
+            if flags2 & SMB1_FLAGS2_UNICODE:
+                if name_start % 2 != 0:
+                    name_start += 1
+                end = name_start
+                while end + 1 < len(payload):
+                    if payload[end] == 0 and payload[end + 1] == 0:
+                        break
+                    end += 2
+                raw = payload[name_start:end].decode('utf-16-le', errors='replace')
+            else:
+                nul = payload.find(b'\x00', name_start)
+                raw = payload[name_start:nul if nul != -1 else len(payload)].decode(
+                    'ascii', errors='replace')
+            # Last path component: '\PIPE\srvsvc' → 'SRVSVC', '\PIPE\' → None
+            parts     = [p for p in raw.replace('/', '\\').split('\\') if p]
+            # Drop leading 'PIPE' namespace component; remainder is the pipe name
+            if parts and parts[0].upper() == 'PIPE':
+                parts = parts[1:]
+            pipe_name = parts[0].upper() if parts else None
+
+        dcerpc = b''
+        if data_count > 0 and data_offset + data_count <= len(payload):
+            dcerpc = payload[data_offset:data_offset + data_count]
+
+        return pipe_name, dcerpc
+    except Exception:
+        return None, None
+
+
+def build_smb1_transaction_response(hdr, uid, tid, flags2, dcerpc_data):
+    """
+    SMB1 TRANSACTION success response carrying dcerpc_data as the response Data section.
+    WordCount=10, no parameters, data starts at offset 55 (32+1+20+2).
+    """
+    n     = len(dcerpc_data)
+    words = (
+        struct.pack('<H', 0)      # TotalParameterCount
+        + struct.pack('<H', n)    # TotalDataCount
+        + struct.pack('<H', 0)    # Reserved
+        + struct.pack('<H', 0)    # ParameterCount
+        + struct.pack('<H', 55)   # ParameterOffset (no params, but offset must be valid)
+        + struct.pack('<H', 0)    # ParameterDisplacement
+        + struct.pack('<H', n)    # DataCount
+        + struct.pack('<H', 55)   # DataOffset = 32+1+20+2 = 55
+        + struct.pack('<H', 0)    # DataDisplacement
+        + struct.pack('<BB', 0, 0)  # SetupCount=0, Reserved
+    )
+    body = struct.pack('<B', 10) + words + struct.pack('<H', n) + dcerpc_data
+    return build_smb1_response_header(
+        SMB1_COM_TRANSACTION, STATUS_SUCCESS, flags2, uid=uid, tid=tid, mid=hdr['mid'],
+    ) + body
+
+
 # ---------------------------------------------------------------------------
 # SMB1 session state machine
 # ---------------------------------------------------------------------------
@@ -1909,13 +2071,14 @@ def handle_smb1(client_sock, client_ip, first_payload):
     open_files   = {}    # {fid(int): {'share': str, 'filename': str|None}}
     pipe_fids    = {}    # {fid(int): {'pending': bytes|None}} for \\PIPE\\srvsvc handles
     next_fid     = 1
+    got_auth     = False
 
     for _ in range(_MAX_MSG - 1):
         try:
             payload = recv_nbss(client_sock)
         except Exception as e:
             trace(client_ip, 'smb1_recv_error', error=f'{type(e).__name__}: {e}')
-            return
+            break
         hdr = parse_smb1_header(payload)
         if not hdr:
             trace(client_ip, 'smb1_bad_header')
@@ -1942,9 +2105,9 @@ def handle_smb1(client_sock, client_ip, first_payload):
                     trace(client_ip, 'smb1_session_setup_r2',
                           user=user, domain=domain, host=host,
                           has_ntlm=ntlm3 is not None)
-                    if user:
-                        _emit_knock(client_ip, user, None, 'SMB1', domain, host,
-                                    smb_action='AUTH', trace_stage='knock_emitted_auth')
+                    _emit_knock(client_ip, user, None, 'SMB1', domain, host,
+                                smb_action='AUTH', trace_stage='knock_emitted_auth')
+                    got_auth = True
                     uid = (int.from_bytes(os.urandom(2), 'little') or 1)
                     send_nbss(client_sock, build_smb1_session_setup_r2_response(hdr, uid))
                 else:
@@ -1955,9 +2118,9 @@ def handle_smb1(client_sock, client_ip, first_payload):
                 user, domain = _smb1_session_setup_nonext(payload, flags2)
                 trace(client_ip, 'smb1_session_setup_nonext',
                       user=user, domain=domain)
-                if user:
-                    _emit_knock(client_ip, user, None, 'SMB1', domain, None,
-                                smb_action='AUTH', trace_stage='knock_emitted_auth')
+                _emit_knock(client_ip, user, None, 'SMB1', domain, None,
+                            smb_action='AUTH', trace_stage='knock_emitted_auth')
+                got_auth = True
                 uid = (int.from_bytes(os.urandom(2), 'little') or 1)
                 send_nbss(client_sock, _build_smb1_session_setup_nonext_response(hdr, uid))
 
@@ -1975,13 +2138,12 @@ def handle_smb1(client_sock, client_ip, first_payload):
                 tree_type = 'ipc' if share_upper == 'IPC$' else 'unknown'
                 trace(client_ip, 'smb1_tree_connect', share=share,
                       tid=hex(new_tid), type=tree_type)
-            if user:
-                if should_emit(client_ip, user, domain, host, 'SMB1', share):
-                    _emit_knock(client_ip, user, share, 'SMB1', domain, host,
-                                smb_action='CONNECT', trace_stage='knock_emitted_tree')
-                else:
-                    trace(client_ip, 'knock_dedup', user=user, share=share,
-                          smb_version='SMB1')
+            if should_emit(client_ip, user, domain, host, 'SMB1', share):
+                _emit_knock(client_ip, user, share, 'SMB1', domain, host,
+                            smb_action='CONNECT', trace_stage='knock_emitted_tree')
+            else:
+                trace(client_ip, 'knock_dedup', user=user, share=share,
+                      smb_version='SMB1')
             send_nbss(client_sock, build_smb1_tree_connect_ok_response(hdr, new_tid, share_upper))
 
         # ── IPC$ and other non-decoy trees ───────────────────────────────────
@@ -2011,9 +2173,9 @@ def handle_smb1(client_sock, client_ip, first_payload):
                     data_cnt = struct.unpack_from('<H', payload, 43)[0] if len(payload) >= 45 else 0
                     dcerpc   = payload[data_off:data_off + data_cnt]
                     trace(client_ip, 'smb1_pipe_write', fid=fid, data_len=len(dcerpc))
-                    pipe_fids[fid]['pending'] = _handle_dcerpc(dcerpc, client_ip,
-                                                               user=user, smb_version='SMB1',
-                                                               smb_domain=domain, smb_host=host)
+                    pipe_fids[fid]['pending'] = _handle_dcerpc_multi(dcerpc, client_ip,
+                                                                    user=user, smb_version='SMB1',
+                                                                    smb_domain=domain, smb_host=host)
                     # Acknowledge the write
                     ack_body = (struct.pack('<B', 6)        # WC=6
                                 + struct.pack('<B', 0xFF)   # AndXCmd=none
@@ -2048,6 +2210,32 @@ def handle_smb1(client_sock, client_ip, first_payload):
                 pipe_fids.pop(fid, None)
                 trace(client_ip, 'smb1_pipe_close', fid=fid)
                 send_nbss(client_sock, build_smb1_close_response(hdr, uid, tid))
+            elif cmd == SMB1_COM_TRANSACTION:
+                # Direct named-pipe transact: DCERPC bundled in one request/response.
+                # Scanners that skip NT_CREATE_ANDX use this path to call NetrShareEnum.
+                pipe_name, dcerpc = _smb1_parse_transaction(payload, flags2)
+                trace(client_ip, 'smb1_transaction', pipe=pipe_name,
+                      data_len=len(dcerpc) if dcerpc else 0)
+                rpc_resp = None
+                if pipe_name == 'SRVSVC' and dcerpc:
+                    rpc_resp = _handle_dcerpc_multi(dcerpc, client_ip, user=user,
+                                                   smb_version='SMB1',
+                                                   smb_domain=domain, smb_host=host)
+                if rpc_resp:
+                    send_nbss(client_sock, build_smb1_transaction_response(
+                        hdr, uid, tid, flags2, rpc_resp))
+                elif not pipe_name:
+                    # Empty pipe name after stripping '\PIPE\' — Samba returns
+                    # STATUS_INVALID_PARAMETER (setup_count check fails on empty name)
+                    send_nbss(client_sock, build_smb1_error_response(
+                        hdr, uid, tid, STATUS_INVALID_PARAMETER, cmd))
+                elif pipe_name != 'SRVSVC':
+                    # Non-empty but unrecognised pipe name → STATUS_OBJECT_NAME_NOT_FOUND
+                    send_nbss(client_sock, build_smb1_error_response(
+                        hdr, uid, tid, STATUS_OBJECT_NAME_NOT_FOUND, cmd))
+                else:
+                    send_nbss(client_sock, build_smb1_error_response(
+                        hdr, uid, tid, STATUS_NOT_SUPPORTED, cmd))
             else:
                 trace(client_ip, 'smb1_ipc_stub', cmd=hex(cmd))
                 send_nbss(client_sock, build_smb1_error_response(
@@ -2181,6 +2369,10 @@ def handle_smb1(client_sock, client_ip, first_payload):
             trace(client_ip, 'smb1_unexpected_cmd',
                   command=hex(cmd), setup_round=setup_round)
             break
+
+    if not got_auth and should_emit(client_ip, None, None, None, 'SMB1', None):
+        _emit_knock(client_ip, None, None, 'SMB1', None, None,
+                    smb_action='PROBE', trace_stage='knock_emitted_probe')
 
 
 # ---------------------------------------------------------------------------

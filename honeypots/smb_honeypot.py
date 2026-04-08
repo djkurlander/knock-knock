@@ -1150,7 +1150,7 @@ def _smb2_post_negotiate(client_sock, client_ip, smb_version):
     ipc_tree_ids = set() # TreeIds for IPC$ or other non-decoy shares
     # open_files: {(persistent, volatile): {'share': str, 'filename': str|None, 'listed': bool}}
     open_files   = {}
-    # pipe_fids: {(persistent, volatile): {'pending': bytes|None}} for \\PIPE\\srvsvc handles
+    # pipe_fids: {(persistent, volatile): {'pending': bytes|None, 'pipe': str}} for IPC named pipe handles
     pipe_fids    = {}
     next_fid     = 1     # monotonic counter for allocating unique FileId values
     got_auth     = False
@@ -2113,7 +2113,7 @@ def handle_smb1(client_sock, client_ip, first_payload):
     decoy_trees  = {}    # {tid: share_name_upper}
     ipc_tree_ids = set() # TIDs for IPC$ or other non-decoy shares
     open_files   = {}    # {fid(int): {'share': str, 'filename': str|None}}
-    pipe_fids    = {}    # {fid(int): {'pending': bytes|None}} for \\PIPE\\srvsvc handles
+    pipe_fids    = {}    # {fid(int): {'pending': bytes|None, 'pipe': str}} for IPC named pipe handles
     next_fid     = 1
     got_auth     = False
 

@@ -877,9 +877,9 @@ def _dcerpc_hdr(pdu_type, call_id, body_len, flags=0x03):
     )
 
 
-def _dcerpc_bind_ack(call_id, ctx_id=0):
-    """DCERPC BIND_ACK accepting the SRVSVC interface with NDR transfer syntax."""
-    sec_addr_str = b'\\PIPE\\srvsvc\x00'  # 13 bytes (null-terminated ASCII path)
+def _dcerpc_bind_ack(call_id, ctx_id=0, pipe_name='srvsvc'):
+    """DCERPC BIND_ACK accepting the named pipe interface with NDR transfer syntax."""
+    sec_addr_str = f'\\PIPE\\{pipe_name.lower()}\x00'.encode('ascii')
     body_pre = (
         struct.pack('<HHI', 4280, 4280, 1)       # max_xmit, max_recv, assoc_group_id
         + struct.pack('<H', len(sec_addr_str))    # sec_addr length
@@ -977,7 +977,7 @@ def _parse_netr_share_enum_level(stub):
 
 
 def _handle_dcerpc_multi(data, client_ip, user=None, smb_version=None,
-                         smb_domain=None, smb_host=None):
+                         smb_domain=None, smb_host=None, pipe_name='SRVSVC'):
     """
     Handle one or more concatenated DCERPC PDUs in a single buffer.
     Walks the buffer using frag_length (at offset 8 in each PDU header),
@@ -994,7 +994,8 @@ def _handle_dcerpc_multi(data, client_ip, user=None, smb_version=None,
             break
         pdu  = data[offset:offset + frag_length]
         resp = _handle_dcerpc(pdu, client_ip, user=user, smb_version=smb_version,
-                              smb_domain=smb_domain, smb_host=smb_host)
+                              smb_domain=smb_domain, smb_host=smb_host,
+                              pipe_name=pipe_name)
         if resp:
             responses.append(resp)
         offset += frag_length
@@ -1002,12 +1003,12 @@ def _handle_dcerpc_multi(data, client_ip, user=None, smb_version=None,
 
 
 def _handle_dcerpc(data, client_ip, user=None, smb_version=None,
-                   smb_domain=None, smb_host=None):
+                   smb_domain=None, smb_host=None, pipe_name='SRVSVC'):
     """
     Parse an incoming DCERPC PDU and return the response bytes, or None if unhandled.
-    BIND → BIND_ACK.  REQUEST opnum 15 (NetrShareEnum) level 1 → share list response.
-    NetrShareEnum always emits a knock (any level, even unsupported ones).
-    Other opnums and levels are traced and return None (caller sends NOT_SUPPORTED).
+    BIND → BIND_ACK (sec_addr reflects the actual pipe).
+    For SRVSVC: REQUEST opnum 15 (NetrShareEnum) → share list response.
+    For other known pipes: REQUEST → DCERPC FAULT (nca_s_op_rng_error).
     """
     if len(data) < 16:
         return None
@@ -1016,8 +1017,8 @@ def _handle_dcerpc(data, client_ip, user=None, smb_version=None,
 
     if pdu_type == _DCERPC_BIND:
         ctx_id = struct.unpack_from('<H', data, 28)[0] if len(data) >= 30 else 0
-        trace(client_ip, 'srvsvc_bind', call_id=call_id, ctx_id=ctx_id)
-        return _dcerpc_bind_ack(call_id, ctx_id)
+        trace(client_ip, 'dcerpc_bind', pipe=pipe_name, call_id=call_id, ctx_id=ctx_id)
+        return _dcerpc_bind_ack(call_id, ctx_id, pipe_name=pipe_name)
 
     if pdu_type == _DCERPC_REQUEST:
         if len(data) < 24:
@@ -1025,20 +1026,23 @@ def _handle_dcerpc(data, client_ip, user=None, smb_version=None,
         ctx_id = struct.unpack_from('<H', data, 20)[0]
         opnum  = struct.unpack_from('<H', data, 22)[0]
         stub   = data[24:]
-        if opnum == _SRVSVC_NETR_SHARE_ENUM:
-            level = _parse_netr_share_enum_level(stub)
-            trace(client_ip, 'srvsvc_netr_share_enum', call_id=call_id, level=level)
-            if level == 1:
-                shares = [('IPC$', 3, 'Remote IPC')] + [(name, 0, '') for name in _DECOYS]
-                share_names = ','.join(name for name, _, _ in shares if name != 'IPC$')
-                _emit_knock(client_ip, user, share_names, smb_version, smb_domain, smb_host,
+        if pipe_name == 'SRVSVC':
+            if opnum == _SRVSVC_NETR_SHARE_ENUM:
+                level = _parse_netr_share_enum_level(stub)
+                trace(client_ip, 'srvsvc_netr_share_enum', call_id=call_id, level=level)
+                if level == 1:
+                    shares = [('IPC$', 3, 'Remote IPC')] + [(name, 0, '') for name in _DECOYS]
+                    share_names = ','.join(name for name, _, _ in shares if name != 'IPC$')
+                    _emit_knock(client_ip, user, share_names, smb_version, smb_domain, smb_host,
+                                smb_action='ENUM', trace_stage='knock_emitted_enum')
+                    return _srvsvc_netr_share_enum_response(call_id, ctx_id, shares)
+                _emit_knock(client_ip, user, None, smb_version, smb_domain, smb_host,
                             smb_action='ENUM', trace_stage='knock_emitted_enum')
-                return _srvsvc_netr_share_enum_response(call_id, ctx_id, shares)
-            _emit_knock(client_ip, user, None, smb_version, smb_domain, smb_host,
-                        smb_action='ENUM', trace_stage='knock_emitted_enum')
-            trace(client_ip, 'srvsvc_unsupported_level', opnum=opnum, level=level)
-            return None
-        trace(client_ip, 'srvsvc_unsupported_opnum', opnum=opnum)
+                trace(client_ip, 'srvsvc_unsupported_level', opnum=opnum, level=level)
+                return _dcerpc_fault(call_id, ctx_id)
+            trace(client_ip, 'srvsvc_unsupported_opnum', opnum=opnum)
+        else:
+            trace(client_ip, 'dcerpc_stub_request', pipe=pipe_name, opnum=opnum)
         return _dcerpc_fault(call_id, ctx_id)
 
     return None
@@ -1238,7 +1242,7 @@ def _smb2_post_negotiate(client_sock, client_ip, smb_version):
                 pipe_name = clean.split('\\')[-1].upper()
                 if pipe_name in _KNOWN_PIPES:
                     fid_p = fid_v = next_fid; next_fid += 1
-                    pipe_fids[(fid_p, fid_v)] = {'pending': None}
+                    pipe_fids[(fid_p, fid_v)] = {'pending': None, 'pipe': pipe_name}
                     trace(client_ip, 'pipe_open', pipe=pipe_name, fid=fid_p)
                     send_nbss(client_sock, build_smb2_create_response(
                         hdr, session_id, tree_id, fid_p, fid_v, False))
@@ -1300,7 +1304,8 @@ def _smb2_post_negotiate(client_sock, client_ip, smb_version):
                       fid=fid_pair[0], data_len=len(dcerpc))
                 rpc_resp = _handle_dcerpc_multi(dcerpc, client_ip,
                                                user=user, smb_version=smb_version,
-                                               smb_domain=domain, smb_host=host)
+                                               smb_domain=domain, smb_host=host,
+                                               pipe_name=pipe_fids[fid_pair].get('pipe', 'SRVSVC'))
                 if rpc_resp:
                     send_nbss(client_sock, build_smb2_ioctl_pipe_response(
                         hdr, session_id, hdr['tree_id'], ctl_code, fid_pair, rpc_resp))
@@ -1374,7 +1379,8 @@ def _smb2_post_negotiate(client_sock, client_ip, smb_version):
                       fid=fid_pair[0], data_len=len(dcerpc))
                 pipe_fids[fid_pair]['pending'] = _handle_dcerpc_multi(
                     dcerpc, client_ip, user=user, smb_version=smb_version,
-                    smb_domain=domain, smb_host=host)
+                    smb_domain=domain, smb_host=host,
+                    pipe_name=pipe_fids[fid_pair].get('pipe', 'SRVSVC'))
                 send_nbss(client_sock, build_smb2_write_response(
                     hdr, session_id, tree_id, data_length))
             elif tree_id in ipc_tree_ids:
@@ -2193,7 +2199,7 @@ def handle_smb1(client_sock, client_ip, first_payload):
                 pipe_name = (name or '').split('\\')[-1].upper()
                 if pipe_name in _KNOWN_PIPES:
                     fid = next_fid; next_fid += 1
-                    pipe_fids[fid] = {'pending': None}
+                    pipe_fids[fid] = {'pending': None, 'pipe': pipe_name}
                     trace(client_ip, 'pipe_open', pipe=pipe_name, fid=fid)
                     send_nbss(client_sock, build_smb1_nt_create_response(
                         hdr, uid, tid, fid, False, 0))
@@ -2213,7 +2219,8 @@ def handle_smb1(client_sock, client_ip, first_payload):
                     trace(client_ip, 'smb1_pipe_write', fid=fid, data_len=len(dcerpc))
                     pipe_fids[fid]['pending'] = _handle_dcerpc_multi(dcerpc, client_ip,
                                                                     user=user, smb_version='SMB1',
-                                                                    smb_domain=domain, smb_host=host)
+                                                                    smb_domain=domain, smb_host=host,
+                                                                    pipe_name=pipe_fids[fid].get('pipe', 'SRVSVC'))
                     # Acknowledge the write
                     ack_body = (struct.pack('<B', 6)        # WC=6
                                 + struct.pack('<B', 0xFF)   # AndXCmd=none
@@ -2258,7 +2265,8 @@ def handle_smb1(client_sock, client_ip, first_payload):
                 if pipe_name in _KNOWN_PIPES and dcerpc:
                     rpc_resp = _handle_dcerpc_multi(dcerpc, client_ip, user=user,
                                                    smb_version='SMB1',
-                                                   smb_domain=domain, smb_host=host)
+                                                   smb_domain=domain, smb_host=host,
+                                                   pipe_name=pipe_name)
                 if rpc_resp:
                     send_nbss(client_sock, build_smb1_transaction_response(
                         hdr, uid, tid, flags2, rpc_resp))

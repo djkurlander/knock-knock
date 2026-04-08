@@ -1001,8 +1001,8 @@ def _handle_dcerpc(data, client_ip, user=None, smb_version=None,
             level = _parse_netr_share_enum_level(stub)
             trace(client_ip, 'srvsvc_netr_share_enum', call_id=call_id, level=level)
             if level == 1:
-                shares = [(name, 0, '') for name in _DECOYS]
-                share_names = ','.join(name for name, _, _ in shares)
+                shares = [('IPC$', 3, 'Remote IPC')] + [(name, 0, '') for name in _DECOYS]
+                share_names = ','.join(name for name, _, _ in shares if name != 'IPC$')
                 _emit_knock(client_ip, user, share_names, smb_version, smb_domain, smb_host,
                             smb_action='ENUM', trace_stage='knock_emitted_enum')
                 return _srvsvc_netr_share_enum_response(call_id, ctx_id, shares)

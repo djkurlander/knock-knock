@@ -841,8 +841,23 @@ _DCERPC_BIND            = 0x0B
 _DCERPC_BIND_ACK        = 0x0C
 _DCERPC_REQUEST         = 0x00
 _DCERPC_RESPONSE        = 0x02
+_DCERPC_FAULT           = 0x03
 _SRVSVC_NETR_SHARE_ENUM = 15         # opnum for NetrShareEnum
 _FSCTL_PIPE_TRANSCEIVE  = 0x0011C017 # SMB2 IOCTL code for named-pipe transact
+
+# Common IPC named pipes accepted by the honeypot.
+# SRVSVC is fully handled (NetrShareEnum). All others accept BIND and return
+# a DCERPC FAULT for any REQUEST — realistic enough to avoid honeypot fingerprinting.
+_KNOWN_PIPES = {
+    'SRVSVC',    # Server Service — share enumeration (fully handled)
+    'WKSSVC',    # Workstation Service — workstation info
+    'SAMR',      # Security Account Manager — user enumeration
+    'LSARPC',    # Local Security Authority — policy/SID lookups
+    'NETLOGON',  # Net Logon — domain auth
+    'WINREG',    # Remote Registry
+    'SVCCTL',    # Service Control Manager
+    'EVENTLOG',  # Event Log
+}
 
 # NDR transfer syntax: 8a885d04-1ceb-11c9-9fe8-08002b104860 v2 (little-endian)
 _NDR_TRANSFER_SYNTAX = (
@@ -879,6 +894,17 @@ def _dcerpc_bind_ack(call_id, ctx_id=0):
     )
     body = body_pre + b'\x00' * pad_len + results
     return _dcerpc_hdr(_DCERPC_BIND_ACK, call_id, len(body)) + body
+
+
+def _dcerpc_fault(call_id, ctx_id=0, fault_code=0x1c010002):
+    """DCERPC FAULT PDU — nca_s_op_rng_error (unknown opnum) by default."""
+    body = (
+        struct.pack('<I', 0)           # alloc_hint
+        + struct.pack('<H', ctx_id)    # p_cont_id
+        + struct.pack('<H', 0)         # cancel_count / reserved
+        + struct.pack('<I', fault_code)  # status: nca_s_op_rng_error
+    )
+    return _dcerpc_hdr(_DCERPC_FAULT, call_id, len(body)) + body
 
 
 def _ndr_wstring(s):
@@ -1013,7 +1039,7 @@ def _handle_dcerpc(data, client_ip, user=None, smb_version=None,
             trace(client_ip, 'srvsvc_unsupported_level', opnum=opnum, level=level)
             return None
         trace(client_ip, 'srvsvc_unsupported_opnum', opnum=opnum)
-        return None
+        return _dcerpc_fault(call_id, ctx_id)
 
     return None
 
@@ -1208,12 +1234,12 @@ def _smb2_post_negotiate(client_sock, client_ip, smb_version):
             name    = _extract_name_smb2_create(payload)
             clean   = (name or '').lstrip('\\').strip()
             if tree_id in ipc_tree_ids:
-                # Only service the srvsvc named pipe; reject everything else on IPC$
+                # Accept any known IPC named pipe; reject everything else on IPC$
                 pipe_name = clean.split('\\')[-1].upper()
-                if pipe_name == 'SRVSVC':
+                if pipe_name in _KNOWN_PIPES:
                     fid_p = fid_v = next_fid; next_fid += 1
                     pipe_fids[(fid_p, fid_v)] = {'pending': None}
-                    trace(client_ip, 'srvsvc_pipe_open', fid=fid_p)
+                    trace(client_ip, 'pipe_open', pipe=pipe_name, fid=fid_p)
                     send_nbss(client_sock, build_smb2_create_response(
                         hdr, session_id, tree_id, fid_p, fid_v, False))
                 else:
@@ -2162,13 +2188,13 @@ def handle_smb1(client_sock, client_ip, first_payload):
         elif hdr['tid'] in ipc_tree_ids:
             tid = hdr['tid']
             if cmd == SMB1_COM_NT_CREATE_ANDX:
-                # Open \\PIPE\\srvsvc; reject everything else on IPC$
+                # Accept any known IPC named pipe; reject everything else on IPC$
                 name      = _smb1_parse_nt_create(payload, flags2)
                 pipe_name = (name or '').split('\\')[-1].upper()
-                if pipe_name == 'SRVSVC':
+                if pipe_name in _KNOWN_PIPES:
                     fid = next_fid; next_fid += 1
                     pipe_fids[fid] = {'pending': None}
-                    trace(client_ip, 'srvsvc_pipe_open', fid=fid)
+                    trace(client_ip, 'pipe_open', pipe=pipe_name, fid=fid)
                     send_nbss(client_sock, build_smb1_nt_create_response(
                         hdr, uid, tid, fid, False, 0))
                 else:
@@ -2229,7 +2255,7 @@ def handle_smb1(client_sock, client_ip, first_payload):
                 trace(client_ip, 'smb1_transaction', pipe=pipe_name,
                       data_len=len(dcerpc) if dcerpc else 0)
                 rpc_resp = None
-                if pipe_name == 'SRVSVC' and dcerpc:
+                if pipe_name in _KNOWN_PIPES and dcerpc:
                     rpc_resp = _handle_dcerpc_multi(dcerpc, client_ip, user=user,
                                                    smb_version='SMB1',
                                                    smb_domain=domain, smb_host=host)
@@ -2241,8 +2267,8 @@ def handle_smb1(client_sock, client_ip, first_payload):
                     # STATUS_INVALID_PARAMETER (setup_count check fails on empty name)
                     send_nbss(client_sock, build_smb1_error_response(
                         hdr, uid, tid, STATUS_INVALID_PARAMETER, cmd))
-                elif pipe_name != 'SRVSVC':
-                    # Non-empty but unrecognised pipe name → STATUS_OBJECT_NAME_NOT_FOUND
+                elif pipe_name not in _KNOWN_PIPES:
+                    # Unrecognised pipe name → STATUS_OBJECT_NAME_NOT_FOUND
                     send_nbss(client_sock, build_smb1_error_response(
                         hdr, uid, tid, STATUS_OBJECT_NAME_NOT_FOUND, cmd))
                 else:

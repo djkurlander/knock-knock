@@ -1287,6 +1287,90 @@ def _smb2_post_negotiate(client_sock, client_ip, smb_version):
                 send_nbss(client_sock, build_smb2_error_response(
                     hdr, session_id, hdr['tree_id'], STATUS_NOT_SUPPORTED, SMB2_IOCTL))
 
+        # ── READ: pipe FID check must come before ipc_stub ───────────────────
+        elif cmd == SMB2_READ:
+            tree_id              = hdr['tree_id']
+            offset, length, fid_pair = _parse_read_params(payload)
+            # ── Pipe read (WRITE+READ DCERPC path) ───────────────────────────
+            if fid_pair in pipe_fids:
+                rpc_resp = pipe_fids[fid_pair]['pending']
+                if rpc_resp:
+                    pipe_fids[fid_pair]['pending'] = None
+                    trace(client_ip, 'smb2_pipe_read',
+                          fid=fid_pair[0], data_len=len(rpc_resp))
+                    send_nbss(client_sock, build_smb2_read_response(
+                        hdr, session_id, tree_id, rpc_resp))
+                else:
+                    send_nbss(client_sock, build_smb2_error_response(
+                        hdr, session_id, tree_id, STATUS_END_OF_FILE, SMB2_READ))
+                continue
+            # ── Decoy file read ───────────────────────────────────────────────
+            share_upper = decoy_trees.get(tree_id)
+            if share_upper is None:
+                trace(client_ip, 'smb2_read_denied', tree_id=hex(tree_id))
+                send_nbss(client_sock, build_smb2_error_response(
+                    hdr, session_id, tree_id, STATUS_ACCESS_DENIED, SMB2_READ))
+                continue
+            offset, length, fid_pair = _parse_read_params(payload)
+            fh     = open_files.get(fid_pair)
+            is_dir = fh is None or fh['filename'] is None
+            trace(client_ip, 'smb2_read', offset=offset, length=length, is_dir=is_dir)
+            if is_dir:
+                send_nbss(client_sock, build_smb2_error_response(
+                    hdr, session_id, tree_id, STATUS_ACCESS_DENIED, SMB2_READ))
+            else:
+                content = _DECOYS[fh['share']].get(fh['filename'], b'')
+                chunk   = content[offset: offset + length]
+                if not chunk:
+                    trace(client_ip, 'smb2_read_eof', file=fh['filename'], offset=offset)
+                    send_nbss(client_sock, build_smb2_error_response(
+                        hdr, session_id, tree_id, STATUS_END_OF_FILE, SMB2_READ))
+                else:
+                    # Always emit — reading a bait file is a high-value event
+                    _emit_knock(client_ip, user, fh['share'], smb_version, domain, host,
+                                smb_file=fh['filename'], smb_action='READ',
+                                trace_stage='knock_emitted_read')
+                    trace(client_ip, 'smb2_read_ok',
+                          file=fh['filename'], offset=offset, bytes_returned=len(chunk))
+                    send_nbss(client_sock, build_smb2_read_response(
+                        hdr, session_id, tree_id, chunk))
+
+        # ── WRITE: pipe FID check must come before ipc_stub ──────────────────
+        elif cmd == SMB2_WRITE:
+            tree_id  = hdr['tree_id']
+            fid_pair = _parse_file_id_at(payload, 80) if len(payload) >= 96 else (0, 0)
+            # ── Pipe write (WRITE+READ DCERPC path) ──────────────────────────
+            if fid_pair in pipe_fids:
+                data_offset = struct.unpack_from('<H', payload, 66)[0] if len(payload) >= 68 else 0
+                data_length = struct.unpack_from('<I', payload, 68)[0] if len(payload) >= 72 else 0
+                dcerpc = payload[data_offset:data_offset + data_length] if data_offset else b''
+                trace(client_ip, 'smb2_pipe_write',
+                      fid=fid_pair[0], data_len=len(dcerpc))
+                pipe_fids[fid_pair]['pending'] = _handle_dcerpc_multi(
+                    dcerpc, client_ip, user=user, smb_version=smb_version,
+                    smb_domain=domain, smb_host=host)
+                send_nbss(client_sock, build_smb2_write_response(
+                    hdr, session_id, tree_id, data_length))
+            elif tree_id in ipc_tree_ids:
+                # Non-pipe write on IPC$ — stub, no knock
+                trace(client_ip, 'smb2_ipc_stub', cmd=hex(cmd), tree_id=hex(tree_id))
+                send_nbss(client_sock, build_smb2_error_response(
+                    hdr, session_id, tree_id, STATUS_NOT_SUPPORTED, cmd))
+            else:
+                # ── Decoy file write (deny + emit) ───────────────────────────
+                share_upper = decoy_trees.get(tree_id)
+                fh          = open_files.get(fid_pair)
+                fname       = fh['filename'] if fh else None
+                write_share = share_upper or (fh['share'] if fh else None)
+                trace(client_ip, 'smb2_write',
+                      tree_id=hex(tree_id), fid=fid_pair[0],
+                      file=fname, on_decoy=share_upper is not None)
+                _emit_knock(client_ip, user, write_share, smb_version, domain, host,
+                            smb_file=fname, smb_action='WRITE',
+                            trace_stage='knock_emitted_write')
+                send_nbss(client_sock, build_smb2_error_response(
+                    hdr, session_id, tree_id, STATUS_ACCESS_DENIED, SMB2_WRITE))
+
         # ── Stub: remaining commands on IPC$ or other non-decoy trees ────────
         elif hdr['tree_id'] in ipc_tree_ids:
             trace(client_ip, 'smb2_ipc_stub', cmd=hex(cmd), tree_id=hex(hdr['tree_id']))
@@ -1341,83 +1425,6 @@ def _smb2_post_negotiate(client_sock, client_ip, smb_version):
             send_nbss(client_sock, build_smb2_query_info_response(
                 hdr, session_id, tree_id, info_type, file_info_class, is_dir,
                 file_size=fsize, share_label=share_upper))
-
-        elif cmd == SMB2_READ:
-            tree_id              = hdr['tree_id']
-            offset, length, fid_pair = _parse_read_params(payload)
-            # ── Pipe read (WRITE+READ DCERPC path) ───────────────────────────
-            if fid_pair in pipe_fids:
-                rpc_resp = pipe_fids[fid_pair]['pending']
-                if rpc_resp:
-                    pipe_fids[fid_pair]['pending'] = None
-                    trace(client_ip, 'smb2_pipe_read',
-                          fid=fid_pair[0], data_len=len(rpc_resp))
-                    send_nbss(client_sock, build_smb2_read_response(
-                        hdr, session_id, tree_id, rpc_resp))
-                else:
-                    send_nbss(client_sock, build_smb2_error_response(
-                        hdr, session_id, tree_id, STATUS_END_OF_FILE, SMB2_READ))
-                continue
-            # ── Decoy file read ───────────────────────────────────────────────
-            share_upper = decoy_trees.get(tree_id)
-            if share_upper is None:
-                trace(client_ip, 'smb2_read_denied', tree_id=hex(tree_id))
-                send_nbss(client_sock, build_smb2_error_response(
-                    hdr, session_id, tree_id, STATUS_ACCESS_DENIED, SMB2_READ))
-                continue
-            offset, length, fid_pair = _parse_read_params(payload)
-            fh     = open_files.get(fid_pair)
-            is_dir = fh is None or fh['filename'] is None
-            trace(client_ip, 'smb2_read', offset=offset, length=length, is_dir=is_dir)
-            if is_dir:
-                send_nbss(client_sock, build_smb2_error_response(
-                    hdr, session_id, tree_id, STATUS_ACCESS_DENIED, SMB2_READ))
-            else:
-                content = _DECOYS[fh['share']].get(fh['filename'], b'')
-                chunk   = content[offset: offset + length]
-                if not chunk:
-                    trace(client_ip, 'smb2_read_eof', file=fh['filename'], offset=offset)
-                    send_nbss(client_sock, build_smb2_error_response(
-                        hdr, session_id, tree_id, STATUS_END_OF_FILE, SMB2_READ))
-                else:
-                    # Always emit — reading a bait file is a high-value event
-                    _emit_knock(client_ip, user, fh['share'], smb_version, domain, host,
-                                smb_file=fh['filename'], smb_action='READ',
-                                trace_stage='knock_emitted_read')
-                    trace(client_ip, 'smb2_read_ok',
-                          file=fh['filename'], offset=offset, bytes_returned=len(chunk))
-                    send_nbss(client_sock, build_smb2_read_response(
-                        hdr, session_id, tree_id, chunk))
-
-        elif cmd == SMB2_WRITE:
-            tree_id  = hdr['tree_id']
-            fid_pair = _parse_file_id_at(payload, 80) if len(payload) >= 96 else (0, 0)
-            # ── Pipe write (WRITE+READ DCERPC path) ──────────────────────────
-            if fid_pair in pipe_fids:
-                data_offset = struct.unpack_from('<H', payload, 66)[0] if len(payload) >= 68 else 0
-                data_length = struct.unpack_from('<I', payload, 68)[0] if len(payload) >= 72 else 0
-                dcerpc = payload[data_offset:data_offset + data_length] if data_offset else b''
-                trace(client_ip, 'smb2_pipe_write',
-                      fid=fid_pair[0], data_len=len(dcerpc))
-                pipe_fids[fid_pair]['pending'] = _handle_dcerpc_multi(
-                    dcerpc, client_ip, user=user, smb_version=smb_version,
-                    smb_domain=domain, smb_host=host)
-                send_nbss(client_sock, build_smb2_write_response(
-                    hdr, session_id, tree_id, data_length))
-            else:
-                # ── Decoy file write (deny + emit) ───────────────────────────
-                share_upper = decoy_trees.get(tree_id)
-                fh          = open_files.get(fid_pair)
-                fname       = fh['filename'] if fh else None
-                write_share = share_upper or (fh['share'] if fh else None)
-                trace(client_ip, 'smb2_write',
-                      tree_id=hex(tree_id), fid=fid_pair[0],
-                      file=fname, on_decoy=share_upper is not None)
-                _emit_knock(client_ip, user, write_share, smb_version, domain, host,
-                            smb_file=fname, smb_action='WRITE',
-                            trace_stage='knock_emitted_write')
-                send_nbss(client_sock, build_smb2_error_response(
-                    hdr, session_id, tree_id, STATUS_ACCESS_DENIED, SMB2_WRITE))
 
         elif cmd == SMB2_CLOSE:
             fid_pair = _parse_file_id_at(payload, 72)   # CLOSE: FileId at body+8 = abs 72

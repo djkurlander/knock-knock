@@ -1437,6 +1437,8 @@ def _smb2_post_negotiate(client_sock, client_ip, smb_version):
                 file_list = [(fn, len(content)) for fn, content in _DECOYS[share_upper].items()]
                 trace(client_ip, 'smb2_query_dir_result',
                       files=[fn for fn, _ in file_list])
+                _emit_knock(client_ip, user, share_upper, smb_version, domain, host,
+                            smb_action='DIR', trace_stage='knock_emitted_dir')
                 send_nbss(client_sock, build_smb2_query_directory_response(
                     hdr, session_id, tree_id, file_list))
 

@@ -55,10 +55,14 @@ _DEFAULT_DECOY_CONTENT = (
 
 
 def _load_decoys() -> dict:
-    """Load decoy shares from SMB_DECOY_DIR (e.g. honeypots/decoys/PUBLIC/passwords.txt).
-    Defaults to a 'decoys/' folder next to this script if env var is unset.
-    Falls back to hardcoded default if the directory is missing or empty.
-    Returns dict[share_name_upper -> dict[filename -> bytes]]."""
+    """Load decoy shares from SMB_DECOY_DIR recursively.
+    Returns dict[share_name_upper -> flat_tree] where flat_tree is a dict
+    mapping slash-separated relative paths to their content:
+      'passwords.txt'      -> bytes   (file)
+      'private'            -> None    (directory)
+      'private/keys.txt'   -> bytes   (file in subdir)
+    Root directory is implicit (always present, not stored as a key).
+    """
     _script_dir = os.path.dirname(os.path.abspath(__file__))
     decoy_dir = (os.environ.get('SMB_DECOY_DIR', '').strip()
                  or os.path.join(_script_dir, 'decoys'))
@@ -69,16 +73,23 @@ def _load_decoys() -> dict:
                 if not share_entry.is_dir():
                     continue
                 share_name = share_entry.name.upper()
-                files: dict = {}
-                for file_entry in os.scandir(share_entry.path):
-                    if file_entry.is_file():
+                tree: dict = {}
+                share_root = share_entry.path
+                for dirpath, _dirnames, filenames in os.walk(share_root):
+                    rel_dir = os.path.relpath(dirpath, share_root).replace(os.sep, '/')
+                    if rel_dir == '.':
+                        rel_dir = ''
+                    if rel_dir:
+                        tree[rel_dir] = None          # explicit subdir entry
+                    for fname in filenames:
+                        rel_file = (rel_dir + '/' + fname) if rel_dir else fname
                         try:
-                            with open(file_entry.path, 'rb') as fh:
-                                files[file_entry.name] = fh.read()
+                            with open(os.path.join(dirpath, fname), 'rb') as fh:
+                                tree[rel_file] = fh.read()
                         except Exception:
                             pass
-                if files:
-                    decoys[share_name] = files
+                if tree:
+                    decoys[share_name] = tree
         except Exception:
             pass
     if not decoys:
@@ -86,7 +97,44 @@ def _load_decoys() -> dict:
     return decoys
 
 
-_DECOYS: dict = _load_decoys()  # share_name_upper -> {filename -> bytes}
+def _list_dir(tree: dict, path: str) -> list:
+    """List immediate children of `path` ('' = root) in a flat tree.
+    Returns list of (name, size, is_dir).
+    """
+    prefix = path + '/' if path else ''
+    seen: set = set()
+    result = []
+    for k, v in tree.items():
+        if not k.startswith(prefix):
+            continue
+        rest = k[len(prefix):]
+        if not rest or '/' in rest:
+            continue                   # skip exact-match and deeper entries
+        if rest not in seen:
+            seen.add(rest)
+            if v is None:
+                result.append((rest, 0, True))
+            else:
+                result.append((rest, len(v), False))
+    return result
+
+
+def _resolve_path(tree: dict, path: str):
+    """Resolve a slash-separated path in a flat tree.
+    Returns 'dir', 'file', or None (not found).
+    """
+    if not path:
+        return 'dir'
+    if path in tree:
+        return 'dir' if tree[path] is None else 'file'
+    # implicit dir: any key is a descendant
+    prefix = path + '/'
+    if any(k.startswith(prefix) for k in tree):
+        return 'dir'
+    return None
+
+
+_DECOYS: dict = _load_decoys()  # share_name_upper -> flat tree
 
 _MAX_MSG      = 20       # per-connection message cap (prevents runaway state machine)
 _SOCK_TIMEOUT = 15       # seconds per recv
@@ -659,18 +707,19 @@ def build_smb2_create_response(hdr, session_id, tree_id, fid_p, fid_v, is_dir, f
 
 
 def build_smb2_query_directory_response(hdr, session_id, tree_id, files):
-    """Return a fake directory listing for the given list of (filename, size) pairs."""
+    """Return a fake directory listing for the given list of (name, size, is_dir) tuples.
+    Prepends '.' and '..' dot entries; returns STATUS_NO_MORE_FILES for empty listings.
+    """
     if not files:
         return build_smb2_error_response(
             hdr, session_id, tree_id, STATUS_NO_MORE_FILES, SMB2_QUERY_DIRECTORY)
     ft_old = _smb2_filetime(time.time() - 86400 * 30)
     ft_now = _smb2_filetime()
 
-    # FILE_BOTH_DIRECTORY_INFORMATION entries; NextEntryOffset stitched up after.
-    entries = []
-    for fname, size in files:
+    def _make_entry(fname, size, is_dir):
+        attrs = 0x10 if is_dir else 0x20     # DIRECTORY or NORMAL
+        alloc = 0 if is_dir else (size + 4095) & ~4095
         name  = fname.encode('utf-16-le')
-        alloc = (size + 4095) & ~4095
         raw = bytearray(
             struct.pack('<I', 0)             # NextEntryOffset (filled below)
             + struct.pack('<I', 0)           # FileIndex
@@ -680,7 +729,7 @@ def build_smb2_query_directory_response(hdr, session_id, tree_id, files):
             + struct.pack('<Q', ft_old)      # ChangeTime
             + struct.pack('<Q', size)        # EndOfFile
             + struct.pack('<Q', alloc)       # AllocationSize
-            + struct.pack('<I', 0x20)        # FileAttributes = NORMAL
+            + struct.pack('<I', attrs)       # FileAttributes
             + struct.pack('<I', len(name))   # FileNameLength
             + struct.pack('<I', 0)           # EaSize
             + struct.pack('<B', 0)           # ShortNameLength
@@ -690,7 +739,12 @@ def build_smb2_query_directory_response(hdr, session_id, tree_id, files):
         )
         if len(raw) % 8:
             raw += b'\x00' * (8 - len(raw) % 8)
-        entries.append(raw)
+        return raw
+
+    # FILE_BOTH_DIRECTORY_INFORMATION entries; NextEntryOffset stitched up after.
+    entries = [_make_entry('.', 0, True), _make_entry('..', 0, True)]
+    for fname, size, is_dir in files:
+        entries.append(_make_entry(fname, size, is_dir))
 
     # Wire up NextEntryOffset: each points to the next entry; last stays 0.
     for i in range(len(entries) - 1):
@@ -1258,40 +1312,41 @@ def _smb2_post_negotiate(client_sock, client_ip, smb_version):
                 send_nbss(client_sock, build_smb2_error_response(
                     hdr, session_id, tree_id, STATUS_ACCESS_DENIED, SMB2_CREATE))
                 continue
-            share_files = _DECOYS[share_upper]
-            if not clean:
-                # Root directory open
+            share_tree = _DECOYS[share_upper]
+            # Normalize: strip leading backslashes, convert to forward-slash path
+            norm = clean.replace('\\', '/').strip('/')
+            kind = _resolve_path(share_tree, norm)
+            if kind == 'dir':
                 fid_p = fid_v = next_fid; next_fid += 1
-                open_files[(fid_p, fid_v)] = {'share': share_upper, 'filename': None, 'listed': False}
-                trace(client_ip, 'smb2_create', name='', fid=fid_p, is_dir=True)
+                open_files[(fid_p, fid_v)] = {'share': share_upper, 'path': norm,
+                                               'is_dir': True, 'listed': False}
+                trace(client_ip, 'smb2_create', name=norm or '(root)', fid=fid_p, is_dir=True)
                 send_nbss(client_sock, build_smb2_create_response(
                     hdr, session_id, tree_id, fid_p, fid_v, True))
+            elif kind == 'file':
+                fsize = len(share_tree[norm])
+                fid_p = fid_v = next_fid; next_fid += 1
+                open_files[(fid_p, fid_v)] = {'share': share_upper, 'path': norm,
+                                               'is_dir': False, 'listed': False}
+                trace(client_ip, 'smb2_create', name=norm, fid=fid_p, is_dir=False)
+                send_nbss(client_sock, build_smb2_create_response(
+                    hdr, session_id, tree_id, fid_p, fid_v, False, file_size=fsize))
             else:
-                # Case-insensitive filename lookup
-                match = next((fn for fn in share_files if fn.lower() == clean.lower()), None)
-                if match:
-                    fid_p = fid_v = next_fid; next_fid += 1
-                    open_files[(fid_p, fid_v)] = {'share': share_upper, 'filename': match, 'listed': False}
-                    trace(client_ip, 'smb2_create', name=clean, fid=fid_p, is_dir=False)
-                    send_nbss(client_sock, build_smb2_create_response(
-                        hdr, session_id, tree_id, fid_p, fid_v, False,
-                        file_size=len(share_files[match])))
+                # Path not found — check if bot is trying to create a new file
+                disposition = (struct.unpack_from('<I', payload, 100)[0]
+                               if len(payload) >= 104 else _SMB2_CREATE_DISP_FILE_OPEN)
+                if disposition != _SMB2_CREATE_DISP_FILE_OPEN:
+                    # Bot is trying to create/overwrite a new file (ransomware, dropper, etc.)
+                    trace(client_ip, 'smb2_create', name=norm, result='write_denied')
+                    _emit_knock(client_ip, user, share_upper, smb_version, domain, host,
+                                smb_file=norm, smb_action='CREATE',
+                                trace_stage='knock_emitted_create')
+                    send_nbss(client_sock, build_smb2_error_response(
+                        hdr, session_id, tree_id, STATUS_ACCESS_DENIED, SMB2_CREATE))
                 else:
-                    # CreateDisposition at body+36 = payload[100]
-                    disposition = (struct.unpack_from('<I', payload, 100)[0]
-                                   if len(payload) >= 104 else _SMB2_CREATE_DISP_FILE_OPEN)
-                    if disposition != _SMB2_CREATE_DISP_FILE_OPEN:
-                        # Bot is trying to create/overwrite a new file (ransomware, dropper, etc.)
-                        trace(client_ip, 'smb2_create', name=clean, result='write_denied')
-                        _emit_knock(client_ip, user, share_upper, smb_version, domain, host,
-                                    smb_file=clean, smb_action='CREATE',
-                                    trace_stage='knock_emitted_create')
-                        send_nbss(client_sock, build_smb2_error_response(
-                            hdr, session_id, tree_id, STATUS_ACCESS_DENIED, SMB2_CREATE))
-                    else:
-                        trace(client_ip, 'smb2_create', name=clean, result='not_found')
-                        send_nbss(client_sock, build_smb2_error_response(
-                            hdr, session_id, tree_id, STATUS_OBJECT_NAME_NOT_FOUND, SMB2_CREATE))
+                    trace(client_ip, 'smb2_create', name=norm, result='not_found')
+                    send_nbss(client_sock, build_smb2_error_response(
+                        hdr, session_id, tree_id, STATUS_OBJECT_NAME_NOT_FOUND, SMB2_CREATE))
 
         # ── IOCTL ── before IPC$ catch-all so FSCTL_PIPE_TRANSCEIVE works ─────
         elif cmd == SMB2_IOCTL:
@@ -1345,25 +1400,25 @@ def _smb2_post_negotiate(client_sock, client_ip, smb_version):
                 continue
             offset, length, fid_pair = _parse_read_params(payload)
             fh     = open_files.get(fid_pair)
-            is_dir = fh is None or fh['filename'] is None
+            is_dir = fh is None or fh['is_dir']
             trace(client_ip, 'smb2_read', offset=offset, length=length, is_dir=is_dir)
             if is_dir:
                 send_nbss(client_sock, build_smb2_error_response(
                     hdr, session_id, tree_id, STATUS_ACCESS_DENIED, SMB2_READ))
             else:
-                content = _DECOYS[fh['share']].get(fh['filename'], b'')
+                content = _DECOYS[fh['share']].get(fh['path'], b'')
                 chunk   = content[offset: offset + length]
                 if not chunk:
-                    trace(client_ip, 'smb2_read_eof', file=fh['filename'], offset=offset)
+                    trace(client_ip, 'smb2_read_eof', file=fh['path'], offset=offset)
                     send_nbss(client_sock, build_smb2_error_response(
                         hdr, session_id, tree_id, STATUS_END_OF_FILE, SMB2_READ))
                 else:
                     # Always emit — reading a bait file is a high-value event
                     _emit_knock(client_ip, user, fh['share'], smb_version, domain, host,
-                                smb_file=fh['filename'], smb_action='READ',
+                                smb_file=fh['path'], smb_action='READ',
                                 trace_stage='knock_emitted_read')
                     trace(client_ip, 'smb2_read_ok',
-                          file=fh['filename'], offset=offset, bytes_returned=len(chunk))
+                          file=fh['path'], offset=offset, bytes_returned=len(chunk))
                     send_nbss(client_sock, build_smb2_read_response(
                         hdr, session_id, tree_id, chunk))
 
@@ -1393,7 +1448,7 @@ def _smb2_post_negotiate(client_sock, client_ip, smb_version):
                 # ── Decoy file write (deny + emit) ───────────────────────────
                 share_upper = decoy_trees.get(tree_id)
                 fh          = open_files.get(fid_pair)
-                fname       = fh['filename'] if fh else None
+                fname       = fh['path'] if fh else None
                 write_share = share_upper or (fh['share'] if fh else None)
                 trace(client_ip, 'smb2_write',
                       tree_id=hex(tree_id), fid=fid_pair[0],
@@ -1427,20 +1482,24 @@ def _smb2_post_negotiate(client_sock, client_ip, smb_version):
             if restart and fh:
                 fh['listed'] = False
             dir_listed = fh['listed'] if fh else False
-            trace(client_ip, 'smb2_query_dir', listed=dir_listed, flags=hex(flags))
+            dir_path   = fh['path'] if fh else ''
+            trace(client_ip, 'smb2_query_dir', path=dir_path or '(root)',
+                  listed=dir_listed, flags=hex(flags))
             if dir_listed:
                 send_nbss(client_sock, build_smb2_error_response(
                     hdr, session_id, tree_id, STATUS_NO_MORE_FILES, SMB2_QUERY_DIRECTORY))
             else:
                 if fh:
                     fh['listed'] = True
-                file_list = [(fn, len(content)) for fn, content in _DECOYS[share_upper].items()]
+                children  = _list_dir(_DECOYS[share_upper], dir_path)
                 trace(client_ip, 'smb2_query_dir_result',
-                      files=[fn for fn, _ in file_list])
+                      path=dir_path or '(root)',
+                      entries=[(n, 'dir' if d else 'file') for n, _, d in children])
                 _emit_knock(client_ip, user, share_upper, smb_version, domain, host,
+                            smb_file=dir_path or None,
                             smb_action='DIR', trace_stage='knock_emitted_dir')
                 send_nbss(client_sock, build_smb2_query_directory_response(
-                    hdr, session_id, tree_id, file_list))
+                    hdr, session_id, tree_id, children))
 
         elif cmd == SMB2_QUERY_INFO:
             tree_id     = hdr['tree_id']
@@ -1452,11 +1511,11 @@ def _smb2_post_negotiate(client_sock, client_ip, smb_version):
                 continue
             info_type, file_info_class, fid_pair = _parse_query_info_params(payload)
             fh       = open_files.get(fid_pair)
-            is_dir   = fh is None or fh['filename'] is None
-            fsize    = 0 if is_dir else len(_DECOYS[fh['share']].get(fh['filename'], b''))
+            is_dir   = fh is None or fh['is_dir']
+            fsize    = 0 if is_dir else len(_DECOYS[fh['share']].get(fh['path'], b''))
             trace(client_ip, 'smb2_query_info',
                   info_type=info_type, file_info_class=file_info_class,
-                  is_dir=is_dir, file=None if is_dir else fh['filename'])
+                  is_dir=is_dir, file=None if is_dir else fh['path'])
             send_nbss(client_sock, build_smb2_query_info_response(
                 hdr, session_id, tree_id, info_type, file_info_class, is_dir,
                 file_size=fsize, share_label=share_upper))

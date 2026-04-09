@@ -2719,7 +2719,6 @@
                 if (d.smb_action === 'CONNECT' || d.smb_action === 'ENUM') {
                     const shareLabel = d.smb_action === 'ENUM' ? 'shares' : 'share';
                     if (share) line1Parts.push(lbl(shareLabel, share));
-                    if (version) line1Parts.push(lbl('version', version));
                     return line1Parts.map((p, i) => i ? `${sep}${p}` : p).join('');
                 }
 

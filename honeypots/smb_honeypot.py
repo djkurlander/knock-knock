@@ -1085,7 +1085,13 @@ def _handle_dcerpc(data, client_ip, user=None, smb_version=None,
                 level = _parse_netr_share_enum_level(stub)
                 trace(client_ip, 'srvsvc_netr_share_enum', call_id=call_id, level=level)
                 if level == 1:
-                    shares = [('IPC$', 3, 'Remote IPC')] + [(name, 0, '') for name in _DECOYS]
+                    # Share types: IPC$=3 (STYPE_IPC), admin shares ending in $=0x80000000
+                    # (STYPE_SPECIAL), regular disk shares=0 (STYPE_DISKTREE)
+                    _STYPE_SPECIAL = 0x80000000
+                    shares = [('IPC$', 3, 'Remote IPC')] + [
+                        (name, _STYPE_SPECIAL if name.endswith('$') else 0, '')
+                        for name in _DECOYS
+                    ]
                     share_names = ','.join(name for name, _, _ in shares if name != 'IPC$')
                     _emit_knock(client_ip, user, share_names, smb_version, smb_domain, smb_host,
                                 smb_action='ENUM', trace_stage='knock_emitted_enum')

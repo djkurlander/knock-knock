@@ -2706,14 +2706,10 @@
                 if (d.smb_action === 'AUTH') {
                     const u = displayUsername(hasUserField(d) ? d.user : '');
                     line1Parts.push(lbl('user', u));
+                    if (domain)  line1Parts.push(lbl('domain',  domain));
+                    if (host)    line1Parts.push(lbl('host',    host));
                     if (version) line1Parts.push(lbl('version', version));
-                    const line1 = line1Parts.map((p, i) => i ? `${sep}${p}` : p).join('');
-                    // line2: domain + host, only if at least one is non-empty
-                    const line2Parts = [];
-                    if (domain) line2Parts.push(lbl('domain', domain));
-                    if (host)   line2Parts.push(lbl('host',   host));
-                    if (!line2Parts.length) return line1;
-                    return `${line1}<br>${line2Parts.map((p, i) => i ? `${sep}${p}` : p).join('')}`;
+                    return line1Parts.map((p, i) => i ? `${sep}${p}` : p).join('');
                 }
 
                 if (d.smb_action === 'CONNECT' || d.smb_action === 'ENUM') {

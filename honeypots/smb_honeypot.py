@@ -1167,6 +1167,7 @@ def _smb2_post_negotiate(client_sock, client_ip, smb_version):
             break
 
         cmd = hdr['command']
+        trace(client_ip, 'smb2_recv', cmd=hex(cmd), payload_len=len(payload))
 
         # ── SESSION_SETUP ────────────────────────────────────────────────────
         if cmd == SMB2_SESSION_SETUP:
@@ -2130,6 +2131,7 @@ def handle_smb1(client_sock, client_ip, first_payload):
 
         cmd    = hdr['command']
         flags2 = hdr['flags2']
+        trace(client_ip, 'smb1_recv', cmd=hex(cmd), payload_len=len(payload))
 
         # ── SESSION_SETUP ────────────────────────────────────────────────────
         if cmd == SMB1_COM_SESSION_SETUP:

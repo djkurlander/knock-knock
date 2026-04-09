@@ -2685,30 +2685,51 @@
             name: 'smb_username',
             match: (d, proto) => proto === 'SMB',
             render: d => {
-                const L = 'color:var(--ui-label)';
+                const L   = 'color:var(--ui-label)';
                 const sep = `<span style="margin-left:10px;"></span>`;
+                const lbl = (k, v) => `<span style="${L}">${k}:</span> <span>${v}</span>`;
+
                 const action  = escapeHtml(d.smb_action || 'UNKNOWN');
                 const version = d.smb_version ? escapeHtml(d.smb_version) : '';
-                const u       = displayUsername(hasUserField(d) ? d.user : '');
-                const share   = d.smb_share  ? escapeHtml(d.smb_share)  : '';
-                const file    = d.smb_file   ? escapeHtml(d.smb_file)   : '';
-                const domain  = d.smb_domain ? escapeHtml(d.smb_domain) : '';
-                const host    = d.smb_host   ? escapeHtml(d.smb_host)   : '';
+                const share   = d.smb_share   ? escapeHtml(d.smb_share)   : '';
+                const file    = d.smb_file    ? escapeHtml(d.smb_file)    : '';
+                const domain  = d.smb_domain  ? escapeHtml(d.smb_domain)  : '';
+                const host    = d.smb_host    ? escapeHtml(d.smb_host)    : '';
 
-                let line1 = `<span style="${L}">action:</span> <span>${action}</span>`;
-                if (version) line1 += `${sep}<span style="${L}">version:</span> <span>${version}</span>`;
+                // line1 always starts with action:
+                const line1Parts = [lbl('action', action)];
 
-                const line2Parts = [`<span style="${L}">user:</span> <span>${u}</span>`];
-                const shareLabel = d.smb_action === 'ENUM' ? 'shares:' : 'share:';
-                if (share)  line2Parts.push(`<span style="${L}">${shareLabel}</span> <span>${share}</span>`);
-                if (file)   line2Parts.push(`<span style="${L}">file:</span> <span>${file}</span>`);
-                if (domain) line2Parts.push(`<span style="${L}">domain:</span> <span>${domain}</span>`);
-                if (host)   line2Parts.push(`<span style="${L}">host:</span> <span>${host}</span>`);
-                if (d.smb_action === 'PROBE') return line1;
+                if (d.smb_action === 'PROBE') {
+                    return line1Parts.join('');
+                }
 
-                const line2 = line2Parts.map((p, i) => i ? `${sep}${p}` : p).join('');
+                if (d.smb_action === 'AUTH') {
+                    const u = displayUsername(hasUserField(d) ? d.user : '');
+                    line1Parts.push(lbl('user', u));
+                    if (version) line1Parts.push(lbl('version', version));
+                    const line1 = line1Parts.map((p, i) => i ? `${sep}${p}` : p).join('');
+                    // line2: domain + host, only if at least one is non-empty
+                    const line2Parts = [];
+                    if (domain) line2Parts.push(lbl('domain', domain));
+                    if (host)   line2Parts.push(lbl('host',   host));
+                    if (!line2Parts.length) return line1;
+                    return `${line1}<br>${line2Parts.map((p, i) => i ? `${sep}${p}` : p).join('')}`;
+                }
 
-                return `${line1}<br>${line2}`;
+                if (d.smb_action === 'CONNECT' || d.smb_action === 'ENUM') {
+                    const shareLabel = d.smb_action === 'ENUM' ? 'shares' : 'share';
+                    if (share) line1Parts.push(lbl(shareLabel, share));
+                    if (version) line1Parts.push(lbl('version', version));
+                    return line1Parts.map((p, i) => i ? `${sep}${p}` : p).join('');
+                }
+
+                // DIR, READ, WRITE, CREATE — action: share: file: on line1; version on line2
+                if (share) line1Parts.push(lbl('share', share));
+                const fileDisplay = file || '&lt;root&gt;';
+                line1Parts.push(lbl('file', fileDisplay));
+                const line1 = line1Parts.map((p, i) => i ? `${sep}${p}` : p).join('');
+                if (!version) return line1;
+                return `${line1}<br>${lbl('version', version)}`;
             },
         },
         {

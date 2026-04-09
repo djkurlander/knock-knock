@@ -31,7 +31,7 @@ SIP_CONN_TIMEOUT = max(2.0, float(os.environ.get('SIP_CONN_TIMEOUT', '20')))
 TRACE_ENABLED = os.environ.get('SIP_TRACE', '0').lower() not in ('0', 'false', 'no')
 TRACE_IP = os.environ.get('SIP_TRACE_IP', '').strip()
 SIP_AUTH_CHALLENGE_MODE = os.environ.get('SIP_AUTH_CHALLENGE_MODE', 'mixed').strip().lower()
-SIP_INVITE_MODE = os.environ.get('SIP_INVITE_MODE', 'reject').strip().lower()
+SIP_INVITE_MODE = os.environ.get('SIP_INVITE_MODE', 'answer').strip().lower()
 SIP_THROTTLE_PER_SEC = 10
 SIP_DEDUP_WINDOW_SEC = int(os.environ.get('SIP_DEDUP_WINDOW_SEC', '60'))
 

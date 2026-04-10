@@ -2674,11 +2674,16 @@
             name: 'rdp_username',
             match: (d, proto) => proto === 'RDP',
             render: d => {
-                const u = hasUserField(d) ? displayUsername(d.user) : NA_INLINE;
-                const domain = d.rdp_domain ? escapeHtml(d.rdp_domain) : '';
-                let html = `<span style="color:var(--ui-label)">user:</span> <span>${u}</span>`;
-                if (domain) html += ` <span style="color:var(--ui-label); margin-left:10px;">domain:</span> <span>${domain}</span>`;
-                return html;
+                const L   = 'color:var(--ui-label)';
+                const sep = `<span style="margin-left:10px;"></span>`;
+                const lbl = (k, v) => `<span style="${L}">${k}:</span> <span>${v}</span>`;
+                const u    = hasUserField(d) ? displayUsername(d.user) : NA_INLINE;
+                const domain = d.domain      ? escapeHtml(d.domain)      : '';
+                const host   = d.rdp_workstation ? escapeHtml(d.rdp_workstation) : '';
+                const parts  = [lbl('user', u)];
+                if (domain) parts.push(lbl('domain', domain));
+                if (host)   parts.push(lbl('host',   host));
+                return parts.map((p, i) => i ? `${sep}${p}` : p).join('');
             },
         },
         {

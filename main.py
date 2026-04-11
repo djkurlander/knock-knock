@@ -1,13 +1,25 @@
-import asyncio, json, sqlite3, os
+import asyncio, json, logging, sqlite3, os
 import redis.asyncio as redis
 import geoip2.database
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, Response
 from datetime import datetime
 from fastapi.staticfiles import StaticFiles
 from constants import PROTO, PROTO_NAME, PROTOCOL_META, DEFAULT_ENABLED_PROTOCOLS, sort_protocols_for_ui
 
 app = FastAPI()
+logger = logging.getLogger("uvicorn.error")
+LOG_UNHANDLED_HTTP = os.environ.get('LOG_UNHANDLED_HTTP', '').lower() == 'true'
+
+def get_request_client_ip(request: Request) -> str:
+    """Extract real client IP: CF-Connecting-IP > X-Forwarded-For > direct."""
+    cf_ip = request.headers.get('cf-connecting-ip')
+    if cf_ip:
+        return cf_ip.strip()
+    xff = request.headers.get('x-forwarded-for')
+    if xff:
+        return xff.split(',')[0].strip()
+    return request.client.host if request.client else None
 
 def get_client_ip(websocket: WebSocket) -> str:
     """Extract real client IP: CF-Connecting-IP > X-Forwarded-For > direct."""
@@ -18,6 +30,20 @@ def get_client_ip(websocket: WebSocket) -> str:
     if xff:
         return xff.split(',')[0].strip()
     return websocket.client.host if websocket.client else None
+
+@app.middleware("http")
+async def log_unhandled_http_requests(request: Request, call_next):
+    response = await call_next(request)
+    if LOG_UNHANDLED_HTTP and response.status_code == 404:
+        logger.warning(
+            "Unhandled HTTP request: ip=%s method=%s url=%s host=%s user_agent=%s",
+            get_request_client_ip(request),
+            request.method,
+            str(request.url),
+            request.headers.get('host', ''),
+            request.headers.get('user-agent', ''),
+        )
+    return response
 
 # --- Visitor Logging (opt-in via LOG_VISITORS=true) ---
 LOG_VISITORS = os.environ.get('LOG_VISITORS', '').lower() == 'true'

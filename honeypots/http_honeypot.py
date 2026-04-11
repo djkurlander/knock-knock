@@ -11,6 +11,7 @@ Usage:
 """
 import json
 import os
+import re
 import socket
 import threading
 import time
@@ -71,6 +72,246 @@ def _should_emit(client_ip: str) -> bool:
             return False
         _throttle_counts[client_ip] = count + 1
         return True
+
+# ---------------------------------------------------------------------------
+# Purpose classification
+# ---------------------------------------------------------------------------
+#
+# Returns a short string describing the inferred intent of the request.
+# Evaluated in priority order — first match wins.
+#
+# Categories (most → least severe):
+#   rce               Remote/arbitrary code execution exploit attempt
+#   credential_theft  Brute-force or credential-harvesting login probe
+#   device_infiltration  Router/IoT/embedded-device takeover
+#   config_exposure   Fishing for credentials/config files left on disk
+#   path_traversal    Directory traversal to read arbitrary files
+#   proxy_abuse       Using the server as a proxy or SSRF pivot
+#   recon_scanner     Identified benign research scanner (Shodan, Censys …)
+#   protocol_probe    Non-HTTP protocol data sent to HTTP port (TLS, RDP …)
+#   mass_scanner      Generic/unidentified automated scan
+#   unknown           Nothing recognisable
+
+_RE_RCE_PATH = re.compile(
+    # -- General structural signals (age well, catch novel exploits) ----------
+    r'(\$\{jndi:)'                              # Log4Shell / JNDI injection
+    r'|(/cgi-bin/(?:admin|login|luci|test|bash|sh|cmd|exec|run))'
+    r'|((?:[?&;]|^/)(?:cmd|exec|command|shell|run|system|passthru|popen|eval)'
+       r'\s*=)'                                 # common RCE param names
+    r'|(/shell\b)'
+    # -- Specific CVE / tool paths (update periodically) ---------------------
+    r'|(/\?s=.*\\think\\)'                      # ThinkPHP RCE
+    r'|(/boaform/admin/formLogin)'              # Fiberhome RCE
+    r'|(/GponForm/diag_Form)'                   # GPON RCE
+    r'|(/setup\.cgi\?)'                         # Netgear RCE
+    r'|(/cgi-bin/(?:vendor_ipcam_cgi|web_shell_cmd)\.cgi)'
+    r'|(/vendor/phpunit/phpunit/.*eval-stdin\.php)',  # PHPUnit RCE (CVE-2017-9841)
+    re.IGNORECASE,
+)
+
+_RE_RCE_BODY = re.compile(
+    r'(\$\{jndi:)'                              # Log4Shell in body
+    r'|(eval\s*\()'
+    r'|(base64_decode\s*\()'
+    r'|(system\s*\(|passthru\s*\(|shell_exec\s*\(|popen\s*\()'
+    r'|(\|\s*(?:sh|bash|cmd\.exe))'            # pipe to shell
+    r'|(`[^`]{1,120}`)',                        # backtick command sub
+    re.IGNORECASE,
+)
+
+_RE_RCE_UA = re.compile(
+    r'(\$\{jndi:)'
+    r'|(;?\s*(?:wget|curl|bash|sh)\s+http)',
+    re.IGNORECASE,
+)
+
+_RE_CRED_PATH = re.compile(
+    r'(/\.git/(?:credentials|COMMIT_EDITMSG|packed-refs))'  # git credential store
+    r'|(/wp-login\.php|/wp-admin/)'
+    r'|(/phpmyadmin[/.])'
+    r'|(/xmlrpc\.php)'
+    r'|(/administrator(?:/|$))'
+    r'|(/admin(?:istration)?/(?:login|index|auth|signin))'
+    r'|(/(?:login|signin|auth|account/login|user/login|session/new)'
+       r'(?:[?/]|$))'
+    r'|(/manager/html)'                         # Tomcat
+    r'|(/remote/login)'                         # Fortinet
+    r'|(/dana-na/auth/)'                        # Pulse Secure
+    r'|(/+api/v1/users/login)',
+    re.IGNORECASE,
+)
+
+_RE_CRED_BODY = re.compile(
+    r'(?:^|&)(?:user(?:name)?|log(?:in)?|email|pass(?:word|wd)?|pwd)'
+    r'\s*=',
+    re.IGNORECASE,
+)
+
+_RE_DEVICE_PATH = re.compile(
+    r'(/HNAP1/)'                                # D-Link
+    r'|(/goform/)'                              # Tenda/TP-Link/etc
+    r'|(/cgi-bin/luci(?:/|$))'                 # OpenWrt
+    r'|(/cgi-bin/(?:login|admin|diagnostic|ping|traceroute)\.cgi)'
+    r'|(/setup\.cgi)'                           # Netgear
+    r'|(/apply\.cgi)'                           # Linksys
+    r'|(/boaform/)'                             # Fiberhome
+    r'|(/GponForm/)'                            # GPON routers
+    r'|(/ui/login)'                             # Ubiquiti UniFi
+    r'|(/api/auth/login)'                       # Ubiquiti / Hikvision
+    r'|(/ISAPI/Security/userCheck)'             # Hikvision
+    r'|(/SDK/(?:webLanguage|DeviceDescription|deviceType))' # Hikvision CVE-2021-36260
+    r'|(/Streaming/Channels/)'                  # Hikvision RTSP
+    r'|(/sdk/index\.php)'                       # Dahua / IP camera
+    r'|(/stssys\.htm|/rpSys\.htm)'             # Cisco router
+    r'|(/cgi-bin/supervisor/CloudSetup\.cgi)'  # D-Link / AXIS
+    r'|(/cgi-bin/qcmap_web_cgi)',               # Qualcomm MDM
+    re.IGNORECASE,
+)
+
+_RE_CONFIG_PATH = re.compile(
+    r'(/\.env(?:\b|$))'
+    r'|(/\.git/(?:HEAD|config|FETCH_HEAD|index))'
+    r'|(/wp-config\.php)'
+    r'|(/(?:config|configuration)\.(?:php|inc|bak|old|yml|yaml|json)'
+       r'(?:\b|$))'
+    r'|(/\.htaccess|/\.htpasswd)'
+    r'|(/phpinfo(?:\.php)?)'
+    r'|(/web\.config)'
+    r'|(/(?:dump|backup|db)\.(?:sql|gz|zip|tar))'
+    r'|(/(?:credentials|secrets|keys|token)(?:\.json|\.yml|\.env|$))'
+    r'|(/aws(?:credentials|config))'
+    r'|(/server-status)'                        # Apache mod_status
+    r'|(/metrics(?:/|$))'                       # Prometheus metrics endpoint
+    r'|(/vendor/(?!phpunit)[^/]+/)',            # exposed composer deps (not phpunit — caught as rce)
+    re.IGNORECASE,
+)
+
+_RE_TRAVERSAL = re.compile(
+    r'\.\.[/\\]'                                # classic ../
+    r'|%2e%2e[%2f%5c]'                         # URL-encoded
+    r'|%252e%252e'                              # double-encoded
+    r'|/etc/(?:passwd|shadow|hosts)'
+    r'|/proc/self/',
+    re.IGNORECASE,
+)
+
+_RE_PROXY_PATH = re.compile(
+    r'^https?://',                              # absolute-form URI (proxy req)
+    re.IGNORECASE,
+)
+
+_RE_SSRF = re.compile(
+    r'(?:169\.254\.169\.254'                   # AWS metadata
+    r'|localhost'
+    r'|127\.0\.0\.1'
+    r'|0\.0\.0\.0'
+    r'|::1'
+    r'|metadata\.google\.internal)',
+    re.IGNORECASE,
+)
+
+# Known benign research scanners — identified by User-Agent or well-known paths
+_RE_RECON_UA = re.compile(
+    r'(Shodan\.IO|ShodanBot)'
+    r'|(Censys(?:Bot|-Spider)?)'
+    r'|(BinaryEdge)'
+    r'|(Rapid7(?:/|$))'
+    r'|(internet-measurement\.com)'
+    r'|(LeakIX)'
+    r'|(Expanse(?:Bot)?)'
+    r'|(SecurityTrails)'
+    r'|(ZoomEye)'
+    r'|(RWTH Aachen)'
+    r'|(netcraft\.com)'
+    r'|(ipip\.net)'
+    r'|(paloaltonetworks\.com)'                 # Cortex Xpanse
+    r'|(\+https?://\S+/methodology)',           # self-identified research scanners (Umai etc.)
+    re.IGNORECASE,
+)
+
+_RECON_PATHS = frozenset({
+    '/robots.txt', '/security.txt', '/.well-known/security.txt',
+    '/sitemap.xml', '/humans.txt',
+})
+
+# Generic mass-scanner user-agents (not specifically research orgs)
+_RE_MASS_UA = re.compile(
+    r'(zgrab)'
+    r'|(masscan)'
+    r'|(Go-http-client)'
+    r'|(python-requests)'
+    r'|(libwww-perl)'
+    r'|(curl/)'
+    r'|(wget/)'
+    r'|(Nuclei)'
+    r'|(Nikto)'
+    r'|(sqlmap)'
+    r'|(nmap)'
+    r'|(dirbuster)'
+    r'|(gobuster)'
+    r'|(wfuzz)'
+    r'|(hydra)',
+    re.IGNORECASE,
+)
+
+
+def _classify_purpose(method: str, path: str, ua: str, body: str) -> str:
+    """Classify the inferred intent of an HTTP request. Returns a short label."""
+    combined = path + ' ' + body   # body may be empty string
+
+    # 0. Protocol probe — non-HTTP binary data on port 80 (TLS, RDP, etc.)
+    #    All valid HTTP methods are printable ASCII; any non-printable first byte
+    #    means binary protocol data (TLS ClientHello 0x16, RDP TPKT 0x03, etc.)
+    if method and not method[0].isprintable():
+        return 'protocol_probe'
+
+    # 1. RCE — highest priority
+    if (_RE_RCE_PATH.search(path)
+            or _RE_RCE_BODY.search(body)
+            or _RE_RCE_UA.search(ua)):
+        return 'rce'
+
+    # 2. Credential theft
+    if _RE_CRED_PATH.search(path):
+        return 'credential_theft'
+    if method in ('POST', 'PUT') and _RE_CRED_BODY.search(body):
+        # Only flag as cred theft if the path also looks login-ish
+        if re.search(r'/(login|signin|auth|session|account|user|wp-|admin)',
+                     path, re.IGNORECASE):
+            return 'credential_theft'
+
+    # 3. Device / IoT infiltration
+    if _RE_DEVICE_PATH.search(path):
+        return 'device_infiltration'
+
+    # 4. Config / secret file exposure
+    if _RE_CONFIG_PATH.search(path):
+        return 'config_exposure'
+
+    # 5. Path traversal
+    if _RE_TRAVERSAL.search(combined):
+        return 'path_traversal'
+
+    # 6. Proxy abuse / SSRF
+    if method == 'CONNECT':
+        return 'proxy_abuse'
+    if _RE_PROXY_PATH.match(path):
+        return 'proxy_abuse'
+    if _RE_SSRF.search(combined):
+        return 'proxy_abuse'
+
+    # 7. Known benign research scanner
+    if _RE_RECON_UA.search(ua) or path in _RECON_PATHS:
+        return 'recon_scanner'
+
+    # 8. Generic mass scanner (identified tool or empty UA hammering non-root)
+    if _RE_MASS_UA.search(ua):
+        return 'mass_scanner'
+    if not ua and path not in ('/', ''):
+        return 'mass_scanner'
+
+    return 'unknown'
+
 
 # ---------------------------------------------------------------------------
 # Request parsing
@@ -180,11 +421,17 @@ def handle_connection(sock: socket.socket, client_ip: str):
         except OSError:
             pass
 
+        if path == '/favicon.ico':
+            return
+
         if not _should_emit(client_ip):
             return
 
+        purpose = _classify_purpose(method, path, ua, body)
+
         knock = {'type': 'KNOCK', 'proto': 'HTTP', 'ip': client_ip,
-                 'http_method': method, 'http_path': path}
+                 'http_method': method, 'http_path': path,
+                 'http_purpose': purpose}
         if host:
             knock['http_host'] = host
         if ua:

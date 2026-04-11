@@ -23,3 +23,6 @@ __pycache__/
 .venv/
 *.pyc
 .env
+
+# Local agent/editor state
+.codex

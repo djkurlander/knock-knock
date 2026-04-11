@@ -2695,11 +2695,12 @@
                 const lbl = (k, v) => `<span style="${L}">${k}:</span> <span>${v}</span>`;
 
                 const action  = escapeHtml(d.smb_action || 'UNKNOWN');
-                const version = d.smb_version ? escapeHtml(d.smb_version) : '';
-                const share   = d.smb_share   ? escapeHtml(d.smb_share)   : '';
-                const file    = d.smb_file    ? escapeHtml(d.smb_file)    : '';
-                const domain  = d.smb_domain  ? escapeHtml(d.smb_domain)  : '';
-                const host    = d.smb_host    ? escapeHtml(d.smb_host)    : '';
+                const version = d.smb_version      ? escapeHtml(d.smb_version)      : '';
+                const share   = d.smb_share        ? escapeHtml(d.smb_share)        : '';
+                const file    = d.smb_file         ? escapeHtml(d.smb_file)         : '';
+                const svcname = d.smb_service_name ? escapeHtml(d.smb_service_name) : '';
+                const domain  = d.smb_domain       ? escapeHtml(d.smb_domain)       : '';
+                const host    = d.smb_host         ? escapeHtml(d.smb_host)         : '';
 
                 // line1 always starts with action:
                 const line1Parts = [lbl('action', action)];
@@ -2720,6 +2721,12 @@
                 if (d.smb_action === 'CONNECT' || d.smb_action === 'ENUM') {
                     const shareLabel = d.smb_action === 'ENUM' ? 'shares' : 'share';
                     if (share) line1Parts.push(lbl(shareLabel, share));
+                    return line1Parts.map((p, i) => i ? `${sep}${p}` : p).join('');
+                }
+
+                if (d.smb_action === 'CREATE_SERVICE') {
+                    if (svcname) line1Parts.push(lbl('svc',  svcname));
+                    if (file)    line1Parts.push(lbl('path', file));
                     return line1Parts.map((p, i) => i ? `${sep}${p}` : p).join('');
                 }
 

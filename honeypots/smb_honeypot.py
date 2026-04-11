@@ -387,6 +387,7 @@ STATUS_END_OF_FILE           = 0xC0000011
 STATUS_INVALID_PARAMETER     = 0xC000000D
 STATUS_OBJECT_NAME_NOT_FOUND = 0xC0000034
 STATUS_NOT_SUPPORTED         = 0xC00000BB
+STATUS_NOT_IMPLEMENTED       = 0xC0000002
 STATUS_BAD_NETWORK_NAME      = 0xC00000CC
 
 
@@ -441,6 +442,16 @@ SMB1_COM_TREE_CONNECT   = 0x75
 SMB1_COM_TREE_DISCONNECT = 0x71
 SMB1_COM_NT_CREATE_ANDX = 0xA2
 _SMB1_TRANS2_FIND_FIRST2 = 0x0001   # TRANS2 sub-command
+_SMB1_TRANS2_NAMES = {
+    0x0001: 'FIND_FIRST2',
+    0x0002: 'FIND_NEXT2',
+    0x0003: 'QUERY_FS_INFORMATION',
+    0x0005: 'QUERY_PATH_INFORMATION',
+    0x0006: 'SET_PATH_INFORMATION',
+    0x0007: 'QUERY_FILE_INFORMATION',
+    0x0008: 'SET_FILE_INFORMATION',
+    0x000E: 'UNKNOWN_0x000E',
+}
 _SMB2_CREATE_DISP_FILE_OPEN = 0x00000001  # open existing only — no write intent
 
 # SMB1 Flags2 bits
@@ -511,15 +522,17 @@ def trace(client_ip, stage, **fields):
 
 def _emit_knock(ip, user=None, smb_share=None, smb_version=None,
                 smb_domain=None, smb_host=None,
-                smb_file=None, smb_action=None, trace_stage='knock'):
+                smb_file=None, smb_action=None, smb_service_name=None,
+                trace_stage='knock'):
     knock = {'type': 'KNOCK', 'proto': 'SMB', 'ip': ip}
-    if user:          knock['user']        = user.lower()
-    if smb_share:     knock['smb_share']   = smb_share
-    if smb_file:      knock['smb_file']    = smb_file
+    if user:               knock['user']             = user.lower()
+    if smb_share:          knock['smb_share']        = smb_share
+    if smb_file:           knock['smb_file']         = smb_file
     knock['smb_action'] = smb_action or 'UNKNOWN'
-    if smb_version:   knock['smb_version'] = smb_version
-    if smb_domain:    knock['smb_domain']  = smb_domain
-    if smb_host:      knock['smb_host']    = smb_host
+    if smb_version:        knock['smb_version']      = smb_version
+    if smb_domain:         knock['smb_domain']       = smb_domain
+    if smb_host:           knock['smb_host']         = smb_host
+    if smb_service_name:   knock['smb_service_name'] = smb_service_name
     print(json.dumps(knock), flush=True)
     trace(ip, trace_stage, user=user, smb_share=smb_share, smb_file=smb_file,
           smb_version=smb_version, domain=smb_domain, host=smb_host)
@@ -923,6 +936,8 @@ _DCERPC_REQUEST         = 0x00
 _DCERPC_RESPONSE        = 0x02
 _DCERPC_FAULT           = 0x03
 _SRVSVC_NETR_SHARE_ENUM = 15         # opnum for NetrShareEnum
+_SVCCTL_R_CREATE_SERVICE_W = 12     # opnum for RCreateServiceW (MS-SCMR §3.1.4.12)
+_SVCCTL_R_OPEN_SC_MANAGER_W = 15   # opnum for ROpenSCManagerW (MS-SCMR §3.1.4.1)
 _FSCTL_PIPE_TRANSCEIVE        = 0x0011C017  # SMB2 IOCTL code for named-pipe transact
 _FSCTL_VALIDATE_NEGOTIATE_INFO = 0x00140204  # SMB3 post-negotiate validation (RFC MS-SMB2 §3.3.5.15.12)
 
@@ -1086,12 +1101,103 @@ def _handle_dcerpc_multi(data, client_ip, user=None, smb_version=None,
     return b''.join(responses) if responses else None
 
 
+def _parse_ndr_conformant_string(buf, offset):
+    """
+    Parse an NDR conformant/varying Unicode string from buf starting at offset.
+    Layout: MaxCount(4) + Offset(4) + ActualCount(4) + UTF-16LE data.
+    Returns (string_value, new_offset) or (None, new_offset) on parse failure.
+    """
+    if offset + 12 > len(buf):
+        return None, offset
+    actual_count = struct.unpack_from('<I', buf, offset + 8)[0]
+    offset += 12
+    byte_len = actual_count * 2
+    if offset + byte_len > len(buf):
+        return None, offset + byte_len
+    try:
+        value = buf[offset:offset + byte_len].decode('utf-16-le').rstrip('\x00')
+    except UnicodeDecodeError:
+        value = None
+    return value, offset + byte_len
+
+
+def _parse_svcctl_r_create_service_w(stub):
+    """
+    Parse an RCreateServiceW NDR stub (MS-SCMR §3.1.4.12).
+    Returns (service_name, binary_path) — either may be None on parse failure.
+
+    Stub layout (all little-endian):
+      [0..3]   hSCManager (SCM handle context, 20 bytes)
+      [20..23] lpServiceName referent pointer (4 bytes)
+      [24..27] lpDisplayName referent pointer (4 bytes)
+      ... DesiredAccess(4) ServiceType(4) StartType(4) ErrorControl(4)
+      lpBinaryPathName referent pointer(4) ...
+    Actual string data follows in order: ServiceName, DisplayName, BinaryPathName.
+    Each string is an NDR conformant/varying string: MaxCount(4)+Offset(4)+Count(4)+data.
+    """
+    try:
+        # SCM handle is 20 bytes (context handle), then ServiceName ptr, DisplayName ptr
+        # then DesiredAccess(4), ServiceType(4), StartType(4), ErrorControl(4),
+        # BinaryPathName ptr(4), ...
+        # String data begins right after the fixed fields.
+        # Fixed-size prefix before first string blob:
+        #   hSCManager(20) + lpServiceName_ptr(4) + lpDisplayName_ptr(4)
+        #   + DesiredAccess(4) + ServiceType(4) + StartType(4) + ErrorControl(4)
+        #   + lpBinaryPathName_ptr(4) = 48 bytes total before first string
+        if len(stub) < 48:
+            return None, None
+
+        # Check which pointers are non-null
+        svc_ptr  = struct.unpack_from('<I', stub, 20)[0]   # lpServiceName
+        disp_ptr = struct.unpack_from('<I', stub, 24)[0]   # lpDisplayName
+        bin_ptr  = struct.unpack_from('<I', stub, 44)[0]   # lpBinaryPathName
+
+        offset = 48  # start of string blobs
+
+        service_name = None
+        if svc_ptr:
+            service_name, offset = _parse_ndr_conformant_string(stub, offset)
+            # NDR strings are 4-byte aligned
+            offset = (offset + 3) & ~3
+
+        if disp_ptr:
+            _, offset = _parse_ndr_conformant_string(stub, offset)
+            offset = (offset + 3) & ~3
+
+        binary_path = None
+        if bin_ptr:
+            binary_path, offset = _parse_ndr_conformant_string(stub, offset)
+
+        return service_name, binary_path
+    except Exception:
+        return None, None
+
+
+def _dcerpc_svcctl_handle_response(call_id, ctx_id, handle=None, win_error=0):
+    """
+    DCERPC RESPONSE containing a context handle [out] + DWORD return code.
+    Used for ROpenSCManagerW (success, win_error=0) and RCreateServiceW (error).
+    handle: 20-byte context handle bytes; defaults to random-looking bytes.
+    """
+    if handle is None:
+        handle = os.urandom(16) + b'\x00\x00\x00\x00'  # 20-byte context handle
+    stub = handle + struct.pack('<I', win_error)
+    body = (
+        struct.pack('<I', len(stub))    # alloc_hint
+        + struct.pack('<H', ctx_id)     # p_cont_id
+        + struct.pack('<H', 0)          # cancel_count
+        + stub
+    )
+    return _dcerpc_hdr(_DCERPC_RESPONSE, call_id, len(body)) + body
+
+
 def _handle_dcerpc(data, client_ip, user=None, smb_version=None,
                    smb_domain=None, smb_host=None, pipe_name='SRVSVC'):
     """
     Parse an incoming DCERPC PDU and return the response bytes, or None if unhandled.
     BIND → BIND_ACK (sec_addr reflects the actual pipe).
     For SRVSVC: REQUEST opnum 15 (NetrShareEnum) → share list response.
+    For SVCCTL: REQUEST opnum 12 (RCreateServiceW) → ACCESS_DENIED response + knock.
     For other known pipes: REQUEST → DCERPC FAULT (nca_s_op_rng_error).
     """
     if len(data) < 16:
@@ -1131,6 +1237,24 @@ def _handle_dcerpc(data, client_ip, user=None, smb_version=None,
                 trace(client_ip, 'srvsvc_unsupported_level', opnum=opnum, level=level)
                 return _dcerpc_fault(call_id, ctx_id)
             trace(client_ip, 'srvsvc_unsupported_opnum', opnum=opnum)
+        elif pipe_name == 'SVCCTL':
+            if opnum == _SVCCTL_R_OPEN_SC_MANAGER_W:
+                # Return a fake SCM handle so the worm can proceed to RCreateServiceW
+                trace(client_ip, 'svcctl_open_sc_manager')
+                return _dcerpc_svcctl_handle_response(call_id, ctx_id, win_error=0)
+            if opnum == _SVCCTL_R_CREATE_SERVICE_W:
+                svc_name, bin_path = _parse_svcctl_r_create_service_w(stub)
+                trace(client_ip, 'svcctl_create_service',
+                      service_name=svc_name, binary_path=bin_path)
+                _emit_knock(client_ip, user, None, smb_version, smb_domain, smb_host,
+                            smb_file=bin_path, smb_action='CREATE_SERVICE',
+                            smb_service_name=svc_name,
+                            trace_stage='knock_emitted_create_service')
+                # Deny with ERROR_ACCESS_DENIED (5) — null handle + error code
+                null_handle = b'\x00' * 20
+                return _dcerpc_svcctl_handle_response(call_id, ctx_id,
+                                                      handle=null_handle, win_error=5)
+            trace(client_ip, 'dcerpc_stub_request', pipe=pipe_name, opnum=opnum)
         else:
             trace(client_ip, 'dcerpc_stub_request', pipe=pipe_name, opnum=opnum)
         return _dcerpc_fault(call_id, ctx_id)
@@ -2296,6 +2420,36 @@ def _smb1_parse_find_first2(payload, flags2):
         return None, None, None
 
 
+def _smb1_parse_transaction2_meta(payload):
+    """Parse basic SMB1 TRANSACTION2 metadata for logging/debugging."""
+    if len(payload) < 63:
+        return None
+    try:
+        setup_count = payload[59]
+        param_count = struct.unpack_from('<H', payload, 51)[0]
+        param_offset = struct.unpack_from('<H', payload, 53)[0]
+        data_count = struct.unpack_from('<H', payload, 55)[0]
+        data_offset = struct.unpack_from('<H', payload, 57)[0]
+        subcommand = None
+        if setup_count >= 1 and len(payload) >= 63:
+            subcommand = struct.unpack_from('<H', payload, 61)[0]
+        param_preview = None
+        if param_count and param_offset and param_offset + param_count <= len(payload):
+            params = payload[param_offset:param_offset + min(param_count, 24)]
+            param_preview = params.hex()
+        return {
+            'setup_count': setup_count,
+            'subcommand': subcommand,
+            'param_count': param_count,
+            'param_offset': param_offset,
+            'data_count': data_count,
+            'data_offset': data_offset,
+            'param_preview': param_preview,
+        }
+    except Exception:
+        return None
+
+
 def build_smb1_transaction_response(hdr, uid, tid, flags2, dcerpc_data):
     """
     SMB1 TRANSACTION success response carrying dcerpc_data as the response Data section.
@@ -2541,10 +2695,24 @@ def handle_smb1(client_sock, client_ip, first_payload):
                 else:
                     send_nbss(client_sock, build_smb1_error_response(
                         hdr, uid, tid, STATUS_NOT_SUPPORTED, cmd))
+            elif cmd == SMB1_COM_TRANSACTION2:
+                meta = _smb1_parse_transaction2_meta(payload) or {}
+                subcommand = meta.get('subcommand')
+                trace(client_ip, 'smb1_ipc_trans2',
+                      subcommand=(hex(subcommand) if subcommand is not None else None),
+                      subcommand_name=_SMB1_TRANS2_NAMES.get(subcommand, 'UNKNOWN'),
+                      setup_count=meta.get('setup_count'),
+                      param_count=meta.get('param_count'),
+                      param_offset=meta.get('param_offset'),
+                      data_count=meta.get('data_count'),
+                      data_offset=meta.get('data_offset'),
+                      param_preview=meta.get('param_preview'))
+                send_nbss(client_sock, build_smb1_error_response(
+                    hdr, uid, tid, STATUS_NOT_IMPLEMENTED, cmd))
             else:
                 trace(client_ip, 'smb1_ipc_stub', cmd=hex(cmd))
                 send_nbss(client_sock, build_smb1_error_response(
-                    hdr, uid, tid, STATUS_NOT_SUPPORTED, cmd))
+                    hdr, uid, tid, STATUS_NOT_IMPLEMENTED, cmd))
 
         # ── NT_CREATE_ANDX ────────────────────────────────────────────────────
         elif cmd == SMB1_COM_NT_CREATE_ANDX:

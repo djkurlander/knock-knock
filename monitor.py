@@ -785,7 +785,7 @@ def monitor(save_knocks=None, max_knocks=None):
                 if raw_domain is not None:
                     domain = sanitize_credential(str(raw_domain))
                     if domain:
-                        package["rdp_domain"] = domain
+                        package["domain"] = domain
             # Pass through protocol-specific extended telemetry into Redis/websocket payloads.
             # This is intentionally not persisted in SQLite.
             for k, v in knock.items():

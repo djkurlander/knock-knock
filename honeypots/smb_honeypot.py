@@ -1175,6 +1175,18 @@ def _parse_svcctl_r_create_service_w(stub):
         return None, None
 
 
+def _dcerpc_svcctl_dword_response(call_id, ctx_id, win_error=0):
+    """DCERPC RESPONSE returning only a DWORD — used for RStartServiceW and similar."""
+    stub = struct.pack('<I', win_error)
+    body = (
+        struct.pack('<I', len(stub))    # alloc_hint
+        + struct.pack('<H', ctx_id)     # p_cont_id
+        + struct.pack('<H', 0)          # cancel_count
+        + stub
+    )
+    return _dcerpc_hdr(_DCERPC_RESPONSE, call_id, len(body)) + body
+
+
 def _dcerpc_svcctl_handle_response(call_id, ctx_id, handle=None, win_error=0):
     """
     DCERPC RESPONSE containing a context handle [out] + DWORD return code.
@@ -1273,9 +1285,8 @@ def _handle_dcerpc(data, client_ip, user=None, smb_version=None,
                             smb_file=bin_path, smb_action='START_SERVICE',
                             smb_service_name=svc_name,
                             trace_stage='knock_emitted_start_service')
-                # Deny execution — null handle + ERROR_ACCESS_DENIED
-                return _dcerpc_svcctl_handle_response(call_id, ctx_id,
-                                                      handle=b'\x00' * 20, win_error=5)
+                # Deny execution — DWORD-only response (RStartServiceW has no [out] handle)
+                return _dcerpc_svcctl_dword_response(call_id, ctx_id, win_error=5)
             trace(client_ip, 'dcerpc_stub_request', pipe=pipe_name, opnum=opnum)
         else:
             trace(client_ip, 'dcerpc_stub_request', pipe=pipe_name, opnum=opnum)

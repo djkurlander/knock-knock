@@ -2906,7 +2906,7 @@
                     return line1Parts.map((p, i) => i ? `${sep}${p}` : p).join('');
                 }
 
-                if (d.smb_action === 'CREATE_SERVICE') {
+                if (d.smb_action === 'CREATE_SERVICE' || d.smb_action === 'START_SERVICE') {
                     if (svcname) line1Parts.push(lbl('svc',  svcname));
                     if (file)    line1Parts.push(lbl('path', file));
                     return line1Parts.map((p, i) => i ? `${sep}${p}` : p).join('');

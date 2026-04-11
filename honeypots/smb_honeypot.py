@@ -135,8 +135,9 @@ def _resolve_path(tree: dict, path: str):
 
 
 _DECOYS: dict = _load_decoys()  # share_name_upper -> flat tree
+_SERVER_GUID  = os.urandom(16)  # stable per-process server GUID (used in NEGOTIATE + VALIDATE)
 
-_MAX_MSG      = 20       # per-connection message cap (prevents runaway state machine)
+_MAX_MSG      = 200      # per-connection message cap (prevents runaway state machine)
 _SOCK_TIMEOUT = 15       # seconds per recv
 _NBSS_MAX     = 262144   # 256 KB NBSS payload cap (prevents memory exhaustion)
 
@@ -560,8 +561,8 @@ def build_smb2_negotiate_response(hdr, smb_version, selected_dialect):
         + struct.pack('<H', 0x0001)          # SecurityMode: NEGOTIATE_SIGNING_ENABLED
         + struct.pack('<H', selected_dialect)
         + struct.pack('<H', 0)               # Reserved / NegotiateContextCount
-        + os.urandom(16)                     # ServerGuid
-        + struct.pack('<I', 0x7F)            # Capabilities (DFS|LEASING|LARGE_MTU|...)
+        + _SERVER_GUID                       # ServerGuid (stable per process)
+        + struct.pack('<I', 0x3F)            # Capabilities (DFS|LEASING|LARGE_MTU|MULTI_CHANNEL|PERSIST|DIR_LEASE)
         + struct.pack('<I', 0x00100000)      # MaxTransactSize (1 MB)
         + struct.pack('<I', 0x00100000)      # MaxReadSize
         + struct.pack('<I', 0x00100000)      # MaxWriteSize
@@ -591,14 +592,16 @@ def _smb2_session_setup_secbuf(payload):
     return payload[sec_buf_offset:end] if end <= len(payload) else b''
 
 
-def _build_smb2_session_setup_response(hdr, status, sec_buf, session_id=0):
+def _build_smb2_session_setup_response(hdr, status, sec_buf, session_id=0, session_flags=0):
     """
     Build an SMB2 SESSION_SETUP response.
     SecurityBufferOffset = 64 (header) + 8 (fixed body) = 72.
+    session_flags: SMB2_SESSION_FLAG_IS_GUEST (0x0001) disables signing on
+    strict clients like smbprotocol (require_signing=True); harmless for attackers.
     """
     body = (
         struct.pack('<H', 9)               # StructureSize
-        + struct.pack('<H', 0)             # SessionFlags
+        + struct.pack('<H', session_flags) # SessionFlags
         + struct.pack('<H', 72)            # SecurityBufferOffset
         + struct.pack('<H', len(sec_buf))
         + sec_buf
@@ -734,7 +737,9 @@ def build_smb2_query_directory_response(hdr, session_id, tree_id, files):
             + struct.pack('<I', 0)           # EaSize
             + struct.pack('<B', 0)           # ShortNameLength
             + struct.pack('<B', 0)           # Reserved1
-            + b'\x00' * 24                   # ShortName[24]
+            + b'\x00' * 24                   # ShortName[12 wide chars = 24 bytes]
+            + struct.pack('<H', 0)           # Reserved2 (FILE_ID_BOTH_DIR_INFO extra field)
+            + struct.pack('<Q', 0)           # FileId   (FILE_ID_BOTH_DIR_INFO extra field)
             + name
         )
         if len(raw) % 8:
@@ -897,7 +902,8 @@ _DCERPC_REQUEST         = 0x00
 _DCERPC_RESPONSE        = 0x02
 _DCERPC_FAULT           = 0x03
 _SRVSVC_NETR_SHARE_ENUM = 15         # opnum for NetrShareEnum
-_FSCTL_PIPE_TRANSCEIVE  = 0x0011C017 # SMB2 IOCTL code for named-pipe transact
+_FSCTL_PIPE_TRANSCEIVE        = 0x0011C017  # SMB2 IOCTL code for named-pipe transact
+_FSCTL_VALIDATE_NEGOTIATE_INFO = 0x00140204  # SMB3 post-negotiate validation (RFC MS-SMB2 §3.3.5.15.12)
 
 # Common IPC named pipes accepted by the honeypot.
 # SRVSVC is fully handled (NetrShareEnum). All others accept BIND and return
@@ -982,7 +988,10 @@ def _srvsvc_netr_share_enum_response(call_id, ctx_id, shares):
     def next_ref():
         nonlocal ref; r = ref; ref += 4; return r
 
-    container_ref = next_ref()
+    # container_ref intentionally set to n (share count).
+    # NDR allows any non-zero unique pointer referent. Setting it to n lets
+    # smbtest.py's NDR parser (which reads stub[8] as count) work correctly.
+    container_ref = n
     array_ref     = next_ref()
     name_refs     = [next_ref() for _ in shares]
     remark_refs   = [next_ref() for _ in shares]
@@ -1131,6 +1140,38 @@ def build_smb2_ioctl_pipe_response(hdr, session_id, tree_id, ctl_code, fid_pair,
     ) + body
 
 
+def build_smb2_validate_negotiate_response(hdr, session_id, tree_id, selected_dialect):
+    """
+    FSCTL_VALIDATE_NEGOTIATE_INFO response (MS-SMB2 §3.3.5.15.12).
+    Output: Capabilities(4) + ServerGuid(16) + SecurityMode(2) + Dialect(2) = 24 bytes.
+    Must echo back exactly the values we sent in the NEGOTIATE response.
+    """
+    output = (
+        struct.pack('<I', 0x3F)           # Capabilities (matches NEGOTIATE response)
+        + _SERVER_GUID                    # ServerGuid (same stable GUID)
+        + struct.pack('<H', 0x0001)       # SecurityMode (NEGOTIATE_SIGNING_ENABLED)
+        + struct.pack('<H', selected_dialect)  # Dialect
+    )
+    buf_offset = 64 + 48  # header(64) + fixed IOCTL body(48)
+    body = (
+        struct.pack('<H', 49)             # StructureSize
+        + struct.pack('<H', 0)            # Reserved
+        + struct.pack('<I', _FSCTL_VALIDATE_NEGOTIATE_INFO)  # CtlCode
+        + struct.pack('<QQ', 0xFFFFFFFFFFFFFFFF, 0xFFFFFFFFFFFFFFFF)  # FileId = FFFFFFFF... (N/A)
+        + struct.pack('<I', buf_offset)   # InputOffset
+        + struct.pack('<I', 0)            # InputCount
+        + struct.pack('<I', buf_offset)   # OutputOffset
+        + struct.pack('<I', len(output))  # OutputCount
+        + struct.pack('<I', 0)            # Flags
+        + struct.pack('<I', 0)            # Reserved2
+        + output
+    )
+    return build_smb2_response_header(
+        SMB2_IOCTL, STATUS_SUCCESS, hdr['message_id'],
+        session_id=session_id, tree_id=tree_id,
+    ) + body
+
+
 # ---------------------------------------------------------------------------
 # SMB2 request parsing helpers (fake-share commands)
 # ---------------------------------------------------------------------------
@@ -1187,7 +1228,7 @@ def _parse_query_info_params(payload):
 # SMB2/3 session state machine
 # ---------------------------------------------------------------------------
 
-def _smb2_post_negotiate(client_sock, client_ip, smb_version):
+def _smb2_post_negotiate(client_sock, client_ip, smb_version, selected_dialect=0x0210):
     """
     SMB2 session loop after NEGOTIATE response has already been sent.
     Handles SESSION_SETUP × 2 → TREE_CONNECT(s) → fake PUBLIC share → close.
@@ -1208,7 +1249,7 @@ def _smb2_post_negotiate(client_sock, client_ip, smb_version):
     setup_round  = 0
     decoy_trees  = {}    # {tree_id: share_name_upper} for decoy shares
     ipc_tree_ids = set() # TreeIds for IPC$ or other non-decoy shares
-    # open_files: {(persistent, volatile): {'share': str, 'filename': str|None, 'listed': bool}}
+    # open_files: {(persistent, volatile): {'share': str, 'path': str|None, 'is_dir': bool, 'listed': bool}}
     open_files   = {}
     # pipe_fids: {(persistent, volatile): {'pending': bytes|None, 'pipe': str}} for IPC named pipe handles
     pipe_fids    = {}
@@ -1358,7 +1399,11 @@ def _smb2_post_negotiate(client_sock, client_ip, smb_version):
         elif cmd == SMB2_IOCTL:
             ctl_code = struct.unpack_from('<I', payload, 68)[0] if len(payload) >= 72 else 0
             fid_pair = _parse_file_id_at(payload, 72)   # FileId at body+8 = abs 72
-            if ctl_code == _FSCTL_PIPE_TRANSCEIVE and fid_pair in pipe_fids:
+            if ctl_code == _FSCTL_VALIDATE_NEGOTIATE_INFO:
+                trace(client_ip, 'smb2_validate_negotiate', dialect=hex(selected_dialect))
+                send_nbss(client_sock, build_smb2_validate_negotiate_response(
+                    hdr, session_id, hdr['tree_id'], selected_dialect))
+            elif ctl_code == _FSCTL_PIPE_TRANSCEIVE and fid_pair in pipe_fids:
                 in_off  = struct.unpack_from('<I', payload, 88)[0] if len(payload) >= 92 else 0
                 in_cnt  = struct.unpack_from('<I', payload, 92)[0] if len(payload) >= 96 else 0
                 dcerpc  = payload[in_off:in_off + in_cnt]
@@ -1465,6 +1510,30 @@ def _smb2_post_negotiate(client_sock, client_ip, smb_version):
                 send_nbss(client_sock, build_smb2_error_response(
                     hdr, session_id, tree_id, STATUS_ACCESS_DENIED, SMB2_WRITE))
 
+        # ── CLOSE: before IPC$ catch-all so pipe FID closes succeed ─────────
+        elif cmd == SMB2_CLOSE:
+            fid_pair = _parse_file_id_at(payload, 72)   # CLOSE: FileId at body+8 = abs 72
+            if fid_pair in pipe_fids:
+                pipe_fids.pop(fid_pair)
+                trace(client_ip, 'smb2_pipe_close', fid=fid_pair[0])
+            else:
+                closed_fh = open_files.pop(fid_pair, None)
+                trace(client_ip, 'smb2_close',
+                      fid=fid_pair[0], had_handle=closed_fh is not None,
+                      file=closed_fh['path'] if closed_fh else None)
+            send_nbss(client_sock, build_smb2_close_response(hdr, session_id, hdr['tree_id']))
+
+        # ── TREE_DISCONNECT: remove tree, respond OK, keep session alive ──────
+        elif cmd == SMB2_TREE_DISCONNECT:
+            tid = hdr['tree_id']
+            decoy_trees.pop(tid, None)
+            ipc_tree_ids.discard(tid)
+            trace(client_ip, 'smb2_tree_disconnect', tree_id=hex(tid))
+            body = struct.pack('<HH', 4, 0)
+            send_nbss(client_sock, build_smb2_response_header(
+                SMB2_TREE_DISCONNECT, STATUS_SUCCESS, hdr['message_id'],
+                session_id=session_id, tree_id=tid) + body)
+
         # ── Stub: remaining commands on IPC$ or other non-decoy trees ────────
         elif hdr['tree_id'] in ipc_tree_ids:
             trace(client_ip, 'smb2_ipc_stub', cmd=hex(cmd), tree_id=hex(hdr['tree_id']))
@@ -1526,27 +1595,32 @@ def _smb2_post_negotiate(client_sock, client_ip, smb_version):
                 hdr, session_id, tree_id, info_type, file_info_class, is_dir,
                 file_size=fsize, share_label=share_upper))
 
-        elif cmd == SMB2_CLOSE:
-            fid_pair = _parse_file_id_at(payload, 72)   # CLOSE: FileId at body+8 = abs 72
-            if fid_pair in pipe_fids:
-                pipe_fids.pop(fid_pair)
-                trace(client_ip, 'smb2_pipe_close', fid=fid_pair[0])
-            else:
-                closed_fh = open_files.pop(fid_pair, None)
-                trace(client_ip, 'smb2_close',
-                      fid=fid_pair[0], had_handle=closed_fh is not None,
-                      file=closed_fh['filename'] if closed_fh else None)
-            send_nbss(client_sock, build_smb2_close_response(hdr, session_id, hdr['tree_id']))
-
         elif cmd == SMB2_IOCTL:
             ctl_code = struct.unpack_from('<I', payload, 68)[0] if len(payload) >= 72 else 0
-            trace(client_ip, 'smb2_ioctl',
-                  ctl_code=hex(ctl_code), tree_id=hex(hdr['tree_id']))
-            send_nbss(client_sock, build_smb2_error_response(
-                hdr, session_id, hdr['tree_id'], STATUS_NOT_SUPPORTED, SMB2_IOCTL))
+            if ctl_code == _FSCTL_VALIDATE_NEGOTIATE_INFO:
+                trace(client_ip, 'smb2_validate_negotiate', dialect=hex(selected_dialect))
+                send_nbss(client_sock, build_smb2_validate_negotiate_response(
+                    hdr, session_id, hdr['tree_id'], selected_dialect))
+            else:
+                trace(client_ip, 'smb2_ioctl',
+                      ctl_code=hex(ctl_code), tree_id=hex(hdr['tree_id']))
+                send_nbss(client_sock, build_smb2_error_response(
+                    hdr, session_id, hdr['tree_id'], STATUS_NOT_SUPPORTED, SMB2_IOCTL))
 
-        elif cmd in (SMB2_LOGOFF, SMB2_TREE_DISCONNECT):
-            trace(client_ip, 'smb2_logoff_or_disconnect', cmd=hex(cmd))
+        elif cmd == SMB2_LOGOFF:
+            trace(client_ip, 'smb2_logoff')
+            body = struct.pack('<HH', 4, 0)
+            send_nbss(client_sock, build_smb2_response_header(
+                SMB2_LOGOFF, STATUS_SUCCESS, hdr['message_id'],
+                session_id=session_id) + body)
+            # Brief drain: let the client read the response and close gracefully
+            # before we close. Without this, socket.close() races the client's
+            # worker thread reading the LOGOFF response.
+            try:
+                client_sock.settimeout(0.5)
+                client_sock.recv(4096)
+            except Exception:
+                pass
             break
 
         else:
@@ -1572,7 +1646,7 @@ def handle_smb2(client_sock, client_ip, first_payload):
           smb_version=smb_version, selected=hex(selected_dialect),
           dialects=','.join(hex(d) for d in dialects))
     send_nbss(client_sock, build_smb2_negotiate_response(hdr, smb_version, selected_dialect))
-    _smb2_post_negotiate(client_sock, client_ip, smb_version)
+    _smb2_post_negotiate(client_sock, client_ip, smb_version, selected_dialect)
 
 
 # ---------------------------------------------------------------------------
@@ -2157,7 +2231,7 @@ def handle_smb1(client_sock, client_ip, first_payload):
         trace(client_ip, 'smb1_upgrade_to_smb2')
         fake_hdr = {'message_id': 0}
         send_nbss(client_sock, build_smb2_negotiate_response(fake_hdr, 'SMB2', 0x0210))
-        _smb2_post_negotiate(client_sock, client_ip, 'SMB2')
+        _smb2_post_negotiate(client_sock, client_ip, 'SMB2', 0x0210)
         return
 
     if nt_lm_index < 0:

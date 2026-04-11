@@ -709,10 +709,8 @@ def build_smb2_create_response(hdr, session_id, tree_id, fid_p, fid_v, is_dir, f
     ) + body
 
 
-def build_smb2_query_directory_response(hdr, session_id, tree_id, files):
-    """Return a fake directory listing for the given list of (name, size, is_dir) tuples.
-    Prepends '.' and '..' dot entries; returns STATUS_NO_MORE_FILES for empty listings.
-    """
+def build_smb2_query_directory_response(hdr, session_id, tree_id, files, file_info_class):
+    """Return a fake directory listing matching the requested SMB2 info class."""
     if not files:
         return build_smb2_error_response(
             hdr, session_id, tree_id, STATUS_NO_MORE_FILES, SMB2_QUERY_DIRECTORY)
@@ -723,7 +721,8 @@ def build_smb2_query_directory_response(hdr, session_id, tree_id, files):
         attrs = 0x10 if is_dir else 0x20     # DIRECTORY or NORMAL
         alloc = 0 if is_dir else (size + 4095) & ~4095
         name  = fname.encode('utf-16-le')
-        raw = bytearray(
+
+        base = (
             struct.pack('<I', 0)             # NextEntryOffset (filled below)
             + struct.pack('<I', 0)           # FileIndex
             + struct.pack('<Q', ft_old)      # CreationTime
@@ -734,24 +733,43 @@ def build_smb2_query_directory_response(hdr, session_id, tree_id, files):
             + struct.pack('<Q', alloc)       # AllocationSize
             + struct.pack('<I', attrs)       # FileAttributes
             + struct.pack('<I', len(name))   # FileNameLength
-            + struct.pack('<I', 0)           # EaSize
-            + struct.pack('<B', 0)           # ShortNameLength
-            + struct.pack('<B', 0)           # Reserved1
-            + b'\x00' * 24                   # ShortName[12 wide chars = 24 bytes]
-            + struct.pack('<H', 0)           # Reserved2 (FILE_ID_BOTH_DIR_INFO extra field)
-            + struct.pack('<Q', 0)           # FileId   (FILE_ID_BOTH_DIR_INFO extra field)
-            + name
         )
+
+        if file_info_class == 1:  # FILE_DIRECTORY_INFORMATION
+            raw = bytearray(base + name)
+        elif file_info_class == 3:  # FILE_BOTH_DIRECTORY_INFORMATION
+            raw = bytearray(
+                base
+                + struct.pack('<I', 0)       # EaSize
+                + struct.pack('<B', 0)       # ShortNameLength
+                + struct.pack('<B', 0)       # Reserved1
+                + b'\x00' * 24               # ShortName[12 wide chars = 24 bytes]
+                + name
+            )
+        elif file_info_class == 37:  # FILE_ID_BOTH_DIRECTORY_INFORMATION
+            raw = bytearray(
+                base
+                + struct.pack('<I', 0)       # EaSize
+                + struct.pack('<B', 0)       # ShortNameLength
+                + struct.pack('<B', 0)       # Reserved1
+                + b'\x00' * 24               # ShortName[12 wide chars = 24 bytes]
+                + struct.pack('<H', 0)       # Reserved2
+                + struct.pack('<Q', 0)       # FileId
+                + name
+            )
+        else:
+            return None
         if len(raw) % 8:
             raw += b'\x00' * (8 - len(raw) % 8)
         return raw
 
-    # FILE_BOTH_DIRECTORY_INFORMATION entries; NextEntryOffset stitched up after.
     entries = [_make_entry('.', 0, True), _make_entry('..', 0, True)]
     for fname, size, is_dir in files:
         entries.append(_make_entry(fname, size, is_dir))
+    if any(entry is None for entry in entries):
+        return build_smb2_error_response(
+            hdr, session_id, tree_id, STATUS_NOT_SUPPORTED, SMB2_QUERY_DIRECTORY)
 
-    # Wire up NextEntryOffset: each points to the next entry; last stays 0.
     for i in range(len(entries) - 1):
         struct.pack_into('<I', entries[i], 0, len(entries[i]))
 
@@ -1224,6 +1242,19 @@ def _parse_query_info_params(payload):
     return info_type, file_info_class, fid
 
 
+def _parse_query_directory_params(payload):
+    """
+    Parse FileInformationClass, Flags, and FileId from an SMB2 QUERY_DIRECTORY request.
+    Body layout: StructureSize(2)+FileInformationClass(1)@66+Flags(1)@67+...+FileId(16)@72
+    """
+    if len(payload) < 96:
+        return 0, 0, (0, 0)
+    file_info_class = payload[66]
+    flags           = payload[67]
+    fid             = _parse_file_id_at(payload, 72)
+    return file_info_class, flags, fid
+
+
 # ---------------------------------------------------------------------------
 # SMB2/3 session state machine
 # ---------------------------------------------------------------------------
@@ -1550,8 +1581,7 @@ def _smb2_post_negotiate(client_sock, client_ip, smb_version, selected_dialect=0
                 send_nbss(client_sock, build_smb2_error_response(
                     hdr, session_id, tree_id, STATUS_ACCESS_DENIED, SMB2_QUERY_DIRECTORY))
                 continue
-            flags    = payload[65] if len(payload) > 65 else 0
-            fid_pair = _parse_file_id_at(payload, 72)   # FileId at body+8 = abs 72
+            file_info_class, flags, fid_pair = _parse_query_directory_params(payload)
             fh       = open_files.get(fid_pair)
             restart  = bool(flags & 0x12)               # REOPEN(0x10) or RESTART_SCANS(0x02)
             if restart and fh:
@@ -1559,7 +1589,7 @@ def _smb2_post_negotiate(client_sock, client_ip, smb_version, selected_dialect=0
             dir_listed = fh['listed'] if fh else False
             dir_path   = fh['path'] if fh else ''
             trace(client_ip, 'smb2_query_dir', path=dir_path or '(root)',
-                  listed=dir_listed, flags=hex(flags))
+                  listed=dir_listed, flags=hex(flags), file_info_class=file_info_class)
             if dir_listed:
                 send_nbss(client_sock, build_smb2_error_response(
                     hdr, session_id, tree_id, STATUS_NO_MORE_FILES, SMB2_QUERY_DIRECTORY))
@@ -1574,7 +1604,7 @@ def _smb2_post_negotiate(client_sock, client_ip, smb_version, selected_dialect=0
                             smb_file=dir_path or None,
                             smb_action='DIR', trace_stage='knock_emitted_dir')
                 send_nbss(client_sock, build_smb2_query_directory_response(
-                    hdr, session_id, tree_id, children))
+                    hdr, session_id, tree_id, children, file_info_class))
 
         elif cmd == SMB2_QUERY_INFO:
             tree_id     = hdr['tree_id']

@@ -7,13 +7,14 @@ Zero filesystem backing: responds to TREE_CONNECT with STATUS_ACCESS_DENIED and 
 Stage 1: foundation — all helpers, header parsers/builders, dedup, knock emission.
          handle_connection() is a stub that identifies SMB1 vs SMB2 and closes.
 """
+import fnmatch
 import json
 import os
 import struct
 import threading
 import time
 
-from impacket import ntlm
+from impacket import ntlm, smb
 from common import create_dualstack_tcp_listener, is_blocked, normalize_ip
 
 # ---------------------------------------------------------------------------
@@ -435,7 +436,9 @@ SMB1_COM_READ_ANDX      = 0x2E
 SMB1_COM_TRANSACTION2   = 0x32
 SMB1_COM_NEGOTIATE      = 0x72
 SMB1_COM_SESSION_SETUP  = 0x73
+SMB1_COM_LOGOFF_ANDX    = 0x74
 SMB1_COM_TREE_CONNECT   = 0x75
+SMB1_COM_TREE_DISCONNECT = 0x71
 SMB1_COM_NT_CREATE_ANDX = 0xA2
 _SMB1_TRANS2_FIND_FIRST2 = 0x0001   # TRANS2 sub-command
 _SMB2_CREATE_DISP_FILE_OPEN = 0x00000001  # open existing only — no write intent
@@ -1974,10 +1977,14 @@ def _smb1_parse_nt_create(data, flags2):
     if not name_len:
         return ''
     if flags2 & SMB1_FLAGS2_UNICODE:
+        if name_len & 1 or 84 + name_len > len(data):
+            return ''
         fname = data[84:84 + name_len].decode('utf-16-le', errors='replace').strip('\x00')
     else:
+        if 83 + name_len > len(data):
+            return ''
         fname = data[83:83 + name_len].decode('latin-1', errors='replace').strip('\x00')
-    return fname.lstrip('\\').strip()
+    return fname.replace('\\', '/').lstrip('/').strip()
 
 
 def build_smb1_nt_create_response(hdr, uid, tid, fid, is_dir, file_size):
@@ -2012,19 +2019,20 @@ def build_smb1_nt_create_response(hdr, uid, tid, fid, is_dir, file_size):
     ) + body
 
 
-def build_smb1_trans2_response(hdr, uid, tid, files):
-    """TRANS2 FIND_FIRST2 response listing the given (filename, size) pairs."""
-    if not files:
+def build_smb1_trans2_response(hdr, uid, tid, entries):
+    """TRANS2 FIND_FIRST2 response listing the given (filename, size, is_dir) entries."""
+    if not entries:
         return build_smb1_error_response(
             hdr, uid, tid, STATUS_NO_MORE_FILES, SMB1_COM_TRANSACTION2)
     ft_old = _smb2_filetime(time.time() - 86400 * 30)
     ft_now = _smb2_filetime()
 
     # FILE_BOTH_DIRECTORY_INFORMATION entries (same format as SMB2 QUERY_DIRECTORY)
-    entries = []
-    for fname, size in files:
+    records = []
+    for fname, size, is_dir in entries:
         name  = fname.encode('utf-16-le')
-        alloc = (size + 4095) & ~4095
+        alloc = 0 if is_dir else ((size + 4095) & ~4095)
+        attrs = smb.ATTR_DIRECTORY if is_dir else smb.ATTR_NORMAL
         raw   = bytearray(
             struct.pack('<I', 0)              # NextEntryOffset (filled below)
             + struct.pack('<I', 0)            # FileIndex
@@ -2034,7 +2042,7 @@ def build_smb1_trans2_response(hdr, uid, tid, files):
             + struct.pack('<Q', ft_old)       # ChangeTime
             + struct.pack('<Q', size)         # EndOfFile
             + struct.pack('<Q', alloc)        # AllocationSize
-            + struct.pack('<I', 0x20)         # FileAttributes = NORMAL
+            + struct.pack('<I', attrs)        # FileAttributes
             + struct.pack('<I', len(name))    # FileNameLength
             + struct.pack('<I', 0)            # EaSize
             + struct.pack('<B', 0)            # ShortNameLength
@@ -2044,15 +2052,15 @@ def build_smb1_trans2_response(hdr, uid, tid, files):
         )
         if len(raw) % 8:
             raw += b'\x00' * (8 - len(raw) % 8)
-        entries.append(raw)
-    for i in range(len(entries) - 1):
-        struct.pack_into('<I', entries[i], 0, len(entries[i]))
-    data_buf = b''.join(entries)
+        records.append(raw)
+    for i in range(len(records) - 1):
+        struct.pack_into('<I', records[i], 0, len(records[i]))
+    data_buf = b''.join(records)
 
     # FIND_FIRST2 response parameters (12 bytes)
     sid    = (int.from_bytes(os.urandom(2), 'little') or 1)
     params = (struct.pack('<H', sid)              # SearchHandle
-              + struct.pack('<H', len(files))     # SearchCount
+              + struct.pack('<H', len(entries))   # SearchCount
               + struct.pack('<H', 1)              # EndOfSearch = 1
               + struct.pack('<H', 0)              # EaErrorOffset
               + struct.pack('<I', 0))             # LastNameOffset
@@ -2102,6 +2110,23 @@ def _smb1_parse_read_andx(data):
     return fid, offset, max_cnt
 
 
+def _smb1_parse_write_andx(data):
+    """Extract (fid, write_mode, payload_bytes) from a WRITE_ANDX request."""
+    if len(data) < 61:
+        return 0, 0, b''
+    fid       = struct.unpack_from('<H', data, 37)[0]
+    write_mode = struct.unpack_from('<H', data, 47)[0]
+    data_cnt  = struct.unpack_from('<H', data, 53)[0]
+    data_off  = struct.unpack_from('<H', data, 55)[0]
+    if not data_cnt or data_off < 32 or data_off + data_cnt > len(data):
+        return fid, write_mode, b''
+    payload = data[data_off:data_off + data_cnt]
+    # SMB1 named-pipe writes commonly prefix the first fragment with 0xFFFF.
+    if payload.startswith(b'\xff\xff'):
+        payload = payload[2:]
+    return fid, write_mode, payload
+
+
 def build_smb1_read_andx_response(hdr, uid, tid, chunk):
     """READ_ANDX success response (WordCount=12)."""
     # DataOffset from SMB header start: 32(hdr)+1(WC)+24(12 words)+2(BC) = 59
@@ -2139,6 +2164,31 @@ def build_smb1_close_response(hdr, uid, tid):
     flags2 = hdr['flags2'] | SMB1_FLAGS2_UNICODE
     return build_smb1_response_header(
         SMB1_COM_CLOSE, STATUS_SUCCESS, flags2,
+        uid=uid, tid=tid, mid=hdr['mid'],
+    ) + body
+
+
+def build_smb1_empty_success_response(hdr, uid, tid, command):
+    """WordCount=0 SMB1 success response for simple teardown commands."""
+    body   = struct.pack('<B', 0) + struct.pack('<H', 0)
+    flags2 = hdr['flags2'] | SMB1_FLAGS2_UNICODE
+    return build_smb1_response_header(
+        command, STATUS_SUCCESS, flags2,
+        uid=uid, tid=tid, mid=hdr['mid'],
+    ) + body
+
+
+def build_smb1_logoff_andx_response(hdr, uid, tid):
+    """LOGOFF_ANDX success response with no chained command."""
+    params = (
+        struct.pack('<B', 0xFF)
+        + struct.pack('<B', 0)
+        + struct.pack('<H', 0)
+    )
+    body   = struct.pack('<B', 2) + params + struct.pack('<H', 0)
+    flags2 = hdr['flags2'] | SMB1_FLAGS2_UNICODE
+    return build_smb1_response_header(
+        SMB1_COM_LOGOFF_ANDX, STATUS_SUCCESS, flags2,
         uid=uid, tid=tid, mid=hdr['mid'],
     ) + body
 
@@ -2205,6 +2255,45 @@ def _smb1_parse_transaction(payload, flags2):
         return pipe_name, dcerpc
     except Exception:
         return None, None
+
+
+def _smb1_parse_find_first2(payload, flags2):
+    """Parse SMB1 TRANS2_FIND_FIRST2 and return (dir_path, pattern, info_level)."""
+    if len(payload) < 61:
+        return None, None, None
+    try:
+        param_count  = struct.unpack_from('<H', payload, 51)[0]
+        param_offset = struct.unpack_from('<H', payload, 53)[0]
+        if not param_count or not param_offset or param_offset + param_count > len(payload):
+            return None, None, None
+        params = payload[param_offset:param_offset + param_count]
+        req = smb.SMBFindFirst2_Parameters(flags=flags2, data=params)
+        raw_name = req['FileName']
+        if isinstance(raw_name, bytes):
+            encoding = 'utf-16-le' if flags2 & SMB1_FLAGS2_UNICODE else 'cp437'
+            search = raw_name.decode(encoding, errors='ignore').rstrip('\x00')
+        else:
+            search = str(raw_name).rstrip('\x00')
+        search = search.replace('\\', '/').lstrip('/')
+        if not search:
+            search = '*'
+        if '/' in search:
+            dir_path, pattern = search.rsplit('/', 1)
+        else:
+            dir_path, pattern = '', search
+        dir_parts = []
+        for part in dir_path.split('/'):
+            if not part or part == '.':
+                continue
+            if part == '..':
+                return None, None, None
+            dir_parts.append(part)
+        pattern = (pattern or '*').strip()
+        if not pattern or len(pattern) > 255:
+            return None, None, None
+        return '/'.join(dir_parts), pattern, req['InformationLevel']
+    except Exception:
+        return None, None, None
 
 
 def build_smb1_transaction_response(hdr, uid, tid, flags2, dcerpc_data):
@@ -2383,13 +2472,10 @@ def handle_smb1(client_sock, client_ip, first_payload):
                         hdr, uid, tid, STATUS_OBJECT_NAME_NOT_FOUND, SMB1_COM_NT_CREATE_ANDX))
             elif cmd == SMB1_COM_WRITE_ANDX:
                 # DCERPC write on pipe — process and cache response for next READ
-                fid = struct.unpack_from('<H', payload, 37)[0] if len(payload) >= 39 else 0
+                fid, write_mode, dcerpc = _smb1_parse_write_andx(payload)
                 if fid in pipe_fids:
-                    # Data offset/count at params[6]/[12]: payload[39]/[45]
-                    data_off = struct.unpack_from('<H', payload, 45)[0] if len(payload) >= 47 else 0
-                    data_cnt = struct.unpack_from('<H', payload, 43)[0] if len(payload) >= 45 else 0
-                    dcerpc   = payload[data_off:data_off + data_cnt]
-                    trace(client_ip, 'smb1_pipe_write', fid=fid, data_len=len(dcerpc))
+                    trace(client_ip, 'smb1_pipe_write', fid=fid, data_len=len(dcerpc),
+                          write_mode=hex(write_mode))
                     pipe_fids[fid]['pending'] = _handle_dcerpc_multi(dcerpc, client_ip,
                                                                     user=user, smb_version='SMB1',
                                                                     smb_domain=domain, smb_host=host,
@@ -2399,7 +2485,7 @@ def handle_smb1(client_sock, client_ip, first_payload):
                                 + struct.pack('<B', 0xFF)   # AndXCmd=none
                                 + struct.pack('<B', 0)      # AndXRsvd
                                 + struct.pack('<H', 0)      # AndXOff
-                                + struct.pack('<H', data_cnt)  # Count
+                                + struct.pack('<H', len(dcerpc))  # Count
                                 + struct.pack('<H', 0)      # Remaining
                                 + struct.pack('<I', 0)      # CountHigh
                                 + struct.pack('<H', 0))     # ByteCount
@@ -2516,10 +2602,30 @@ def handle_smb1(client_sock, client_ip, first_payload):
                 send_nbss(client_sock, build_smb1_error_response(
                     hdr, uid, tid, STATUS_NOT_SUPPORTED, SMB1_COM_TRANSACTION2))
                 continue
-            file_list = [(fn, len(content)) for fn, content in _DECOYS[share_upper].items()]
+            dir_path, pattern, info_level = _smb1_parse_find_first2(payload, flags2)
+            if info_level != smb.SMB_FIND_FILE_BOTH_DIRECTORY_INFO:
+                trace(client_ip, 'smb1_trans2_find_first2',
+                      share=share_upper, path=dir_path, pattern=pattern,
+                      info_level=info_level, result='unsupported_info_level')
+                send_nbss(client_sock, build_smb1_error_response(
+                    hdr, uid, tid, STATUS_NOT_SUPPORTED, SMB1_COM_TRANSACTION2))
+                continue
+            if dir_path is None or _resolve_path(_DECOYS[share_upper], dir_path) != 'dir':
+                trace(client_ip, 'smb1_trans2_find_first2',
+                      share=share_upper, path=dir_path, pattern=pattern,
+                      info_level=info_level, result='dir_not_found')
+                send_nbss(client_sock, build_smb1_error_response(
+                    hdr, uid, tid, STATUS_NO_SUCH_FILE, SMB1_COM_TRANSACTION2))
+                continue
+            file_list = [
+                (name, size, is_dir)
+                for name, size, is_dir in _list_dir(_DECOYS[share_upper], dir_path)
+                if fnmatch.fnmatchcase(name, pattern)
+            ]
             trace(client_ip, 'smb1_trans2_find_first2',
-                  share=share_upper, count=len(file_list),
-                  files=[fn for fn, _ in file_list])
+                  share=share_upper, path=dir_path, pattern=pattern,
+                  info_level=info_level, count=len(file_list),
+                  files=[fn for fn, _, _ in file_list])
             send_nbss(client_sock, build_smb1_trans2_response(hdr, uid, tid, file_list))
 
         # ── READ_ANDX ─────────────────────────────────────────────────────────
@@ -2583,6 +2689,19 @@ def handle_smb1(client_sock, client_ip, first_payload):
                   had_handle=closed_fh is not None,
                   file=closed_fh['filename'] if closed_fh else None)
             send_nbss(client_sock, build_smb1_close_response(hdr, uid, hdr['tid']))
+
+        elif cmd == SMB1_COM_TREE_DISCONNECT:
+            old_tid = hdr['tid']
+            decoy_trees.pop(old_tid, None)
+            trace(client_ip, 'smb1_tree_disconnect', tid=hex(old_tid))
+            send_nbss(client_sock, build_smb1_empty_success_response(
+                hdr, uid, old_tid, SMB1_COM_TREE_DISCONNECT))
+
+        elif cmd == SMB1_COM_LOGOFF_ANDX:
+            trace(client_ip, 'smb1_logoff')
+            send_nbss(client_sock, build_smb1_logoff_andx_response(
+                hdr, uid, hdr['tid']))
+            break
 
         else:
             trace(client_ip, 'smb1_unexpected_cmd',

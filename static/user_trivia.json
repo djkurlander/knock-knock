@@ -260,7 +260,7 @@
   {
     "user": "administrator",
     "facts": [
-      "administrator is the Windows equivalent of root; the primary target for SMB brute-force attacks and RDP exploitation."
+      "administrator is the Windows equivalent of root; the primary target for RDP exploitation."
     ]
   },
   {

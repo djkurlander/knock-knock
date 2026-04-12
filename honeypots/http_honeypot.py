@@ -486,6 +486,9 @@ def handle_connection(sock: socket.socket, client_ip: str):
         if path == '/favicon.ico':
             return
 
+        if method == 'PRI':
+            return  # HTTP/2 connection preface — can't parse the actual request
+
         if not _should_emit(client_ip):
             return
 

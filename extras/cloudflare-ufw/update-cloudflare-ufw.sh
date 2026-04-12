@@ -2,7 +2,7 @@
 # Fetches latest Cloudflare IP ranges and updates UFW rules for ports 80 and 443.
 # Intended to run daily via cron.
 
-PORTS="80 443"
+PORTS="80 8080"
 COMMENT="Cloudflare"
 TMPFILE=$(mktemp)
 trap "rm -f $TMPFILE" EXIT

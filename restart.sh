@@ -88,7 +88,7 @@ else
     systemctl daemon-reload
 
     systemctl start knock-monitor
-    echo "  [+] Honeypot + Monitor online (ports 21/FTP 22/SSH 23/Telnet 25/MAIL 587/SMTP 445/SMB 3389/RDP 5060/SIP, log parsing active)"
+    echo "  [+] Honeypot + Monitor online (ports 21/FTP 22/SSH 23/Telnet 25/SMTP 587/SMTP 80/HTTP 445/SMB 3389/RDP 5060/SIP, log parsing active)"
 
     systemctl start knock-web
     echo "  [+] Web server online (WebSockets active)"

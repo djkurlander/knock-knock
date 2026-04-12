@@ -2851,14 +2851,27 @@
             name: 'http_request',
             match: (d, proto) => proto === 'HTTP',
             render: d => {
+                const HTTP_PURPOSE_LABELS = {
+                    'rce':                  'remote code execution',
+                    'credential_theft':     'credential theft',
+                    'device_infiltration':  'device infiltration',
+                    'config_exposure':      'configuration exposure',
+                    'path_traversal':       'path traversal',
+                    'proxy_abuse':          'proxy abuse',
+                    'research_scanner':     'research scanner',
+                    'protocol_probe':       'protocol probe',
+                    'mass_scanner':         'mass scanner',
+                    'unknown':              'unknown',
+                };
                 const L   = 'color:var(--ui-label)';
                 const sep = `<span style="margin-left:10px;"></span>`;
                 const lbl = (k, v) => `<span style="${L}">${k}:</span> <span>${v}</span>`;
-                const purpose = escapeHtml(d.http_purpose || 'unknown');
+                const rawPurpose = d.http_purpose || 'unknown';
+                const purpose = HTTP_PURPOSE_LABELS[rawPurpose] || rawPurpose.replace(/_/g, ' ');
                 const method  = escapeHtml(d.http_method  || '');
                 const path    = escapeHtml((d.http_path || '/').slice(0, 80));
-                const lines = [lbl('purpose', purpose)];
-                if (d.http_exploit) lines.push(lbl(purpose === 'research_scanner' ? 'scanner' : 'exploit', escapeHtml(d.http_exploit)));
+                const lines = [lbl('purpose', escapeHtml(purpose))];
+                if (d.http_exploit) lines.push(lbl(rawPurpose === 'research_scanner' ? 'scanner' : 'exploit', escapeHtml(d.http_exploit)));
                 const methodPath = [];
                 if (method) methodPath.push(lbl('method', method));
                 if (path)   methodPath.push(lbl('path', path));

@@ -105,7 +105,8 @@ _RE_RCE_PATH = re.compile(
     r'|(/GponForm/diag_Form)'                   # GPON RCE
     r'|(/setup\.cgi\?)'                         # Netgear RCE
     r'|(/cgi-bin/(?:vendor_ipcam_cgi|web_shell_cmd)\.cgi)'
-    r'|(/vendor/phpunit/phpunit/.*eval-stdin\.php)',  # PHPUnit RCE (CVE-2017-9841)
+    r'|(/vendor/phpunit/phpunit/.*eval-stdin\.php)'  # PHPUnit RCE (CVE-2017-9841)
+    r'|(/geoserver/(?:web|ows|wfs|wcs|wms)(?:/|$))',  # GeoServer RCE (CVE-2024-36401)
     re.IGNORECASE,
 )
 
@@ -137,7 +138,9 @@ _RE_CRED_PATH = re.compile(
     r'|(/manager/html)'                         # Tomcat
     r'|(/remote/login)'                         # Fortinet
     r'|(/dana-na/auth/)'                        # Pulse Secure
-    r'|(/+api/v1/users/login)',
+    r'|(/+api/v1/users/login)'
+    r'|(/wp-json/wp/v2/users(?:[/?]|$))'           # WordPress user enumeration via REST API
+    r'|(/\?rest_route=/wp/v2/users(?:&|$))',        # WordPress user enumeration (alternate form)
     re.IGNORECASE,
 )
 

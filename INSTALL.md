@@ -33,17 +33,17 @@ ssh -p 2222 user@your-server
 Open the ports for whichever honeypots you plan to run, plus the web dashboard. For example, with UFW:
 
 ```bash
-# Web dashboard (pick one)
-ufw allow 80/tcp     # HTTP
-ufw allow 443/tcp    # HTTPS
+# Web dashboard (default port 8080)
+ufw allow 8080/tcp
 
-# Honeypot ports (enable as needed)
+# Honeypot ports (enable as needed — these should be open to everyone)
 ufw allow 21/tcp     # FTP
-ufw allow 22/tcp     # SSH
+ufw allow 22/tcp     # SSH honeypot
 ufw allow 23/tcp     # Telnet
-ufw allow 25/tcp     # SMTP (MAIL)
+ufw allow 25/tcp     # SMTP
+ufw allow 80/tcp     # HTTP
 ufw allow 445/tcp    # SMB
-ufw allow 587/tcp    # SMTP
+ufw allow 587/tcp    # SMTP (submission)
 ufw allow 3389/tcp   # RDP
 ufw allow 5060       # SIP (TCP + UDP)
 
@@ -52,6 +52,8 @@ ufw allow 2222/tcp   # or whatever you chose
 ```
 
 If you're not using UFW, open the equivalent ports in your firewall.
+
+The web dashboard runs on port 8080 by default. You can access it at `http://your-server-ip:8080`. To change the port, set the `WEB_PORT` environment variable.
 
 ### MaxMind Account (GeoIP)
 
@@ -319,7 +321,7 @@ systemctl restart knock-monitor
 
 ### Selecting Protocols (`ENABLED_PROTOCOLS`)
 
-By default, all honeypots run (SSH, TNET, FTP, RDP, SMB, SIP, SMTP, MAIL). To run only specific protocols, set the `ENABLED_PROTOCOLS` environment variable to a comma-separated list.
+By default, all honeypots run (SSH, TNET, FTP, RDP, SMB, SIP, SMTP, HTTP). To run only specific protocols, set the `ENABLED_PROTOCOLS` environment variable to a comma-separated list.
 
 **Docker:** Copy the example override file (if you haven't already) and uncomment the `ENABLED_PROTOCOLS` setting:
 ```bash
@@ -345,7 +347,7 @@ certs/key.pem    # Private key
 **Docker:** Copy the example override file (if you haven't already) and uncomment the SSL settings:
 ```bash
 cp docker-compose.override.yml.example docker-compose.override.yml
-# Edit docker-compose.override.yml and uncomment ENABLE_SSL, the 443 port, and the certs volume
+# Edit docker-compose.override.yml and uncomment ENABLE_SSL and the certs volume
 docker compose up -d
 ```
 
@@ -358,6 +360,16 @@ systemctl restart knock-web
 ### IP Blocklist
 
 To immediately reject connections from specific IPs, add them to `data/blocklist.txt` (one per line). The honeypot reloads this file automatically every 60 seconds. Lines starting with `#` are ignored.
+
+### Hiding Your Server IP
+
+By default the web dashboard is publicly accessible on port 8080. This is fine for most deployments — there is nothing sensitive in the dashboard and no authentication to bypass.
+
+If you want to hide your server's real IP address (so bots can't correlate the honeypot with your dashboard domain, or bypass Cloudflare to hammer the dashboard directly), see `extras/cloudflare-ufw/README.md` for a complete guide to:
+
+- Restricting dashboard access to Cloudflare proxy IPs only
+- Using a Cloudflare Origin Rule to keep visitors on standard ports (80/443)
+- Docker-specific setup using nginx to enforce IP restrictions
 
 ---
 

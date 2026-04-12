@@ -1,116 +1,154 @@
-# Cloudflare UFW Setup for Knock-Knock
+# Hiding Your Server IP with Cloudflare
 
-## Why?
+This guide is **optional**. By default, Knock-Knock's web dashboard runs on port 8080 and is accessible to anyone who knows your server's IP. That's fine for most deployments.
 
-If your Knock-Knock dashboard is served through Cloudflare, you want to hide your server's real IP address. Bots that discover the origin IP can bypass Cloudflare and access the web server directly — or worse, correlate the IP with the honeypot.
+If you want to hide your server's real IP — so your dashboard is only reachable through Cloudflare's proxy and bots can't reach it directly — follow this guide.
 
-This guide sets up UFW (Uncomplicated Firewall) so that only Cloudflare's proxy servers can reach your web port, while the honeypot and your real SSH port remain accessible.
+## Why bother?
 
-By default, this setup allows Cloudflare traffic on both ports 80 (HTTP) and 443 (HTTPS). If you only use one, you can adjust the rules and update script to suit your setup.
+- Bots that discover your origin IP can bypass Cloudflare and hit the dashboard directly
+- More importantly, they can correlate the IP with the honeypot and know it's a trap
+- Cloudflare also gives you DDoS protection, caching, and HTTPS for free
 
 ## Prerequisites
 
-- Cloudflare DNS proxying enabled for your domain (orange cloud icon)
-- Your real SSH port (not port 22, which the honeypot uses)
+- Cloudflare account (free tier is fine) with your domain pointed at your server
+- DNS record for your domain set to **proxied** (orange cloud icon)
+- SSL mode set to **Full (strict)** in Cloudflare SSL/TLS settings
+- A Cloudflare **Origin CA certificate** in `certs/cert.pem` and `certs/key.pem`
+  (Generate one in Cloudflare dashboard → SSL/TLS → Origin Server)
+
+## Overview
+
+The approach:
+1. Web dashboard runs on port 8080 (not 80 or 443)
+2. A **Cloudflare Origin Rule** forwards visitor traffic (443) → your server's port 8080
+3. UFW restricts port 8080 to Cloudflare IP ranges only — direct access is blocked
+4. Visitors always see standard HTTPS — they never know about port 8080
+
+Port 80 remains open to everyone as a honeypot port (HTTP honeypot captures web scanners).
+
+---
 
 ## Setup
 
-### 1. Install and enable UFW
+### 1. Cloudflare Origin Rule
 
-```bash
-apt install ufw
+In the Cloudflare dashboard for your domain:
+
+- **Rules** → **Origin Rules** → **Add Rule** (Custom)
+- Name: anything (e.g. "Route to port 8080")
+- Match: **All incoming requests** (leave as default — no custom expression needed)
+- Action: **Rewrite** → Destination Port → `8080`
+- Save
+
+This applies to all proxied traffic for this domain, including WebSocket connections.
+
+### 2. Enable HTTPS on the web UI
+
+Place your Cloudflare Origin CA certificate in the `certs/` directory:
+```
+certs/cert.pem   # Origin CA certificate
+certs/key.pem    # Private key
 ```
 
-### 2. Set default policy
+**Systemd:** In `/etc/systemd/system/knock-web.service`, enable the HTTPS `ExecStart` block (swap the commented and uncommented versions), then:
+```bash
+systemctl daemon-reload && systemctl restart knock-web
+```
+
+**Docker:** See the Docker section below.
+
+### 3. UFW — restrict port 8080 to Cloudflare IPs
 
 ```bash
 ufw default deny incoming
 ufw default allow outgoing
-```
 
-### 3. Allow required ports
-
-```bash
-# Honeypot ports (public — this is the whole point)
-ufw allow 22/tcp    # SSH
+# Honeypot ports — open to all (intentional)
+ufw allow 22/tcp    # SSH honeypot
 ufw allow 23/tcp    # Telnet
 ufw allow 21/tcp    # FTP
-ufw allow 587/tcp   # SMTP (submission)
-ufw allow 25/tcp    # MAIL (SMTP)
-ufw allow 3389/tcp  # RDP
+ufw allow 25/tcp    # SMTP
+ufw allow 80/tcp    # HTTP honeypot
 ufw allow 445/tcp   # SMB
-ufw allow 5060/udp  # SIP (UDP)
-ufw allow 5060/tcp  # SIP (TCP)
+ufw allow 587/tcp   # SMTP submission
+ufw allow 3389/tcp  # RDP
+ufw allow 5060      # SIP
 
-# Your real SSH port (replace 2222 with yours)
-ufw allow 2222/tcp
+# Your real SSH port
+ufw allow 2222/tcp  # replace with your actual port
 
-# Web ports from Cloudflare IPs only (both HTTP and HTTPS)
+# Port 8080 (web dashboard) — Cloudflare IPs only
 for cidr in $(curl -sf https://www.cloudflare.com/ips-v4) $(curl -sf https://www.cloudflare.com/ips-v6); do
-    ufw allow from "$cidr" to any port 80 proto tcp comment "Cloudflare"
-    ufw allow from "$cidr" to any port 443 proto tcp comment "Cloudflare"
+    ufw allow from "$cidr" to any port 8080 proto tcp comment "Cloudflare"
 done
-```
 
-### 4. Enable UFW
-
-```bash
 ufw enable
 ```
 
-Verify with `ufw status`. You should see your SSH port, port 22, and Cloudflare CIDR rules for ports 80 and 443.
+### 4. Keep Cloudflare IPs up to date (cron)
 
-### 5. Daily Cloudflare IP updates (cron)
-
-Cloudflare occasionally adds or removes IP ranges. The included `update-cloudflare-ufw.sh` script fetches the latest ranges and syncs UFW rules accordingly — adding new ones and removing stale ones.
+Cloudflare occasionally adds or removes IP ranges. The included script fetches the latest and syncs UFW rules:
 
 ```bash
-# Make it executable
 chmod +x extras/cloudflare-ufw/update-cloudflare-ufw.sh
 
-# Add to root's crontab (runs daily at 4am)
 crontab -e
+# Add:
+0 4 * * * /bin/bash /root/knock-knock/extras/cloudflare-ufw/update-cloudflare-ufw.sh >> /var/log/cloudflare-ufw.log 2>&1
 ```
 
-Add this line:
+### 5. Verify
 
-```
-0 4 * * * /bin/bash /path/to/knock-knock/extras/cloudflare-ufw/update-cloudflare-ufw.sh >> /var/log/cloudflare-ufw.log 2>&1
+```bash
+# Direct access to your server IP should be blocked
+curl -k https://YOUR_SERVER_IP:8080 --max-time 5
+# Expected: connection refused or timeout
+
+# Access via Cloudflare domain should work
+curl https://your-domain.com
 ```
 
-**Note:** Behind Cloudflare, `websocket.client.host` will be a Cloudflare proxy IP, not the visitor's real IP. The app handles this automatically — `main.py` checks `CF-Connecting-IP` and `X-Forwarded-For` headers before falling back to the direct connection IP. No extra configuration needed.
+---
 
 ## Docker: nginx reverse proxy
 
-**This section only applies to Docker deployments.** Systemd deployments can skip this — UFW controls traffic directly.
+**Docker bypasses UFW** by inserting its own iptables rules — so UFW alone can't restrict Docker-published ports. The solution is to put **nginx** in front of the web container, since nginx is a host process that UFW can control.
 
-Docker bypasses UFW by inserting its own iptables rules for published ports. This means the Cloudflare-only UFW rules above won't protect Docker's web port — anyone can reach it by IP regardless of UFW.
+### Architecture
 
-To fix this, bind Docker to localhost and put nginx in front:
-
-### 1. Remove any existing port 443 mapping
-
-If your `docker-compose.override.yml` has a `443:443` port mapping (e.g. from a previous HTTPS setup), remove it — nginx will own port 443 instead. Open the file and delete or comment out any line that looks like:
-
-```yaml
-      - "443:443"
+```
+Cloudflare (443) → Origin Rule → server:8080 (nginx, host process, UFW-restricted)
+                                      ↓
+                               127.0.0.1:8081 (web container, localhost only)
 ```
 
-If you're not sure whether you have one:
+### 1. Create a `.env` file
+
+Docker Compose reads this for port binding variable substitution:
 
 ```bash
-grep -r 443 docker-compose.override.yml 2>/dev/null
-```
-
-### 2. Lock the web port to localhost
-
-Create a `.env` file in the project directory:
-
-```
+cat >> /root/knock-knock/.env << 'EOF'
+WEB_PORT=8081
 WEB_LISTEN=127.0.0.1
+EOF
 ```
 
-Then restart: `docker compose down && docker compose up -d`
+This binds the web container to `127.0.0.1:8081` — unreachable from outside, accessible to nginx on the host.
+
+### 2. Update `docker-compose.override.yml`
+
+Add to your override (create from `.example` if needed):
+
+```yaml
+  web:
+    environment:
+      - ENABLE_SSL=true
+      - WEB_PORT=8081
+    volumes:
+      - ./certs:/app/certs:ro
+```
 
 ### 3. Install and configure nginx
 
@@ -122,51 +160,64 @@ Create `/etc/nginx/sites-available/knock-knock`:
 
 ```nginx
 server {
-    listen 443 ssl;
+    listen 8080 ssl;
     server_name YOUR_DOMAIN;
 
     ssl_certificate     /root/knock-knock/certs/cert.pem;
     ssl_certificate_key /root/knock-knock/certs/key.pem;
 
+    include /etc/nginx/cloudflare_ips.conf;
+
     location / {
-        proxy_pass http://127.0.0.1:80;
+        proxy_pass https://127.0.0.1:8081;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";
         proxy_set_header Host $host;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header CF-Connecting-IP $http_cf_connecting_ip;
+        proxy_ssl_verify off;
     }
 }
 ```
 
-Enable and start:
-
+Enable it:
 ```bash
 ln -s /etc/nginx/sites-available/knock-knock /etc/nginx/sites-enabled/
 rm -f /etc/nginx/sites-enabled/default
-nginx -t && systemctl enable nginx && systemctl restart nginx
 ```
 
-The `Upgrade` and `Connection` headers are required for WebSocket (live feed) to work through the proxy.
-
-## Verification
+### 4. Generate the Cloudflare IP include file
 
 ```bash
-# Confirm UFW is active
-ufw status
+NGINX_IP_INCLUDE=/etc/nginx/cloudflare_ips.conf \
+    bash extras/cloudflare-ufw/update-cloudflare-ufw.sh
 
-# Direct access to your server IP should be refused
-curl -k https://YOUR_SERVER_IP --max-time 5
-# Expected: connection refused or timeout
-
-# Access via your Cloudflare domain should work
-curl -k https://your-domain.com
-# Expected: normal page response
+nginx -t && systemctl enable nginx && systemctl start nginx
 ```
+
+### 5. Start Docker
+
+```bash
+docker compose down && docker compose up -d
+```
+
+### 6. Keep the nginx IP list up to date (cron)
+
+```bash
+crontab -e
+# Add (note the NGINX_IP_INCLUDE variable):
+0 4 * * * NGINX_IP_INCLUDE=/etc/nginx/cloudflare_ips.conf /bin/bash /root/knock-knock/extras/cloudflare-ufw/update-cloudflare-ufw.sh >> /var/log/cloudflare-ufw.log 2>&1
+```
+
+The script reloads nginx automatically after updating the IP list (`nginx -t && systemctl reload nginx`).
+
+---
 
 ## Notes
 
-- Redis (port 6379) listens on localhost only by default — no UFW rule needed
-- If you add other services later, remember to open their ports in UFW
-- The update script logs to `/var/log/cloudflare-ufw.log` — check it if rules seem wrong
+- Redis (port 6379) listens on localhost only — no firewall rule needed
+- The update script logs to `/var/log/cloudflare-ufw.log`
+- On systemd servers, UFW handles port 8080 restriction directly (no nginx needed)
+- On Docker servers, nginx handles the restriction since Docker bypasses UFW
+- WebSocket connections (`wss://`) work through the Cloudflare Origin Rule automatically

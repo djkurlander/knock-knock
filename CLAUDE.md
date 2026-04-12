@@ -133,14 +133,42 @@ All persistent data lives in `data/`:
 
 **Note:** `blocklist.txt` and `knock:blocked` survive `--reset-all` intentionally. Use `--reset-blocklist` to clear them.
 
+## Port Configuration
+
+The web UI runs on port 8080 by default (`WEB_PORT=8080`). Most deployments just open port 8080 to the world — there's nothing sensitive in the dashboard. See `extras/cloudflare-ufw/README.md` for optional IP restriction via Cloudflare.
+
+### Default (no Cloudflare)
+- Honeypot ports (21, 22, 23, 25, 80, 445, 587, 3389, 5060): open to all — intentional
+- Port 8080 (web UI): open to all, accessible at `http://your-server-ip:8080`
+
+### This deployment (knock-knock.net servers, Cloudflare-protected)
+All servers use a Cloudflare Origin Rule (443 → 8080) so visitors connect on standard HTTPS while the web UI runs on 8080, restricted to Cloudflare IPs only.
+
+**Systemd servers:**
+- Port 8080: UFW restricts to Cloudflare IPs via `extras/cloudflare-ufw/update-cloudflare-ufw.sh`
+- `knock-web.service` runs uvicorn on `${WEB_PORT:-8080}` with SSL (Cloudflare Origin CA cert)
+
+**Docker server (ny):**
+Docker bypasses UFW, so nginx enforces the restriction instead:
+- nginx listens on 8080, enforces Cloudflare IP allowlist, proxies to web container on 8081
+- Web container: `WEB_PORT=8081`, `WEB_LISTEN=127.0.0.1` (set in `.env` for compose binding)
+- `docker-compose.override.yml`: `ENABLE_SSL=true`, `WEB_PORT=8081`, certs volume
+- nginx IP list auto-updated via `NGINX_IP_INCLUDE=/etc/nginx/cloudflare_ips.conf` in crontab
+
+### HTTP honeypot and port 80
+Port 80 is open to all — it's a honeypot port. Port 443 is not mapped to the HTTP honeypot (it can't do TLS). On the Docker server, nginx owns port 8080; port 80 goes to the honeypot container.
+
+---
+
 ## Environment Variables
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
 | `REDIS_HOST` | `localhost` | Redis server hostname (set to `redis` in Docker) |
 | `DB_DIR` | `data` | Directory for SQLite databases and blocklist |
-| `ENABLE_SSL` | unset | Set to `true` in `docker-compose.yml` for HTTPS |
-| `WEB_PORT` | `8080` | Port the web UI listens on (use Cloudflare Origin Rule to proxy 80→this) |
+| `ENABLE_SSL` | unset | Set to `true` to enable HTTPS on the web UI |
+| `WEB_PORT` | `8080` | Port the web UI listens on; also used in Docker Compose port binding via `.env` |
+| `WEB_LISTEN` | `0.0.0.0` | Interface the web UI binds to; set to `127.0.0.1` in Docker to restrict to localhost |
 | `LOG_VISITORS` | unset | Set to `true` to log dashboard visitors to `visitors.db` |
 | `SMTP_HOSTNAME` | reverse DNS | Override SMTP banner/cert hostname (default: reverse DNS of server IP) |
 | `SMB_DECOY_DIR` | `honeypots/decoys` | Directory of decoy share folders (e.g. `honeypots/decoys/PUBLIC/passwords.txt`). Defaults to `decoys/` next to the script. Loaded at startup; zero FS access after that. Falls back to hardcoded `PUBLIC/passwords.txt` if directory is missing or empty. |

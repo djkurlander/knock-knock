@@ -273,8 +273,8 @@ _RE_HIDDEN_TOOL_STATE = re.compile(
 
 _RE_TRAVERSAL = re.compile(
     r'\.\.[/\\]'                                # classic ../
-    r'|%2e%2e[%2f%5c]'                         # URL-encoded
-    r'|%252e%252e'                              # double-encoded
+    r'|(?:\.%2e|%2e\.|%2e%2e)(?:/|\\|%2f|%5c)' # encoded dot-dot + slash
+    r'|(?:%252e%252e|%252e\.|\.%252e)(?:/|\\|%252f|%255c)'  # double-encoded
     r'|/etc/(?:passwd|shadow|hosts)'
     r'|/proc/self/',
     re.IGNORECASE,
@@ -386,10 +386,10 @@ def _classify_purpose(method: str, path: str, ua: str, body: str):
     if _RE_RECON_UA.search(ua) or path in _RECON_PATHS:
         return 'research_scanner', None, None
 
-    # 9. Generic mass scanner (identified tool or empty UA hammering non-root)
+    # 9. Generic mass scanner (identified tool or empty UA)
     if _RE_MASS_UA.search(ua):
         return 'mass_scanner', None, None
-    if not ua and path not in ('/', ''):
+    if not ua:
         return 'mass_scanner', None, None
 
     return 'unknown', None, None

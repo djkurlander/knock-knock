@@ -30,7 +30,11 @@ def _load_exploits():
     """
     Load and compile http_exploits.json from the same directory as this script.
     Each entry may have: path_pattern, body_pattern, ua_pattern (all optional regexes),
-    plus name, cve (optional), and purpose.
+    plus name, cve (optional), purpose, and optional integer priority.
+    Lower priority numbers win. If priorities tie, file order wins. Intended
+    ranges are roughly: 100s for specific exploit signatures, 200s for targeted
+    product/login/config probes, 300s for malicious tool-family UAs, 600-700s
+    for generic scanner probes, and 800s for known research scanners.
     Returns a list of compiled exploit dicts.
     """
     candidates = [
@@ -43,16 +47,19 @@ def _load_exploits():
                 with open(path) as f:
                     entries = json.load(f)
                 compiled = []
-                for e in entries:
+                for idx, e in enumerate(entries):
                     compiled.append({
                         'name':         e['name'],
                         'cve':          e.get('cve'),
                         'purpose':      e.get('purpose'),
+                        'priority':     int(e.get('priority', 1000)),
+                        'order':        idx,
                         'method_re':    re.compile(e['method_pattern'], re.IGNORECASE) if e.get('method_pattern') else None,
                         'path_re':      re.compile(e['path_pattern'], re.IGNORECASE) if e.get('path_pattern') else None,
                         'body_re':      re.compile(e['body_pattern'], re.IGNORECASE) if e.get('body_pattern') else None,
                         'ua_re':        re.compile(e['ua_pattern'],   re.IGNORECASE) if e.get('ua_pattern')   else None,
                     })
+                compiled.sort(key=lambda e: (e['priority'], e['order']))
                 print(f'[http] Loaded {len(compiled)} exploit signatures from {path}', flush=True)
                 return compiled
             except Exception as ex:

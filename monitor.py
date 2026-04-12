@@ -789,7 +789,7 @@ def monitor(save_knocks=None, max_knocks=None):
             # Pass through protocol-specific extended telemetry into Redis/websocket payloads.
             # This is intentionally not persisted in SQLite.
             for k, v in knock.items():
-                if not isinstance(k, str) or not k.startswith(("sip_", "smtp_", "mail_", "smb_", "rdp_")):
+                if not isinstance(k, str) or not k.startswith(("sip_", "smtp_", "mail_", "smb_", "rdp_", "http_")):
                     continue
                 if isinstance(v, str):
                     package[k] = sanitize_credential(v)

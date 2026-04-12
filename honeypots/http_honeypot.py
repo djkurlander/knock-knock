@@ -18,6 +18,81 @@ import time
 
 from common import create_dualstack_tcp_listener, is_blocked, normalize_ip
 
+# ---------------------------------------------------------------------------
+# Exploit database — loaded once at startup from static/http_exploits.json
+# ---------------------------------------------------------------------------
+
+def _load_exploits():
+    """
+    Load and compile http_exploits.json from the static/ directory next to this file.
+    Each entry may have: path_pattern, body_pattern, ua_pattern (all optional regexes),
+    plus name, cve (optional), and purpose.
+    Returns a list of compiled exploit dicts.
+    """
+    candidates = [
+        os.path.join(os.path.dirname(__file__), '..', 'static', 'http_exploits.json'),
+        os.path.join(os.path.dirname(__file__), 'static', 'http_exploits.json'),
+    ]
+    for path in candidates:
+        path = os.path.normpath(path)
+        if os.path.exists(path):
+            try:
+                with open(path) as f:
+                    entries = json.load(f)
+                compiled = []
+                for e in entries:
+                    compiled.append({
+                        'name':         e['name'],
+                        'cve':          e.get('cve'),
+                        'purpose':      e.get('purpose'),
+                        'path_re':      re.compile(e['path_pattern'], re.IGNORECASE) if e.get('path_pattern') else None,
+                        'body_re':      re.compile(e['body_pattern'], re.IGNORECASE) if e.get('body_pattern') else None,
+                        'ua_re':        re.compile(e['ua_pattern'],   re.IGNORECASE) if e.get('ua_pattern')   else None,
+                    })
+                print(f'[http] Loaded {len(compiled)} exploit signatures from {path}', flush=True)
+                return compiled
+            except Exception as ex:
+                print(f'[http] Failed to load http_exploits.json: {ex}', flush=True)
+    print('[http] http_exploits.json not found — exploit matching disabled', flush=True)
+    return []
+
+_EXPLOITS = _load_exploits()
+
+
+def _match_exploit(path: str, ua: str, body: str):
+    """
+    Check path/ua/body against the compiled exploit list.
+    Returns (name, cve, purpose) for the first match, or (None, None, None).
+    Matching rules per entry:
+      - path_re only:            path must match
+      - ua_re only:              ua must match
+      - path_re + body_re:       both must match
+      - path_re + ua_re:         both must match
+      - all three:               all must match
+    """
+    for e in _EXPLOITS:
+        p_ok = e['path_re'].search(path) if e['path_re'] else None
+        b_ok = e['body_re'].search(body) if e['body_re'] else None
+        u_ok = e['ua_re'].search(ua)     if e['ua_re']   else None
+
+        has_path = e['path_re'] is not None
+        has_body = e['body_re'] is not None
+        has_ua   = e['ua_re']   is not None
+
+        if not has_path and not has_body and not has_ua:
+            continue
+
+        # All present fields must match
+        if has_path and not p_ok:
+            continue
+        if has_body and not b_ok:
+            continue
+        if has_ua   and not u_ok:
+            continue
+
+        return e['name'], e.get('cve'), e.get('purpose')
+    return None, None, None
+
 HTTP_PORT        = int(os.environ.get('HTTP_PORT',        80))
 HTTP_TIMEOUT     = int(os.environ.get('HTTP_TIMEOUT',     15))
 HTTP_MAX_HEADERS = int(os.environ.get('HTTP_MAX_HEADERS', 8192))
@@ -258,62 +333,71 @@ _RE_MASS_UA = re.compile(
 )
 
 
-def _classify_purpose(method: str, path: str, ua: str, body: str) -> str:
-    """Classify the inferred intent of an HTTP request. Returns a short label."""
+def _classify_purpose(method: str, path: str, ua: str, body: str):
+    """
+    Classify the inferred intent of an HTTP request.
+    Returns (purpose: str, exploit_name: str|None, exploit_cve: str|None).
+    Checks the exploit database first; falls back to general regex classifiers.
+    """
     combined = path + ' ' + body   # body may be empty string
 
     # 0. Protocol probe — non-HTTP binary data on port 80 (TLS, RDP, etc.)
     #    All valid HTTP methods are printable ASCII; any non-printable first byte
     #    means binary protocol data (TLS ClientHello 0x16, RDP TPKT 0x03, etc.)
     if method and not method[0].isprintable():
-        return 'protocol_probe'
+        return 'protocol_probe', None, None
 
-    # 1. RCE — highest priority
+    # 1. Exploit database — specific match overrides general classifiers
+    exp_name, exp_cve, exp_purpose = _match_exploit(path, ua, body)
+    if exp_name:
+        return exp_purpose or 'unknown', exp_name, exp_cve
+
+    # 2. RCE — highest priority
     if (_RE_RCE_PATH.search(path)
             or _RE_RCE_BODY.search(body)
             or _RE_RCE_UA.search(ua)):
-        return 'rce'
+        return 'rce', None, None
 
-    # 2. Credential theft
+    # 3. Credential theft
     if _RE_CRED_PATH.search(path):
-        return 'credential_theft'
+        return 'credential_theft', None, None
     if method in ('POST', 'PUT') and _RE_CRED_BODY.search(body):
         # Only flag as cred theft if the path also looks login-ish
         if re.search(r'/(login|signin|auth|session|account|user|wp-|admin)',
                      path, re.IGNORECASE):
-            return 'credential_theft'
+            return 'credential_theft', None, None
 
-    # 3. Device / IoT infiltration
+    # 4. Device / IoT infiltration
     if _RE_DEVICE_PATH.search(path):
-        return 'device_infiltration'
+        return 'device_infiltration', None, None
 
-    # 4. Config / secret file exposure
+    # 5. Config / secret file exposure
     if _RE_CONFIG_PATH.search(path):
-        return 'config_exposure'
+        return 'config_exposure', None, None
 
-    # 5. Path traversal
+    # 6. Path traversal
     if _RE_TRAVERSAL.search(combined):
-        return 'path_traversal'
+        return 'path_traversal', None, None
 
-    # 6. Proxy abuse / SSRF
+    # 7. Proxy abuse / SSRF
     if method == 'CONNECT':
-        return 'proxy_abuse'
+        return 'proxy_abuse', None, None
     if _RE_PROXY_PATH.match(path):
-        return 'proxy_abuse'
+        return 'proxy_abuse', None, None
     if _RE_SSRF.search(combined):
-        return 'proxy_abuse'
+        return 'proxy_abuse', None, None
 
-    # 7. Known benign research scanner
+    # 8. Known benign research scanner
     if _RE_RECON_UA.search(ua) or path in _RECON_PATHS:
-        return 'recon_scanner'
+        return 'recon_scanner', None, None
 
-    # 8. Generic mass scanner (identified tool or empty UA hammering non-root)
+    # 9. Generic mass scanner (identified tool or empty UA hammering non-root)
     if _RE_MASS_UA.search(ua):
-        return 'mass_scanner'
+        return 'mass_scanner', None, None
     if not ua and path not in ('/', ''):
-        return 'mass_scanner'
+        return 'mass_scanner', None, None
 
-    return 'unknown'
+    return 'unknown', None, None
 
 
 # ---------------------------------------------------------------------------
@@ -430,11 +514,13 @@ def handle_connection(sock: socket.socket, client_ip: str):
         if not _should_emit(client_ip):
             return
 
-        purpose = _classify_purpose(method, path, ua, body)
+        purpose, exploit_name, exploit_cve = _classify_purpose(method, path, ua, body)
 
         knock = {'type': 'KNOCK', 'proto': 'HTTP', 'ip': client_ip,
                  'http_method': method, 'http_path': path,
                  'http_purpose': purpose}
+        if exploit_name:
+            knock['http_exploit'] = exploit_name + (f' ({exploit_cve})' if exploit_cve else '')
         if host:
             knock['http_host'] = host
         if ua:

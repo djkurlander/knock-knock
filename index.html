@@ -2675,11 +2675,13 @@
                 const purpose = escapeHtml(d.http_purpose || 'unknown');
                 const method  = escapeHtml(d.http_method  || '');
                 const path    = escapeHtml((d.http_path || '/').slice(0, 80));
-                const parts   = [lbl('purpose', purpose)];
-                if (method) parts.push(lbl('method', method));
-                if (path)   parts.push(lbl('path', path));
-                if (d.http_exploit) parts.push(lbl('exploit', escapeHtml(d.http_exploit)));
-                return parts.map((p, i) => i ? `${sep}${p}` : p).join('');
+                const lines = [lbl('purpose', purpose)];
+                if (d.http_exploit) lines.push(lbl('exploit', escapeHtml(d.http_exploit)));
+                const methodPath = [];
+                if (method) methodPath.push(lbl('method', method));
+                if (path)   methodPath.push(lbl('path', path));
+                if (methodPath.length) lines.push(methodPath.map((p, i) => i ? `${sep}${p}` : p).join(''));
+                return lines.join('<br>');
             },
         },
         {

@@ -26,7 +26,7 @@ services:
   # honeypot-monitor:
   #   environment:
   #     - ENABLED_PROTOCOLS=SSH
-  #     # or: ENABLED_PROTOCOLS=SSH,TNET,SMTP:25,SMTP:587,HTTP:80
+  #     # or: ENABLED_PROTOCOLS=SSH,TNET,SMTP:25,SMTP:587,HTTP:80,HTTP:443
 
   ## Override the web UI port (default: 8080)
   ## Set up a Cloudflare Origin Rule to forward port 80/443 → this port
@@ -37,12 +37,10 @@ services:
   #     - "9090:9090"
 
   ## HTTPS — uncomment the block below, then place certs in certs/
+  ## Place cert.pem and key.pem in certs/ (e.g. Let's Encrypt or Cloudflare Origin CA)
   # web:
   #   environment:
   #     - ENABLE_SSL=true
-  #     - WEB_PORT=8443
-  #   ports:
-  #     - "8443:8443"
   #   volumes:
   #     - ./certs:/app/certs:ro
 

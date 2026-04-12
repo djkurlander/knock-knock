@@ -364,7 +364,7 @@ def _classify_purpose(method: str, path: str, ua: str, body: str):
 
     # 8. Known benign research scanner
     if _RE_RECON_UA.search(ua) or path in _RECON_PATHS:
-        return 'recon_scanner', None, None
+        return 'research_scanner', None, None
 
     # 9. Generic mass scanner (identified tool or empty UA hammering non-root)
     if _RE_MASS_UA.search(ua):

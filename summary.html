@@ -2858,7 +2858,7 @@
                 const method  = escapeHtml(d.http_method  || '');
                 const path    = escapeHtml((d.http_path || '/').slice(0, 80));
                 const lines = [lbl('purpose', purpose)];
-                if (d.http_exploit) lines.push(lbl('exploit', escapeHtml(d.http_exploit)));
+                if (d.http_exploit) lines.push(lbl(purpose === 'research_scanner' ? 'scanner' : 'exploit', escapeHtml(d.http_exploit)));
                 const methodPath = [];
                 if (method) methodPath.push(lbl('method', method));
                 if (path)   methodPath.push(lbl('path', path));

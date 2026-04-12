@@ -20,30 +20,54 @@ GEOIP_ASN_PATH = '/usr/share/GeoIP/GeoLite2-ASN.mmdb'
 DB_PATH = os.environ.get('DB_DIR', 'data') + '/knock_knock.db'
 BLOCKLIST_FILE = os.environ.get('DB_DIR', 'data') + '/blocklist.txt'
 
-from constants import PROTO, PROTO_NAME, PROTOCOL_META, DEFAULT_ENABLED_PROTOCOLS, sort_protocols_for_ui
+from constants import PROTO, PROTO_NAME, PROTOCOL_META, sort_protocols_for_ui
 
 USER_PANEL_PROTOCOLS = {name for name, meta in PROTOCOL_META.items() if meta.get('supports_user_panel')}
 PASS_PANEL_PROTOCOLS = {name for name, meta in PROTOCOL_META.items() if meta.get('supports_pass_panel')}
 MAIL_FORENSICS_MAX = int(os.environ.get("MAIL_FORENSICS_MAX", "100"))
 
+_DEFAULT_ENABLED_STR = 'SSH,TNET,FTP,RDP,SMB,SIP,SMTP:25,SMTP:587,HTTP:80'
+
 def parse_enabled_protocols():
-    raw = os.environ.get("ENABLED_PROTOCOLS", "").strip()
-    if not raw:
-        return list(DEFAULT_ENABLED_PROTOCOLS)
-    enabled = []
+    """
+    Parse ENABLED_PROTOCOLS env var (e.g. 'SSH,SMTP:25,SMTP:587,HTTP:80') into:
+      - names: ordered list of unique protocol names (for DB init, UI config, etc.)
+      - entries: list of (proto, port_or_None) tuples (for spawning)
+    Returns (names, entries).
+    """
+    raw = os.environ.get("ENABLED_PROTOCOLS", "").strip() or _DEFAULT_ENABLED_STR
+    entries = []
+    names = []
     for token in raw.split(','):
-        name = token.strip().upper()
-        if not name:
+        token = token.strip().upper()
+        if not token:
             continue
-        if name not in PROTO:
-            print(f"⚠️ Ignoring unknown protocol in ENABLED_PROTOCOLS: {name}", flush=True)
+        if ':' in token:
+            proto, port_str = token.split(':', 1)
+            try:
+                port = int(port_str)
+            except ValueError:
+                print(f"⚠️ Ignoring malformed token in ENABLED_PROTOCOLS: {token}", flush=True)
+                continue
+        else:
+            proto, port = token, None
+        if proto not in PROTO:
+            print(f"⚠️ Ignoring unknown protocol in ENABLED_PROTOCOLS: {proto}", flush=True)
             continue
-        if name not in enabled:
-            enabled.append(name)
-    if not enabled:
+        entries.append((proto, port))
+        if proto not in names:
+            names.append(proto)
+    if not entries:
         print("⚠️ ENABLED_PROTOCOLS resolved to empty set; using defaults", flush=True)
-        return list(DEFAULT_ENABLED_PROTOCOLS)
-    return enabled
+        entries = []
+        names = []
+        for token in _DEFAULT_ENABLED_STR.split(','):
+            proto, _, port_str = token.partition(':')
+            port = int(port_str) if port_str else None
+            entries.append((proto, port))
+            if proto not in names:
+                names.append(proto)
+    return names, entries
 
 def publish_protocol_config(redis_conn, enabled_protocols):
     enabled = sort_protocols_for_ui([p for p in enabled_protocols if p in PROTO])
@@ -189,12 +213,11 @@ _KNOCK_EXTRA_COLS = {
     'SSH':  ['username TEXT', 'password TEXT'],
     'TNET': ['username TEXT', 'password TEXT'],
     'FTP':  ['username TEXT', 'password TEXT'],
-    'SMTP': ['username TEXT', 'password TEXT', 'smtp_stage TEXT',
+    'SMTP': ['username TEXT', 'password TEXT', 'smtp_port INTEGER', 'smtp_stage TEXT',
              'smtp_mail_from TEXT', 'smtp_rcpt_to TEXT',
              'subject TEXT', 'body TEXT'],
-    'MAIL': ['username TEXT', 'password TEXT', 'smtp_stage TEXT',
-             'smtp_mail_from TEXT', 'smtp_rcpt_to TEXT',
-             'subject TEXT', 'body TEXT'],
+    'HTTP': ['http_port INTEGER', 'http_method TEXT', 'http_path TEXT', 'http_purpose TEXT',
+             'http_exploit TEXT', 'http_host TEXT', 'http_user_agent TEXT', 'http_body TEXT'],
     'SIP':  ['sip_method TEXT', 'sip_dial_string TEXT', 'sip_dial_number TEXT',
              'sip_call_id TEXT', 'sip_cseq TEXT', 'sip_extension TEXT',
              'sip_dial_country TEXT', 'sip_dial_country_name TEXT',
@@ -215,12 +238,14 @@ _PROTO_KEY_MAP = {
     'SSH':  [('user', 'username'), ('pass', 'password')],
     'TNET': [('user', 'username'), ('pass', 'password')],
     'FTP':  [('user', 'username'), ('pass', 'password')],
-    'SMTP': [('user', 'username'), ('pass', 'password'), ('smtp_stage', 'smtp_stage'),
+    'SMTP': [('user', 'username'), ('pass', 'password'), ('smtp_port', 'smtp_port'),
+             ('smtp_stage', 'smtp_stage'),
              ('smtp_mail_from', 'smtp_mail_from'), ('smtp_rcpt_to', 'smtp_rcpt_to'),
              ('subject', 'subject'), ('body', 'body')],
-    'MAIL': [('user', 'username'), ('pass', 'password'), ('smtp_stage', 'smtp_stage'),
-             ('smtp_mail_from', 'smtp_mail_from'), ('smtp_rcpt_to', 'smtp_rcpt_to'),
-             ('subject', 'subject'), ('body', 'body')],
+    'HTTP': [('http_port', 'http_port'), ('http_method', 'http_method'), ('http_path', 'http_path'),
+             ('http_purpose', 'http_purpose'), ('http_exploit', 'http_exploit'),
+             ('http_host', 'http_host'), ('http_user_agent', 'http_user_agent'),
+             ('http_body', 'http_body')],
     'SIP':  [('sip_method', 'sip_method'), ('sip_dial_string', 'sip_dial_string'),
              ('sip_dial_number', 'sip_dial_number'), ('sip_call_id', 'sip_call_id'),
              ('sip_cseq', 'sip_cseq'), ('sip_extension', 'sip_extension'),
@@ -537,7 +562,7 @@ def store_smtp_diag(redis_conn, diag):
     redis_conn.set(f"knock:diag:{proto}:last", json.dumps(diag))
     if diag["no_knock_reason"]:
         redis_conn.hincrby(f"knock:diag:{proto}:reason_counts", diag["no_knock_reason"], 1)
-    label = "SMTP25" if proto == "mail" else "SMTP587"
+    label = f"SMTP{diag.get('smtp_port', 25)}"
     print(
         f"🧪 {label} no-knock {diag['ip']} | reason={diag['no_knock_reason']} "
         f"stop={diag['stop_reason']} cmds={diag['commands_seen']}",
@@ -638,7 +663,7 @@ def monitor(save_knocks=None, max_knocks=None):
         save_protos = set(p.strip().upper() for p in save_knocks.split(','))
     else:
         save_protos = False  # --save-knocks not passed at all
-    enabled_protocols = parse_enabled_protocols()
+    enabled_protocols, proto_entries = parse_enabled_protocols()
     # Intersect save_protos with enabled protocols — never create tables for disabled protocols
     if save_protos is None:
         save_protos = set(enabled_protocols)
@@ -647,7 +672,8 @@ def monitor(save_knocks=None, max_knocks=None):
     init_db(save_protos=save_protos, enabled_protocols=enabled_protocols)
     r = redis.Redis(host=os.environ.get('REDIS_HOST', 'localhost'), port=6379, db=0, decode_responses=True)
     publish_protocol_config(r, enabled_protocols)
-    print(f"🧭 Enabled protocols: {', '.join(enabled_protocols)}", flush=True)
+    entry_strs = [f"{p}:{port}" if port else p for p, port in proto_entries]
+    print(f"🧭 Enabled protocols: {', '.join(entry_strs)}", flush=True)
     while True:
         try:
             c_reader = geoip2.database.Reader(GEOIP_CITY_PATH)
@@ -702,14 +728,21 @@ def monitor(save_knocks=None, max_knocks=None):
 
     # Spawn enabled honeypots as subprocesses
     honeypots = {}
-    for proto in enabled_protocols:
-        script = PROTOCOL_META.get(proto, {}).get("honeypot_script")
+    for proto, port_override in proto_entries:
+        meta = PROTOCOL_META.get(proto, {})
+        script = meta.get("honeypot_script")
         if not script:
             print(f"⚠️ No honeypot script configured for protocol {proto}; skipping", flush=True)
             continue
-        extra_args = PROTOCOL_META.get(proto, {}).get("honeypot_args", [])
-        honeypots[proto] = subprocess.Popen(
-            [sys.executable, "-u", script] + extra_args,
+        args = list(meta.get("honeypot_args", []))
+        if port_override is not None:
+            if '--port' in args:
+                args[args.index('--port') + 1] = str(port_override)
+            else:
+                args = ['--port', str(port_override)] + args
+        key = f"{proto}_{port_override}" if port_override is not None else proto
+        honeypots[key] = subprocess.Popen(
+            [sys.executable, "-u", script] + args,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,

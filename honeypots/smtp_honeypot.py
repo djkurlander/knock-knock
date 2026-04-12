@@ -108,6 +108,7 @@ def b64decode(s):
         return '<cryptic binary>'
 
 _PROTO_LABEL = "SMTP"  # overridden by --proto arg
+_SMTP_PORT = 25        # overridden by --port arg
 
 def emit_smtp_knock(
     client_ip,
@@ -120,7 +121,8 @@ def emit_smtp_knock(
     subject=None,
     body=None,
 ):
-    knock = {"type": "KNOCK", "proto": _PROTO_LABEL, "ip": client_ip, "smtp_stage": stage}
+    knock = {"type": "KNOCK", "proto": _PROTO_LABEL, "ip": client_ip,
+             "smtp_port": _SMTP_PORT, "smtp_stage": stage}
     if username is not None:
         knock["user"] = username
     if password is not None:
@@ -475,9 +477,10 @@ def handle_connection(client_sock, client_ip):
         except:
             pass
 
-def start_honeypot(port=587, proto_label="SMTP"):
-    global _PROTO_LABEL
+def start_honeypot(port=25, proto_label="SMTP"):
+    global _PROTO_LABEL, _SMTP_PORT
     _PROTO_LABEL = proto_label
+    _SMTP_PORT = port
     ensure_smtp_cert(_SMTP_HOSTNAME, SMTP_TLS_CERT_PATH, SMTP_TLS_KEY_PATH)
     sock = create_dualstack_tcp_listener(port, backlog=100)
     print(f"🚀 {proto_label} Honeypot Active on Port {port} (IPv4+IPv6) [{SMTP_FINGERPRINT}]. Collecting knocks...", flush=True)
@@ -494,7 +497,7 @@ def start_honeypot(port=587, proto_label="SMTP"):
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument("--port", type=int, default=587)
+    parser.add_argument("--port", type=int, default=25)
     parser.add_argument("--proto", default="SMTP")
     args = parser.parse_args()
     start_honeypot(port=args.port, proto_label=args.proto)

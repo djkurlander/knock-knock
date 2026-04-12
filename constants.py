@@ -1,9 +1,9 @@
 # Protocol enum — stored as INTEGER in knocks/proto intel tables
-PROTO = {'SSH': 0, 'TNET': 1, 'SMTP': 2, 'RDP': 3, 'MAIL': 4, 'FTP': 5, 'SIP': 6, 'SMB': 7}
+PROTO = {'SSH': 0, 'TNET': 1, 'SMTP': 2, 'RDP': 3, 'FTP': 5, 'SIP': 6, 'SMB': 7, 'HTTP': 8}
 PROTO_NAME = {v: k for k, v in PROTO.items()}  # reverse lookup: 0->'SSH' etc.
 
 # Canonical protocol order for UI controls and displays.
-PROTOCOL_UI_ORDER = ['SSH', 'TNET', 'FTP', 'RDP', 'SMB', 'SIP', 'MAIL', 'SMTP']
+PROTOCOL_UI_ORDER = ['SSH', 'TNET', 'FTP', 'RDP', 'SMB', 'SIP', 'HTTP', 'SMTP']
 
 SSH_HONEYPOT_SCRIPT = 'honeypots/ssh_honeypot_asyncssh.py'
 
@@ -37,13 +37,13 @@ PROTOCOL_META = {
         'supports_pass_panel': False,
         'honeypot_script': 'honeypots/rdp_honeypot.py',
     },
-    'MAIL': {
-        'proto_int': 4,
+    'HTTP': {
+        'proto_int': 8,
         'color': '#00ffaa',
-        'supports_user_panel': True,
-        'supports_pass_panel': True,
-        'honeypot_script': 'honeypots/smtp_honeypot.py',
-        'honeypot_args': ['--port', '25', '--proto', 'MAIL'],
+        'supports_user_panel': False,
+        'supports_pass_panel': False,
+        'honeypot_script': 'honeypots/http_honeypot.py',
+        'honeypot_args': [],
     },
     'FTP': {
         'proto_int': 5,

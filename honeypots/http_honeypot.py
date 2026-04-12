@@ -97,6 +97,8 @@ HTTP_TIMEOUT     = int(os.environ.get('HTTP_TIMEOUT',     15))
 HTTP_MAX_HEADERS = int(os.environ.get('HTTP_MAX_HEADERS', 8192))
 HTTP_MAX_BODY    = int(os.environ.get('HTTP_MAX_BODY',    4096))
 
+_HTTP_PORT = HTTP_PORT  # updated by --port arg; emitted in every knock
+
 # Per-IP knock throttle: max this many knocks per second per IP.
 _HTTP_THROTTLE_PER_SEC = 20
 
@@ -490,6 +492,7 @@ def handle_connection(sock: socket.socket, client_ip: str):
         purpose, exploit_name, exploit_cve = _classify_purpose(method, path, ua, body)
 
         knock = {'type': 'KNOCK', 'proto': 'HTTP', 'ip': client_ip,
+                 'http_port': _HTTP_PORT,
                  'http_method': method, 'http_path': path,
                  'http_purpose': purpose}
         if exploit_name:
@@ -516,8 +519,15 @@ def handle_connection(sock: socket.socket, client_ip: str):
 # ---------------------------------------------------------------------------
 
 def main():
-    server = create_dualstack_tcp_listener(HTTP_PORT)
-    print(f'🚀 HTTP Honeypot Active on Port {HTTP_PORT} (IPv4+IPv6). Collecting knocks...',
+    global _HTTP_PORT
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--port', type=int, default=HTTP_PORT)
+    args = parser.parse_args()
+    _HTTP_PORT = args.port
+
+    server = create_dualstack_tcp_listener(_HTTP_PORT)
+    print(f'🚀 HTTP Honeypot Active on Port {_HTTP_PORT} (IPv4+IPv6). Collecting knocks...',
           flush=True)
     while True:
         try:

@@ -877,7 +877,7 @@
         RDP:  { proto_int: 3, enabled: true, supports_user_panel: true,  supports_pass_panel: false, color: '#ff1a1a' },
         SMB:  { proto_int: 7, enabled: true, supports_user_panel: true,  supports_pass_panel: false, color: '#d6d9df' },
         SIP:  { proto_int: 6, enabled: true, supports_user_panel: false, supports_pass_panel: false, color: '#ff7a00' },
-        MAIL: { proto_int: 4, enabled: true, supports_user_panel: false, supports_pass_panel: false, color: '#00ffaa' },
+        HTTP: { proto_int: 8, enabled: true, supports_user_panel: false, supports_pass_panel: false, color: '#00ffaa' },
         SMTP: { proto_int: 2, enabled: true, supports_user_panel: true,  supports_pass_panel: true,  color: '#ff00ff' },
     };
     const DEFAULT_PROTO_COLORS = {
@@ -885,7 +885,7 @@
         SSH:  '#00ff41',
         TNET: '#00fbff',
         SMTP: '#ff00ff',
-        MAIL: '#00ffaa',
+        HTTP: '#00ffaa',
         RDP:  '#ff1a1a',
         FTP:  '#FFFF77',
         SIP:  '#ff7a00',
@@ -2666,9 +2666,21 @@
             render: d => renderSipAccountBlock(d),
         },
         {
-            name: 'mail_envelope',
-            match: (d, proto) => proto === 'MAIL' && SMTP_MESSAGE_STAGES.has(String(d.smtp_stage || '')),
-            render: d => renderFromToBlock(d, 'smtp_mail_from', 'smtp_rcpt_to', true),
+            name: 'http_request',
+            match: (d, proto) => proto === 'HTTP',
+            render: d => {
+                const L   = 'color:var(--ui-label)';
+                const sep = `<span style="margin-left:10px;"></span>`;
+                const lbl = (k, v) => `<span style="${L}">${k}:</span> <span>${v}</span>`;
+                const purpose = escapeHtml(d.http_purpose || 'unknown');
+                const method  = escapeHtml(d.http_method  || '');
+                const path    = escapeHtml((d.http_path || '/').slice(0, 80));
+                const parts   = [lbl('purpose', purpose)];
+                if (method) parts.push(lbl('method', method));
+                if (path)   parts.push(lbl('path', path));
+                if (d.http_exploit) parts.push(lbl('exploit', escapeHtml(d.http_exploit)));
+                return parts.map((p, i) => i ? `${sep}${p}` : p).join('');
+            },
         },
         {
             name: 'rdp_username',

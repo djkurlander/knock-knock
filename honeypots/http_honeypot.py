@@ -19,19 +19,18 @@ import time
 from common import create_dualstack_tcp_listener, is_blocked, normalize_ip
 
 # ---------------------------------------------------------------------------
-# Exploit database — loaded once at startup from static/http_exploits.json
+# Exploit database — loaded once at startup from honeypots/http_exploits.json
 # ---------------------------------------------------------------------------
 
 def _load_exploits():
     """
-    Load and compile http_exploits.json from the static/ directory next to this file.
+    Load and compile http_exploits.json from the same directory as this script.
     Each entry may have: path_pattern, body_pattern, ua_pattern (all optional regexes),
     plus name, cve (optional), and purpose.
     Returns a list of compiled exploit dicts.
     """
     candidates = [
-        os.path.join(os.path.dirname(__file__), '..', 'static', 'http_exploits.json'),
-        os.path.join(os.path.dirname(__file__), 'static', 'http_exploits.json'),
+        os.path.join(os.path.dirname(__file__), 'http_exploits.json'),
     ]
     for path in candidates:
         path = os.path.normpath(path)

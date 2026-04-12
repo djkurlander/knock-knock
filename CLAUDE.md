@@ -42,12 +42,12 @@ python smtp_honeypot.py
 # Add --save-knocks=SIP,SMTP to store only specific protocols
 python monitor.py
 
-# Web server (HTTP, port 80)
-python3 -m uvicorn main:app --host 0.0.0.0 --port 80 \
+# Web server (HTTP, default port 8080 — Cloudflare Origin Rule proxies 80→8080)
+python3 -m uvicorn main:app --host 0.0.0.0 --port 8080 \
   --proxy-headers --forwarded-allow-ips='*' --workers 2
 
-# Web server (HTTPS, port 443)
-python3 -m uvicorn main:app --host 0.0.0.0 --port 443 \
+# Web server (HTTPS, default port 8443)
+python3 -m uvicorn main:app --host 0.0.0.0 --port 8443 \
   --ssl-keyfile certs/key.pem --ssl-certfile certs/cert.pem \
   --proxy-headers --forwarded-allow-ips='*' --workers 2
 ```
@@ -86,7 +86,7 @@ SMTP Attacker → smtp_honeypot.py (port 587) ─┘        (GeoIP, DB, Redis)
                                                               ↓
                                                   SQLite DB (data/) + Redis pub/sub
                                                               ↓
-                                                   main.py (FastAPI, port 80/443)
+                                                   main.py (FastAPI, port 8080/8443)
                                                               ↓
                                                Browser WebSocket → Live Dashboard
 ```
@@ -140,6 +140,7 @@ All persistent data lives in `data/`:
 | `REDIS_HOST` | `localhost` | Redis server hostname (set to `redis` in Docker) |
 | `DB_DIR` | `data` | Directory for SQLite databases and blocklist |
 | `ENABLE_SSL` | unset | Set to `true` in `docker-compose.yml` for HTTPS |
+| `WEB_PORT` | `8080` | Port the web UI listens on (use Cloudflare Origin Rule to proxy 80→this) |
 | `LOG_VISITORS` | unset | Set to `true` to log dashboard visitors to `visitors.db` |
 | `SMTP_HOSTNAME` | reverse DNS | Override SMTP banner/cert hostname (default: reverse DNS of server IP) |
 | `SMB_DECOY_DIR` | `honeypots/decoys` | Directory of decoy share folders (e.g. `honeypots/decoys/PUBLIC/passwords.txt`). Defaults to `decoys/` next to the script. Loaded at startup; zero FS access after that. Falls back to hardcoded `PUBLIC/passwords.txt` if directory is missing or empty. |

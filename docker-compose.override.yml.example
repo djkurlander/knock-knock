@@ -21,18 +21,28 @@ services:
   #     - SMTP_HOSTNAME=mail.local
 
   ## Select which honeypots to run (default: all)
-  ## Protocols: SSH, TNET, FTP, RDP, SMB, SIP, SMTP, MAIL
+  ## Protocols: SSH, TNET, FTP, RDP, SMB, SIP, SMTP, HTTP
+  ## Use PROTO:PORT syntax to run the same protocol on multiple ports
   # honeypot-monitor:
   #   environment:
   #     - ENABLED_PROTOCOLS=SSH
-  #     # or: ENABLED_PROTOCOLS=SSH,TNET,SMTP
+  #     # or: ENABLED_PROTOCOLS=SSH,TNET,SMTP:25,SMTP:587,HTTP:80
+
+  ## Override the web UI port (default: 8080)
+  ## Set up a Cloudflare Origin Rule to forward port 80/443 → this port
+  # web:
+  #   environment:
+  #     - WEB_PORT=9090
+  #   ports:
+  #     - "9090:9090"
 
   ## HTTPS — uncomment the block below, then place certs in certs/
   # web:
   #   environment:
   #     - ENABLE_SSL=true
+  #     - WEB_PORT=8443
   #   ports:
-  #     - "443:443"
+  #     - "8443:8443"
   #   volumes:
   #     - ./certs:/app/certs:ro
 

@@ -5,10 +5,10 @@ After=network.target redis-server.service knock-monitor.service
 [Service]
 User=root
 WorkingDirectory=/root/knock-knock
-# Plain HTTP (default)
+# Plain HTTP (default — port 8080, Cloudflare Origin Rule proxies 80→8080)
 ExecStart=/root/knock-knock/.venv/bin/python3 -m uvicorn main:app \
     --host 0.0.0.0 \
-    --port 80 \
+    --port ${WEB_PORT:-8080} \
     --proxy-headers \
     --forwarded-allow-ips='*' \
     --workers 2 \
@@ -17,7 +17,7 @@ ExecStart=/root/knock-knock/.venv/bin/python3 -m uvicorn main:app \
 # HTTPS — use this ExecStart instead (remove the one above):
 # ExecStart=/root/knock-knock/.venv/bin/python3 -m uvicorn main:app \
 #     --host 0.0.0.0 \
-#     --port 443 \
+#     --port ${WEB_PORT:-8443} \
 #     --ssl-keyfile /root/knock-knock/certs/key.pem \
 #     --ssl-certfile /root/knock-knock/certs/cert.pem \
 #     --proxy-headers \
@@ -26,6 +26,7 @@ ExecStart=/root/knock-knock/.venv/bin/python3 -m uvicorn main:app \
 #     --timeout-keep-alive 30 \
 #     --log-level warning
 # Environment=LOG_VISITORS=true  # Uncomment to log dashboard visitors to visitors.db
+# Environment=WEB_PORT=8080      # Override default port (e.g. if 8080 is taken)
 Restart=always
 RestartSec=5
 

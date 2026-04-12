@@ -48,6 +48,7 @@ def _load_exploits():
                         'name':         e['name'],
                         'cve':          e.get('cve'),
                         'purpose':      e.get('purpose'),
+                        'method_re':    re.compile(e['method_pattern'], re.IGNORECASE) if e.get('method_pattern') else None,
                         'path_re':      re.compile(e['path_pattern'], re.IGNORECASE) if e.get('path_pattern') else None,
                         'body_re':      re.compile(e['body_pattern'], re.IGNORECASE) if e.get('body_pattern') else None,
                         'ua_re':        re.compile(e['ua_pattern'],   re.IGNORECASE) if e.get('ua_pattern')   else None,
@@ -62,30 +63,33 @@ def _load_exploits():
 _EXPLOITS = _load_exploits()
 
 
-def _match_exploit(path: str, ua: str, body: str):
+def _match_exploit(method: str, path: str, ua: str, body: str):
     """
-    Check path/ua/body against the compiled exploit list.
+    Check method/path/ua/body against the compiled exploit list.
     Returns (name, cve, purpose) for the first match, or (None, None, None).
     Matching rules per entry:
+      - method_re only:          method must match
       - path_re only:            path must match
       - ua_re only:              ua must match
-      - path_re + body_re:       both must match
-      - path_re + ua_re:         both must match
-      - all three:               all must match
+      - any combination:         all present fields must match
     """
     for e in _EXPLOITS:
+        m_ok = e['method_re'].search(method) if e['method_re'] else None
         p_ok = e['path_re'].search(path) if e['path_re'] else None
         b_ok = e['body_re'].search(body) if e['body_re'] else None
         u_ok = e['ua_re'].search(ua)     if e['ua_re']   else None
 
+        has_method = e['method_re'] is not None
         has_path = e['path_re'] is not None
         has_body = e['body_re'] is not None
         has_ua   = e['ua_re']   is not None
 
-        if not has_path and not has_body and not has_ua:
+        if not has_method and not has_path and not has_body and not has_ua:
             continue
 
         # All present fields must match
+        if has_method and not m_ok:
+            continue
         if has_path and not p_ok:
             continue
         if has_body and not b_ok:
@@ -255,6 +259,11 @@ _RE_CONFIG_PATH = re.compile(
     re.IGNORECASE,
 )
 
+_RE_HIDDEN_TOOL_STATE = re.compile(
+    r'/(?!\.well-known(?:/|$))(?:\.[^/]+/)+(?:memory\.json|sftp\.json)(?:\b|$)',
+    re.IGNORECASE,
+)
+
 _RE_TRAVERSAL = re.compile(
     r'\.\.[/\\]'                                # classic ../
     r'|%2e%2e[%2f%5c]'                         # URL-encoded
@@ -327,7 +336,7 @@ def _classify_purpose(method: str, path: str, ua: str, body: str):
         return 'protocol_probe', None, None
 
     # 1. Exploit database — specific match overrides general classifiers
-    exp_name, exp_cve, exp_purpose = _match_exploit(path, ua, body)
+    exp_name, exp_cve, exp_purpose = _match_exploit(method, path, ua, body)
     if exp_name:
         return exp_purpose or 'unknown', exp_name, exp_cve
 
@@ -351,7 +360,7 @@ def _classify_purpose(method: str, path: str, ua: str, body: str):
         return 'device_infiltration', None, None
 
     # 5. Config / secret file exposure
-    if _RE_CONFIG_PATH.search(path):
+    if _RE_CONFIG_PATH.search(path) or _RE_HIDDEN_TOOL_STATE.search(path):
         return 'config_exposure', None, None
 
     # 6. Path traversal

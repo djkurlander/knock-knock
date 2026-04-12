@@ -168,20 +168,14 @@ def _should_emit(client_ip: str) -> bool:
 #   unknown           Nothing recognisable
 
 _RE_RCE_PATH = re.compile(
-    # -- General structural signals (age well, catch novel exploits) ----------
-    r'(\$\{jndi:)'                              # Log4Shell / JNDI injection
+    # General structural signals — age well, catch novel exploits.
+    # Named CVE paths live in http_exploits.json instead.
+    r'(\$\{jndi:)'                              # JNDI injection (Log4Shell family)
     r'|(/cgi-bin/(?:admin|login|luci|test|bash|sh|cmd|exec|run))'
     r'|((?:[?&;]|^/)(?:cmd|exec|command|shell|run|system|passthru|popen|eval)'
        r'\s*=)'                                 # common RCE param names
     r'|(/shell\b)'
-    # -- Specific CVE / tool paths (update periodically) ---------------------
-    r'|(/\?s=.*\\think\\)'                      # ThinkPHP RCE
-    r'|(/boaform/admin/formLogin)'              # Fiberhome RCE
-    r'|(/GponForm/diag_Form)'                   # GPON RCE
-    r'|(/setup\.cgi\?)'                         # Netgear RCE
-    r'|(/cgi-bin/(?:vendor_ipcam_cgi|web_shell_cmd)\.cgi)'
-    r'|(/vendor/phpunit/phpunit/.*eval-stdin\.php)'  # PHPUnit RCE (CVE-2017-9841)
-    r'|(/geoserver/(?:web|ows|wfs|wcs|wms)(?:/|$))',  # GeoServer RCE (CVE-2024-36401)
+    r'|(/cgi-bin/(?:vendor_ipcam_cgi|web_shell_cmd)\.cgi)',
     re.IGNORECASE,
 )
 
@@ -202,20 +196,15 @@ _RE_RCE_UA = re.compile(
 )
 
 _RE_CRED_PATH = re.compile(
+    # General credential-harvesting signals.
+    # Named products (WordPress, phpMyAdmin, Tomcat, etc.) live in http_exploits.json.
     r'(/\.git/(?:credentials|COMMIT_EDITMSG|packed-refs))'  # git credential store
-    r'|(/wp-login\.php|/wp-admin/)'
-    r'|(/phpmyadmin[/.])'
-    r'|(/xmlrpc\.php)'
+    r'|(/wp-admin/)'                            # WordPress admin area (not login — that's in JSON)
     r'|(/administrator(?:/|$))'
     r'|(/admin(?:istration)?/(?:login|index|auth|signin))'
     r'|(/(?:login|signin|auth|account/login|user/login|session/new)'
        r'(?:[?/]|$))'
-    r'|(/manager/html)'                         # Tomcat
-    r'|(/remote/login)'                         # Fortinet
-    r'|(/dana-na/auth/)'                        # Pulse Secure
-    r'|(/+api/v1/users/login)'
-    r'|(/wp-json/wp/v2/users(?:[/?]|$))'           # WordPress user enumeration via REST API
-    r'|(/\?rest_route=/wp/v2/users(?:&|$))',        # WordPress user enumeration (alternate form)
+    r'|(/+api/v1/users/login)',
     re.IGNORECASE,
 )
 
@@ -226,20 +215,17 @@ _RE_CRED_BODY = re.compile(
 )
 
 _RE_DEVICE_PATH = re.compile(
-    r'(/HNAP1/)'                                # D-Link
-    r'|(/goform/)'                              # Tenda/TP-Link/etc
+    # General device/IoT structural signals.
+    # Named products (Hikvision, D-Link, Ubiquiti, etc.) live in http_exploits.json.
+    r'(/goform/)'                               # Tenda/TP-Link/etc
     r'|(/cgi-bin/luci(?:/|$))'                 # OpenWrt
     r'|(/cgi-bin/(?:login|admin|diagnostic|ping|traceroute)\.cgi)'
-    r'|(/setup\.cgi)'                           # Netgear
-    r'|(/apply\.cgi)'                           # Linksys
-    r'|(/boaform/)'                             # Fiberhome
+    r'|(/setup\.cgi)'                           # generic router setup CGI
+    r'|(/apply\.cgi)'                           # Linksys / generic
+    r'|(/boaform/)'                             # Boa httpd (many embedded devices)
     r'|(/GponForm/)'                            # GPON routers
-    r'|(/ui/login)'                             # Ubiquiti UniFi
-    r'|(/api/auth/login)'                       # Ubiquiti / Hikvision
-    r'|(/ISAPI/Security/userCheck)'             # Hikvision
-    r'|(/SDK/(?:webLanguage|DeviceDescription|deviceType))' # Hikvision CVE-2021-36260
-    r'|(/Streaming/Channels/)'                  # Hikvision RTSP
-    r'|(/sdk/index\.php)'                       # Dahua / IP camera
+    r'|(/api/auth/login)'                       # generic device API login
+    r'|(/Streaming/Channels/)'                  # IP camera RTSP gateway
     r'|(/stssys\.htm|/rpSys\.htm)'             # Cisco router
     r'|(/cgi-bin/supervisor/CloudSetup\.cgi)'  # D-Link / AXIS
     r'|(/cgi-bin/qcmap_web_cgi)',               # Qualcomm MDM
@@ -288,22 +274,10 @@ _RE_SSRF = re.compile(
     re.IGNORECASE,
 )
 
-# Known benign research scanners — identified by User-Agent or well-known paths
+# Self-identifying research scanners via methodology URL in UA — general structural signal.
+# Named scanner orgs are in http_exploits.json.
 _RE_RECON_UA = re.compile(
-    r'(Shodan\.IO|ShodanBot)'
-    r'|(Censys(?:Bot|-Spider)?)'
-    r'|(BinaryEdge)'
-    r'|(Rapid7(?:/|$))'
-    r'|(internet-measurement\.com)'
-    r'|(LeakIX)'
-    r'|(Expanse(?:Bot)?)'
-    r'|(SecurityTrails)'
-    r'|(ZoomEye)'
-    r'|(RWTH Aachen)'
-    r'|(netcraft\.com)'
-    r'|(ipip\.net)'
-    r'|(paloaltonetworks\.com)'                 # Cortex Xpanse
-    r'|(\+https?://\S+/methodology)',           # self-identified research scanners (Umai etc.)
+    r'\+https?://\S+/methodology',
     re.IGNORECASE,
 )
 

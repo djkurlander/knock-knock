@@ -13,10 +13,14 @@ import json
 import os
 import re
 import socket
+import ssl
 import threading
 import time
 
-from common import create_dualstack_tcp_listener, is_blocked, normalize_ip
+from common import create_dualstack_tcp_listener, ensure_self_signed_server_cert, is_blocked, normalize_ip
+
+HTTPS_CERT_PATH = os.environ.get('HTTPS_CERT_PATH', 'data/https.crt')
+HTTPS_KEY_PATH  = os.environ.get('HTTPS_KEY_PATH',  'data/https.key')
 
 # ---------------------------------------------------------------------------
 # Exploit database — loaded once at startup from honeypots/http_exploits.json
@@ -526,11 +530,30 @@ def main():
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument('--port', type=int, default=HTTP_PORT)
+    parser.add_argument('--ssl',    dest='ssl', action='store_true',  default=None)
+    parser.add_argument('--no-ssl', dest='ssl', action='store_false')
+    parser.add_argument('--ssl-cert', default=HTTPS_CERT_PATH)
+    parser.add_argument('--ssl-key',  default=HTTPS_KEY_PATH)
     args = parser.parse_args()
     _HTTP_PORT = args.port
 
+    # Auto-enable SSL on port 443 unless explicitly disabled
+    use_ssl = args.ssl if args.ssl is not None else (_HTTP_PORT == 443)
+
+    ssl_context = None
+    if use_ssl:
+        ensure_self_signed_server_cert(
+            cert_path=args.ssl_cert,
+            key_path=args.ssl_key,
+            subject='/CN=localhost/O=Apache/C=US',
+            days=825,
+        )
+        ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        ssl_context.load_cert_chain(certfile=args.ssl_cert, keyfile=args.ssl_key)
+
+    proto = 'HTTPS' if use_ssl else 'HTTP'
     server = create_dualstack_tcp_listener(_HTTP_PORT)
-    print(f'🚀 HTTP Honeypot Active on Port {_HTTP_PORT} (IPv4+IPv6). Collecting knocks...',
+    print(f'🚀 {proto} Honeypot Active on Port {_HTTP_PORT} (IPv4+IPv6). Collecting knocks...',
           flush=True)
     while True:
         try:
@@ -539,6 +562,12 @@ def main():
             if is_blocked(client_ip):
                 conn.close()
                 continue
+            if ssl_context:
+                try:
+                    conn = ssl_context.wrap_socket(conn, server_side=True)
+                except ssl.SSLError:
+                    conn.close()
+                    continue
             threading.Thread(target=handle_connection, args=(conn, client_ip),
                              daemon=True).start()
         except OSError:

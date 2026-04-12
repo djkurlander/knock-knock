@@ -26,7 +26,7 @@ USER_PANEL_PROTOCOLS = {name for name, meta in PROTOCOL_META.items() if meta.get
 PASS_PANEL_PROTOCOLS = {name for name, meta in PROTOCOL_META.items() if meta.get('supports_pass_panel')}
 MAIL_FORENSICS_MAX = int(os.environ.get("MAIL_FORENSICS_MAX", "100"))
 
-_DEFAULT_ENABLED_STR = 'SSH,TNET,FTP,RDP,SMB,SIP,SMTP:25,SMTP:587,HTTP:80'
+_DEFAULT_ENABLED_STR = 'SSH,TNET,FTP,RDP,SMB,SIP,SMTP:25,SMTP:587,HTTP:80,HTTP:443'
 
 def parse_enabled_protocols():
     """

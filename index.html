@@ -1576,7 +1576,7 @@
             const kpm = protoUptime > 0 ? (count / protoUptime) : 0;
             return { proto, count, pct, kpm };
         })
-            .sort((a, b) => (b.kpm - a.kpm) || (b.count - a.count) || a.proto.localeCompare(b.proto));
+            .sort((a, b) => (b.count - a.count) || (b.kpm - a.kpm) || a.proto.localeCompare(b.proto));
 
         const header = `
             <div style="display:grid;grid-template-columns:1fr 0.82fr 1.45fr 0.73fr;gap:8px;margin-bottom:8px;color:var(--ui-label);font-weight:bold;">

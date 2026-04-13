@@ -11,7 +11,7 @@ minimal shared columns. That left SMTP rows missing:
 These values can be reconstructed from the corresponding global intel tables.
 
 Usage:
-    python fix_mail_migration.py data/knock_knock.db
+    python extras/db-migrations/fix_mail_migration.py data/knock_knock.db
 
 Safe to run multiple times.
 """

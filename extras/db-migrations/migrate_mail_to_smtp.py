@@ -3,7 +3,7 @@
 One-time migration: merge MAIL intel (proto_int=4) into SMTP intel (proto_int=2).
 
 Run BEFORE deploying the code update that removes MAIL from the protocol list:
-    python migrate_mail_to_smtp.py data/knock_knock.db
+    python extras/db-migrations/migrate_mail_to_smtp.py data/knock_knock.db
 
 Safe to run multiple times — idempotent (DELETE WHERE proto=4 removes nothing on re-run).
 """

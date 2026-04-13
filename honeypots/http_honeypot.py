@@ -328,7 +328,7 @@ _RE_MASS_UA = re.compile(
 )
 
 _RE_APP_DISCOVERY_PATH = re.compile(
-    r'\.(?:php|asp|aspx|jsp|jspx|do|action)(?:[?#]|$)',
+    r'\.(?:php|asp|aspx|jsp|jspx|cgi|do|action)(?:[?#]|$)',
     re.IGNORECASE,
 )
 
@@ -396,22 +396,20 @@ def _classify_purpose(method: str, path: str, ua: str, body: str):
     if _RE_RECON_UA.search(ua) or path in _RECON_PATHS:
         return 'research_scanner', None, None
 
-    # 9. Generic mass scanner (identified tool)
-    if _RE_MASS_UA.search(ua):
-        return 'mass_scanner', None, None
-
-    # 10. Basic first-touch probe of the site root
+    # 9. Basic first-touch probe of the site root
     if method in ('GET', 'HEAD') and path in ('/', ''):
         return 'basic_probe', None, None
 
-    # 11. Fallback discovery buckets for unknown non-root requests
+    # 10. Fallback discovery buckets for unknown non-root requests
     if method in ('GET', 'HEAD') and path not in ('/', ''):
         if _RE_APP_DISCOVERY_PATH.search(path):
             return 'app_discovery', None, None
         if _RE_FILE_DISCOVERY_PATH.search(path):
             return 'resource_discovery', None, None
 
-    # 12. Generic mass scanner fallback for otherwise unclassified empty-UA requests
+    # 11. Generic mass scanner fallback
+    if _RE_MASS_UA.search(ua):
+        return 'mass_scanner', None, None
     if not ua:
         return 'mass_scanner', None, None
 

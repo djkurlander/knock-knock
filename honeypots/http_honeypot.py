@@ -327,6 +327,16 @@ _RE_MASS_UA = re.compile(
     re.IGNORECASE,
 )
 
+_RE_APP_DISCOVERY_PATH = re.compile(
+    r'\.(?:php|asp|aspx|jsp|jspx|do|action)(?:[?#]|$)',
+    re.IGNORECASE,
+)
+
+_RE_FILE_DISCOVERY_PATH = re.compile(
+    r'/[^/?#]+\.[A-Za-z0-9]{1,8}(?:[?#]|$)|/[^/?#]{2,}(?:[?#]|$)',
+    re.IGNORECASE,
+)
+
 
 def _classify_purpose(method: str, path: str, ua: str, body: str):
     """
@@ -391,6 +401,17 @@ def _classify_purpose(method: str, path: str, ua: str, body: str):
         return 'mass_scanner', None, None
     if not ua:
         return 'mass_scanner', None, None
+
+    # 10. Basic first-touch probe of the site root
+    if method in ('GET', 'HEAD') and path in ('/', ''):
+        return 'basic_probe', None, None
+
+    # 11. Fallback discovery buckets for unknown non-root requests
+    if method in ('GET', 'HEAD') and path not in ('/', ''):
+        if _RE_APP_DISCOVERY_PATH.search(path):
+            return 'app_discovery', None, None
+        if _RE_FILE_DISCOVERY_PATH.search(path):
+            return 'file_discovery', None, None
 
     return 'unknown', None, None
 

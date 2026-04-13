@@ -38,15 +38,47 @@ def migrate(db_path):
             print(f"  {table}: no MAIL rows — skipping")
             continue
 
-        # Merge MAIL rows into SMTP, summing hits and keeping latest last_seen
-        cur.execute(f"""
-            INSERT INTO {table} ({key_col}, proto, hits, last_seen)
-                SELECT {key_col}, ?, hits, last_seen
-                FROM {table} WHERE proto = ?
-            ON CONFLICT({key_col}, proto) DO UPDATE SET
-                hits      = hits + excluded.hits,
-                last_seen = MAX(last_seen, excluded.last_seen)
-        """, (SMTP_PROTO, MAIL_PROTO))
+        # Merge MAIL rows into SMTP, preserving the extra per-table columns.
+        if table == 'country_intel_proto':
+            cur.execute(f"""
+                INSERT INTO {table} ({key_col}, proto, country, hits, last_seen)
+                    SELECT {key_col}, ?, country, hits, last_seen
+                    FROM {table} WHERE proto = ?
+                ON CONFLICT({key_col}, proto) DO UPDATE SET
+                    hits      = hits + excluded.hits,
+                    last_seen = MAX(last_seen, excluded.last_seen),
+                    country   = COALESCE(NULLIF({table}.country, ''), excluded.country)
+            """, (SMTP_PROTO, MAIL_PROTO))
+        elif table == 'isp_intel_proto':
+            cur.execute(f"""
+                INSERT INTO {table} ({key_col}, proto, hits, last_seen, asn)
+                    SELECT {key_col}, ?, hits, last_seen, asn
+                    FROM {table} WHERE proto = ?
+                ON CONFLICT({key_col}, proto) DO UPDATE SET
+                    hits      = hits + excluded.hits,
+                    last_seen = MAX(last_seen, excluded.last_seen),
+                    asn       = COALESCE({table}.asn, excluded.asn)
+            """, (SMTP_PROTO, MAIL_PROTO))
+        elif table == 'ip_intel_proto':
+            cur.execute(f"""
+                INSERT INTO {table} ({key_col}, proto, hits, last_seen, lat, lng)
+                    SELECT {key_col}, ?, hits, last_seen, lat, lng
+                    FROM {table} WHERE proto = ?
+                ON CONFLICT({key_col}, proto) DO UPDATE SET
+                    hits      = hits + excluded.hits,
+                    last_seen = MAX(last_seen, excluded.last_seen),
+                    lat       = COALESCE({table}.lat, excluded.lat),
+                    lng       = COALESCE({table}.lng, excluded.lng)
+            """, (SMTP_PROTO, MAIL_PROTO))
+        else:
+            cur.execute(f"""
+                INSERT INTO {table} ({key_col}, proto, hits, last_seen)
+                    SELECT {key_col}, ?, hits, last_seen
+                    FROM {table} WHERE proto = ?
+                ON CONFLICT({key_col}, proto) DO UPDATE SET
+                    hits      = hits + excluded.hits,
+                    last_seen = MAX(last_seen, excluded.last_seen)
+            """, (SMTP_PROTO, MAIL_PROTO))
         merged = cur.rowcount
 
         # Delete MAIL rows now that they've been merged

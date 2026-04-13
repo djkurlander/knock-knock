@@ -938,9 +938,18 @@ _DCERPC_FAULT           = 0x03
 _SRVSVC_NETR_SHARE_ENUM = 15         # opnum for NetrShareEnum
 _SVCCTL_R_CREATE_SERVICE_W = 12     # opnum for RCreateServiceW (MS-SCMR §3.1.4.12)
 _SVCCTL_R_OPEN_SC_MANAGER_W = 15   # opnum for ROpenSCManagerW (MS-SCMR §3.1.4.1)
+_SVCCTL_R_OPEN_SERVICE_W    = 16   # opnum for ROpenServiceW  (MS-SCMR §3.1.4.20)
 _SVCCTL_R_START_SERVICE_W   = 19   # opnum for RStartServiceW  (MS-SCMR §3.1.4.30)
+_SVCCTL_ERROR_SERVICE_DOES_NOT_EXIST = 1060
 _FSCTL_PIPE_TRANSCEIVE        = 0x0011C017  # SMB2 IOCTL code for named-pipe transact
 _FSCTL_VALIDATE_NEGOTIATE_INFO = 0x00140204  # SMB3 post-negotiate validation (RFC MS-SMB2 §3.3.5.15.12)
+
+_SVCCTL_OPNUM_NAMES = {
+    _SVCCTL_R_CREATE_SERVICE_W: 'RCreateServiceW',
+    _SVCCTL_R_OPEN_SC_MANAGER_W: 'ROpenSCManagerW',
+    _SVCCTL_R_OPEN_SERVICE_W: 'ROpenServiceW',
+    _SVCCTL_R_START_SERVICE_W: 'RStartServiceW',
+}
 
 # Common IPC named pipes accepted by the honeypot.
 # SRVSVC is fully handled (NetrShareEnum). All others accept BIND and return
@@ -1175,6 +1184,27 @@ def _parse_svcctl_r_create_service_w(stub):
         return None, None
 
 
+def _parse_svcctl_r_open_service_w(stub):
+    """
+    Parse an ROpenServiceW NDR stub (MS-SCMR §3.1.4.20).
+    Returns (service_name, desired_access).
+
+    Best-effort layout:
+      hSCManager(20) + lpServiceName_ptr(4) + DesiredAccess(4) + string blob...
+    """
+    try:
+        if len(stub) < 28:
+            return None, None
+        svc_ptr = struct.unpack_from('<I', stub, 20)[0]
+        desired_access = struct.unpack_from('<I', stub, 24)[0]
+        service_name = None
+        if svc_ptr:
+            service_name, _ = _parse_ndr_conformant_string(stub, 28)
+        return service_name, desired_access
+    except Exception:
+        return None, None
+
+
 def _dcerpc_svcctl_dword_response(call_id, ctx_id, win_error=0):
     """DCERPC RESPONSE returning only a DWORD — used for RStartServiceW and similar."""
     stub = struct.pack('<I', win_error)
@@ -1259,6 +1289,20 @@ def _handle_dcerpc(data, client_ip, user=None, smb_version=None,
                 # Return a fake SCM handle so the worm can proceed to RCreateServiceW
                 trace(client_ip, 'svcctl_open_sc_manager')
                 return _dcerpc_svcctl_handle_response(call_id, ctx_id, win_error=0)
+            if opnum == _SVCCTL_R_OPEN_SERVICE_W:
+                svc_name, desired_access = _parse_svcctl_r_open_service_w(stub)
+                trace(client_ip, 'svcctl_open_service',
+                      service_name=svc_name, desired_access=hex(desired_access or 0),
+                      result='service_not_found')
+                _emit_knock(client_ip, user, None, smb_version, smb_domain, smb_host,
+                            smb_action='OPEN_SERVICE',
+                            smb_service_name=svc_name,
+                            trace_stage='knock_emitted_open_service')
+                # Returning ERROR_SERVICE_DOES_NOT_EXIST nudges installers into CreateServiceW.
+                return _dcerpc_svcctl_handle_response(
+                    call_id, ctx_id, handle=b'\x00' * 20,
+                    win_error=_SVCCTL_ERROR_SERVICE_DOES_NOT_EXIST,
+                )
             if opnum == _SVCCTL_R_CREATE_SERVICE_W:
                 svc_name, bin_path = _parse_svcctl_r_create_service_w(stub)
                 trace(client_ip, 'svcctl_create_service',
@@ -1287,9 +1331,12 @@ def _handle_dcerpc(data, client_ip, user=None, smb_version=None,
                             trace_stage='knock_emitted_start_service')
                 # Deny execution — DWORD-only response (RStartServiceW has no [out] handle)
                 return _dcerpc_svcctl_dword_response(call_id, ctx_id, win_error=5)
-            trace(client_ip, 'dcerpc_stub_request', pipe=pipe_name, opnum=opnum)
+            trace(client_ip, 'dcerpc_stub_request', pipe=pipe_name, opnum=opnum,
+                  opnum_name=_SVCCTL_OPNUM_NAMES.get(opnum, f'UNKNOWN_{opnum}'),
+                  stub_len=len(stub))
         else:
-            trace(client_ip, 'dcerpc_stub_request', pipe=pipe_name, opnum=opnum)
+            trace(client_ip, 'dcerpc_stub_request', pipe=pipe_name, opnum=opnum,
+                  stub_len=len(stub))
         return _dcerpc_fault(call_id, ctx_id)
 
     return None

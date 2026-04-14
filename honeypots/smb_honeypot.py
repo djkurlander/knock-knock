@@ -135,6 +135,62 @@ def _resolve_path(tree: dict, path: str):
     return None
 
 
+def _overlay_resolve_path(tree: dict, overlay: dict, path: str):
+    """Resolve a path against the read-only decoy tree plus a writable overlay."""
+    if not path:
+        return 'dir'
+    if path in overlay:
+        return 'file'
+    kind = _resolve_path(tree, path)
+    if kind is not None:
+        return kind
+    prefix = path + '/'
+    if any(k.startswith(prefix) for k in overlay):
+        return 'dir'
+    return None
+
+
+def _overlay_get_content(tree: dict, overlay: dict, path: str) -> bytes:
+    """Fetch file bytes from the writable overlay first, then the decoy tree."""
+    if path in overlay:
+        return bytes(overlay[path])
+    value = tree.get(path, b'')
+    return b'' if value is None else value
+
+
+def _overlay_list_dir(tree: dict, overlay: dict, path: str) -> list:
+    """List immediate children from the decoy tree plus writable overlay."""
+    merged = {}
+    for name, size, is_dir in _list_dir(tree, path):
+        merged[name.lower()] = (name, size, is_dir)
+
+    prefix = path + '/' if path else ''
+    for key, value in overlay.items():
+        if not key.startswith(prefix):
+            continue
+        rest = key[len(prefix):]
+        if not rest:
+            continue
+        child = rest.split('/', 1)[0]
+        if '/' in rest:
+            merged[child.lower()] = (child, 0, True)
+        else:
+            merged[child.lower()] = (child, len(value), False)
+    return sorted(merged.values(), key=lambda item: item[0].lower())
+
+
+def _overlay_write_file(overlay: dict, path: str, offset: int, data: bytes) -> int:
+    """Write bytes into an overlay-backed file, expanding with zeros as needed."""
+    buf = overlay.setdefault(path, bytearray())
+    end = offset + len(data)
+    if len(buf) < offset:
+        buf.extend(b'\x00' * (offset - len(buf)))
+    if len(buf) < end:
+        buf.extend(b'\x00' * (end - len(buf)))
+    buf[offset:end] = data
+    return len(data)
+
+
 _DECOYS: dict = _load_decoys()  # share_name_upper -> flat tree
 _SERVER_GUID  = os.urandom(16)  # stable per-process server GUID (used in NEGOTIATE + VALIDATE)
 
@@ -1230,17 +1286,25 @@ def _parse_svcctl_r_open_service_w(stub):
     Parse an ROpenServiceW NDR stub (MS-SCMR §3.1.4.20).
     Returns (service_name, desired_access).
 
-    Layout:
-      hSCManager(20) + lpServiceName_ptr(4) + DesiredAccess(4) + string blob...
+    Observed layout from live clients:
+      hSCManager(20) + lpServiceName_ptr(4) + deferred NDR string + DesiredAccess(4)
+
+    This differs from the earlier simplified assumption that DesiredAccess appears
+    before the deferred string blob. The live traces show the string immediately
+    after the pointer fields, with DesiredAccess trailing the string data.
     """
     try:
-        if len(stub) < 28:
+        if len(stub) < 24:
             return None, None
         svc_ptr = struct.unpack_from('<I', stub, 20)[0]
-        desired_access = struct.unpack_from('<I', stub, 24)[0]
         service_name = None
+        offset = 24
         if svc_ptr:
-            service_name, _ = _parse_ndr_conformant_string(stub, 28)
+            service_name, offset = _parse_ndr_conformant_string(stub, offset)
+            offset = (offset + 3) & ~3
+        desired_access = None
+        if offset + 4 <= len(stub):
+            desired_access = struct.unpack_from('<I', stub, offset)[0]
         return service_name, desired_access
     except Exception:
         return None, None
@@ -1487,6 +1551,22 @@ def _parse_read_params(payload):
     return int(offset), min(length, 65536), fid
 
 
+def _parse_write_params(payload):
+    """
+    Parse Length, Offset, FileId, and data bytes from an SMB2 WRITE request.
+    Body layout: DataOffset(2)@66 + Length(4)@68 + Offset(8)@72 + FileId(16)@80
+    """
+    if len(payload) < 96:
+        return 0, 0, (0, 0), b''
+    data_offset = struct.unpack_from('<H', payload, 66)[0]
+    length = struct.unpack_from('<I', payload, 68)[0]
+    offset = struct.unpack_from('<Q', payload, 72)[0]
+    fid = _parse_file_id_at(payload, 80)
+    if not data_offset or data_offset + length > len(payload):
+        return int(offset), 0, fid, b''
+    return int(offset), int(length), fid, payload[data_offset:data_offset + length]
+
+
 def _parse_query_info_params(payload):
     """
     Parse InfoType, FileInfoClass, FileId from an SMB2 QUERY_INFO request.
@@ -1540,6 +1620,7 @@ def _smb2_post_negotiate(client_sock, client_ip, smb_version, selected_dialect=0
     ipc_tree_ids = set() # TreeIds for IPC$ or other non-decoy shares
     # open_files: {(persistent, volatile): {'share': str, 'path': str|None, 'is_dir': bool, 'listed': bool}}
     open_files   = {}
+    overlay_files = {}  # {(share_upper, share_relative_path): bytearray}
     # pipe_fids: {(persistent, volatile): {'pending': bytes|None, 'pipe': str}} for IPC named pipe handles
     pipe_fids    = {}
     # svc_handles: {handle_bytes: (svc_name, bin_path)} — maps fake SVCCTL handles to service info
@@ -1651,9 +1732,10 @@ def _smb2_post_negotiate(client_sock, client_ip, smb_version, selected_dialect=0
                     hdr, session_id, tree_id, STATUS_ACCESS_DENIED, SMB2_CREATE))
                 continue
             share_tree = _DECOYS[share_upper]
+            share_overlay = overlay_files.setdefault(share_upper, {})
             # Normalize: strip leading backslashes, convert to forward-slash path
             norm = clean.replace('\\', '/').strip('/')
-            kind = _resolve_path(share_tree, norm)
+            kind = _overlay_resolve_path(share_tree, share_overlay, norm)
             _emit_knock(client_ip, user, share_upper, smb_version, domain, host,
                         smb_file=norm, smb_action='CREATE',
                         trace_stage='knock_emitted_create')
@@ -1665,7 +1747,7 @@ def _smb2_post_negotiate(client_sock, client_ip, smb_version, selected_dialect=0
                 send_nbss(client_sock, build_smb2_create_response(
                     hdr, session_id, tree_id, fid_p, fid_v, True))
             elif kind == 'file':
-                fsize = len(share_tree[norm])
+                fsize = len(_overlay_get_content(share_tree, share_overlay, norm))
                 fid_p = fid_v = next_fid; next_fid += 1
                 open_files[(fid_p, fid_v)] = {'share': share_upper, 'path': norm,
                                                'is_dir': False, 'listed': False}
@@ -1677,10 +1759,14 @@ def _smb2_post_negotiate(client_sock, client_ip, smb_version, selected_dialect=0
                 disposition = (struct.unpack_from('<I', payload, 100)[0]
                                if len(payload) >= 104 else _SMB2_CREATE_DISP_FILE_OPEN)
                 if disposition != _SMB2_CREATE_DISP_FILE_OPEN:
-                    # Bot is trying to create/overwrite a new file (ransomware, dropper, etc.)
-                    trace(client_ip, 'smb2_create', name=norm, result='write_denied')
-                    send_nbss(client_sock, build_smb2_error_response(
-                        hdr, session_id, tree_id, STATUS_ACCESS_DENIED, SMB2_CREATE))
+                    share_overlay.setdefault(norm, bytearray())
+                    fid_p = fid_v = next_fid; next_fid += 1
+                    open_files[(fid_p, fid_v)] = {'share': share_upper, 'path': norm,
+                                                  'is_dir': False, 'listed': False}
+                    trace(client_ip, 'smb2_create', name=norm, fid=fid_p,
+                          is_dir=False, result='created_overlay')
+                    send_nbss(client_sock, build_smb2_create_response(
+                        hdr, session_id, tree_id, fid_p, fid_v, False, file_size=0))
                 else:
                     trace(client_ip, 'smb2_create', name=norm, result='not_found')
                     send_nbss(client_sock, build_smb2_error_response(
@@ -1749,7 +1835,10 @@ def _smb2_post_negotiate(client_sock, client_ip, smb_version, selected_dialect=0
                 send_nbss(client_sock, build_smb2_error_response(
                     hdr, session_id, tree_id, STATUS_ACCESS_DENIED, SMB2_READ))
             else:
-                content = _DECOYS[fh['share']].get(fh['path'], b'')
+                content = _overlay_get_content(
+                    _DECOYS[fh['share']],
+                    overlay_files.setdefault(fh['share'], {}),
+                    fh['path'])
                 chunk   = content[offset: offset + length]
                 if not chunk:
                     trace(client_ip, 'smb2_read_eof', file=fh['path'], offset=offset)
@@ -1768,12 +1857,10 @@ def _smb2_post_negotiate(client_sock, client_ip, smb_version, selected_dialect=0
         # ── WRITE: pipe FID check must come before ipc_stub ──────────────────
         elif cmd == SMB2_WRITE:
             tree_id  = hdr['tree_id']
-            fid_pair = _parse_file_id_at(payload, 80) if len(payload) >= 96 else (0, 0)
+            offset, data_length, fid_pair, write_data = _parse_write_params(payload)
             # ── Pipe write (WRITE+READ DCERPC path) ──────────────────────────
             if fid_pair in pipe_fids:
-                data_offset = struct.unpack_from('<H', payload, 66)[0] if len(payload) >= 68 else 0
-                data_length = struct.unpack_from('<I', payload, 68)[0] if len(payload) >= 72 else 0
-                dcerpc = payload[data_offset:data_offset + data_length] if data_offset else b''
+                dcerpc = write_data
                 trace(client_ip, 'smb2_pipe_write',
                       fid=fid_pair[0], data_len=len(dcerpc))
                 pipe_fids[fid_pair]['pending'] = _handle_dcerpc_multi(
@@ -1789,7 +1876,7 @@ def _smb2_post_negotiate(client_sock, client_ip, smb_version, selected_dialect=0
                 send_nbss(client_sock, build_smb2_error_response(
                     hdr, session_id, tree_id, STATUS_NOT_SUPPORTED, cmd))
             else:
-                # ── Decoy file write (deny + emit) ───────────────────────────
+                # ── Decoy file write (overlay-backed) ───────────────────────
                 share_upper = decoy_trees.get(tree_id)
                 fh          = open_files.get(fid_pair)
                 fname       = fh['path'] if fh else None
@@ -1800,8 +1887,19 @@ def _smb2_post_negotiate(client_sock, client_ip, smb_version, selected_dialect=0
                 _emit_knock(client_ip, user, write_share, smb_version, domain, host,
                             smb_file=fname, smb_action='WRITE',
                             trace_stage='knock_emitted_write')
-                send_nbss(client_sock, build_smb2_error_response(
-                    hdr, session_id, tree_id, STATUS_ACCESS_DENIED, SMB2_WRITE))
+                if share_upper is None or fh is None or fh['is_dir'] or fname is None:
+                    send_nbss(client_sock, build_smb2_error_response(
+                        hdr, session_id, tree_id, STATUS_ACCESS_DENIED, SMB2_WRITE))
+                else:
+                    written = _overlay_write_file(
+                        overlay_files.setdefault(fh['share'], {}),
+                        fname,
+                        offset,
+                        write_data)
+                    trace(client_ip, 'smb2_write_ok',
+                          file=fname, offset=offset, bytes_written=written)
+                    send_nbss(client_sock, build_smb2_write_response(
+                        hdr, session_id, tree_id, written))
 
         # ── CLOSE: before IPC$ catch-all so pipe FID closes succeed ─────────
         elif cmd == SMB2_CLOSE:
@@ -1858,7 +1956,10 @@ def _smb2_post_negotiate(client_sock, client_ip, smb_version, selected_dialect=0
             else:
                 if fh:
                     fh['listed'] = True
-                children  = _list_dir(_DECOYS[share_upper], dir_path)
+                children  = _overlay_list_dir(
+                    _DECOYS[share_upper],
+                    overlay_files.setdefault(share_upper, {}),
+                    dir_path)
                 trace(client_ip, 'smb2_query_dir_result',
                       path=dir_path or '(root)',
                       entries=[(n, 'dir' if d else 'file') for n, _, d in children])
@@ -1879,7 +1980,10 @@ def _smb2_post_negotiate(client_sock, client_ip, smb_version, selected_dialect=0
             info_type, file_info_class, fid_pair = _parse_query_info_params(payload)
             fh       = open_files.get(fid_pair)
             is_dir   = fh is None or fh['is_dir']
-            fsize    = 0 if is_dir else len(_DECOYS[fh['share']].get(fh['path'], b''))
+            fsize    = 0 if is_dir else len(_overlay_get_content(
+                _DECOYS[fh['share']],
+                overlay_files.setdefault(fh['share'], {}),
+                fh['path']))
             trace(client_ip, 'smb2_query_info',
                   info_type=info_type, file_info_class=file_info_class,
                   is_dir=is_dir, file=None if is_dir else fh['path'])
@@ -2370,20 +2474,21 @@ def _smb1_parse_read_andx(data):
 
 
 def _smb1_parse_write_andx(data):
-    """Extract (fid, write_mode, payload_bytes) from a WRITE_ANDX request."""
+    """Extract (fid, offset, write_mode, payload_bytes) from a WRITE_ANDX request."""
     if len(data) < 61:
-        return 0, 0, b''
+        return 0, 0, 0, b''
     fid       = struct.unpack_from('<H', data, 37)[0]
+    offset    = struct.unpack_from('<I', data, 39)[0]
     write_mode = struct.unpack_from('<H', data, 47)[0]
     data_cnt  = struct.unpack_from('<H', data, 53)[0]
     data_off  = struct.unpack_from('<H', data, 55)[0]
     if not data_cnt or data_off < 32 or data_off + data_cnt > len(data):
-        return fid, write_mode, b''
+        return fid, offset, write_mode, b''
     payload = data[data_off:data_off + data_cnt]
     # SMB1 named-pipe writes commonly prefix the first fragment with 0xFFFF.
     if payload.startswith(b'\xff\xff'):
         payload = payload[2:]
-    return fid, write_mode, payload
+    return fid, offset, write_mode, payload
 
 
 def build_smb1_read_andx_response(hdr, uid, tid, chunk):
@@ -2455,10 +2560,15 @@ def build_smb1_logoff_andx_response(hdr, uid, tid):
 def _smb1_parse_transaction(payload, flags2):
     """
     Parse an SMB1 TRANSACTION (0x25) request.
-    Returns (pipe_name_upper, dcerpc_bytes).
+    Returns a metadata dict with:
+      pipe_name: normalized upper-case pipe name or None
+      pipe_raw: raw decoded name field
+      dcerpc: extracted Data section bytes
+      setup_count / param_count / param_offset / data_count / data_offset
+      setup_preview / param_preview / data_preview
     pipe_name_upper: last path component of the Name field (e.g. 'SRVSVC'), or None.
     dcerpc_bytes: raw Data section bytes (may be empty).
-    Returns (None, None) on parse failure.
+    Returns None on parse failure.
 
     Layout after 32-byte SMB1 header:
       [32]    WordCount
@@ -2472,20 +2582,24 @@ def _smb1_parse_transaction(payload, flags2):
       [32+1+WordCount*2+2]  Name field (null-terminated, ASCII or UTF-16LE)
     """
     if len(payload) < 60:
-        return None, None
+        return None
     try:
         wc          = payload[32]
+        setup_count = payload[59]
+        param_count = struct.unpack_from('<H', payload, 51)[0]
+        param_offset = struct.unpack_from('<H', payload, 53)[0]
         data_count  = struct.unpack_from('<H', payload, 55)[0]
         data_offset = struct.unpack_from('<H', payload, 57)[0]
 
         # ByteCount is right after the Setup words
         bc_off     = 32 + 1 + wc * 2
         if len(payload) < bc_off + 2:
-            return None, None
+            return None
 
         # Name field follows ByteCount; align to 2-byte boundary for Unicode
         name_start = bc_off + 2
         pipe_name  = None
+        pipe_raw   = None
         if name_start < len(payload):
             if flags2 & SMB1_FLAGS2_UNICODE:
                 if name_start % 2 != 0:
@@ -2500,6 +2614,7 @@ def _smb1_parse_transaction(payload, flags2):
                 nul = payload.find(b'\x00', name_start)
                 raw = payload[name_start:nul if nul != -1 else len(payload)].decode(
                     'ascii', errors='replace')
+            pipe_raw = raw
             # Last path component: '\PIPE\srvsvc' → 'SRVSVC', '\PIPE\' → None
             parts     = [p for p in raw.replace('/', '\\').split('\\') if p]
             # Drop leading 'PIPE' namespace component; remainder is the pipe name
@@ -2510,10 +2625,31 @@ def _smb1_parse_transaction(payload, flags2):
         dcerpc = b''
         if data_count > 0 and data_offset + data_count <= len(payload):
             dcerpc = payload[data_offset:data_offset + data_count]
+        setup_preview = None
+        setup_off = 61
+        setup_len = setup_count * 2
+        if setup_count and setup_off + setup_len <= len(payload):
+            setup_preview = payload[setup_off:setup_off + min(setup_len, 24)].hex()
+        param_preview = None
+        if param_count and param_offset and param_offset + param_count <= len(payload):
+            param_preview = payload[param_offset:param_offset + min(param_count, 24)].hex()
+        data_preview = dcerpc[:24].hex() if dcerpc else None
 
-        return pipe_name, dcerpc
+        return {
+            'pipe_name': pipe_name,
+            'pipe_raw': pipe_raw,
+            'dcerpc': dcerpc,
+            'setup_count': setup_count,
+            'param_count': param_count,
+            'param_offset': param_offset,
+            'data_count': data_count,
+            'data_offset': data_offset,
+            'setup_preview': setup_preview,
+            'param_preview': param_preview,
+            'data_preview': data_preview,
+        }
     except Exception:
-        return None, None
+        return None
 
 
 def _smb1_parse_find_first2(payload, flags2):
@@ -2663,6 +2799,7 @@ def handle_smb1(client_sock, client_ip, first_payload):
     decoy_trees  = {}    # {tid: share_name_upper}
     ipc_tree_ids = set() # TIDs for IPC$ or other non-decoy shares
     open_files   = {}    # {fid(int): {'share': str, 'filename': str|None}}
+    overlay_files = {}   # {share_upper: {share_relative_path: bytearray}}
     pipe_fids    = {}    # {fid(int): {'pending': bytes|None, 'pipe': str}} for IPC named pipe handles
     svc_handles  = {}    # {handle_bytes: (svc_name, bin_path)} — maps fake SVCCTL handles to service info
     next_fid     = 1
@@ -2762,10 +2899,10 @@ def handle_smb1(client_sock, client_ip, first_payload):
                         hdr, uid, tid, STATUS_OBJECT_NAME_NOT_FOUND, SMB1_COM_NT_CREATE_ANDX))
             elif cmd == SMB1_COM_WRITE_ANDX:
                 # DCERPC write on pipe — process and cache response for next READ
-                fid, write_mode, dcerpc = _smb1_parse_write_andx(payload)
+                fid, write_offset, write_mode, dcerpc = _smb1_parse_write_andx(payload)
                 if fid in pipe_fids:
                     trace(client_ip, 'smb1_pipe_write', fid=fid, data_len=len(dcerpc),
-                          write_mode=hex(write_mode))
+                          write_mode=hex(write_mode), offset=write_offset)
                     pipe_fids[fid]['pending'] = _handle_dcerpc_multi(dcerpc, client_ip,
                                                                     user=user, smb_version='SMB1',
                                                                     smb_domain=domain, smb_host=host,
@@ -2808,9 +2945,20 @@ def handle_smb1(client_sock, client_ip, first_payload):
             elif cmd == SMB1_COM_TRANSACTION:
                 # Direct named-pipe transact: DCERPC bundled in one request/response.
                 # Scanners that skip NT_CREATE_ANDX use this path to call NetrShareEnum.
-                pipe_name, dcerpc = _smb1_parse_transaction(payload, flags2)
+                txn_meta = _smb1_parse_transaction(payload, flags2) or {}
+                pipe_name = txn_meta.get('pipe_name')
+                dcerpc = txn_meta.get('dcerpc')
                 trace(client_ip, 'smb1_transaction', pipe=pipe_name,
-                      data_len=len(dcerpc) if dcerpc else 0)
+                      pipe_raw=txn_meta.get('pipe_raw'),
+                      data_len=len(dcerpc) if dcerpc else 0,
+                      setup_count=txn_meta.get('setup_count'),
+                      param_count=txn_meta.get('param_count'),
+                      param_offset=txn_meta.get('param_offset'),
+                      data_count=txn_meta.get('data_count'),
+                      data_offset=txn_meta.get('data_offset'),
+                      setup_preview=txn_meta.get('setup_preview'),
+                      param_preview=txn_meta.get('param_preview'),
+                      data_preview=txn_meta.get('data_preview'))
                 rpc_resp = None
                 if pipe_name in _KNOWN_PIPES and dcerpc:
                     rpc_resp = _handle_dcerpc_multi(dcerpc, client_ip, user=user,
@@ -2864,6 +3012,7 @@ def handle_smb1(client_sock, client_ip, first_payload):
             name  = _smb1_parse_nt_create(payload, flags2)
             clean = (name or '').lstrip('\\').strip()
             share_files = _DECOYS[share_upper]
+            share_overlay = overlay_files.setdefault(share_upper, {})
             if not clean:
                 fid = next_fid; next_fid += 1
                 open_files[fid] = {'share': share_upper, 'filename': None}
@@ -2871,24 +3020,35 @@ def handle_smb1(client_sock, client_ip, first_payload):
                 send_nbss(client_sock, build_smb1_nt_create_response(
                     hdr, uid, tid, fid, True, 0))
             else:
-                match = next((fn for fn in share_files if fn.lower() == clean.lower()), None)
+                kind = _overlay_resolve_path(share_files, share_overlay, clean)
                 _emit_knock(client_ip, user, share_upper, 'SMB1', domain, host,
                             smb_file=clean, smb_action='CREATE',
                             trace_stage='knock_emitted_create')
-                if match:
+                if kind == 'file':
                     fid = next_fid; next_fid += 1
-                    open_files[fid] = {'share': share_upper, 'filename': match}
+                    open_files[fid] = {'share': share_upper, 'filename': clean}
                     trace(client_ip, 'smb1_create', name=clean, fid=fid, is_dir=False)
                     send_nbss(client_sock, build_smb1_nt_create_response(
-                        hdr, uid, tid, fid, False, len(share_files[match])))
+                        hdr, uid, tid, fid, False,
+                        len(_overlay_get_content(share_files, share_overlay, clean))))
+                elif kind == 'dir':
+                    fid = next_fid; next_fid += 1
+                    open_files[fid] = {'share': share_upper, 'filename': clean}
+                    trace(client_ip, 'smb1_create', name=clean, fid=fid, is_dir=True)
+                    send_nbss(client_sock, build_smb1_nt_create_response(
+                        hdr, uid, tid, fid, True, 0))
                 else:
                     # CreateDisposition at params[35] = payload[68]
                     disposition = (struct.unpack_from('<I', payload, 68)[0]
                                    if len(payload) >= 72 else _SMB2_CREATE_DISP_FILE_OPEN)
                     if disposition != _SMB2_CREATE_DISP_FILE_OPEN:
-                        trace(client_ip, 'smb1_create', name=clean, result='write_denied')
-                        send_nbss(client_sock, build_smb1_error_response(
-                            hdr, uid, tid, STATUS_ACCESS_DENIED, SMB1_COM_NT_CREATE_ANDX))
+                        share_overlay.setdefault(clean, bytearray())
+                        fid = next_fid; next_fid += 1
+                        open_files[fid] = {'share': share_upper, 'filename': clean}
+                        trace(client_ip, 'smb1_create', name=clean, fid=fid,
+                              is_dir=False, result='created_overlay')
+                        send_nbss(client_sock, build_smb1_nt_create_response(
+                            hdr, uid, tid, fid, False, 0))
                     else:
                         trace(client_ip, 'smb1_create', name=clean, result='not_found')
                         send_nbss(client_sock, build_smb1_error_response(
@@ -2916,7 +3076,10 @@ def handle_smb1(client_sock, client_ip, first_payload):
                 send_nbss(client_sock, build_smb1_error_response(
                     hdr, uid, tid, STATUS_NOT_SUPPORTED, SMB1_COM_TRANSACTION2))
                 continue
-            if dir_path is None or _resolve_path(_DECOYS[share_upper], dir_path) != 'dir':
+            if dir_path is None or _overlay_resolve_path(
+                    _DECOYS[share_upper],
+                    overlay_files.setdefault(share_upper, {}),
+                    dir_path) != 'dir':
                 trace(client_ip, 'smb1_trans2_find_first2',
                       share=share_upper, path=dir_path, pattern=pattern,
                       info_level=info_level, result='dir_not_found')
@@ -2925,7 +3088,10 @@ def handle_smb1(client_sock, client_ip, first_payload):
                 continue
             file_list = [
                 (name, size, is_dir)
-                for name, size, is_dir in _list_dir(_DECOYS[share_upper], dir_path)
+                for name, size, is_dir in _overlay_list_dir(
+                    _DECOYS[share_upper],
+                    overlay_files.setdefault(share_upper, {}),
+                    dir_path)
                 if fnmatch.fnmatchcase(name, pattern)
             ]
             trace(client_ip, 'smb1_trans2_find_first2',
@@ -2953,7 +3119,10 @@ def handle_smb1(client_sock, client_ip, first_payload):
                 send_nbss(client_sock, build_smb1_error_response(
                     hdr, uid, tid, STATUS_ACCESS_DENIED, SMB1_COM_READ_ANDX))
             else:
-                content = _DECOYS[fh['share']].get(fh['filename'], b'')
+                content = _overlay_get_content(
+                    _DECOYS[fh['share']],
+                    overlay_files.setdefault(fh['share'], {}),
+                    fh['filename'])
                 chunk   = content[offset:offset + max_cnt]
                 if not chunk:
                     trace(client_ip, 'smb1_read_eof',
@@ -2984,8 +3153,32 @@ def handle_smb1(client_sock, client_ip, first_payload):
             _emit_knock(client_ip, user, write_share, 'SMB1', domain, host,
                         smb_file=fname, smb_action='WRITE',
                         trace_stage='knock_emitted_write')
-            send_nbss(client_sock, build_smb1_error_response(
-                hdr, uid, tid, STATUS_ACCESS_DENIED, SMB1_COM_WRITE_ANDX))
+            if share_upper is None or fh is None or fname is None:
+                send_nbss(client_sock, build_smb1_error_response(
+                    hdr, uid, tid, STATUS_ACCESS_DENIED, SMB1_COM_WRITE_ANDX))
+            else:
+                _fid, write_offset, _write_mode, write_data = _smb1_parse_write_andx(payload)
+                written = _overlay_write_file(
+                    overlay_files.setdefault(fh['share'], {}),
+                    fname,
+                    write_offset,
+                    write_data)
+                trace(client_ip, 'smb1_write_ok', file=fname,
+                      offset=write_offset, bytes_written=written)
+                ack_body = (
+                    struct.pack('<B', 6)
+                    + struct.pack('<B', 0xFF)
+                    + struct.pack('<B', 0)
+                    + struct.pack('<H', 0)
+                    + struct.pack('<H', written)
+                    + struct.pack('<H', 0)
+                    + struct.pack('<I', 0)
+                    + struct.pack('<H', 0)
+                )
+                send_nbss(client_sock,
+                          build_smb1_response_header(SMB1_COM_WRITE_ANDX, STATUS_SUCCESS,
+                                                     flags2, uid=uid, tid=tid)
+                          + ack_body)
 
         # ── COM_CLOSE ─────────────────────────────────────────────────────────
         elif cmd == SMB1_COM_CLOSE:

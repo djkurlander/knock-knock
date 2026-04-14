@@ -31,6 +31,7 @@ SMB_SERVER_DOMAIN     = (os.environ.get('SMB_SERVER_DOMAIN', '').strip()
                          or 'WORKGROUP')
 SMB_NATIVE_OS         = 'Windows Server 2019 Standard 17763'
 SMB_NATIVE_LAN_MAN    = 'Windows Server 2019 Standard 17763'
+SMB_QUARANTINE_DIR    = os.environ.get('SMB_QUARANTINE_DIR', '').strip()
 
 # Decoy shares: loaded at startup from SMB_DECOY_DIR folder (or hardcoded default).
 # Structure: dict[share_name_upper -> dict[filename -> bytes]]
@@ -189,6 +190,43 @@ def _overlay_write_file(overlay: dict, path: str, offset: int, data: bytes) -> i
         buf.extend(b'\x00' * (end - len(buf)))
     buf[offset:end] = data
     return len(data)
+
+
+def _sanitize_quarantine_component(value: str) -> str:
+    """Sanitize a value for use in a flat quarantine filename."""
+    cleaned = []
+    for ch in (value or ''):
+        if ch.isalnum() or ch in '._-':
+            cleaned.append(ch)
+        else:
+            cleaned.append('_')
+    return ''.join(cleaned).strip('._') or 'unnamed'
+
+
+def _quarantine_overlay_file(client_ip: str, smb_version: str, share: str, path: str, data: bytes):
+    """Best-effort write of an overlay-captured payload to the quarantine directory."""
+    if not SMB_QUARANTINE_DIR or not data:
+        return None
+    try:
+        os.makedirs(SMB_QUARANTINE_DIR, exist_ok=True)
+        stamp = time.strftime('%Y%m%dT%H%M%SZ', time.gmtime())
+        safe_ip = _sanitize_quarantine_component(client_ip)
+        safe_share = _sanitize_quarantine_component(share)
+        safe_path = _sanitize_quarantine_component(path.replace('/', '__'))
+        safe_ver = _sanitize_quarantine_component(smb_version)
+        filename = f'{stamp}_{safe_ip}_{safe_ver}_{safe_share}_{safe_path}'
+        full_path = os.path.join(SMB_QUARANTINE_DIR, filename)
+        # Avoid collisions if the same path is quarantined more than once in the same second.
+        if os.path.exists(full_path):
+            full_path = os.path.join(
+                SMB_QUARANTINE_DIR,
+                f'{filename}_{int(time.time() * 1000)}',
+            )
+        with open(full_path, 'wb') as fh:
+            fh.write(data)
+        return full_path
+    except Exception:
+        return None
 
 
 _DECOYS: dict = _load_decoys()  # share_name_upper -> flat tree
@@ -1621,6 +1659,7 @@ def _smb2_post_negotiate(client_sock, client_ip, smb_version, selected_dialect=0
     # open_files: {(persistent, volatile): {'share': str, 'path': str|None, 'is_dir': bool, 'listed': bool}}
     open_files   = {}
     overlay_files = {}  # {(share_upper, share_relative_path): bytearray}
+    quarantined_paths = set()  # {(share_upper, share_relative_path)}
     # pipe_fids: {(persistent, volatile): {'pending': bytes|None, 'pipe': str}} for IPC named pipe handles
     pipe_fids    = {}
     # svc_handles: {handle_bytes: (svc_name, bin_path)} — maps fake SVCCTL handles to service info
@@ -1909,6 +1948,18 @@ def _smb2_post_negotiate(client_sock, client_ip, smb_version, selected_dialect=0
                 trace(client_ip, 'smb2_pipe_close', fid=fid_pair[0])
             else:
                 closed_fh = open_files.pop(fid_pair, None)
+                if closed_fh and not closed_fh['is_dir']:
+                    share = closed_fh['share']
+                    path = closed_fh['path']
+                    overlay_content = overlay_files.setdefault(share, {}).get(path)
+                    if overlay_content:
+                        qkey = (share, path)
+                        qpath = _quarantine_overlay_file(
+                            client_ip, smb_version, share, path, bytes(overlay_content))
+                        if qpath:
+                            quarantined_paths.add(qkey)
+                            trace(client_ip, 'smb_quarantine_saved',
+                                  smb_version=smb_version, share=share, file=path, saved_to=qpath)
                 trace(client_ip, 'smb2_close',
                       fid=fid_pair[0], had_handle=closed_fh is not None,
                       file=closed_fh['path'] if closed_fh else None)
@@ -2027,6 +2078,13 @@ def _smb2_post_negotiate(client_sock, client_ip, smb_version, selected_dialect=0
     if not got_auth and should_emit(client_ip, None, None, None, smb_version, None):
         _emit_knock(client_ip, None, None, smb_version, None, None,
                     smb_action='PROBE', trace_stage='knock_emitted_probe')
+    for share, files in overlay_files.items():
+        for path, content in files.items():
+            if content and (share, path) not in quarantined_paths:
+                qpath = _quarantine_overlay_file(client_ip, smb_version, share, path, bytes(content))
+                if qpath:
+                    trace(client_ip, 'smb_quarantine_saved',
+                          smb_version=smb_version, share=share, file=path, saved_to=qpath)
 
 
 def handle_smb2(client_sock, client_ip, first_payload):
@@ -2800,6 +2858,7 @@ def handle_smb1(client_sock, client_ip, first_payload):
     ipc_tree_ids = set() # TIDs for IPC$ or other non-decoy shares
     open_files   = {}    # {fid(int): {'share': str, 'filename': str|None}}
     overlay_files = {}   # {share_upper: {share_relative_path: bytearray}}
+    quarantined_paths = set()  # {(share_upper, share_relative_path)}
     pipe_fids    = {}    # {fid(int): {'pending': bytes|None, 'pipe': str}} for IPC named pipe handles
     svc_handles  = {}    # {handle_bytes: (svc_name, bin_path)} — maps fake SVCCTL handles to service info
     next_fid     = 1
@@ -3184,6 +3243,18 @@ def handle_smb1(client_sock, client_ip, first_payload):
         elif cmd == SMB1_COM_CLOSE:
             fid = _smb1_parse_close(payload)
             closed_fh = open_files.pop(fid, None)
+            if closed_fh and closed_fh['filename'] is not None:
+                share = closed_fh['share']
+                path = closed_fh['filename']
+                overlay_content = overlay_files.setdefault(share, {}).get(path)
+                if overlay_content:
+                    qkey = (share, path)
+                    qpath = _quarantine_overlay_file(
+                        client_ip, 'SMB1', share, path, bytes(overlay_content))
+                    if qpath:
+                        quarantined_paths.add(qkey)
+                        trace(client_ip, 'smb_quarantine_saved',
+                              smb_version='SMB1', share=share, file=path, saved_to=qpath)
             trace(client_ip, 'smb1_close', fid=fid,
                   had_handle=closed_fh is not None,
                   file=closed_fh['filename'] if closed_fh else None)
@@ -3210,6 +3281,13 @@ def handle_smb1(client_sock, client_ip, first_payload):
     if not got_auth and should_emit(client_ip, None, None, None, 'SMB1', None):
         _emit_knock(client_ip, None, None, 'SMB1', None, None,
                     smb_action='PROBE', trace_stage='knock_emitted_probe')
+    for share, files in overlay_files.items():
+        for path, content in files.items():
+            if content and (share, path) not in quarantined_paths:
+                qpath = _quarantine_overlay_file(client_ip, 'SMB1', share, path, bytes(content))
+                if qpath:
+                    trace(client_ip, 'smb_quarantine_saved',
+                          smb_version='SMB1', share=share, file=path, saved_to=qpath)
 
 
 # ---------------------------------------------------------------------------

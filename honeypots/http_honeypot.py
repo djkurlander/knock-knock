@@ -351,6 +351,8 @@ def _classify_purpose(method: str, path: str, ua: str, body: str):
     #    means binary protocol data (TLS ClientHello 0x16, RDP TPKT 0x03, etc.)
     if method and not method[0].isprintable():
         return 'protocol_probe', None, None
+    if method == 'T3':
+        return 'protocol_probe', None, None
 
     # 1. Exploit database — specific match overrides general classifiers
     exp_name, exp_cve, exp_purpose = _match_exploit(method, path, ua, body)

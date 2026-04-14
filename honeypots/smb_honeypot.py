@@ -935,6 +935,7 @@ _DCERPC_BIND_ACK        = 0x0C
 _DCERPC_REQUEST         = 0x00
 _DCERPC_RESPONSE        = 0x02
 _DCERPC_FAULT           = 0x03
+_DCERPC_PFC_OBJECT_UUID = 0x80
 _SRVSVC_NETR_SHARE_ENUM = 15         # opnum for NetrShareEnum
 _SVCCTL_R_CREATE_SERVICE_W = 12     # opnum for RCreateServiceW (MS-SCMR §3.1.4.12)
 _SVCCTL_R_OPEN_SC_MANAGER_W = 15   # opnum for ROpenSCManagerW (MS-SCMR §3.1.4.1)
@@ -1132,6 +1133,46 @@ def _parse_ndr_conformant_string(buf, offset):
     return value, offset + byte_len
 
 
+def _parse_dcerpc_request_fields(data):
+    """
+    Parse a DCERPC REQUEST PDU and return:
+      (ctx_id, opnum, stub, meta_dict)
+
+    Handles optional object UUIDs and auth verifier trailers.
+    """
+    if len(data) < 24:
+        return None, None, b'', {}
+
+    flags = data[3]
+    frag_length = struct.unpack_from('<H', data, 8)[0]
+    auth_length = struct.unpack_from('<H', data, 10)[0]
+    ctx_id = struct.unpack_from('<H', data, 20)[0]
+    opnum = struct.unpack_from('<H', data, 22)[0]
+
+    stub_offset = 24 + (16 if (flags & _DCERPC_PFC_OBJECT_UUID) else 0)
+    stub_end = min(frag_length, len(data))
+    auth_pad_length = 0
+
+    if auth_length:
+        auth_trailer_len = 8 + auth_length
+        auth_start = stub_end - auth_trailer_len
+        if stub_offset <= auth_start < len(data):
+            auth_pad_length = data[auth_start]
+            stub_end = max(stub_offset, auth_start - auth_pad_length)
+
+    stub = data[stub_offset:stub_end] if stub_end >= stub_offset else b''
+    meta = {
+        'flags': flags,
+        'frag_length': frag_length,
+        'auth_length': auth_length,
+        'auth_pad_length': auth_pad_length,
+        'has_object_uuid': bool(flags & _DCERPC_PFC_OBJECT_UUID),
+        'stub_offset': stub_offset,
+        'stub_end': stub_end,
+    }
+    return ctx_id, opnum, stub, meta
+
+
 def _parse_svcctl_r_create_service_w(stub):
     """
     Parse an RCreateServiceW NDR stub (MS-SCMR §3.1.4.12).
@@ -1189,7 +1230,7 @@ def _parse_svcctl_r_open_service_w(stub):
     Parse an ROpenServiceW NDR stub (MS-SCMR §3.1.4.20).
     Returns (service_name, desired_access).
 
-    Best-effort layout:
+    Layout:
       hSCManager(20) + lpServiceName_ptr(4) + DesiredAccess(4) + string blob...
     """
     try:
@@ -1260,9 +1301,9 @@ def _handle_dcerpc(data, client_ip, user=None, smb_version=None,
     if pdu_type == _DCERPC_REQUEST:
         if len(data) < 24:
             return None
-        ctx_id = struct.unpack_from('<H', data, 20)[0]
-        opnum  = struct.unpack_from('<H', data, 22)[0]
-        stub   = data[24:]
+        ctx_id, opnum, stub, req_meta = _parse_dcerpc_request_fields(data)
+        if ctx_id is None or opnum is None:
+            return None
         if pipe_name == 'SRVSVC':
             if opnum == _SRVSVC_NETR_SHARE_ENUM:
                 level = _parse_netr_share_enum_level(stub)
@@ -1293,6 +1334,10 @@ def _handle_dcerpc(data, client_ip, user=None, smb_version=None,
                 svc_name, desired_access = _parse_svcctl_r_open_service_w(stub)
                 trace(client_ip, 'svcctl_open_service',
                       service_name=svc_name, desired_access=hex(desired_access or 0),
+                      stub_len=len(stub), stub_preview=stub[:64].hex(),
+                      has_object_uuid=req_meta.get('has_object_uuid'),
+                      auth_length=req_meta.get('auth_length'),
+                      auth_pad_length=req_meta.get('auth_pad_length'),
                       result='service_not_found')
                 _emit_knock(client_ip, user, None, smb_version, smb_domain, smb_host,
                             smb_action='OPEN_SERVICE',
@@ -1333,10 +1378,16 @@ def _handle_dcerpc(data, client_ip, user=None, smb_version=None,
                 return _dcerpc_svcctl_dword_response(call_id, ctx_id, win_error=5)
             trace(client_ip, 'dcerpc_stub_request', pipe=pipe_name, opnum=opnum,
                   opnum_name=_SVCCTL_OPNUM_NAMES.get(opnum, f'UNKNOWN_{opnum}'),
-                  stub_len=len(stub))
+                  stub_len=len(stub), stub_preview=stub[:64].hex(),
+                  has_object_uuid=req_meta.get('has_object_uuid'),
+                  auth_length=req_meta.get('auth_length'),
+                  auth_pad_length=req_meta.get('auth_pad_length'))
         else:
             trace(client_ip, 'dcerpc_stub_request', pipe=pipe_name, opnum=opnum,
-                  stub_len=len(stub))
+                  stub_len=len(stub), stub_preview=stub[:64].hex(),
+                  has_object_uuid=req_meta.get('has_object_uuid'),
+                  auth_length=req_meta.get('auth_length'),
+                  auth_pad_length=req_meta.get('auth_pad_length'))
         return _dcerpc_fault(call_id, ctx_id)
 
     return None
@@ -1603,6 +1654,9 @@ def _smb2_post_negotiate(client_sock, client_ip, smb_version, selected_dialect=0
             # Normalize: strip leading backslashes, convert to forward-slash path
             norm = clean.replace('\\', '/').strip('/')
             kind = _resolve_path(share_tree, norm)
+            _emit_knock(client_ip, user, share_upper, smb_version, domain, host,
+                        smb_file=norm, smb_action='CREATE',
+                        trace_stage='knock_emitted_create')
             if kind == 'dir':
                 fid_p = fid_v = next_fid; next_fid += 1
                 open_files[(fid_p, fid_v)] = {'share': share_upper, 'path': norm,
@@ -1625,9 +1679,6 @@ def _smb2_post_negotiate(client_sock, client_ip, smb_version, selected_dialect=0
                 if disposition != _SMB2_CREATE_DISP_FILE_OPEN:
                     # Bot is trying to create/overwrite a new file (ransomware, dropper, etc.)
                     trace(client_ip, 'smb2_create', name=norm, result='write_denied')
-                    _emit_knock(client_ip, user, share_upper, smb_version, domain, host,
-                                smb_file=norm, smb_action='CREATE',
-                                trace_stage='knock_emitted_create')
                     send_nbss(client_sock, build_smb2_error_response(
                         hdr, session_id, tree_id, STATUS_ACCESS_DENIED, SMB2_CREATE))
                 else:
@@ -2821,6 +2872,9 @@ def handle_smb1(client_sock, client_ip, first_payload):
                     hdr, uid, tid, fid, True, 0))
             else:
                 match = next((fn for fn in share_files if fn.lower() == clean.lower()), None)
+                _emit_knock(client_ip, user, share_upper, 'SMB1', domain, host,
+                            smb_file=clean, smb_action='CREATE',
+                            trace_stage='knock_emitted_create')
                 if match:
                     fid = next_fid; next_fid += 1
                     open_files[fid] = {'share': share_upper, 'filename': match}
@@ -2833,9 +2887,6 @@ def handle_smb1(client_sock, client_ip, first_payload):
                                    if len(payload) >= 72 else _SMB2_CREATE_DISP_FILE_OPEN)
                     if disposition != _SMB2_CREATE_DISP_FILE_OPEN:
                         trace(client_ip, 'smb1_create', name=clean, result='write_denied')
-                        _emit_knock(client_ip, user, share_upper, 'SMB1', domain, host,
-                                    smb_file=clean, smb_action='CREATE',
-                                    trace_stage='knock_emitted_create')
                         send_nbss(client_sock, build_smb1_error_response(
                             hdr, uid, tid, STATUS_ACCESS_DENIED, SMB1_COM_NT_CREATE_ANDX))
                     else:

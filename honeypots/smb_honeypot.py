@@ -642,6 +642,18 @@ def _classify_create_action(kind, disposition, path):
         return 'CREATE_FILE'
     return 'CHECK_FILE'
 
+
+def _extract_utf16_pipe_name(buf):
+    """Best-effort extraction of a UTF-16 pipe/control name from raw IOCTL input."""
+    if not buf:
+        return None
+    try:
+        decoded = buf.decode('utf-16-le', errors='ignore')
+    except Exception:
+        return None
+    match = re.search(r'([A-Za-z][A-Za-z0-9_]{2,})', decoded)
+    return match.group(1) if match else None
+
 # ---------------------------------------------------------------------------
 # SMB2 packet builders
 # ---------------------------------------------------------------------------
@@ -1342,6 +1354,7 @@ def _parse_svcctl_r_create_service_w(stub):
         'disp_ptr': None,
         'post_display_offset': None,
         'fixed_offset': None,
+        'ptr_block_offset': None,
         'bin_ptr': None,
         'load_group_ptr': None,
         'dep_ptr': None,
@@ -1384,19 +1397,25 @@ def _parse_svcctl_r_create_service_w(stub):
             _, offset, _ = _parse_ndr_string_any(stub, offset)
         debug['post_display_offset'] = offset
 
+        # The first four DWORDs (DesiredAccess, ServiceType, StartType,
+        # ErrorControl) start immediately after the second deferred string.
+        # The subsequent unique-pointer block is then realigned to a 4-byte
+        # boundary before lpBinaryPathName.
         fixed_offset = offset
+        ptr_block_offset = _align4(fixed_offset + 16)
         debug['fixed_offset'] = fixed_offset
-        if fixed_offset + 48 > len(stub):
+        debug['ptr_block_offset'] = ptr_block_offset
+        if ptr_block_offset + 32 > len(stub):
             return service_name, None, debug
 
-        bin_ptr        = struct.unpack_from('<I', stub, fixed_offset + 16)[0]
-        load_group_ptr = struct.unpack_from('<I', stub, fixed_offset + 20)[0]
+        bin_ptr        = struct.unpack_from('<I', stub, ptr_block_offset + 0)[0]
+        load_group_ptr = struct.unpack_from('<I', stub, ptr_block_offset + 4)[0]
         # lpdwTagId is [out] and does not contribute deferred input data.
-        dep_ptr        = struct.unpack_from('<I', stub, fixed_offset + 28)[0]
-        dep_size       = struct.unpack_from('<I', stub, fixed_offset + 32)[0]
-        start_name_ptr = struct.unpack_from('<I', stub, fixed_offset + 36)[0]
-        password_ptr   = struct.unpack_from('<I', stub, fixed_offset + 40)[0]
-        pw_size        = struct.unpack_from('<I', stub, fixed_offset + 44)[0]
+        dep_ptr        = struct.unpack_from('<I', stub, ptr_block_offset + 12)[0]
+        dep_size       = struct.unpack_from('<I', stub, ptr_block_offset + 16)[0]
+        start_name_ptr = struct.unpack_from('<I', stub, ptr_block_offset + 20)[0]
+        password_ptr   = struct.unpack_from('<I', stub, ptr_block_offset + 24)[0]
+        pw_size        = struct.unpack_from('<I', stub, ptr_block_offset + 28)[0]
         debug['bin_ptr'] = hex(bin_ptr)
         debug['load_group_ptr'] = hex(load_group_ptr)
         debug['dep_ptr'] = hex(dep_ptr)
@@ -1405,7 +1424,7 @@ def _parse_svcctl_r_create_service_w(stub):
         debug['password_ptr'] = hex(password_ptr)
         debug['pw_size'] = pw_size
 
-        deferred_offset = fixed_offset + 48
+        deferred_offset = ptr_block_offset + 32
         debug['deferred_offset'] = deferred_offset
         binary_path = None
         if bin_ptr:
@@ -1583,6 +1602,7 @@ def _handle_dcerpc(data, client_ip, user=None, smb_version=None,
                       disp_ptr=create_meta.get('disp_ptr'),
                       post_display_offset=create_meta.get('post_display_offset'),
                       fixed_offset=create_meta.get('fixed_offset'),
+                      ptr_block_offset=create_meta.get('ptr_block_offset'),
                       bin_ptr=create_meta.get('bin_ptr'),
                       load_group_ptr=create_meta.get('load_group_ptr'),
                       dep_ptr=create_meta.get('dep_ptr'),
@@ -1979,18 +1999,32 @@ def _smb2_post_negotiate(client_sock, client_ip, smb_version, selected_dialect=0
                     send_nbss(client_sock, build_smb2_error_response(
                         hdr, session_id, hdr['tree_id'], STATUS_NOT_SUPPORTED, SMB2_IOCTL))
             else:
+                ioctl_input = b''
+                pipe_name = None
+                if in_cnt and in_off and in_off + in_cnt <= len(payload):
+                    ioctl_input = payload[in_off:in_off + in_cnt]
+                    pipe_name = _extract_utf16_pipe_name(ioctl_input)
                 input_preview = None
                 if in_cnt and in_off and in_off + min(in_cnt, 64) <= len(payload):
                     input_preview = payload[in_off:in_off + min(in_cnt, 64)].hex()
                 trace(client_ip, 'smb2_ioctl',
                       ctl_code=hex(ctl_code), tree_id=hex(hdr['tree_id']),
                       fid=None if not fid_pair else fid_pair[0],
+                      pipe=pipe_name,
                       input_offset=in_off, input_count=in_cnt,
                       output_offset=out_off, output_count=out_cnt,
                       max_input=max_in, max_output=max_out,
                       input_preview=input_preview)
-                send_nbss(client_sock, build_smb2_error_response(
-                    hdr, session_id, hdr['tree_id'], STATUS_NOT_SUPPORTED, SMB2_IOCTL))
+                if ctl_code == _FSCTL_PIPE_TRANSCEIVE and pipe_name:
+                    _emit_knock(client_ip, user, 'IPC$', smb_version, domain, host,
+                                smb_file=pipe_name, smb_action='REMOTE_COMMAND',
+                                trace_stage='knock_emitted_remote_command')
+                    send_nbss(client_sock, build_smb2_ioctl_pipe_response(
+                        hdr, session_id, hdr['tree_id'], ctl_code,
+                        fid_pair or (0xFFFFFFFFFFFFFFFF, 0xFFFFFFFFFFFFFFFF), b''))
+                else:
+                    send_nbss(client_sock, build_smb2_error_response(
+                        hdr, session_id, hdr['tree_id'], STATUS_NOT_SUPPORTED, SMB2_IOCTL))
 
         # ── READ: pipe FID check must come before ipc_stub ───────────────────
         elif cmd == SMB2_READ:

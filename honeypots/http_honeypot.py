@@ -21,6 +21,8 @@ from common import create_dualstack_tcp_listener, ensure_self_signed_server_cert
 
 HTTPS_CERT_PATH = os.environ.get('HTTPS_CERT_PATH', 'data/https.crt')
 HTTPS_KEY_PATH  = os.environ.get('HTTPS_KEY_PATH',  'data/https.key')
+HTTP_TRACE      = os.environ.get('HTTP_TRACE', '0').lower() not in ('0', 'false', 'no')
+HTTP_TRACE_IP   = os.environ.get('HTTP_TRACE_IP', '').strip()
 
 # ---------------------------------------------------------------------------
 # Exploit database — loaded once at startup from honeypots/http_exploits.json
@@ -120,6 +122,40 @@ _HTTP_THROTTLE_PER_SEC = 20
 _throttle_lock   = threading.Lock()
 _throttle_window = 0       # current second (int)
 _throttle_counts: dict = {}
+
+
+def _http_trace_enabled_for(client_ip: str) -> bool:
+    if not HTTP_TRACE:
+        return False
+    if HTTP_TRACE_IP and client_ip != HTTP_TRACE_IP:
+        return False
+    return True
+
+
+def _body_preview(body: str, limit: int = 96) -> tuple[str, str]:
+    """
+    Return (kind, preview) for trace logging.
+    kind is 'text' or 'hex'. Binary-looking bodies are logged as hex.
+    """
+    if not body:
+        return 'text', ''
+    sample = body[:limit]
+    weird = sum(1 for ch in sample if ord(ch) < 32 and ch not in '\r\n\t')
+    if weird > max(2, len(sample) // 8):
+        return 'hex', sample.encode('latin-1', errors='replace').hex()
+    cleaned = ''.join(ch if ch.isprintable() or ch in '\r\n\t' else '.' for ch in sample)
+    return 'text', cleaned
+
+
+def trace_http(client_ip: str, stage: str, **kwargs):
+    if not _http_trace_enabled_for(client_ip):
+        return
+    parts = [f"HTTPTRACE ip={client_ip}", f"stage={stage}"]
+    for k, v in kwargs.items():
+        if v is None:
+            continue
+        parts.append(f"{k}={v!r}")
+    print(' '.join(parts), flush=True)
 
 # ---------------------------------------------------------------------------
 # Fake HTTP responses
@@ -518,6 +554,12 @@ def handle_connection(sock: socket.socket, client_ip: str):
         host    = parsed['host']
         ua      = parsed['user_agent']
         body    = _read_body(sock, parsed) if parsed['has_body'] else ''
+        preview_kind, preview = _body_preview(body)
+        trace_http(client_ip, 'request',
+                   method=method, path=path, host=host or None, ua=ua or None,
+                   content_length=parsed.get('content_length', 0),
+                   body_len=len(body), body_preview_kind=preview_kind,
+                   body_preview=preview or None)
 
         # Send response before emitting knock — don't delay the bot
         response = _RESPONSE_200 if path in ('/', '') else _RESPONSE_404
@@ -536,6 +578,9 @@ def handle_connection(sock: socket.socket, client_ip: str):
             return
 
         purpose, exploit_name, exploit_cve = _classify_purpose(method, path, ua, body)
+        trace_http(client_ip, 'classified',
+                   method=method, path=path, purpose=purpose,
+                   exploit=exploit_name, cve=exploit_cve)
 
         knock = {'type': 'KNOCK', 'proto': 'HTTP', 'ip': client_ip,
                  'http_port': _HTTP_PORT,

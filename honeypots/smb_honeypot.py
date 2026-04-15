@@ -1260,6 +1260,11 @@ def _parse_ndr_string_any(buf, offset):
     return None, offset, None
 
 
+def _align4(offset):
+    """Return the next 4-byte aligned offset."""
+    return (offset + 3) & ~3
+
+
 def _parse_dcerpc_request_fields(data):
     """
     Parse a DCERPC REQUEST PDU and return:
@@ -1305,41 +1310,75 @@ def _parse_svcctl_r_create_service_w(stub):
     Parse an RCreateServiceW NDR stub (MS-SCMR §3.1.4.12).
     Returns (service_name, binary_path) — either may be None on parse failure.
 
-    Stub layout (all little-endian):
-      [0..3]   hSCManager (SCM handle context, 20 bytes)
-      [20..23] lpServiceName referent pointer (4 bytes)
-      [24..27] lpDisplayName referent pointer (4 bytes)
-      ... DesiredAccess(4) ServiceType(4) StartType(4) ErrorControl(4)
-      lpBinaryPathName referent pointer(4) ...
-    Actual string data follows in order: ServiceName, DisplayName, BinaryPathName.
-    Each string is an NDR conformant/varying string: MaxCount(4)+Offset(4)+Count(4)+data.
+    Live traces show a top-level marshal order of:
+      hSCManager(20)
+      lpServiceName unique pointer + deferred string
+      lpDisplayName unique pointer + deferred string
+      fixed DWORD/pointer block:
+        DesiredAccess, ServiceType, StartType, ErrorControl,
+        lpBinaryPathName, lpLoadOrderGroup, lpdwTagId, lpDependencies,
+        dwDependSize, lpServiceStartName, lpPassword, dwPwSize
+      deferred pointees for the later pointers in that same order
+
+    The earlier parser incorrectly assumed lpDisplayName sat at offset 24 and that
+    the fixed block started immediately after the first string without re-alignment.
+    The live stub previews show 4-byte alignment padding between these items.
     """
     try:
-        # Live clients appear to marshal the first two top-level strings immediately
-        # after their pointer fields, then place the fixed DWORD/pointer block, then
-        # defer later pointer targets such as BinaryPathName.
         if len(stub) < 28:
             return None, None
 
-        svc_ptr  = struct.unpack_from('<I', stub, 20)[0]   # lpServiceName
-        disp_ptr = struct.unpack_from('<I', stub, 24)[0]   # lpDisplayName
-        offset = 28
+        offset = 20
+        svc_ptr = struct.unpack_from('<I', stub, offset)[0]
+        offset += 4
 
         service_name = None
         if svc_ptr:
             service_name, offset, _ = _parse_ndr_string_any(stub, offset)
+            offset = _align4(offset)
 
+        if offset + 4 > len(stub):
+            return service_name, None
+
+        disp_ptr = struct.unpack_from('<I', stub, offset)[0]
+        offset += 4
         if disp_ptr:
             _, offset, _ = _parse_ndr_string_any(stub, offset)
+            offset = _align4(offset)
 
         fixed_offset = offset
         if fixed_offset + 48 > len(stub):
             return service_name, None
 
-        bin_ptr  = struct.unpack_from('<I', stub, fixed_offset + 16)[0]   # lpBinaryPathName
+        bin_ptr        = struct.unpack_from('<I', stub, fixed_offset + 16)[0]
+        load_group_ptr = struct.unpack_from('<I', stub, fixed_offset + 20)[0]
+        # lpdwTagId is [out] and does not contribute deferred input data.
+        dep_ptr        = struct.unpack_from('<I', stub, fixed_offset + 28)[0]
+        dep_size       = struct.unpack_from('<I', stub, fixed_offset + 32)[0]
+        start_name_ptr = struct.unpack_from('<I', stub, fixed_offset + 36)[0]
+        password_ptr   = struct.unpack_from('<I', stub, fixed_offset + 40)[0]
+        pw_size        = struct.unpack_from('<I', stub, fixed_offset + 44)[0]
+
+        deferred_offset = fixed_offset + 48
         binary_path = None
         if bin_ptr:
-            binary_path, _, _ = _parse_ndr_string_any(stub, fixed_offset + 48)
+            binary_path, deferred_offset, _ = _parse_ndr_string_any(stub, deferred_offset)
+            deferred_offset = _align4(deferred_offset)
+
+        if load_group_ptr:
+            _, deferred_offset, _ = _parse_ndr_string_any(stub, deferred_offset)
+            deferred_offset = _align4(deferred_offset)
+
+        if dep_ptr and dep_size:
+            deferred_offset += dep_size
+            deferred_offset = _align4(deferred_offset)
+
+        if start_name_ptr:
+            _, deferred_offset, _ = _parse_ndr_string_any(stub, deferred_offset)
+            deferred_offset = _align4(deferred_offset)
+
+        if password_ptr and pw_size:
+            deferred_offset += pw_size
 
         return service_name, binary_path
     except Exception:

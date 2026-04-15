@@ -2694,6 +2694,9 @@
                 if (method) methodPath.push(lbl('method', method));
                 if (path)   methodPath.push(lbl('path', path));
                 if (methodPath.length) lines.push(methodPath.map((p, i) => i ? `${sep}${p}` : p).join(''));
+                if (['POST', 'PUT', 'PATCH'].includes(d.http_method) && d.http_body) {
+                    lines.push(lbl('body', escapeHtml(oneLinePreview(d.http_body, 40))));
+                }
                 return lines.join('<br>');
             },
         },

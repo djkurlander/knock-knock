@@ -1059,6 +1059,7 @@ _SVCCTL_R_OPEN_SC_MANAGER_W = 15   # opnum for ROpenSCManagerW (MS-SCMR §3.1.4.
 _SVCCTL_R_OPEN_SERVICE_W    = 16   # opnum for ROpenServiceW  (MS-SCMR §3.1.4.20)
 _SVCCTL_R_START_SERVICE_W   = 19   # opnum for RStartServiceW  (MS-SCMR §3.1.4.30)
 _SVCCTL_ERROR_SERVICE_DOES_NOT_EXIST = 1060
+_FSCTL_PIPE_WAIT              = 0x00110018  # SMB2 IOCTL code for waiting on a named pipe
 _FSCTL_PIPE_TRANSCEIVE        = 0x0011C017  # SMB2 IOCTL code for named-pipe transact
 _FSCTL_VALIDATE_NEGOTIATE_INFO = 0x00140204  # SMB3 post-negotiate validation (RFC MS-SMB2 §3.3.5.15.12)
 
@@ -1397,59 +1398,73 @@ def _parse_svcctl_r_create_service_w(stub):
             _, offset, _ = _parse_ndr_string_any(stub, offset)
         debug['post_display_offset'] = offset
 
-        # The first four DWORDs (DesiredAccess, ServiceType, StartType,
-        # ErrorControl) start immediately after the second deferred string.
-        # The subsequent unique-pointer block is then realigned to a 4-byte
-        # boundary before lpBinaryPathName.
+        # DesiredAccess begins immediately after the second deferred string,
+        # even if that leaves the stream only 2-byte aligned. The following
+        # scalar DWORDs are then realigned to 4 bytes. After that, the
+        # remaining pointer arguments are marshaled inline in declaration
+        # order with their pointees following immediately.
         fixed_offset = offset
-        ptr_block_offset = _align4(fixed_offset + 16)
+        scalar_offset = _align4(fixed_offset + 4)
+        ptr_block_offset = scalar_offset + 12
         debug['fixed_offset'] = fixed_offset
         debug['ptr_block_offset'] = ptr_block_offset
-        if ptr_block_offset + 32 > len(stub):
+        if ptr_block_offset + 4 > len(stub):
             return service_name, None, debug
 
-        bin_ptr        = struct.unpack_from('<I', stub, ptr_block_offset + 0)[0]
-        load_group_ptr = struct.unpack_from('<I', stub, ptr_block_offset + 4)[0]
-        # lpdwTagId is [out] and does not contribute deferred input data.
-        dep_ptr        = struct.unpack_from('<I', stub, ptr_block_offset + 12)[0]
-        dep_size       = struct.unpack_from('<I', stub, ptr_block_offset + 16)[0]
-        start_name_ptr = struct.unpack_from('<I', stub, ptr_block_offset + 20)[0]
-        password_ptr   = struct.unpack_from('<I', stub, ptr_block_offset + 24)[0]
-        pw_size        = struct.unpack_from('<I', stub, ptr_block_offset + 28)[0]
+        bin_ptr = struct.unpack_from('<I', stub, ptr_block_offset)[0]
         debug['bin_ptr'] = hex(bin_ptr)
-        debug['load_group_ptr'] = hex(load_group_ptr)
-        debug['dep_ptr'] = hex(dep_ptr)
-        debug['dep_size'] = dep_size
-        debug['start_name_ptr'] = hex(start_name_ptr)
-        debug['password_ptr'] = hex(password_ptr)
-        debug['pw_size'] = pw_size
 
-        deferred_offset = ptr_block_offset + 32
-        debug['deferred_offset'] = deferred_offset
         binary_path = None
+        deferred_offset = ptr_block_offset + 4
         if bin_ptr:
             binary_path, deferred_offset, _ = _parse_ndr_string_any(stub, deferred_offset)
             deferred_offset = _align4(deferred_offset)
-            debug['deferred_offset'] = deferred_offset
 
-        if load_group_ptr:
-            _, deferred_offset, _ = _parse_ndr_string_any(stub, deferred_offset)
-            deferred_offset = _align4(deferred_offset)
-            debug['deferred_offset'] = deferred_offset
+        load_group_ptr = 0
+        if deferred_offset + 4 <= len(stub):
+            load_group_ptr = struct.unpack_from('<I', stub, deferred_offset)[0]
+            debug['load_group_ptr'] = hex(load_group_ptr)
+            deferred_offset += 4
+            if load_group_ptr:
+                _, deferred_offset, _ = _parse_ndr_string_any(stub, deferred_offset)
+                deferred_offset = _align4(deferred_offset)
 
-        if dep_ptr and dep_size:
-            deferred_offset += dep_size
-            deferred_offset = _align4(deferred_offset)
-            debug['deferred_offset'] = deferred_offset
+        if deferred_offset + 4 <= len(stub):
+            # lpdwTagId is [out] only; consume the pointer slot but no input pointee.
+            deferred_offset += 4
 
-        if start_name_ptr:
-            _, deferred_offset, _ = _parse_ndr_string_any(stub, deferred_offset)
-            deferred_offset = _align4(deferred_offset)
-            debug['deferred_offset'] = deferred_offset
+        dep_ptr = 0
+        dep_size = 0
+        if deferred_offset + 8 <= len(stub):
+            dep_ptr = struct.unpack_from('<I', stub, deferred_offset)[0]
+            dep_size = struct.unpack_from('<I', stub, deferred_offset + 4)[0]
+            debug['dep_ptr'] = hex(dep_ptr)
+            debug['dep_size'] = dep_size
+            deferred_offset += 8
+            if dep_ptr and dep_size and deferred_offset + dep_size <= len(stub):
+                deferred_offset = _align4(deferred_offset + dep_size)
 
-        if password_ptr and pw_size:
-            deferred_offset += pw_size
-            debug['deferred_offset'] = deferred_offset
+        start_name_ptr = 0
+        if deferred_offset + 4 <= len(stub):
+            start_name_ptr = struct.unpack_from('<I', stub, deferred_offset)[0]
+            debug['start_name_ptr'] = hex(start_name_ptr)
+            deferred_offset += 4
+            if start_name_ptr:
+                _, deferred_offset, _ = _parse_ndr_string_any(stub, deferred_offset)
+                deferred_offset = _align4(deferred_offset)
+
+        password_ptr = 0
+        pw_size = 0
+        if deferred_offset + 8 <= len(stub):
+            password_ptr = struct.unpack_from('<I', stub, deferred_offset)[0]
+            pw_size = struct.unpack_from('<I', stub, deferred_offset + 4)[0]
+            debug['password_ptr'] = hex(password_ptr)
+            debug['pw_size'] = pw_size
+            deferred_offset += 8
+            if password_ptr and pw_size and deferred_offset + pw_size <= len(stub):
+                deferred_offset = _align4(deferred_offset + pw_size)
+
+        debug['deferred_offset'] = deferred_offset
 
         return service_name, binary_path, debug
     except Exception:
@@ -1979,10 +1994,24 @@ def _smb2_post_negotiate(client_sock, client_ip, smb_version, selected_dialect=0
             out_cnt  = struct.unpack_from('<I', payload, 100)[0] if len(payload) >= 104 else 0
             max_in   = struct.unpack_from('<I', payload, 104)[0] if len(payload) >= 108 else 0
             max_out  = struct.unpack_from('<I', payload, 108)[0] if len(payload) >= 112 else 0
+            ioctl_input = b''
+            pipe_name = None
+            if in_cnt and in_off and in_off + in_cnt <= len(payload):
+                ioctl_input = payload[in_off:in_off + in_cnt]
+                pipe_name = _extract_utf16_pipe_name(ioctl_input)
             if ctl_code == _FSCTL_VALIDATE_NEGOTIATE_INFO:
                 trace(client_ip, 'smb2_validate_negotiate', dialect=hex(selected_dialect))
                 send_nbss(client_sock, build_smb2_validate_negotiate_response(
                     hdr, session_id, hdr['tree_id'], selected_dialect))
+            elif ctl_code == _FSCTL_PIPE_WAIT and pipe_name:
+                trace(client_ip, 'smb2_pipe_wait',
+                      pipe=pipe_name, input_count=in_cnt)
+                _emit_knock(client_ip, user, 'IPC$', smb_version, domain, host,
+                            smb_file=pipe_name, smb_action='REMOTE_COMMAND',
+                            trace_stage='knock_emitted_remote_command')
+                send_nbss(client_sock, build_smb2_ioctl_pipe_response(
+                    hdr, session_id, hdr['tree_id'], ctl_code,
+                    fid_pair or (0xFFFFFFFFFFFFFFFF, 0xFFFFFFFFFFFFFFFF), b''))
             elif ctl_code == _FSCTL_PIPE_TRANSCEIVE and fid_pair in pipe_fids:
                 dcerpc  = payload[in_off:in_off + in_cnt]
                 trace(client_ip, 'smb2_pipe_transceive',
@@ -1999,11 +2028,6 @@ def _smb2_post_negotiate(client_sock, client_ip, smb_version, selected_dialect=0
                     send_nbss(client_sock, build_smb2_error_response(
                         hdr, session_id, hdr['tree_id'], STATUS_NOT_SUPPORTED, SMB2_IOCTL))
             else:
-                ioctl_input = b''
-                pipe_name = None
-                if in_cnt and in_off and in_off + in_cnt <= len(payload):
-                    ioctl_input = payload[in_off:in_off + in_cnt]
-                    pipe_name = _extract_utf16_pipe_name(ioctl_input)
                 input_preview = None
                 if in_cnt and in_off and in_off + min(in_cnt, 64) <= len(payload):
                     input_preview = payload[in_off:in_off + min(in_cnt, 64)].hex()
@@ -2015,7 +2039,7 @@ def _smb2_post_negotiate(client_sock, client_ip, smb_version, selected_dialect=0
                       output_offset=out_off, output_count=out_cnt,
                       max_input=max_in, max_output=max_out,
                       input_preview=input_preview)
-                if ctl_code == _FSCTL_PIPE_TRANSCEIVE and pipe_name:
+                if ctl_code in (_FSCTL_PIPE_WAIT, _FSCTL_PIPE_TRANSCEIVE) and pipe_name:
                     _emit_knock(client_ip, user, 'IPC$', smb_version, domain, host,
                                 smb_file=pipe_name, smb_action='REMOTE_COMMAND',
                                 trace_stage='knock_emitted_remote_command')

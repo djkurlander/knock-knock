@@ -309,6 +309,7 @@ _RE_HIDDEN_TOOL_STATE = re.compile(
 
 _RE_TRAVERSAL = re.compile(
     r'\.\.[/\\]'                                # classic ../
+    r'|\.\.(?:%2f|%5c)'                         # literal dot-dot + encoded slash
     r'|(?:\.%2e|%2e\.|%2e%2e)(?:/|\\|%2f|%5c)' # encoded dot-dot + slash
     r'|(?:%252e%252e|%252e\.|\.%252e)(?:/|\\|%252f|%255c)'  # double-encoded
     r'|/etc/(?:passwd|shadow|hosts)'

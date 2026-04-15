@@ -614,7 +614,7 @@
             <div class="d-nav-item" onclick="dJump(5)">🔌<span>ISP</span></div>
             <div class="d-nav-item" onclick="dJump(6)">🔢<span>IP</span></div>
             <div class="d-nav-item" onclick="dJump(7)">📋<span>LAST</span></div>
-            <div class="d-nav-item" onclick="dJump(8)">📊<span>PROTO</span></div>
+            <div class="d-nav-item" onclick="dJump(8)">📊<span>STATS</span></div>
             <div class="d-nav-item" onclick="dJump(9)">🎲<span>TRIVIA</span></div>
             <div class="d-nav-item" onclick="dJump(10)">😂<span>JOKES</span></div>
             <div class="d-nav-item" onclick="dJump(11)">ℹ️<span>ABOUT</span></div>
@@ -657,7 +657,7 @@
         <div class="d-box"><h2 style="display:flex;justify-content:space-between;align-items:center;">ISP<span class="proto-cycle-btn desktop-readonly" style="vertical-align:initial;">ALL</span></h2><div id="d-prov" class="d-content"></div></div>
         <div class="d-box"><h2 style="display:flex;justify-content:space-between;align-items:center;">IP ADDRESS<span class="proto-cycle-btn desktop-readonly" style="vertical-align:initial;">ALL</span></h2><div id="d-ip" class="d-content"></div></div>
         <div class="d-box" id="d-box-info"><h2 style="display:flex;justify-content:space-between;align-items:center;">LAST KNOCK<span class="proto-cycle-btn desktop-readonly" style="vertical-align:initial;">ALL</span></h2><div id="d-details" class="d-content"></div></div>
-        <div class="d-box" id="d-box-proto"><h2>PROTO STATS</h2><div id="d-proto-stats" class="d-content"></div></div>
+        <div class="d-box" id="d-box-proto"><h2>STATS</h2><div id="d-proto-stats" class="d-content"></div></div>
         <div class="d-box" id="d-box-trivia"><h2 style="display:flex;justify-content:space-between;align-items:center;">TRIVIA<span class="proto-cycle-btn desktop-readonly" style="vertical-align:initial;">ALL</span></h2><div id="d-trivia" class="d-content"></div></div>
         <div class="d-box" id="d-box-jokes"><h2>KNOCK-KNOCK JOKES</h2><div id="d-jokes" class="d-content" style="color:var(--neon-green); line-height:1.6;"></div></div>
 	        <div class="d-box"><h2>ABOUT</h2><div class="d-content" style="color:var(--neon-green); line-height:1.6;">
@@ -703,7 +703,7 @@
         <div class="m-pane" id="m-pane-prov"><h2 style="display:flex;justify-content:space-between;align-items:center;">ISP<span class="proto-dropdown"><span class="proto-dropdown-trigger">ALL<span style="letter-spacing:0;margin-left:3px;font-size:1.2em">▾</span></span><span class="proto-dropdown-menu"></span></span></h2><div id="m-prov" class="m-content"></div></div>
         <div class="m-pane" id="m-pane-ip"><h2 style="display:flex;justify-content:space-between;align-items:center;">IP ADDRESS<span class="proto-dropdown"><span class="proto-dropdown-trigger">ALL<span style="letter-spacing:0;margin-left:3px;font-size:1.2em">▾</span></span><span class="proto-dropdown-menu"></span></span></h2><div id="m-ip" class="m-content"></div></div>
         <div class="m-pane" id="m-pane-details"><h2 style="display:flex;justify-content:space-between;align-items:center;">LAST KNOCK<span class="proto-dropdown"><span class="proto-dropdown-trigger">ALL<span style="letter-spacing:0;margin-left:3px;font-size:1.2em">▾</span></span><span class="proto-dropdown-menu"></span></span></h2><div id="m-details" class="m-content"></div></div>
-        <div class="m-pane" id="m-pane-proto"><h2>PROTO STATS</h2><div id="m-proto-stats" class="m-content"></div></div>
+        <div class="m-pane" id="m-pane-proto"><h2>STATS</h2><div id="m-proto-stats" class="m-content"></div></div>
         <div class="m-pane" id="m-pane-trivia"><h2 style="display:flex;justify-content:space-between;align-items:center;">TRIVIA<span class="proto-dropdown"><span class="proto-dropdown-trigger">ALL<span style="letter-spacing:0;margin-left:3px;font-size:1.2em">▾</span></span><span class="proto-dropdown-menu"></span></span></h2><div id="m-trivia" class="m-content"></div></div>
         <div class="m-pane" id="m-pane-jokes"><h2>KNOCK-KNOCK JOKES</h2><div id="m-jokes" class="m-content" style="color:var(--neon-green); line-height:1.6;"></div></div>
 	        <div class="m-pane" id="m-pane-about"><h2>ABOUT</h2><div class="m-content" style="color:var(--neon-green); line-height:1.6;">
@@ -732,7 +732,7 @@
             <div class="nav-item" onclick="jump(5)">🔌<span>ISP</span></div>
             <div class="nav-item" onclick="jump(6)">🔢<span>IP</span></div>
             <div class="nav-item" onclick="jump(7)">📋<span>LAST</span></div>
-            <div class="nav-item" onclick="jump(8)">📊<span>PROTO</span></div>
+            <div class="nav-item" onclick="jump(8)">📊<span>STATS</span></div>
             <div class="nav-item" onclick="jump(9)">🎲<span>TRIVIA</span></div>
             <div class="nav-item" onclick="jump(10)">😂<span>JOKES</span></div>
             <div class="nav-item" onclick="jump(11)">ℹ️<span>ABOUT</span></div>
@@ -915,6 +915,7 @@
     let activeProtocols = [];
     let classicView = false;
     let isFiltered = false;
+    let isAggregator = false;
     let showProtocolSwitcher  = true;
     let showProtoCycleButtons = true;
     let showProtoChip         = true;
@@ -951,7 +952,7 @@
         if (isFiltered) {
             lines.push(`<div style="${ROW}"><span style="${L};${LW}">Viewing:</span><span style="${G}">${activeProtocols.map(escapeHtml).join(', ')} only</span></div>`);
         }
-        lines.push(`<div style="${ROW}"><span style="${L};${LW}">Version:</span><span style="${G}">2.0.0-beta.1</span></div>`);
+        lines.push(`<div style="${ROW}"><span style="${L};${LW}">Version:</span><span style="${G}">2.0.0-beta.3</span></div>`);
         const html = lines.join('');
         ['d-about-server-info', 'm-about-server-info'].forEach(id => {
             const el = document.getElementById(id);
@@ -1520,6 +1521,7 @@
     // Maps to same structure as leaderboards above.
     let protoStatsCache = {};
     let protoBreakdownCache = {};
+    let sourceCountsCache = [];   // [{source_id, display_name, hits}] sorted by hits desc
     let uptimeMinutesCache = 0;
 
     // Per-protocol feed arrays (newest at index 0)
@@ -1592,8 +1594,35 @@
             </div>
         `).join('');
 
-        const footer = '';
-        const html = header + body + footer;
+        let sourcesSection = '';
+        if (isAggregator && sourceCountsCache.length > 0) {
+            const total = sourceCountsCache.reduce((s, r) => s + r.hits, 0) || 1;
+            const uptime = Number(uptimeMinutesCache) || 1;
+            const srcHeader = `
+                <div style="margin-top:16px;margin-bottom:6px;padding-top:10px;border-top:1px solid #333;
+                             color:var(--ui-label);font-weight:bold;font-size:0.85em;letter-spacing:0.05em;">SOURCES</div>
+                <div style="display:grid;grid-template-columns:1fr 0.82fr 1.45fr 0.73fr;gap:8px;margin-bottom:8px;color:var(--ui-label);font-weight:bold;">
+                    <span class="proto-col-header" style="text-align:center;">SOURCE</span><span style="text-align:center;">%</span><span style="text-align:center;">KNOCKS</span><span style="text-align:center;">/MIN</span>
+                </div>
+            `;
+            const srcBody = sourceCountsCache.map(r => {
+                const pct = (r.hits / total * 100);
+                const elapsedMinutes = (r.first_seen && r.last_seen)
+                    ? Math.max(1, (Date.parse(r.last_seen) - Date.parse(r.first_seen)) / 60000)
+                    : uptime;
+                const kpm = r.hits / elapsedMinutes;
+                return `
+                <div style="display:grid;grid-template-columns:1fr 0.82fr 1.45fr 0.73fr;gap:8px;padding:4px 0;border-bottom:1px solid #222;">
+                    <span style="font-weight:bold;color:var(--ui-label);padding-left:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escapeHtml(r.source_id)}">${escapeHtml(r.display_name)}</span>
+                    <span style="color:var(--neon-green);text-align:center;">${pct >= 99.95 ? '100' : pct.toFixed(1)}%</span>
+                    <span style="color:var(--data-blue);text-align:center;">${r.hits.toLocaleString()}</span>
+                    <span style="color:var(--neon-green);text-align:center;">${kpm.toFixed(1)}</span>
+                </div>`;
+            }).join('');
+            sourcesSection = srcHeader + srcBody;
+        }
+
+        const html = header + body + sourcesSection;
         ['d-proto-stats', 'm-proto-stats'].forEach(id => {
             const el = document.getElementById(id);
             if (el) el.innerHTML = html;
@@ -2602,6 +2631,11 @@
         return `<span class="proto-badge proto-${cls}" style="color:${escapeHtml(color)}"><span class="proto-badge-label">${escapeHtml(label)}</span></span>`;
     }
 
+    function getSourceBadge(d) {
+        if (!isAggregator || !d.source_display) return '';
+        return `<span style="margin-left:6px;padding:1px 5px;border-radius:3px;font-size:0.75em;background:rgba(255,255,255,0.10);color:var(--ui-label);font-family:monospace;">${escapeHtml(d.source_display)}</span>`;
+    }
+
     function sipDialString(d) {
         return d.sip_dial_string || null;
     }
@@ -2794,7 +2828,7 @@
         const div = document.createElement('div');
         div.className = 'knock';
         div.innerHTML = `
-            <div class="knock-location"><span style="display:flex;align-items:center;gap:0.3em"><strong>${getFlag(d.iso)}</strong> <strong>${safeLoc}</strong></span>${getProtoBadge(d.proto)}</div>
+            <div class="knock-location"><span style="display:flex;align-items:center;gap:0.3em"><strong>${getFlag(d.iso)}</strong> <strong>${safeLoc}</strong></span>${getProtoBadge(d.proto)}${getSourceBadge(d)}</div>
             ${protoLine}<br>
             <span class="knock-meta"><span style="color:var(--ui-label)">ISP:</span> <span style="color:var(--data-blue)">${safeIsp}</span> <span style="color:var(--ui-label); margin-left:10px;">IP:</span> <span style="color:var(--data-blue)">${formatIP(d.ip)}</span></span>
         `;
@@ -2888,7 +2922,7 @@
 
         const html = `
             <div class="info-section" style="font-size:1.1em; margin-bottom:15px; padding-bottom:10px; border-bottom:1px solid #333;">
-                <div class="knock-location"><span style="display:flex;align-items:center;gap:0.3em"><strong>${getFlag(d.iso)}</strong> <strong>${safeLoc}</strong></span>${getProtoBadge(d.proto)}</div>
+                <div class="knock-location"><span style="display:flex;align-items:center;gap:0.3em"><strong>${getFlag(d.iso)}</strong> <strong>${safeLoc}</strong></span>${getProtoBadge(d.proto)}${getSourceBadge(d)}</div>
                 ${protoLine}<br>
                 <span class="knock-meta"><span style="color:var(--ui-label)">ISP:</span> <span style="color:var(--data-blue)">${safeIsp}</span> <span style="color:var(--ui-label); margin-left:10px;">IP:</span> <span style="color:var(--data-blue)">${formatIP(d.ip)}</span></span>
             </div>
@@ -2992,7 +3026,7 @@
 
         const html = `
             <div class="info-section" style="font-size:1.1em; margin-bottom:15px; padding-bottom:10px; border-bottom:1px solid #333;">
-                <div class="knock-location"><span style="display:flex;align-items:center;gap:0.3em"><strong>${getFlag(d.iso)}</strong> <strong>${safeLoc}</strong></span>${getProtoBadge(d.proto)}</div>
+                <div class="knock-location"><span style="display:flex;align-items:center;gap:0.3em"><strong>${getFlag(d.iso)}</strong> <strong>${safeLoc}</strong></span>${getProtoBadge(d.proto)}${getSourceBadge(d)}</div>
                 ${protoLine}<br>
                 <span class="knock-meta"><span style="color:var(--ui-label)">ISP:</span> <span style="color:var(--data-blue)">${safeIsp}</span> <span style="color:var(--ui-label); margin-left:10px;">IP:</span> <span style="color:var(--data-blue)">${formatIP(d.ip)}</span></span>
             </div>
@@ -3067,6 +3101,7 @@
             }
             else if (msg.type === 'init_stats') {
                 debugLog(`init_stats received (total=${d.total})`);
+                if (d.is_aggregator !== undefined) isAggregator = d.is_aggregator;
                 if (Array.isArray(d.enabled_protocols) || (d.protocol_meta && typeof d.protocol_meta === 'object')) {
                     applyProtocolConfig(d.enabled_protocols, d.protocol_meta);
                 }
@@ -3080,6 +3115,7 @@
                 leaderboards.ips = d.top_ips || [];
                 if (d.proto_stats) protoStatsCache = d.proto_stats;
                 protoBreakdownCache = normalizeProtoBreakdown(d.proto_breakdown || {}, d.total || 0);
+                if (Array.isArray(d.source_counts)) sourceCountsCache = d.source_counts;
 
                 // Seed per-protocol last knock times from backend
                 const plt = d.proto_last_times || {};

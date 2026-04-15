@@ -48,3 +48,24 @@ services:
   # web:
   #   environment:
   #     - LOG_VISITORS=true
+
+  ## Federation — feeder mode: forward knocks to an aggregator server
+  ## SOURCE_ID defaults to hostname; keep it short (e.g. ams2, lon1, ny)
+  ## Only set AGGREGATOR_HOST to enable forwarding; local honeypots still run normally
+  # honeypot-monitor:
+  #   environment:
+  #     - SOURCE_ID=ams2
+  #     - AGGREGATOR_HOST=aggregator.example.com
+  #     - AGGREGATOR_PORT=9999      # default
+
+  ## Federation — aggregator mode: receive forwarded knocks from feeder servers
+  ## Open INGEST_PORT in your firewall to feeder IPs only (no auth token — firewall is the gate)
+  ## IS_AGGREGATOR=true tells the UI to show source badges on each knock in the feed
+  # honeypot-monitor:
+  #   environment:
+  #     - INGEST_PORT=9999
+  #   ports:
+  #     - "9999:9999"
+  # web:
+  #   environment:
+  #     - IS_AGGREGATOR=true

@@ -10,6 +10,7 @@ from constants import PROTO, PROTO_NAME, PROTOCOL_META, DEFAULT_ENABLED_PROTOCOL
 app = FastAPI()
 logger = logging.getLogger("uvicorn.error")
 LOG_UNHANDLED_HTTP = os.environ.get('LOG_UNHANDLED_HTTP', '').lower() == 'true'
+IS_AGGREGATOR = os.environ.get('IS_AGGREGATOR', '').lower() == 'true'
 
 def get_request_client_ip(request: Request) -> str:
     """Extract real client IP: CF-Connecting-IP > X-Forwarded-For > direct."""
@@ -115,6 +116,31 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 
 r = redis.from_url(f"redis://{os.environ.get('REDIS_HOST', 'localhost')}", decode_responses=True)
 DB_PATH = os.environ.get('DB_DIR', 'data') + '/knock_knock.db'
+
+def _build_source_counts(raw):
+    """Merge Redis source_counts hash with display names from sources table.
+    Returns list of {source_id, display_name, hits} sorted by hits desc."""
+    if not raw:
+        return []
+    try:
+        conn = sqlite3.connect(DB_PATH, timeout=5)
+        rows = conn.execute("SELECT source_id, display_name, first_seen, last_seen FROM sources WHERE active=1").fetchall()
+        conn.close()
+        meta = {row[0]: {"display_name": row[1] or row[0], "first_seen": row[2], "last_seen": row[3]} for row in rows}
+    except Exception:
+        meta = {}
+    result = []
+    for src_id, count in raw.items():
+        m = meta.get(src_id, {})
+        result.append({
+            "source_id": src_id,
+            "display_name": m.get("display_name", src_id),
+            "hits": int(count or 0),
+            "first_seen": m.get("first_seen"),
+            "last_seen": m.get("last_seen"),
+        })
+    result.sort(key=lambda x: x["hits"], reverse=True)
+    return result
 
 async def load_protocol_runtime_config():
     enabled_protocols_raw = await r.get("knock:config:enabled_protocols")
@@ -256,6 +282,7 @@ class ConnectionManager:
         last_lng_val = await r.get("knock:last_lng")
         current_kpm = await self.get_kpm()
         proto_counts_raw = await r.hgetall("knock:proto_counts")
+        source_counts_raw = await r.hgetall("knock:source_counts")
         enabled_protocols = []
         protocol_meta = {}
         if include_protocol_config:
@@ -283,7 +310,9 @@ class ConnectionManager:
             "top_ips": stats_cache.top_ips,
             "proto_stats": {str(k): v for k, v in stats_cache.proto_stats.items()},
             "proto_breakdown": proto_breakdown,
-            "cache_ts": stats_cache.last_updated
+            "cache_ts": stats_cache.last_updated,
+            "is_aggregator": IS_AGGREGATOR,
+            "source_counts": _build_source_counts(source_counts_raw),
         }
 
         if include_history:
@@ -336,7 +365,9 @@ class ConnectionManager:
                     "proto_histories": stats.get("proto_histories", {}),
                     "proto_last_times": stats.get("proto_last_times", {}),
                     "cache_ts": stats.get("cache_ts"),
-                    "last_knock_stats": history[0] if history else None
+                    "last_knock_stats": history[0] if history else None,
+                    "is_aggregator": stats.get("is_aggregator", False),
+                    "source_counts": stats.get("source_counts", []),
                 }
             }
             await websocket.send_json(payload)

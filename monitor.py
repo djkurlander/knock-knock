@@ -20,6 +20,11 @@ GEOIP_ASN_PATH = '/usr/share/GeoIP/GeoLite2-ASN.mmdb'
 DB_PATH = os.environ.get('DB_DIR', 'data') + '/knock_knock.db'
 BLOCKLIST_FILE = os.environ.get('DB_DIR', 'data') + '/blocklist.txt'
 
+SOURCE_ID       = os.environ.get('SOURCE_ID', socket.gethostname().split('.')[0])
+AGGREGATOR_HOST = os.environ.get('AGGREGATOR_HOST', '').strip()
+AGGREGATOR_PORT = int(os.environ.get('AGGREGATOR_PORT', '9999'))
+INGEST_PORT     = int(os.environ.get('INGEST_PORT', '0') or '0') or None
+
 from constants import PROTO, PROTO_NAME, PROTOCOL_META, sort_protocols_for_ui
 
 USER_PANEL_PROTOCOLS = {name for name, meta in PROTOCOL_META.items() if meta.get('supports_user_panel')}
@@ -205,7 +210,7 @@ SELF_REDACTION_PATTERNS = _build_self_redaction_patterns()
 # Common columns for all knock tables (after id and timestamp)
 _COMMON_KNOCK_COLS = [
     'ip_address TEXT', 'iso_code TEXT', 'city TEXT', 'region TEXT',
-    'country TEXT', 'isp TEXT', 'asn TEXT',
+    'country TEXT', 'isp TEXT', 'asn TEXT', 'source INTEGER DEFAULT 0',
 ]
 
 # Protocol-specific extra columns
@@ -231,6 +236,7 @@ _KNOCK_EXTRA_COLS = {
 _COMMON_KEY_MAP = [
     ('ip', 'ip_address'), ('iso', 'iso_code'), ('city', 'city'),
     ('region', 'region'), ('country', 'country'), ('isp', 'isp'), ('asn', 'asn'),
+    ('source_int', 'source'),
 ]
 
 # Maps JSON knock data keys -> column names for protocol-specific fields
@@ -339,6 +345,35 @@ def init_db(save_protos=None, enabled_protocols=None):
         cur.execute("""CREATE TABLE IF NOT EXISTS dial_intel
             (number TEXT PRIMARY KEY, hits INTEGER, first_seen DATETIME, last_seen DATETIME,
              country TEXT, country_name TEXT, lat REAL, lng REAL)""")
+    cur.execute("""CREATE TABLE IF NOT EXISTS sources (
+        id           INTEGER PRIMARY KEY,
+        source_id    TEXT UNIQUE NOT NULL,
+        display_name TEXT,
+        hits         INTEGER NOT NULL DEFAULT 0,
+        first_seen   DATETIME,
+        last_seen    DATETIME,
+        active       INTEGER NOT NULL DEFAULT 1
+    )""")
+    # Local machine is always id=0
+    cur.execute("INSERT OR IGNORE INTO sources (id, source_id) VALUES (0, ?)", (SOURCE_ID,))
+    # Migrate existing sources rows that predate hits/last_seen columns
+    _src_cols = [row[1] for row in cur.execute("PRAGMA table_info(sources)").fetchall()]
+    if 'hits' not in _src_cols:
+        cur.execute("ALTER TABLE sources ADD COLUMN hits INTEGER NOT NULL DEFAULT 0")
+    if 'first_seen' not in _src_cols:
+        cur.execute("ALTER TABLE sources ADD COLUMN first_seen DATETIME")
+    if 'last_seen' not in _src_cols:
+        cur.execute("ALTER TABLE sources ADD COLUMN last_seen DATETIME")
+    if 'active' not in _src_cols:
+        cur.execute("ALTER TABLE sources ADD COLUMN active INTEGER NOT NULL DEFAULT 1")
+    # Add source column to any existing knock tables that predate this feature
+    for _tname in [f"knocks_{p.lower()}" for p in _KNOCK_EXTRA_COLS]:
+        try:
+            _tcols = [row[1] for row in cur.execute(f"PRAGMA table_info({_tname})").fetchall()]
+            if _tcols and 'source' not in _tcols:
+                cur.execute(f"ALTER TABLE {_tname} ADD COLUMN source INTEGER DEFAULT 0")
+        except Exception:
+            pass
     cur.execute("CREATE TABLE IF NOT EXISTS monitor_heartbeats (id INTEGER PRIMARY KEY, uptime_minutes INTEGER NOT NULL DEFAULT 0)")
     # Migrate old schema (many timestamp rows) to single uptime_minutes row
     cols = [row[1] for row in cur.execute("PRAGMA table_info(monitor_heartbeats)").fetchall()]
@@ -404,6 +439,84 @@ def init_db(save_protos=None, enabled_protocols=None):
     conn.commit()
     conn.close()
 
+def _load_sources(conn):
+    """Load sources table. Returns (encode, decode, hits):
+       encode: {source_id → id}
+       decode: {id → display_label}
+       hits:   {source_id → hits}
+    """
+    rows = conn.execute("SELECT id, source_id, display_name, hits FROM sources").fetchall()
+    encode = {row[1]: row[0] for row in rows}
+    decode  = {row[0]: row[2] or row[1] for row in rows}  # display_name if set, else source_id
+    hits    = {row[1]: row[3] or 0 for row in rows}
+    return encode, decode, hits
+
+def _ensure_source(source_id, encode, decode):
+    """Return integer id for source_id, registering a new row if first seen."""
+    if source_id in encode:
+        return encode[source_id]
+    conn = sqlite3.connect(DB_PATH, timeout=10)
+    try:
+        conn.execute("INSERT OR IGNORE INTO sources (source_id) VALUES (?)", (source_id,))
+        conn.commit()
+        new_id = conn.execute("SELECT id FROM sources WHERE source_id=?", (source_id,)).fetchone()[0]
+    finally:
+        conn.close()
+    encode[source_id] = new_id
+    decode[new_id] = source_id
+    print(f"[INGEST] Registered new source: {source_id!r} → id={new_id}", flush=True)
+    return new_id
+
+_forward_queue = queue.Queue(maxsize=500)
+
+def _start_forward_worker():
+    def _worker():
+        while True:
+            sock = None
+            try:
+                sock = socket.create_connection((AGGREGATOR_HOST, AGGREGATOR_PORT), timeout=10)
+                print(f"[FORWARD] Connected to {AGGREGATOR_HOST}:{AGGREGATOR_PORT}", flush=True)
+                while True:
+                    knock = _forward_queue.get()
+                    sock.sendall((json.dumps(knock) + '\n').encode())
+            except Exception as e:
+                print(f"[FORWARD] {e}", flush=True)
+            finally:
+                if sock:
+                    try: sock.close()
+                    except: pass
+            time.sleep(5)
+    threading.Thread(target=_worker, daemon=True).start()
+
+def _start_ingest_server(knock_queue):
+    def _handler(conn):
+        try:
+            with conn.makefile('r') as f:
+                for line in f:
+                    line = line.strip()
+                    if line:
+                        knock_queue.put(line)
+        except Exception:
+            pass
+        finally:
+            try: conn.close()
+            except: pass
+
+    def _server():
+        srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        srv.bind(('0.0.0.0', INGEST_PORT))
+        srv.listen(20)
+        print(f"[INGEST] Listening on port {INGEST_PORT}", flush=True)
+        while True:
+            try:
+                conn, addr = srv.accept()
+                threading.Thread(target=_handler, args=(conn,), daemon=True).start()
+            except Exception as e:
+                print(f"[INGEST] Accept error: {e}", flush=True)
+
+    threading.Thread(target=_server, daemon=True).start()
+
 def heartbeat_worker(redis_conn, enabled_protocols):
     proto_cols = [f"uptime_{p.lower()}" for p in enabled_protocols]
     proto_set_clause = ", ".join(f"{col} = {col} + 1" for col in proto_cols)
@@ -460,6 +573,14 @@ def log_to_enriched_db(data, save_protos=None):
                            ON CONFLICT(number) DO UPDATE SET hits=hits+1, last_seen=?, country_name=?""",
                         (dial_number, now, now, data.get('sip_dial_country'), data.get('sip_dial_country_name'),
                          data.get('sip_dial_lat'), data.get('sip_dial_lng'), now, data.get('sip_dial_country_name')))
+        src_id = data.get('source', SOURCE_ID)
+        cur.execute("""INSERT INTO sources (source_id, hits, first_seen, last_seen)
+                       VALUES (?, 1, ?, ?)
+                       ON CONFLICT(source_id) DO UPDATE SET
+                           hits=hits+1,
+                           first_seen=COALESCE(first_seen, excluded.first_seen),
+                           last_seen=excluded.last_seen""",
+                    (src_id, now, now, now))
         conn.commit()
     finally:
         conn.close()
@@ -710,6 +831,7 @@ def monitor(save_knocks=None, max_knocks=None):
                 col = f"uptime_{proto_name.lower()}"
                 proto_uptimes[proto_name] = col_map.get(col, 0) or 0
         proto_rows = conn.execute("SELECT proto, SUM(hits) AS c FROM ip_intel_proto GROUP BY proto").fetchall()
+        source_rows = conn.execute("SELECT source_id, hits FROM sources").fetchall()
         conn.close()
         r.set("knock:total_global", total)
         r.delete("knock:proto_counts")
@@ -717,6 +839,9 @@ def monitor(save_knocks=None, max_knocks=None):
             proto_name = PROTO_NAME.get(proto_int)
             if proto_name:
                 r.hset("knock:proto_counts", proto_name, int(count))
+        r.delete("knock:source_counts")
+        for src_id, src_hits in source_rows:
+            r.hset("knock:source_counts", src_id, int(src_hits or 0))
         for proto_name in PROTO.keys():
             if not r.hexists("knock:proto_counts", proto_name):
                 r.hset("knock:proto_counts", proto_name, 0)
@@ -753,6 +878,18 @@ def monitor(save_knocks=None, max_knocks=None):
 
     knock_queue = queue.Queue()
 
+    # Load sources dimension dict (used in main loop — single-threaded, no lock needed)
+    _sc = sqlite3.connect(DB_PATH, timeout=10)
+    _src_encode, _src_decode, _src_hits = _load_sources(_sc)
+    _sc.close()
+
+    if AGGREGATOR_HOST:
+        _start_forward_worker()
+        print(f"[FORWARD] Feeder mode → {AGGREGATOR_HOST}:{AGGREGATOR_PORT} as source={SOURCE_ID!r}", flush=True)
+
+    if INGEST_PORT:
+        _start_ingest_server(knock_queue)
+
     def pipe_reader(proc, name):
         for line in proc.stdout:
             knock_queue.put(line)
@@ -786,6 +923,12 @@ def monitor(save_knocks=None, max_knocks=None):
         except (json.JSONDecodeError, ValueError):
             print(line, end='', flush=True)  # pass through diagnostic output from honeypots
             continue
+        # Feeder: forward raw knock to aggregator before local enrichment
+        if AGGREGATOR_HOST and knock.get('type') == 'KNOCK':
+            try:
+                _forward_queue.put_nowait({**knock, 'source': SOURCE_ID})
+            except queue.Full:
+                pass
         if knock.get("type") == "SMTP_DIAG":
             store_smtp_diag(r, build_smtp_diag(knock))
             continue
@@ -819,6 +962,11 @@ def monitor(save_knocks=None, max_knocks=None):
                     domain = sanitize_credential(str(raw_domain))
                     if domain:
                         package["domain"] = domain
+            # Source tagging — integer for SQLite, string+display for Redis/WebSocket
+            _src_id = knock.get('source', SOURCE_ID)
+            package['source_int']     = _ensure_source(_src_id, _src_encode, _src_decode)
+            package['source']         = _src_id
+            package['source_display'] = _src_decode.get(package['source_int'], _src_id)
             # Pass through protocol-specific extended telemetry into Redis/websocket payloads.
             # This is intentionally not persisted in SQLite.
             for k, v in knock.items():
@@ -848,6 +996,7 @@ def monitor(save_knocks=None, max_knocks=None):
             r.ltrim(proto_key, 0, 99)
             r.incr("knock:total_global")
             r.hincrby("knock:proto_counts", package['proto'], 1)
+            r.hincrby("knock:source_counts", package['source'], 1)
             r.set("knock:last_time", int(time.time()))
             r.set(f"knock:last_time:{package['proto'].lower()}", int(time.time()))
             if geo['lat'] is not None:

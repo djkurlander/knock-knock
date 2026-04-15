@@ -14,6 +14,8 @@ WorkingDirectory=/root/knock-knock
 # Environment=ENABLED_PROTOCOLS=SSH,TNET,SMTP
 # Override SMTP banner hostname (default: reverse DNS of server IP)
 # Environment=SMTP_HOSTNAME=mail.local
+# Log each knock to the journal (default: off — keeps journal small)
+# Environment=TRACE_KNOCK=true
 # Federation — feeder mode: forward knocks to an aggregator server
 # SOURCE_ID defaults to hostname; keep it short (e.g. ams2, lon1, ny)
 # Only set AGGREGATOR_HOST to enable forwarding; local honeypots still run normally

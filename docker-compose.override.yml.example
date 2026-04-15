@@ -20,6 +20,11 @@ services:
   #   environment:
   #     - SMTP_HOSTNAME=mail.local
 
+  ## Log each knock to stdout/journal (default: off — keeps journal small)
+  # honeypot-monitor:
+  #   environment:
+  #     - TRACE_KNOCK=true
+
   ## Select which honeypots to run (default: all)
   ## Protocols: SSH, TNET, FTP, RDP, SMB, SIP, SMTP, HTTP
   ## Use PROTO:PORT syntax to run the same protocol on multiple ports

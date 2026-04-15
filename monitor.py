@@ -20,6 +20,7 @@ GEOIP_ASN_PATH = '/usr/share/GeoIP/GeoLite2-ASN.mmdb'
 DB_PATH = os.environ.get('DB_DIR', 'data') + '/knock_knock.db'
 BLOCKLIST_FILE = os.environ.get('DB_DIR', 'data') + '/blocklist.txt'
 
+TRACE_KNOCK     = os.environ.get('TRACE_KNOCK', '').lower() == 'true'
 SOURCE_ID       = os.environ.get('SOURCE_ID', socket.gethostname().split('.')[0])
 AGGREGATOR_HOST = os.environ.get('AGGREGATOR_HOST', '').strip()
 AGGREGATOR_PORT = int(os.environ.get('AGGREGATOR_PORT', '9999'))
@@ -922,7 +923,8 @@ def monitor(save_knocks=None, max_knocks=None):
         try:
             knock = json.loads(line)
         except (json.JSONDecodeError, ValueError):
-            print(line, end='', flush=True)  # pass through diagnostic output from honeypots
+            if TRACE_KNOCK:
+                print(line, end='', flush=True)  # pass through diagnostic output from honeypots
             continue
         # Feeder: forward raw knock to aggregator before local enrichment
         if AGGREGATOR_HOST and knock.get('type') == 'KNOCK':
@@ -1007,15 +1009,18 @@ def monitor(save_knocks=None, max_knocks=None):
             if package.get("subject"):
                 left = user if user is not None else package.get("mail_from", package.get("smtp_mail_from", "<none>"))
                 right = pw if pw is not None else package.get("mail_to", package.get("smtp_rcpt_to", "<none>"))
-                print(f"📧 MAIL {geo['iso']} | {left} → {right} | {package['subject'][:60]} via {geo['isp']}")
+                if TRACE_KNOCK:
+                    print(f"📧 MAIL {geo['iso']} | {left} → {right} | {package['subject'][:60]} via {geo['isp']}")
             elif proto == 'SIP' and package.get('sip_dial_number'):
                 dial_raw = package.get('sip_dial_string', '')
                 dial_e164 = package.get('sip_dial_number', '')
                 dial_dest = package.get('sip_dial_country_name', '')
-                print(f"📡 SIP {geo['iso']} | {dial_raw} → {dial_e164} → {dial_dest} via {geo['isp']}")
+                if TRACE_KNOCK:
+                    print(f"📡 SIP {geo['iso']} | {dial_raw} → {dial_e164} → {dial_dest} via {geo['isp']}")
             else:
-                cred = format_cred_summary(user, pw)
-                print(f"📡 {proto} {geo['iso']} | {cred} via {geo['isp']}")
+                if TRACE_KNOCK:
+                    cred = format_cred_summary(user, pw)
+                    print(f"📡 {proto} {geo['iso']} | {cred} via {geo['isp']}")
             if max_knocks and not r.sismember("knock:blocked", ip):
                 limit = max_knocks.get(proto) or max_knocks.get(None)
                 hits = proto_hits if proto in max_knocks else projected_hits

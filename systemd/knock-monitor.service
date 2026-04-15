@@ -14,6 +14,15 @@ WorkingDirectory=/root/knock-knock
 # Environment=ENABLED_PROTOCOLS=SSH,TNET,SMTP
 # Override SMTP banner hostname (default: reverse DNS of server IP)
 # Environment=SMTP_HOSTNAME=mail.local
+# Federation — feeder mode: forward knocks to an aggregator server
+# SOURCE_ID defaults to hostname; keep it short (e.g. ams2, lon1, ny)
+# Only set AGGREGATOR_HOST to enable forwarding; local honeypots still run normally
+# Environment=SOURCE_ID=la5
+# Environment=AGGREGATOR_HOST=aggregator.example.com
+# Environment=AGGREGATOR_PORT=9999
+# Federation — aggregator mode: receive forwarded knocks from feeder servers
+# Open INGEST_PORT in your firewall to feeder IPs only (no auth token — firewall is the gate)
+# Environment=INGEST_PORT=9999
 ExecStart=/root/knock-knock/.venv/bin/python -u monitor.py
 Restart=always
 RestartSec=5

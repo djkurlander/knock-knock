@@ -580,7 +580,7 @@ def log_to_enriched_db(data, save_protos=None):
                            hits=hits+1,
                            first_seen=COALESCE(first_seen, excluded.first_seen),
                            last_seen=excluded.last_seen""",
-                    (src_id, now, now, now))
+                    (src_id, now, now))
         conn.commit()
     finally:
         conn.close()
@@ -889,6 +889,7 @@ def monitor(save_knocks=None, max_knocks=None):
 
     if INGEST_PORT:
         _start_ingest_server(knock_queue)
+        r.set("knock:is_aggregator", "1")
 
     def pipe_reader(proc, name):
         for line in proc.stdout:

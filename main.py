@@ -10,7 +10,6 @@ from constants import PROTO, PROTO_NAME, PROTOCOL_META, DEFAULT_ENABLED_PROTOCOL
 app = FastAPI()
 logger = logging.getLogger("uvicorn.error")
 LOG_UNHANDLED_HTTP = os.environ.get('LOG_UNHANDLED_HTTP', '').lower() == 'true'
-IS_AGGREGATOR = os.environ.get('IS_AGGREGATOR', '').lower() == 'true'
 
 def get_request_client_ip(request: Request) -> str:
     """Extract real client IP: CF-Connecting-IP > X-Forwarded-For > direct."""
@@ -283,6 +282,7 @@ class ConnectionManager:
         current_kpm = await self.get_kpm()
         proto_counts_raw = await r.hgetall("knock:proto_counts")
         source_counts_raw = await r.hgetall("knock:source_counts")
+        is_aggregator = bool(await r.get("knock:is_aggregator"))
         enabled_protocols = []
         protocol_meta = {}
         if include_protocol_config:
@@ -311,7 +311,7 @@ class ConnectionManager:
             "proto_stats": {str(k): v for k, v in stats_cache.proto_stats.items()},
             "proto_breakdown": proto_breakdown,
             "cache_ts": stats_cache.last_updated,
-            "is_aggregator": IS_AGGREGATOR,
+            "is_aggregator": is_aggregator,
             "source_counts": _build_source_counts(source_counts_raw),
         }
 

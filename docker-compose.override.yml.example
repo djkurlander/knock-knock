@@ -60,12 +60,9 @@ services:
 
   ## Federation — aggregator mode: receive forwarded knocks from feeder servers
   ## Open INGEST_PORT in your firewall to feeder IPs only (no auth token — firewall is the gate)
-  ## IS_AGGREGATOR=true tells the UI to show source badges on each knock in the feed
+  ## Source badges and SOURCES section appear in the UI automatically when INGEST_PORT is set
   # honeypot-monitor:
   #   environment:
   #     - INGEST_PORT=9999
   #   ports:
   #     - "9999:9999"
-  # web:
-  #   environment:
-  #     - IS_AGGREGATOR=true

@@ -631,6 +631,17 @@ def _emit_knock(ip, user=None, smb_share=None, smb_version=None,
     trace(ip, trace_stage, user=user, smb_share=smb_share, smb_file=smb_file,
           smb_version=smb_version, domain=smb_domain, host=smb_host)
 
+
+def _classify_create_action(kind, disposition, path):
+    """Map SMB CREATE/NT_CREATE semantics to a more human-meaningful action."""
+    if kind == 'dir' or not path:
+        return 'OPEN_DIR'
+    if kind == 'file':
+        return 'OPEN_FILE'
+    if disposition != _SMB2_CREATE_DISP_FILE_OPEN:
+        return 'CREATE_FILE'
+    return 'CHECK_FILE'
+
 # ---------------------------------------------------------------------------
 # SMB2 packet builders
 # ---------------------------------------------------------------------------
@@ -1308,7 +1319,7 @@ def _parse_dcerpc_request_fields(data):
 def _parse_svcctl_r_create_service_w(stub):
     """
     Parse an RCreateServiceW NDR stub (MS-SCMR §3.1.4.12).
-    Returns (service_name, binary_path) — either may be None on parse failure.
+    Returns (service_name, binary_path, debug_meta).
 
     Live traces show a top-level marshal order of:
       hSCManager(20)
@@ -1324,31 +1335,59 @@ def _parse_svcctl_r_create_service_w(stub):
     the fixed block started immediately after the first string without re-alignment.
     The live stub previews show 4-byte alignment padding between these items.
     """
+    debug = {
+        'svc_ptr': None,
+        'post_service_offset': None,
+        'disp_ptr_offset': None,
+        'disp_ptr': None,
+        'post_display_offset': None,
+        'fixed_offset': None,
+        'bin_ptr': None,
+        'load_group_ptr': None,
+        'dep_ptr': None,
+        'dep_size': None,
+        'start_name_ptr': None,
+        'password_ptr': None,
+        'pw_size': None,
+        'deferred_offset': None,
+    }
     try:
         if len(stub) < 28:
-            return None, None
+            return None, None, debug
 
+        # Observed live layout:
+        #   hSCManager(20)
+        #   lpServiceName + deferred string
+        #   4-byte pad up to next top-level pointer
+        #   lpDisplayName + deferred string
+        #   fixed 48-byte DWORD/pointer block begins immediately after that
+        #   deferred data for later pointers starts immediately after the block
         offset = 20
         svc_ptr = struct.unpack_from('<I', stub, offset)[0]
+        debug['svc_ptr'] = hex(svc_ptr)
         offset += 4
 
         service_name = None
         if svc_ptr:
             service_name, offset, _ = _parse_ndr_string_any(stub, offset)
             offset = _align4(offset)
+        debug['post_service_offset'] = offset
 
         if offset + 4 > len(stub):
-            return service_name, None
+            return service_name, None, debug
 
+        debug['disp_ptr_offset'] = offset
         disp_ptr = struct.unpack_from('<I', stub, offset)[0]
+        debug['disp_ptr'] = hex(disp_ptr)
         offset += 4
         if disp_ptr:
             _, offset, _ = _parse_ndr_string_any(stub, offset)
-            offset = _align4(offset)
+        debug['post_display_offset'] = offset
 
         fixed_offset = offset
+        debug['fixed_offset'] = fixed_offset
         if fixed_offset + 48 > len(stub):
-            return service_name, None
+            return service_name, None, debug
 
         bin_ptr        = struct.unpack_from('<I', stub, fixed_offset + 16)[0]
         load_group_ptr = struct.unpack_from('<I', stub, fixed_offset + 20)[0]
@@ -1358,31 +1397,44 @@ def _parse_svcctl_r_create_service_w(stub):
         start_name_ptr = struct.unpack_from('<I', stub, fixed_offset + 36)[0]
         password_ptr   = struct.unpack_from('<I', stub, fixed_offset + 40)[0]
         pw_size        = struct.unpack_from('<I', stub, fixed_offset + 44)[0]
+        debug['bin_ptr'] = hex(bin_ptr)
+        debug['load_group_ptr'] = hex(load_group_ptr)
+        debug['dep_ptr'] = hex(dep_ptr)
+        debug['dep_size'] = dep_size
+        debug['start_name_ptr'] = hex(start_name_ptr)
+        debug['password_ptr'] = hex(password_ptr)
+        debug['pw_size'] = pw_size
 
         deferred_offset = fixed_offset + 48
+        debug['deferred_offset'] = deferred_offset
         binary_path = None
         if bin_ptr:
             binary_path, deferred_offset, _ = _parse_ndr_string_any(stub, deferred_offset)
             deferred_offset = _align4(deferred_offset)
+            debug['deferred_offset'] = deferred_offset
 
         if load_group_ptr:
             _, deferred_offset, _ = _parse_ndr_string_any(stub, deferred_offset)
             deferred_offset = _align4(deferred_offset)
+            debug['deferred_offset'] = deferred_offset
 
         if dep_ptr and dep_size:
             deferred_offset += dep_size
             deferred_offset = _align4(deferred_offset)
+            debug['deferred_offset'] = deferred_offset
 
         if start_name_ptr:
             _, deferred_offset, _ = _parse_ndr_string_any(stub, deferred_offset)
             deferred_offset = _align4(deferred_offset)
+            debug['deferred_offset'] = deferred_offset
 
         if password_ptr and pw_size:
             deferred_offset += pw_size
+            debug['deferred_offset'] = deferred_offset
 
-        return service_name, binary_path
+        return service_name, binary_path, debug
     except Exception:
-        return None, None
+        return None, None, debug
 
 
 def _parse_svcctl_r_open_service_w(stub):
@@ -1518,13 +1570,27 @@ def _handle_dcerpc(data, client_ip, user=None, smb_version=None,
                     win_error=_SVCCTL_ERROR_SERVICE_DOES_NOT_EXIST,
                 )
             if opnum == _SVCCTL_R_CREATE_SERVICE_W:
-                svc_name, bin_path = _parse_svcctl_r_create_service_w(stub)
+                svc_name, bin_path, create_meta = _parse_svcctl_r_create_service_w(stub)
                 trace(client_ip, 'svcctl_create_service',
                       service_name=svc_name, binary_path=bin_path,
                       stub_len=len(stub), stub_preview=stub[:96].hex(),
                       has_object_uuid=req_meta.get('has_object_uuid'),
                       auth_length=req_meta.get('auth_length'),
-                      auth_pad_length=req_meta.get('auth_pad_length'))
+                      auth_pad_length=req_meta.get('auth_pad_length'),
+                      svc_ptr=create_meta.get('svc_ptr'),
+                      post_service_offset=create_meta.get('post_service_offset'),
+                      disp_ptr_offset=create_meta.get('disp_ptr_offset'),
+                      disp_ptr=create_meta.get('disp_ptr'),
+                      post_display_offset=create_meta.get('post_display_offset'),
+                      fixed_offset=create_meta.get('fixed_offset'),
+                      bin_ptr=create_meta.get('bin_ptr'),
+                      load_group_ptr=create_meta.get('load_group_ptr'),
+                      dep_ptr=create_meta.get('dep_ptr'),
+                      dep_size=create_meta.get('dep_size'),
+                      start_name_ptr=create_meta.get('start_name_ptr'),
+                      password_ptr=create_meta.get('password_ptr'),
+                      pw_size=create_meta.get('pw_size'),
+                      deferred_offset=create_meta.get('deferred_offset'))
                 _emit_knock(client_ip, user, None, smb_version, smb_domain, smb_host,
                             smb_file=bin_path, smb_action='CREATE_SERVICE',
                             smb_service_name=svc_name,
@@ -1846,8 +1912,11 @@ def _smb2_post_negotiate(client_sock, client_ip, smb_version, selected_dialect=0
             # Normalize: strip leading backslashes, convert to forward-slash path
             norm = clean.replace('\\', '/').strip('/')
             kind = _overlay_resolve_path(share_tree, share_overlay, norm)
+            disposition = (struct.unpack_from('<I', payload, 100)[0]
+                           if len(payload) >= 104 else _SMB2_CREATE_DISP_FILE_OPEN)
+            create_action = _classify_create_action(kind, disposition, norm)
             _emit_knock(client_ip, user, share_upper, smb_version, domain, host,
-                        smb_file=norm, smb_action='CREATE',
+                        smb_file=norm, smb_action=create_action,
                         trace_stage='knock_emitted_create')
             if kind == 'dir':
                 fid_p = fid_v = next_fid; next_fid += 1
@@ -1866,8 +1935,6 @@ def _smb2_post_negotiate(client_sock, client_ip, smb_version, selected_dialect=0
                     hdr, session_id, tree_id, fid_p, fid_v, False, file_size=fsize))
             else:
                 # Path not found — check if bot is trying to create a new file
-                disposition = (struct.unpack_from('<I', payload, 100)[0]
-                               if len(payload) >= 104 else _SMB2_CREATE_DISP_FILE_OPEN)
                 if disposition != _SMB2_CREATE_DISP_FILE_OPEN:
                     share_overlay.setdefault(norm, bytearray())
                     fid_p = fid_v = next_fid; next_fid += 1
@@ -1886,13 +1953,17 @@ def _smb2_post_negotiate(client_sock, client_ip, smb_version, selected_dialect=0
         elif cmd == SMB2_IOCTL:
             ctl_code = struct.unpack_from('<I', payload, 68)[0] if len(payload) >= 72 else 0
             fid_pair = _parse_file_id_at(payload, 72)   # FileId at body+8 = abs 72
+            in_off   = struct.unpack_from('<I', payload, 88)[0] if len(payload) >= 92 else 0
+            in_cnt   = struct.unpack_from('<I', payload, 92)[0] if len(payload) >= 96 else 0
+            out_off  = struct.unpack_from('<I', payload, 96)[0] if len(payload) >= 100 else 0
+            out_cnt  = struct.unpack_from('<I', payload, 100)[0] if len(payload) >= 104 else 0
+            max_in   = struct.unpack_from('<I', payload, 104)[0] if len(payload) >= 108 else 0
+            max_out  = struct.unpack_from('<I', payload, 108)[0] if len(payload) >= 112 else 0
             if ctl_code == _FSCTL_VALIDATE_NEGOTIATE_INFO:
                 trace(client_ip, 'smb2_validate_negotiate', dialect=hex(selected_dialect))
                 send_nbss(client_sock, build_smb2_validate_negotiate_response(
                     hdr, session_id, hdr['tree_id'], selected_dialect))
             elif ctl_code == _FSCTL_PIPE_TRANSCEIVE and fid_pair in pipe_fids:
-                in_off  = struct.unpack_from('<I', payload, 88)[0] if len(payload) >= 92 else 0
-                in_cnt  = struct.unpack_from('<I', payload, 92)[0] if len(payload) >= 96 else 0
                 dcerpc  = payload[in_off:in_off + in_cnt]
                 trace(client_ip, 'smb2_pipe_transceive',
                       fid=fid_pair[0], data_len=len(dcerpc))
@@ -1908,8 +1979,16 @@ def _smb2_post_negotiate(client_sock, client_ip, smb_version, selected_dialect=0
                     send_nbss(client_sock, build_smb2_error_response(
                         hdr, session_id, hdr['tree_id'], STATUS_NOT_SUPPORTED, SMB2_IOCTL))
             else:
+                input_preview = None
+                if in_cnt and in_off and in_off + min(in_cnt, 64) <= len(payload):
+                    input_preview = payload[in_off:in_off + min(in_cnt, 64)].hex()
                 trace(client_ip, 'smb2_ioctl',
-                      ctl_code=hex(ctl_code), tree_id=hex(hdr['tree_id']))
+                      ctl_code=hex(ctl_code), tree_id=hex(hdr['tree_id']),
+                      fid=None if not fid_pair else fid_pair[0],
+                      input_offset=in_off, input_count=in_cnt,
+                      output_offset=out_off, output_count=out_cnt,
+                      max_input=max_in, max_output=max_out,
+                      input_preview=input_preview)
                 send_nbss(client_sock, build_smb2_error_response(
                     hdr, session_id, hdr['tree_id'], STATUS_NOT_SUPPORTED, SMB2_IOCTL))
 
@@ -2115,13 +2194,28 @@ def _smb2_post_negotiate(client_sock, client_ip, smb_version, selected_dialect=0
 
         elif cmd == SMB2_IOCTL:
             ctl_code = struct.unpack_from('<I', payload, 68)[0] if len(payload) >= 72 else 0
+            fid_pair = _parse_file_id_at(payload, 72) if len(payload) >= 88 else None
+            in_off   = struct.unpack_from('<I', payload, 88)[0] if len(payload) >= 92 else 0
+            in_cnt   = struct.unpack_from('<I', payload, 92)[0] if len(payload) >= 96 else 0
+            out_off  = struct.unpack_from('<I', payload, 96)[0] if len(payload) >= 100 else 0
+            out_cnt  = struct.unpack_from('<I', payload, 100)[0] if len(payload) >= 104 else 0
+            max_in   = struct.unpack_from('<I', payload, 104)[0] if len(payload) >= 108 else 0
+            max_out  = struct.unpack_from('<I', payload, 108)[0] if len(payload) >= 112 else 0
             if ctl_code == _FSCTL_VALIDATE_NEGOTIATE_INFO:
                 trace(client_ip, 'smb2_validate_negotiate', dialect=hex(selected_dialect))
                 send_nbss(client_sock, build_smb2_validate_negotiate_response(
                     hdr, session_id, hdr['tree_id'], selected_dialect))
             else:
+                input_preview = None
+                if in_cnt and in_off and in_off + min(in_cnt, 64) <= len(payload):
+                    input_preview = payload[in_off:in_off + min(in_cnt, 64)].hex()
                 trace(client_ip, 'smb2_ioctl',
-                      ctl_code=hex(ctl_code), tree_id=hex(hdr['tree_id']))
+                      ctl_code=hex(ctl_code), tree_id=hex(hdr['tree_id']),
+                      fid=None if not fid_pair else fid_pair[0],
+                      input_offset=in_off, input_count=in_cnt,
+                      output_offset=out_off, output_count=out_cnt,
+                      max_input=max_in, max_output=max_out,
+                      input_preview=input_preview)
                 send_nbss(client_sock, build_smb2_error_response(
                     hdr, session_id, hdr['tree_id'], STATUS_NOT_SUPPORTED, SMB2_IOCTL))
 
@@ -3144,6 +3238,9 @@ def handle_smb1(client_sock, client_ip, first_payload):
             share_files = _DECOYS[share_upper]
             share_overlay = overlay_files.setdefault(share_upper, {})
             if not clean:
+                _emit_knock(client_ip, user, share_upper, 'SMB1', domain, host,
+                            smb_file=clean, smb_action='OPEN_DIR',
+                            trace_stage='knock_emitted_create')
                 fid = next_fid; next_fid += 1
                 open_files[fid] = {'share': share_upper, 'filename': None}
                 trace(client_ip, 'smb1_create', name='', fid=fid, is_dir=True)
@@ -3151,8 +3248,11 @@ def handle_smb1(client_sock, client_ip, first_payload):
                     hdr, uid, tid, fid, True, 0))
             else:
                 kind = _overlay_resolve_path(share_files, share_overlay, clean)
+                disposition = (struct.unpack_from('<I', payload, 68)[0]
+                               if len(payload) >= 72 else _SMB2_CREATE_DISP_FILE_OPEN)
+                create_action = _classify_create_action(kind, disposition, clean)
                 _emit_knock(client_ip, user, share_upper, 'SMB1', domain, host,
-                            smb_file=clean, smb_action='CREATE',
+                            smb_file=clean, smb_action=create_action,
                             trace_stage='knock_emitted_create')
                 if kind == 'file':
                     fid = next_fid; next_fid += 1
@@ -3169,8 +3269,6 @@ def handle_smb1(client_sock, client_ip, first_payload):
                         hdr, uid, tid, fid, True, 0))
                 else:
                     # CreateDisposition at params[35] = payload[68]
-                    disposition = (struct.unpack_from('<I', payload, 68)[0]
-                                   if len(payload) >= 72 else _SMB2_CREATE_DISP_FILE_OPEN)
                     if disposition != _SMB2_CREATE_DISP_FILE_OPEN:
                         share_overlay.setdefault(clean, bytearray())
                         fid = next_fid; next_fid += 1

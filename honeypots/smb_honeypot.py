@@ -234,7 +234,7 @@ _SERVER_GUID  = os.urandom(16)  # stable per-process server GUID (used in NEGOTI
 
 _MAX_MSG      = 200      # per-connection message cap (prevents runaway state machine)
 _SOCK_TIMEOUT = 15       # seconds per recv
-_NBSS_MAX     = 262144   # 256 KB NBSS payload cap (prevents memory exhaustion)
+_NBSS_MAX     = int(os.environ.get('SMB_NBSS_MAX', str(4 * 1024 * 1024)))  # 4 MB default
 
 _dedup_lock = threading.Lock()
 _dedup_seen: dict = {}
@@ -1227,6 +1227,39 @@ def _parse_ndr_conformant_string(buf, offset):
     return value, offset + byte_len
 
 
+def _parse_ndr_varying_string(buf, offset):
+    """
+    Parse an NDR varying Unicode string from buf starting at offset.
+    Layout: Offset(4) + ActualCount(4) + UTF-16LE data.
+    """
+    if offset + 8 > len(buf):
+        return None, offset
+    actual_count = struct.unpack_from('<I', buf, offset + 4)[0]
+    offset += 8
+    byte_len = actual_count * 2
+    if offset + byte_len > len(buf):
+        return None, offset + byte_len
+    try:
+        value = buf[offset:offset + byte_len].decode('utf-16-le').rstrip('\x00')
+    except UnicodeDecodeError:
+        value = None
+    return value, offset + byte_len
+
+
+def _parse_ndr_string_any(buf, offset):
+    """
+    Parse either a conformant/varying or varying-only Unicode NDR string.
+    Returns (value, new_offset, format_name).
+    """
+    value, new_offset = _parse_ndr_conformant_string(buf, offset)
+    if value is not None:
+        return value, new_offset, 'conformant'
+    value, new_offset = _parse_ndr_varying_string(buf, offset)
+    if value is not None:
+        return value, new_offset, 'varying'
+    return None, offset, None
+
+
 def _parse_dcerpc_request_fields(data):
     """
     Parse a DCERPC REQUEST PDU and return:
@@ -1282,37 +1315,31 @@ def _parse_svcctl_r_create_service_w(stub):
     Each string is an NDR conformant/varying string: MaxCount(4)+Offset(4)+Count(4)+data.
     """
     try:
-        # SCM handle is 20 bytes (context handle), then ServiceName ptr, DisplayName ptr
-        # then DesiredAccess(4), ServiceType(4), StartType(4), ErrorControl(4),
-        # BinaryPathName ptr(4), ...
-        # String data begins right after the fixed fields.
-        # Fixed-size prefix before first string blob:
-        #   hSCManager(20) + lpServiceName_ptr(4) + lpDisplayName_ptr(4)
-        #   + DesiredAccess(4) + ServiceType(4) + StartType(4) + ErrorControl(4)
-        #   + lpBinaryPathName_ptr(4) = 48 bytes total before first string
-        if len(stub) < 48:
+        # Live clients appear to marshal the first two top-level strings immediately
+        # after their pointer fields, then place the fixed DWORD/pointer block, then
+        # defer later pointer targets such as BinaryPathName.
+        if len(stub) < 28:
             return None, None
 
-        # Check which pointers are non-null
         svc_ptr  = struct.unpack_from('<I', stub, 20)[0]   # lpServiceName
         disp_ptr = struct.unpack_from('<I', stub, 24)[0]   # lpDisplayName
-        bin_ptr  = struct.unpack_from('<I', stub, 44)[0]   # lpBinaryPathName
-
-        offset = 48  # start of string blobs
+        offset = 28
 
         service_name = None
         if svc_ptr:
-            service_name, offset = _parse_ndr_conformant_string(stub, offset)
-            # NDR strings are 4-byte aligned
-            offset = (offset + 3) & ~3
+            service_name, offset, _ = _parse_ndr_string_any(stub, offset)
 
         if disp_ptr:
-            _, offset = _parse_ndr_conformant_string(stub, offset)
-            offset = (offset + 3) & ~3
+            _, offset, _ = _parse_ndr_string_any(stub, offset)
 
+        fixed_offset = offset
+        if fixed_offset + 48 > len(stub):
+            return service_name, None
+
+        bin_ptr  = struct.unpack_from('<I', stub, fixed_offset + 16)[0]   # lpBinaryPathName
         binary_path = None
         if bin_ptr:
-            binary_path, offset = _parse_ndr_conformant_string(stub, offset)
+            binary_path, _, _ = _parse_ndr_string_any(stub, fixed_offset + 48)
 
         return service_name, binary_path
     except Exception:
@@ -1338,11 +1365,12 @@ def _parse_svcctl_r_open_service_w(stub):
         service_name = None
         offset = 24
         if svc_ptr:
-            service_name, offset = _parse_ndr_conformant_string(stub, offset)
-            offset = (offset + 3) & ~3
+            service_name, offset, _ = _parse_ndr_string_any(stub, offset)
         desired_access = None
         if offset + 4 <= len(stub):
             desired_access = struct.unpack_from('<I', stub, offset)[0]
+        elif len(stub) >= 4:
+            desired_access = struct.unpack_from('<I', stub, len(stub) - 4)[0]
         return service_name, desired_access
     except Exception:
         return None, None
@@ -1453,7 +1481,11 @@ def _handle_dcerpc(data, client_ip, user=None, smb_version=None,
             if opnum == _SVCCTL_R_CREATE_SERVICE_W:
                 svc_name, bin_path = _parse_svcctl_r_create_service_w(stub)
                 trace(client_ip, 'svcctl_create_service',
-                      service_name=svc_name, binary_path=bin_path)
+                      service_name=svc_name, binary_path=bin_path,
+                      stub_len=len(stub), stub_preview=stub[:96].hex(),
+                      has_object_uuid=req_meta.get('has_object_uuid'),
+                      auth_length=req_meta.get('auth_length'),
+                      auth_pad_length=req_meta.get('auth_pad_length'))
                 _emit_knock(client_ip, user, None, smb_version, smb_domain, smb_host,
                             smb_file=bin_path, smb_action='CREATE_SERVICE',
                             smb_service_name=svc_name,

@@ -689,12 +689,13 @@ def store_smtp_diag(redis_conn, diag):
     redis_conn.set(f"knock:diag:{proto}:last", json.dumps(diag))
     if diag["no_knock_reason"]:
         redis_conn.hincrby(f"knock:diag:{proto}:reason_counts", diag["no_knock_reason"], 1)
-    label = f"SMTP{diag.get('smtp_port', 25)}"
-    print(
-        f"🧪 {label} no-knock {diag['ip']} | reason={diag['no_knock_reason']} "
-        f"stop={diag['stop_reason']} cmds={diag['commands_seen']}",
-        flush=True,
-    )
+    if TRACE_KNOCK:
+        label = f"SMTP{diag.get('smtp_port', 25)}"
+        print(
+            f"🧪 {label} no-knock {diag['ip']} | reason={diag['no_knock_reason']} "
+            f"stop={diag['stop_reason']} cmds={diag['commands_seen']}",
+            flush=True,
+        )
 
 def build_mail_forensic(knock, proto, ip):
     mail_from = knock.get("mail_from", knock.get("smtp_mail_from"))

@@ -1493,7 +1493,7 @@
             if (!el) return;
             if (paused) {
                 el.dataset.origHtml = el.innerHTML;
-                el.innerHTML = '— PAUSED —';
+                el.innerHTML = 'BOTS ARE PAUSED <span class="status-dot status-online"></span>';
                 el.classList.add('paused-title');
             } else {
                 el.innerHTML = el.dataset.origHtml || 'BOTS ARE KNOCKING <span class="status-dot"></span>';

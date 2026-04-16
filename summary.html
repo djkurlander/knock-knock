@@ -1695,6 +1695,27 @@
         }
     }
 
+    function bumpSourceCountsWithKnock(d) {
+        if (!isAggregator || !d.source) return;
+        const src = sourceCountsCache.find(r => r.source_id === d.source);
+        if (src) {
+            src.hits += 1;
+            src.last_seen = new Date().toISOString().replace('T', ' ').slice(0, 19);
+        }
+        sourceCountsCache.sort((a, b) => b.hits - a.hits);
+    }
+
+    function pulseSourceStatsRow(source_id) {
+        if (!isAggregator || !source_id) return;
+        ['d-proto-stats', 'm-proto-stats'].forEach(id => {
+            const container = document.getElementById(id);
+            if (!container) return;
+            const row = container.querySelector(`.proto-stats-row[data-source="${CSS.escape(source_id)}"]`);
+            if (!row) return;
+            triggerPulseClass(row);
+        });
+    }
+
     function renderProtoStats() {
         const rows = TRACKED_PROTOCOLS.map(proto => {
             const count = Number(protoBreakdownCache?.[proto]?.count || 0);
@@ -1737,7 +1758,7 @@
                     : uptime;
                 const kpm = r.hits / elapsedMinutes;
                 return `
-                <div style="display:grid;grid-template-columns:1fr 0.82fr 1.45fr 0.73fr;gap:8px;padding:4px 0;border-bottom:1px solid #222;">
+                <div class="proto-stats-row" data-source="${escapeHtml(r.source_id)}" style="display:grid;grid-template-columns:1fr 0.82fr 1.45fr 0.73fr;gap:8px;padding:4px 0;border-bottom:1px solid #222;">
                     <span style="font-weight:bold;color:var(--ui-label);padding-left:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escapeHtml(r.source_id)}">${escapeHtml(r.display_name)}</span>
                     <span style="color:var(--neon-green);text-align:center;">${pct >= 99.95 ? '100' : pct.toFixed(1)}%</span>
                     <span style="color:var(--data-blue);text-align:center;">${r.hits.toLocaleString()}</span>
@@ -3261,6 +3282,7 @@
                 renderKnock(d, true);
                 if (Number.isFinite(Number(d.uptime_minutes))) uptimeMinutesCache = Number(d.uptime_minutes);
                 bumpProtoBreakdownWithKnock(d);
+                bumpSourceCountsWithKnock(d);
                 if (isFiltered) {
                     updateHeaderStats(getFilteredTotal(), getFilteredKpm());
                 } else {
@@ -3268,6 +3290,7 @@
                 }
                 renderProtoStats();
                 pulseProtoStatsRow(d.proto);
+                pulseSourceStatsRow(d.source);
                 if (knockMatchesFilter(d)) {
                     incrementAndSort('loc', d.iso, d.country);
                     if (hasPassField(d)) incrementAndSort('pass', d.pass);

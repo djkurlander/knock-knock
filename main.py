@@ -281,7 +281,6 @@ class ConnectionManager:
         last_lng_val = await r.get("knock:last_lng")
         current_kpm = await self.get_kpm()
         proto_counts_raw = await r.hgetall("knock:proto_counts")
-        source_counts_raw = await r.hgetall("knock:source_counts")
         is_aggregator = bool(await r.get("knock:is_aggregator"))
         enabled_protocols = []
         protocol_meta = {}
@@ -312,7 +311,7 @@ class ConnectionManager:
             "proto_breakdown": proto_breakdown,
             "cache_ts": stats_cache.last_updated,
             "is_aggregator": is_aggregator,
-            "source_counts": _build_source_counts(source_counts_raw),
+            "source_counts": _build_source_counts(await r.hgetall("knock:source_counts")) if is_aggregator else [],
         }
 
         if include_history:

@@ -1500,6 +1500,11 @@
                 el.classList.remove('paused-title');
             }
         });
+        if (paused) {
+            if (ws) ws.close();
+        } else {
+            connect();
+        }
     }
     document.addEventListener('keydown', (e) => {
         if (e.code === 'Space' && e.target === document.body) {
@@ -3113,11 +3118,10 @@
         ws.onclose = (e) => {
             debugLog(`WS: closed (code=${e.code}, reason=${e.reason || 'none'})`);
             document.querySelectorAll('.status-dot').forEach(d => d.classList.remove('status-online'));
-            setTimeout(connect, 3000);
+            if (!paused) setTimeout(connect, 3000);
         };
         ws.onerror = (e) => debugLog('WS: error event');
         ws.onmessage = (event) => {
-            if (paused) return;
             const msg = JSON.parse(event.data);
             const d = msg.data;
             if (msg.type === 'new_knock') {

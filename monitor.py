@@ -41,7 +41,12 @@ def parse_enabled_protocols():
       - entries: list of (proto, port_or_None) tuples (for spawning)
     Returns (names, entries).
     """
-    raw = os.environ.get("ENABLED_PROTOCOLS", "").strip() or _DEFAULT_ENABLED_STR
+    raw_env = os.environ.get("ENABLED_PROTOCOLS")  # None=unset, ""=explicitly empty
+    if raw_env is not None and raw_env.strip() == '':
+        # Explicitly set to empty — pure ingest mode, no local honeypots
+        print("🔌 ENABLED_PROTOCOLS='' — ingest-only mode, no local honeypots will be spawned", flush=True)
+        return [], []
+    raw = raw_env.strip() if raw_env else _DEFAULT_ENABLED_STR
     entries = []
     names = []
     for token in raw.split(','):
@@ -873,8 +878,8 @@ def monitor(save_knocks=None, max_knocks=None):
             stderr=subprocess.STDOUT,
             text=True,
         )
-    if not honeypots:
-        print("❌ No honeypots enabled after parsing ENABLED_PROTOCOLS", flush=True)
+    if not honeypots and not INGEST_PORT:
+        print("❌ No honeypots enabled and INGEST_PORT not set — nothing to do", flush=True)
         sys.exit(1)
 
     knock_queue = queue.Queue()

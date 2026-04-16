@@ -1508,6 +1508,20 @@
         }
     });
 
+    // Mobile tap-to-pause: quick tap on pane background (not on interactive elements or header)
+    let _touchStartX, _touchStartY;
+    document.addEventListener('touchstart', (e) => {
+        _touchStartX = e.touches[0].clientX;
+        _touchStartY = e.touches[0].clientY;
+    }, { passive: true });
+    document.addEventListener('touchend', (e) => {
+        const dx = Math.abs(e.changedTouches[0].clientX - _touchStartX);
+        const dy = Math.abs(e.changedTouches[0].clientY - _touchStartY);
+        if (dx < 10 && dy < 10 && !e.target.closest('a, button, .proto-cycle-btn, .proto-dropdown, .proto-dropdown-trigger, .nav-item, .dot, .m-header-left, canvas')) {
+            togglePause();
+        }
+    }, { passive: true });
+
     function playTone(freq, type, vol, dur) {
         if (!audioCtx) initAudio();
         if (!audioCtx || audioCtx.state === 'suspended') return;

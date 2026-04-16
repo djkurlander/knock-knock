@@ -26,3 +26,6 @@ __pycache__/
 
 # Local agent/editor state
 .codex
+
+# Per-server deployment scripts (contain server IPs)
+allow-feeders.sh

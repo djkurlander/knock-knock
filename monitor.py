@@ -944,7 +944,9 @@ def monitor(save_knocks=None, max_knocks=None):
         try:
             knock = json.loads(line)
         except (json.JSONDecodeError, ValueError):
-            if TRACE_KNOCK:
+            if re.match(r'^[A-Z]+TRACE\b', line):
+                print(line, end='', flush=True)
+            elif TRACE_KNOCK:
                 print(line, end='', flush=True)  # pass through diagnostic output from honeypots
             continue
         # Sanitize credential fields before any processing or forwarding

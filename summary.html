@@ -2805,9 +2805,9 @@
         return safeIp;
     }
 
-    function getSourceBadge(d) {
+    function getSourceLine(d) {
         if (!isAggregator || !d.source_display) return '';
-        return `<span style="margin-left:6px;padding:1px 5px;border-radius:3px;font-size:0.75em;background:rgba(255,255,255,0.10);color:var(--ui-label);font-family:monospace;">${escapeHtml(d.source_display)}</span>`;
+        return `<div><span style="color:var(--ui-label)">source:</span> <span style="color:var(--data-blue)">${escapeHtml(d.source_display)}</span></div>`;
     }
 
     function getProtoBadge(proto) {
@@ -3010,9 +3010,9 @@
         const div = document.createElement('div');
         div.className = 'knock';
         div.innerHTML = `
-            <div class="knock-location"><span style="display:flex;align-items:center;gap:0.3em"><strong>${getFlag(d.iso)}</strong> <strong>${safeLoc}</strong></span>${getProtoBadge(d.proto)}${getSourceBadge(d)}</div>
+            <div class="knock-location"><span style="display:flex;align-items:center;gap:0.3em"><strong>${getFlag(d.iso)}</strong> <strong>${safeLoc}</strong></span>${getProtoBadge(d.proto)}</div>
             ${protoLine}<br>
-            <span class="knock-meta"><span style="color:var(--ui-label)">ISP:</span> <span style="color:var(--data-blue)">${safeIsp}</span> <span style="color:var(--ui-label); margin-left:10px;">IP:</span> <span style="color:var(--data-blue)">${formatIP(d.ip)}</span></span>
+            <span class="knock-meta"><span style="color:var(--ui-label)">ISP:</span> <span style="color:var(--data-blue)">${safeIsp}</span> <span style="color:var(--ui-label); margin-left:10px;">IP:</span> <span style="color:var(--data-blue)">${formatIP(d.ip)}</span></span>${getSourceLine(d)}
         `;
         twemoji.parse(div);
         return div;
@@ -3104,9 +3104,9 @@
 
         const html = `
             <div class="info-section" style="font-size:1.1em; margin-bottom:15px; padding-bottom:10px; border-bottom:1px solid #333;">
-                <div class="knock-location"><span style="display:flex;align-items:center;gap:0.3em"><strong>${getFlag(d.iso)}</strong> <strong>${safeLoc}</strong></span>${getProtoBadge(d.proto)}${getSourceBadge(d)}</div>
+                <div class="knock-location"><span style="display:flex;align-items:center;gap:0.3em"><strong>${getFlag(d.iso)}</strong> <strong>${safeLoc}</strong></span>${getProtoBadge(d.proto)}</div>
                 ${protoLine}<br>
-                <span class="knock-meta"><span style="color:var(--ui-label)">ISP:</span> <span style="color:var(--data-blue)">${safeIsp}</span> <span style="color:var(--ui-label); margin-left:10px;">IP:</span> <span style="color:var(--data-blue)">${formatIP(d.ip)}</span></span>
+                <span class="knock-meta"><span style="color:var(--ui-label)">ISP:</span> <span style="color:var(--data-blue)">${safeIsp}</span> <span style="color:var(--ui-label); margin-left:10px;">IP:</span> <span style="color:var(--data-blue)">${formatIP(d.ip)}</span></span>${getSourceLine(d)}
             </div>
             <div class="info-item" style="margin-bottom:12px;">
                 <div><span style="color:var(--ui-label)">country:</span> <span style="color:var(--neon-green)">${safeCountry}${countryRank}</span></div>
@@ -3208,9 +3208,9 @@
 
         const html = `
             <div class="info-section" style="font-size:1.1em; margin-bottom:15px; padding-bottom:10px; border-bottom:1px solid #333;">
-                <div class="knock-location"><span style="display:flex;align-items:center;gap:0.3em"><strong>${getFlag(d.iso)}</strong> <strong>${safeLoc}</strong></span>${getProtoBadge(d.proto)}${getSourceBadge(d)}</div>
+                <div class="knock-location"><span style="display:flex;align-items:center;gap:0.3em"><strong>${getFlag(d.iso)}</strong> <strong>${safeLoc}</strong></span>${getProtoBadge(d.proto)}</div>
                 ${protoLine}<br>
-                <span class="knock-meta"><span style="color:var(--ui-label)">ISP:</span> <span style="color:var(--data-blue)">${safeIsp}</span> <span style="color:var(--ui-label); margin-left:10px;">IP:</span> <span style="color:var(--data-blue)">${formatIP(d.ip)}</span></span>
+                <span class="knock-meta"><span style="color:var(--ui-label)">ISP:</span> <span style="color:var(--data-blue)">${safeIsp}</span> <span style="color:var(--ui-label); margin-left:10px;">IP:</span> <span style="color:var(--data-blue)">${formatIP(d.ip)}</span></span>${getSourceLine(d)}
             </div>
             <div style="line-height:1.6;">
                 ${triviaContent}

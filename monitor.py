@@ -293,6 +293,8 @@ def init_db(save_protos=None, enabled_protocols=None):
     """save_protos: None=all, False/empty=none, set=specific protocols"""
     conn = sqlite3.connect(DB_PATH, timeout=10)
     cur = conn.cursor()
+    cur.execute("PRAGMA journal_mode=WAL")
+    cur.fetchone()
     # Migrate old generic knocks table -> per-protocol tables (before creating new tables)
     # Old schema only had username+password (no protocol-specific fields), so only
     # SSH/TNET/FTP rows (user+pass protocols) get meaningful data. Non-user/pass
@@ -440,8 +442,6 @@ def init_db(save_protos=None, enabled_protocols=None):
                 cur.execute(f"UPDATE monitor_heartbeats SET {col} = uptime_minutes WHERE id = 1")
                 seeded.append(name)
         print(f"✅ Added per-protocol uptime tracking (seeded from total uptime: {', '.join(seeded) or 'none'})")
-    cur.execute("PRAGMA journal_mode=WAL")
-    cur.fetchone()  # consume PRAGMA result to avoid "statements in progress" error
     conn.commit()
     conn.close()
 

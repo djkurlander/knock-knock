@@ -185,6 +185,8 @@
         .ip-fill { background: var(--ip-purple); }
 
         @keyframes pulse-green { 0% { background: rgba(0, 255, 65, 0.4); } 100% { background: transparent; } }
+        @keyframes paused-blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+        .paused-title { animation: paused-blink 1.2s ease-in-out infinite; color: var(--hazard-yellow, #ffcc00) !important; }
         @keyframes latest-proto-fade {
             0%    { opacity: 1; }
             16.67% { opacity: 1; }
@@ -625,7 +627,7 @@
 
         <div class="d-header-content">
             <div class="d-header-left" onclick="toggleSound()" style="cursor:pointer;">
-                <h1>BOTS ARE KNOCKING <span class="status-dot"></span></h1>
+                <h1 id="d-header-title">BOTS ARE KNOCKING <span class="status-dot"></span></h1>
                 <div id="d-header-tagline" style="font-size: 1em; color: var(--neon-green); margin-top: -8px; margin-bottom: 7px; font-style: italic;">... BUT THEY CAN'T COME IN. &nbsp;<span id="d-header-sound" style="font-style:normal; cursor:pointer;">🔈</span></div>
                 <div class="d-stats-wrap">
                     <div class="d-stats-block">
@@ -681,7 +683,7 @@
     <div class="m-header">
         <div class="m-header-content">
             <div class="m-header-left" onclick="toggleSound()" style="cursor:pointer;">
-                <h1>BOTS ARE KNOCKING <span class="status-dot"></span></h1>
+                <h1 id="m-header-title">BOTS ARE KNOCKING <span class="status-dot"></span></h1>
                 <div style="font-size: 0.85em; color: var(--neon-green); margin-top: -2px; margin-bottom: 8px; font-style: italic;">... BUT THEY CAN'T COME IN. &nbsp;<span id="m-header-sound" style="font-style:normal; cursor:pointer;">🔈</span></div>
                 <div class="m-stat-row">
                     <span id="m-total-label" class="stat-label">Total Knocks:</span>&nbsp;<span id="m-total" class="stat-value">0</span>
@@ -757,6 +759,7 @@
     const SHOW_PARAM = URL_PARAMS.get('show');
     let debugDiv = null;
     let knockCount = 0;
+    let paused = false;
     const DEBUG_STORAGE_KEY = 'knock_debug_log';
     const MAX_PER_PANEL = 100;
     const PULSE_TIMEOUT_BUFFER_MS = 80;
@@ -1482,6 +1485,28 @@
     // Unlock audio on first user interaction
     document.addEventListener('click', initAudio, { once: true });
     document.addEventListener('touchstart', initAudio, { once: true });
+
+    function togglePause() {
+        paused = !paused;
+        const titles = [document.getElementById('d-header-title'), document.getElementById('m-header-title')];
+        titles.forEach(el => {
+            if (!el) return;
+            if (paused) {
+                el.dataset.origHtml = el.innerHTML;
+                el.innerHTML = '— PAUSED —';
+                el.classList.add('paused-title');
+            } else {
+                el.innerHTML = el.dataset.origHtml || 'BOTS ARE KNOCKING <span class="status-dot"></span>';
+                el.classList.remove('paused-title');
+            }
+        });
+    }
+    document.addEventListener('keydown', (e) => {
+        if (e.code === 'Space' && e.target === document.body) {
+            e.preventDefault();
+            togglePause();
+        }
+    });
 
     function playTone(freq, type, vol, dur) {
         if (!audioCtx) initAudio();
@@ -3078,6 +3103,7 @@
         };
         ws.onerror = (e) => debugLog('WS: error event');
         ws.onmessage = (event) => {
+            if (paused) return;
             const msg = JSON.parse(event.data);
             const d = msg.data;
             if (msg.type === 'new_knock') {

@@ -8,8 +8,11 @@ Stage 1: foundation — all helpers, header parsers/builders, dedup, knock emiss
          handle_connection() is a stub that identifies SMB1 vs SMB2 and closes.
 """
 import fnmatch
+import hashlib
 import json
 import os
+import re
+import socket
 import struct
 import threading
 import time
@@ -25,13 +28,23 @@ SMB_PORT              = int(os.environ.get('SMB_PORT', '445'))
 TRACE_ENABLED         = os.environ.get('SMB_TRACE', '0').lower() not in ('0', 'false', 'no')
 TRACE_IP              = os.environ.get('SMB_TRACE_IP', '').strip()
 EMIT_DEDUP_WINDOW_SEC = max(1, int(os.environ.get('SMB_DEDUP_WINDOW_SEC', '60')))
-SMB_SERVER_NAME       = (os.environ.get('SMB_SERVER_NAME', '').strip()
-                         or 'Windows Server 2019 Standard 10.0')
 SMB_SERVER_DOMAIN     = (os.environ.get('SMB_SERVER_DOMAIN', '').strip()
                          or 'WORKGROUP')
 SMB_NATIVE_OS         = 'Windows Server 2019 Standard 17763'
 SMB_NATIVE_LAN_MAN    = 'Windows Server 2019 Standard 17763'
 SMB_QUARANTINE_DIR    = os.environ.get('SMB_QUARANTINE_DIR', '').strip()
+
+
+def _default_smb_server_name() -> str:
+    """Generate a stable fake Windows hostname from the local hostname."""
+    hostname = socket.gethostname().encode('utf-8', 'ignore')
+    digest = hashlib.sha256(hostname).digest()
+    suffix = int.from_bytes(digest[:2], 'big') % 10000
+    return f'WIN-SRV{suffix:04d}'
+
+
+SMB_SERVER_NAME       = (os.environ.get('SMB_SERVER_NAME', '').strip()
+                         or _default_smb_server_name())
 
 # Decoy shares: loaded at startup from SMB_DECOY_DIR folder (or hardcoded default).
 # Structure: dict[share_name_upper -> dict[filename -> bytes]]
@@ -653,6 +666,21 @@ def _extract_utf16_pipe_name(buf):
         return None
     match = re.search(r'([A-Za-z][A-Za-z0-9_]{2,})', decoded)
     return match.group(1) if match else None
+
+
+def _parse_fsctl_pipe_wait_name(buf):
+    """Parse FSCTL_PIPE_WAIT input and return the requested pipe name, if present."""
+    if not buf or len(buf) < 13:
+        return None
+    try:
+        name_len = struct.unpack_from('<I', buf, 8)[0]
+        name_off = 13
+        if name_len <= 0 or name_off + name_len > len(buf):
+            return None
+        raw = buf[name_off:name_off + name_len]
+        return raw.decode('utf-16-le', errors='ignore').rstrip('\x00') or None
+    except Exception:
+        return None
 
 # ---------------------------------------------------------------------------
 # SMB2 packet builders
@@ -1995,9 +2023,21 @@ def _smb2_post_negotiate(client_sock, client_ip, smb_version, selected_dialect=0
             max_in   = struct.unpack_from('<I', payload, 104)[0] if len(payload) >= 108 else 0
             max_out  = struct.unpack_from('<I', payload, 108)[0] if len(payload) >= 112 else 0
             ioctl_input = b''
-            pipe_name = None
+            input_preview = None
             if in_cnt and in_off and in_off + in_cnt <= len(payload):
                 ioctl_input = payload[in_off:in_off + in_cnt]
+                input_preview = ioctl_input[:64].hex()
+            trace(client_ip, 'smb2_ioctl_entry',
+                  ctl_code=hex(ctl_code), tree_id=hex(hdr['tree_id']),
+                  fid=None if not fid_pair else fid_pair[0],
+                  input_offset=in_off, input_count=in_cnt,
+                  output_offset=out_off, output_count=out_cnt,
+                  max_input=max_in, max_output=max_out,
+                  input_preview=input_preview)
+            pipe_name = None
+            if ctl_code == _FSCTL_PIPE_WAIT:
+                pipe_name = _parse_fsctl_pipe_wait_name(ioctl_input)
+            if not pipe_name and ioctl_input:
                 pipe_name = _extract_utf16_pipe_name(ioctl_input)
             if ctl_code == _FSCTL_VALIDATE_NEGOTIATE_INFO:
                 trace(client_ip, 'smb2_validate_negotiate', dialect=hex(selected_dialect))
@@ -2028,9 +2068,6 @@ def _smb2_post_negotiate(client_sock, client_ip, smb_version, selected_dialect=0
                     send_nbss(client_sock, build_smb2_error_response(
                         hdr, session_id, hdr['tree_id'], STATUS_NOT_SUPPORTED, SMB2_IOCTL))
             else:
-                input_preview = None
-                if in_cnt and in_off and in_off + min(in_cnt, 64) <= len(payload):
-                    input_preview = payload[in_off:in_off + min(in_cnt, 64)].hex()
                 trace(client_ip, 'smb2_ioctl',
                       ctl_code=hex(ctl_code), tree_id=hex(hdr['tree_id']),
                       fid=None if not fid_pair else fid_pair[0],
@@ -2259,14 +2296,23 @@ def _smb2_post_negotiate(client_sock, client_ip, smb_version, selected_dialect=0
             out_cnt  = struct.unpack_from('<I', payload, 100)[0] if len(payload) >= 104 else 0
             max_in   = struct.unpack_from('<I', payload, 104)[0] if len(payload) >= 108 else 0
             max_out  = struct.unpack_from('<I', payload, 108)[0] if len(payload) >= 112 else 0
+            ioctl_input = b''
+            input_preview = None
+            if in_cnt and in_off and in_off + in_cnt <= len(payload):
+                ioctl_input = payload[in_off:in_off + in_cnt]
+                input_preview = ioctl_input[:64].hex()
+            trace(client_ip, 'smb2_ioctl_entry',
+                  ctl_code=hex(ctl_code), tree_id=hex(hdr['tree_id']),
+                  fid=None if not fid_pair else fid_pair[0],
+                  input_offset=in_off, input_count=in_cnt,
+                  output_offset=out_off, output_count=out_cnt,
+                  max_input=max_in, max_output=max_out,
+                  input_preview=input_preview)
             if ctl_code == _FSCTL_VALIDATE_NEGOTIATE_INFO:
                 trace(client_ip, 'smb2_validate_negotiate', dialect=hex(selected_dialect))
                 send_nbss(client_sock, build_smb2_validate_negotiate_response(
                     hdr, session_id, hdr['tree_id'], selected_dialect))
             else:
-                input_preview = None
-                if in_cnt and in_off and in_off + min(in_cnt, 64) <= len(payload):
-                    input_preview = payload[in_off:in_off + min(in_cnt, 64)].hex()
                 trace(client_ip, 'smb2_ioctl',
                       ctl_code=hex(ctl_code), tree_id=hex(hdr['tree_id']),
                       fid=None if not fid_pair else fid_pair[0],

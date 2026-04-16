@@ -342,6 +342,9 @@
             #d-box-trivia {
                 flex: 0 0 300px;
             }
+            #d-box-proto {
+                flex: 0 0 288px;
+            }
             #d-globe-pane {
                 display: flex;
                 justify-content: center;
@@ -1620,9 +1623,7 @@
             const total = sourceCountsCache.reduce((s, r) => s + r.hits, 0) || 1;
             const uptime = Number(uptimeMinutesCache) || 1;
             const srcHeader = `
-                <div style="margin-top:16px;margin-bottom:6px;padding-top:10px;border-top:1px solid #333;
-                             color:var(--ui-label);font-weight:bold;font-size:0.85em;letter-spacing:0.05em;">SOURCES</div>
-                <div style="display:grid;grid-template-columns:1fr 0.82fr 1.45fr 0.73fr;gap:8px;margin-bottom:8px;color:var(--ui-label);font-weight:bold;">
+                <div style="display:grid;grid-template-columns:1fr 0.82fr 1.45fr 0.73fr;gap:8px;margin-top:16px;margin-bottom:8px;padding-top:10px;border-top:1px solid #333;color:var(--ui-label);font-weight:bold;">
                     <span class="proto-col-header" style="text-align:center;">SOURCE</span><span style="text-align:center;">%</span><span style="text-align:center;">KNOCKS</span><span style="text-align:center;">/MIN</span>
                 </div>
             `;

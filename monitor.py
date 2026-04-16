@@ -660,6 +660,21 @@ def sanitize_body(s, max_len=2000):
         clean = pat.sub(replacement, clean)
     return clean[:max_len]
 
+_SANITIZE_SIMPLE_FIELDS = ('user', 'pass', 'subject', 'domain')
+_SANITIZE_PROTO_PREFIXES = ("sip_", "smtp_", "mail_", "smb_", "rdp_", "http_")
+
+def sanitize_knock(knock):
+    """Redact this server's own IPs/hostnames from all credential fields in a raw knock."""
+    for field in _SANITIZE_SIMPLE_FIELDS:
+        if field in knock:
+            knock[field] = sanitize_credential(knock[field] if isinstance(knock[field], str) else str(knock[field]))
+    if 'body' in knock:
+        knock['body'] = sanitize_body(knock['body'])
+    for k, v in knock.items():
+        if isinstance(k, str) and k.startswith(_SANITIZE_PROTO_PREFIXES):
+            knock[k] = sanitize_credential(v if isinstance(v, str) else str(v)) if v is not None else v
+    return knock
+
 def build_smtp_diag(knock):
     return {
         "proto": knock.get("proto", "SMTP"),
@@ -932,7 +947,11 @@ def monitor(save_knocks=None, max_knocks=None):
             if TRACE_KNOCK:
                 print(line, end='', flush=True)  # pass through diagnostic output from honeypots
             continue
-        # Feeder: forward raw knock to aggregator before local enrichment
+        # Sanitize credential fields before any processing or forwarding
+        # Sanitize credential fields once, before forwarding or any local processing
+        if knock.get('type') == 'KNOCK':
+            knock = sanitize_knock(knock)
+        # Feeder: forward sanitized knock to aggregator before local enrichment
         if AGGREGATOR_HOST and knock.get('type') == 'KNOCK':
             try:
                 _forward_queue.put_nowait({**knock, 'source': SOURCE_ID})
@@ -947,8 +966,8 @@ def monitor(save_knocks=None, max_knocks=None):
             forensic = build_mail_forensic(knock, proto, ip)
             raw_user = knock.get("user")
             raw_pass = knock.get("pass")
-            user = sanitize_credential(raw_user if isinstance(raw_user, str) else str(raw_user)) if proto in USER_PANEL_PROTOCOLS and raw_user is not None else None
-            pw = sanitize_credential(raw_pass if isinstance(raw_pass, str) else str(raw_pass)) if proto in PASS_PANEL_PROTOCOLS and raw_pass is not None else None
+            user = raw_user if proto in USER_PANEL_PROTOCOLS and raw_user is not None else None
+            pw = raw_pass if proto in PASS_PANEL_PROTOCOLS and raw_pass is not None else None
             geo = get_geo_enriched(ip, c_reader, a_reader)
             package = {
                 "ip": ip, "user": user, "pass": pw,
@@ -962,15 +981,13 @@ def monitor(save_knocks=None, max_knocks=None):
             if pw is None:
                 package.pop("pass")
             if knock.get("subject"):
-                package["subject"] = sanitize_credential(str(knock["subject"]))
+                package["subject"] = knock["subject"]
             if knock.get("body"):
-                package["body"] = sanitize_body(knock.get("body"))
+                package["body"] = knock["body"]
             if proto == "RDP":
                 raw_domain = knock.get("domain")
-                if raw_domain is not None:
-                    domain = sanitize_credential(str(raw_domain))
-                    if domain:
-                        package["domain"] = domain
+                if raw_domain is not None and raw_domain:
+                    package["domain"] = raw_domain
             # Source tagging — integer for SQLite, string+display for Redis/WebSocket
             _src_id = knock.get('source', SOURCE_ID)
             package['source_int']     = _ensure_source(_src_id, _src_encode, _src_decode)
@@ -979,14 +996,9 @@ def monitor(save_knocks=None, max_knocks=None):
             # Pass through protocol-specific extended telemetry into Redis/websocket payloads.
             # This is intentionally not persisted in SQLite.
             for k, v in knock.items():
-                if not isinstance(k, str) or not k.startswith(("sip_", "smtp_", "mail_", "smb_", "rdp_", "http_")):
+                if not isinstance(k, str) or not k.startswith(_SANITIZE_PROTO_PREFIXES):
                     continue
-                if isinstance(v, str):
-                    package[k] = sanitize_credential(v)
-                elif isinstance(v, (int, float, bool)) or v is None:
-                    package[k] = v
-                else:
-                    package[k] = sanitize_credential(str(v))
+                package[k] = v
             try:
                 package.update(get_intel_stats_before_update(package))
                 projected_hits = int(package.get('ip_hits', 0) or 0)

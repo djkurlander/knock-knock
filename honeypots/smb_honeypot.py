@@ -684,6 +684,30 @@ def _parse_fsctl_pipe_wait_name(buf):
     except Exception:
         return None
 
+
+def _is_remcom_pipe(pipe_name: str | None) -> bool:
+    if not pipe_name:
+        return False
+    pipe_upper = pipe_name.upper()
+    return (
+        pipe_upper == 'REMCOM_COMMUNICATON'
+        or pipe_upper.startswith('REMCOM_STDOUT')
+        or pipe_upper.startswith('REMCOM_STDIN')
+        or pipe_upper.startswith('REMCOM_STDERR')
+    )
+
+
+def _is_known_pipe(pipe_name: str | None) -> bool:
+    if not pipe_name:
+        return False
+    return pipe_name.upper() in _KNOWN_PIPES or _is_remcom_pipe(pipe_name)
+
+
+def _trace_data_preview(data: bytes | None, limit: int = 64) -> str | None:
+    if not data:
+        return None
+    return data[:limit].hex()
+
 # ---------------------------------------------------------------------------
 # SMB2 packet builders
 # ---------------------------------------------------------------------------
@@ -1957,9 +1981,13 @@ def _smb2_post_negotiate(client_sock, client_ip, smb_version, selected_dialect=0
                 # Accept any known IPC named pipe; reject everything else on IPC$
                 pipe_raw = clean.split('\\')[-1]
                 pipe_name = pipe_raw.upper()
-                if pipe_name in _KNOWN_PIPES:
+                if _is_known_pipe(pipe_name):
                     fid_p = fid_v = next_fid; next_fid += 1
-                    pipe_fids[(fid_p, fid_v)] = {'pending': None, 'pipe': pipe_name}
+                    pipe_fids[(fid_p, fid_v)] = {
+                        'pending': None,
+                        'pipe': pipe_name,
+                        'pipe_display': pipe_raw,
+                    }
                     trace(client_ip, 'pipe_open', pipe=pipe_name, fid=fid_p)
                     _emit_knock(client_ip, user, 'IPC$', smb_version, domain, host,
                                 smb_file=f'OPEN:{pipe_raw}', smb_action='REMOTE_COMMAND',
@@ -2102,12 +2130,19 @@ def _smb2_post_negotiate(client_sock, client_ip, smb_version, selected_dialect=0
             # ── Pipe read (WRITE+READ DCERPC path) ───────────────────────────
             if fid_pair in pipe_fids:
                 rpc_resp = pipe_fids[fid_pair]['pending']
-                if rpc_resp:
+                pipe_name = pipe_fids[fid_pair].get('pipe')
+                if rpc_resp is not None:
                     pipe_fids[fid_pair]['pending'] = None
                     trace(client_ip, 'smb2_pipe_read',
                           fid=fid_pair[0], data_len=len(rpc_resp))
                     send_nbss(client_sock, build_smb2_read_response(
                         hdr, session_id, tree_id, rpc_resp))
+                elif _is_remcom_pipe(pipe_name):
+                    trace(client_ip, 'smb2_remcom_read',
+                          fid=fid_pair[0], pipe=pipe_fids[fid_pair].get('pipe_display', pipe_name),
+                          offset=offset, length=length)
+                    send_nbss(client_sock, build_smb2_read_response(
+                        hdr, session_id, tree_id, b''))
                 else:
                     send_nbss(client_sock, build_smb2_error_response(
                         hdr, session_id, tree_id, STATUS_END_OF_FILE, SMB2_READ))
@@ -2152,14 +2187,22 @@ def _smb2_post_negotiate(client_sock, client_ip, smb_version, selected_dialect=0
             offset, data_length, fid_pair, write_data = _parse_write_params(payload)
             # ── Pipe write (WRITE+READ DCERPC path) ──────────────────────────
             if fid_pair in pipe_fids:
-                dcerpc = write_data
+                pipe_name = pipe_fids[fid_pair].get('pipe', 'SRVSVC')
+                pipe_display = pipe_fids[fid_pair].get('pipe_display', pipe_name)
                 trace(client_ip, 'smb2_pipe_write',
-                      fid=fid_pair[0], data_len=len(dcerpc))
-                pipe_fids[fid_pair]['pending'] = _handle_dcerpc_multi(
-                    dcerpc, client_ip, user=user, smb_version=smb_version,
-                    smb_domain=domain, smb_host=host,
-                    pipe_name=pipe_fids[fid_pair].get('pipe', 'SRVSVC'),
-                    svc_handles=svc_handles)
+                      fid=fid_pair[0], data_len=len(write_data))
+                if _is_remcom_pipe(pipe_name):
+                    trace(client_ip, 'smb2_remcom_write',
+                          fid=fid_pair[0], pipe=pipe_display,
+                          offset=offset, data_len=len(write_data),
+                          data_preview=_trace_data_preview(write_data))
+                    pipe_fids[fid_pair]['pending'] = b''
+                else:
+                    pipe_fids[fid_pair]['pending'] = _handle_dcerpc_multi(
+                        write_data, client_ip, user=user, smb_version=smb_version,
+                        smb_domain=domain, smb_host=host,
+                        pipe_name=pipe_name,
+                        svc_handles=svc_handles)
                 send_nbss(client_sock, build_smb2_write_response(
                     hdr, session_id, tree_id, data_length))
             elif tree_id in ipc_tree_ids:

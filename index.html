@@ -969,7 +969,7 @@
             const cityList = Object.entries(cityMap)
                 .map(([city, count]) => count > 1 ? `${escapeHtml(city)} (${count})` : escapeHtml(city))
                 .join(', ');
-            lines.push(`<div style="margin-top:8px;color:var(--ui-grey-dim)">Aggregated view across ${sourceCountsCache.length} server${sourceCountsCache.length !== 1 ? 's' : ''} worldwide: ${cityList}</div>`);
+            lines.push(`<div style="margin-top:8px;"><span style="color:var(--ui-label)">Aggregated view across ${sourceCountsCache.length} server${sourceCountsCache.length !== 1 ? 's' : ''} worldwide:</span> <span style="color:var(--neon-green)">${cityList}</span></div>`);
         }
         const html = lines.join('');
         ['d-about-server-info', 'm-about-server-info'].forEach(id => {

@@ -633,6 +633,7 @@ def _emit_knock(ip, user=None, smb_share=None, smb_version=None,
                 trace_stage='knock'):
     knock = {'type': 'KNOCK', 'proto': 'SMB', 'ip': ip}
     if user:               knock['user']             = user.lower()
+    elif smb_action == 'AUTH': knock['user']         = ''   # real AUTH with no username → show as <none>
     if smb_share:          knock['smb_share']        = smb_share
     if smb_file:           knock['smb_file']         = smb_file
     knock['smb_action'] = smb_action or 'UNKNOWN'

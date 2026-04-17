@@ -559,7 +559,7 @@ def log_to_enriched_db(data, save_protos=None):
             cur.execute(f"INSERT INTO {table} ({', '.join(col_names)}) VALUES ({placeholders})", values)
         now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         proto_int = PROTO.get(data.get('proto', 'SSH'), 0)
-        if data.get('user') is not None:
+        if data.get('user') is not None and not data.get('skip_user_intel'):
             cur.execute("INSERT INTO user_intel VALUES (?, 1, ?) ON CONFLICT(username) DO UPDATE SET hits=hits+1, last_seen=?", (data['user'], now, now))
             cur.execute("INSERT INTO user_intel_proto VALUES (?, ?, 1, ?) ON CONFLICT(username, proto) DO UPDATE SET hits=hits+1, last_seen=?", (data['user'], proto_int, now, now))
         if data.get('pass') is not None:
@@ -990,6 +990,9 @@ def monitor(save_knocks=None, max_knocks=None):
                 raw_domain = knock.get("domain")
                 if raw_domain is not None and raw_domain:
                     package["domain"] = raw_domain
+            # SMB: only count username in intel on AUTH knocks, not DIR/READ/WRITE etc.
+            if proto == "SMB" and knock.get("smb_action") != "AUTH":
+                package["skip_user_intel"] = True
             # Source tagging — integer for SQLite, string+display for Redis/WebSocket
             _src_id = knock.get('source', SOURCE_ID)
             package['source_int']     = _ensure_source(_src_id, _src_encode, _src_decode)

@@ -626,9 +626,9 @@
         </nav>
 
         <div class="d-header-content">
-            <div class="d-header-left" onclick="toggleSound()" style="cursor:pointer;">
+            <div class="d-header-left" onclick="togglePause()" style="cursor:pointer;">
                 <h1 id="d-header-title">BOTS ARE KNOCKING <span class="status-dot"></span></h1>
-                <div id="d-header-tagline" style="font-size: 1em; color: var(--neon-green); margin-top: -8px; margin-bottom: 7px; font-style: italic;">... BUT THEY CAN'T COME IN. &nbsp;<span id="d-header-sound" style="font-style:normal; cursor:pointer;">🔈</span></div>
+                <div id="d-header-tagline" style="font-size: 1em; color: var(--neon-green); margin-top: -8px; margin-bottom: 7px; font-style: italic;">... BUT THEY CAN'T COME IN. &nbsp;<span id="d-header-sound" style="font-style:normal; cursor:pointer;" onclick="toggleSound(); event.stopPropagation();">🔈</span></div>
                 <div class="d-stats-wrap">
                     <div class="d-stats-block">
                         <div class="d-stats">
@@ -642,7 +642,7 @@
                 </div>
             </div>
             <div class="d-header-mid">
-                <div class="d-header-proto-switcher" id="d-header-proto-switcher">
+                <div class="d-header-proto-switcher" id="d-header-proto-switcher" onclick="event.stopPropagation();">
                     <div class="d-header-proto-label">Filter by protocol:</div>
                     <div id="d-header-proto-buttons" class="d-header-proto-buttons"></div>
                 </div>
@@ -682,9 +682,9 @@
 <div id="mobile-layout">
     <div class="m-header">
         <div class="m-header-content">
-            <div class="m-header-left" onclick="toggleSound()" style="cursor:pointer;">
+            <div class="m-header-left" onclick="togglePause()" style="cursor:pointer;">
                 <h1 id="m-header-title">BOTS ARE KNOCKING <span class="status-dot"></span></h1>
-                <div style="font-size: 0.85em; color: var(--neon-green); margin-top: -2px; margin-bottom: 8px; font-style: italic;">... BUT THEY CAN'T COME IN. &nbsp;<span id="m-header-sound" style="font-style:normal; cursor:pointer;">🔈</span></div>
+                <div style="font-size: 0.85em; color: var(--neon-green); margin-top: -2px; margin-bottom: 8px; font-style: italic;">... BUT THEY CAN'T COME IN. &nbsp;<span id="m-header-sound" style="font-style:normal; cursor:pointer;" onclick="toggleSound(); event.stopPropagation();">🔈</span></div>
                 <div class="m-stat-row">
                     <span id="m-total-label" class="stat-label">Total Knocks:</span>&nbsp;<span id="m-total" class="stat-value">0</span>
                 </div>
@@ -1513,19 +1513,6 @@
         }
     });
 
-    // Mobile tap-to-pause: quick tap on pane background (not on interactive elements or header)
-    let _touchStartX, _touchStartY;
-    document.addEventListener('touchstart', (e) => {
-        _touchStartX = e.touches[0].clientX;
-        _touchStartY = e.touches[0].clientY;
-    }, { passive: true });
-    document.addEventListener('touchend', (e) => {
-        const dx = Math.abs(e.changedTouches[0].clientX - _touchStartX);
-        const dy = Math.abs(e.changedTouches[0].clientY - _touchStartY);
-        if (dx < 10 && dy < 10 && !e.target.closest('a, button, .proto-cycle-btn, .proto-dropdown, .proto-dropdown-trigger, .nav-item, .dot, .m-header-left, canvas')) {
-            togglePause();
-        }
-    }, { passive: true });
 
     function playTone(freq, type, vol, dur) {
         if (!audioCtx) initAudio();

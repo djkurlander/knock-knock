@@ -1078,6 +1078,18 @@
             lines.push(`<div style="${ROW}"><span style="${L};${LW}">Viewing:</span><span style="${G}">${activeProtocols.map(escapeHtml).join(', ')} only</span></div>`);
         }
         lines.push(`<div style="${ROW}"><span style="${L};${LW}">Version:</span><span style="${G}">2.0.0-beta.3</span></div>`);
+        if (isAggregator && sourceCountsCache.length > 0) {
+            const cityMap = {};
+            sourceCountsCache.forEach(r => {
+                const city = r.display_name !== r.source_id ? r.display_name : null;
+                const key = city || r.source_id;
+                cityMap[key] = (cityMap[key] || 0) + 1;
+            });
+            const cityList = Object.entries(cityMap)
+                .map(([city, count]) => count > 1 ? `${escapeHtml(city)} (${count})` : escapeHtml(city))
+                .join(', ');
+            lines.push(`<div style="margin-top:8px;color:var(--ui-grey-dim)">Aggregated view across ${sourceCountsCache.length} server${sourceCountsCache.length !== 1 ? 's' : ''} worldwide: ${cityList}</div>`);
+        }
         const html = lines.join('');
         ['d-about-server-info', 'm-about-server-info'].forEach(id => {
             const el = document.getElementById(id);
@@ -2826,7 +2838,10 @@
 
     function getSourceLine(d) {
         if (!isAggregator || !d.source_display) return '';
-        return `<div><span style="color:var(--ui-label)">source:</span> <span style="color:var(--data-blue)">${escapeHtml(d.source_display)}</span></div>`;
+        const label = (d.source_display !== d.source)
+            ? `${escapeHtml(d.source_display)} (${escapeHtml(d.source)})`
+            : escapeHtml(d.source_display);
+        return `<div><span style="color:var(--ui-label)">source:</span> <span style="color:var(--data-blue)">${label}</span></div>`;
     }
 
     function getProtoBadge(proto) {

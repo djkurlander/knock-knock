@@ -404,6 +404,39 @@ def parse_ntlm_authenticate(data):
             return raw.decode('utf-16-le', errors='replace').strip('\x00')
         return raw.decode('latin-1', errors='replace').strip('\x00')
 
+    def _clean_identity(value):
+        if value is None:
+            return None
+        value = value.strip().strip('\x00')
+        if not value:
+            return None
+        if value.upper() == 'NULL':
+            return None
+        printable = ''.join(ch for ch in value if ch.isprintable())
+        return printable or None
+
+    def _plausibility_score(username, domain, workstation):
+        score = 0
+        if username:
+            score += 2
+            if len(username) >= 4:
+                score += 2
+            if re.fullmatch(r'[A-Za-z0-9._$@-]+', username or ''):
+                score += 1
+            if username.lower() in {'for', 'if', 'do', 'set', 'cmd', 'echo'}:
+                score -= 4
+        if domain:
+            score += 1
+        if workstation:
+            score += 1
+        return score
+
+    candidates = []
+    debug = {
+        'flags': None,
+        'type3_preview': _trace_data_preview(data, limit=96),
+    }
+
     # Primary path: impacket NTLMAuthChallengeResponse
     try:
         resp = ntlm.NTLMAuthChallengeResponse()
@@ -417,24 +450,51 @@ def parse_ntlm_authenticate(data):
         workstation = resp.fields.get('host_name') or resp.fields.get('workstation')
         if isinstance(workstation, bytes):
             workstation = workstation.decode('utf-16-le', errors='replace').strip('\x00')
-        if username:
-            return username, domain or None, workstation or None
+        username = _clean_identity(username)
+        domain = _clean_identity(domain)
+        workstation = _clean_identity(workstation)
+        candidates.append(('impacket', username, domain, workstation))
     except Exception:
         pass
 
     # Fallback: manual struct parser for Type-3 variants impacket doesn't decode cleanly
     try:
         if len(data) < 64 or not data.startswith(b'NTLMSSP\x00'):
-            return None, None, None
+            return None, None, None, debug
         if struct.unpack_from('<I', data, 8)[0] != 3:
-            return None, None, None
+            return None, None, None, debug
         flags       = struct.unpack_from('<I', data, 60)[0]
+        debug['flags'] = hex(flags)
         username    = _decode_ntlm_text(_read_secbuf(data, 36), flags)
         domain      = _decode_ntlm_text(_read_secbuf(data, 28), flags)
         workstation = _decode_ntlm_text(_read_secbuf(data, 44), flags)
-        return username if username is not None else '', domain or None, workstation or None
+        username = _clean_identity(username)
+        domain = _clean_identity(domain)
+        workstation = _clean_identity(workstation)
+        candidates.append(('manual', username, domain, workstation))
     except Exception:
-        return None, None, None
+        pass
+
+    if not candidates:
+        return None, None, None, debug
+    debug['candidates'] = [
+        {
+            'source': source,
+            'username': username,
+            'domain': domain,
+            'workstation': workstation,
+            'score': _plausibility_score(username, domain, workstation),
+        }
+        for source, username, domain, workstation in candidates
+    ]
+    _source, username, domain, workstation = max(
+        candidates,
+        key=lambda item: _plausibility_score(item[1], item[2], item[3]))
+    debug['selected_source'] = _source
+    debug['selected_score'] = _plausibility_score(username, domain, workstation)
+    if debug['selected_score'] < 0:
+        return None, None, None, debug
+    return username, domain, workstation, debug
 
 # ---------------------------------------------------------------------------
 # NBSS framing (NetBIOS Session Service over TCP — all SMB/TCP uses this)
@@ -737,6 +797,14 @@ def _remcom_stdout_stub(command_text: str | None) -> bytes:
     if not command_text:
         return b''
     return f'[{SMB_SERVER_NAME}] {command_text}\r\n'.encode('utf-8', 'ignore')
+
+
+def _remcom_stderr_stub(command_text: str | None) -> bytes:
+    if not command_text:
+        return b'Windows Script Host: Access is denied.\r\n'
+    if 'tmp.vbs' in command_text.lower():
+        return b'Windows Script Host: Access is denied.\r\n'
+    return b'The command completed with an error.\r\n'
 
 
 def _pipe_knock_action(pipe_name: str | None) -> str:
@@ -1937,6 +2005,7 @@ def _smb2_post_negotiate(client_sock, client_ip, smb_version, selected_dialect=0
     remcom_state = {
         'last_command': None,
         'last_command_time': 0.0,
+        'stderr_stub': None,
     }
     # svc_handles: {handle_bytes: (svc_name, bin_path)} — maps fake SVCCTL handles to service info
     svc_handles  = {}
@@ -1969,10 +2038,22 @@ def _smb2_post_negotiate(client_sock, client_ip, smb_version, selected_dialect=0
 
             elif setup_round == 2:
                 ntlm3 = find_ntlmssp(sec_buf)
+                ntlm_debug = None
                 if ntlm3:
-                    user, domain, host = parse_ntlm_authenticate(ntlm3)
+                    user, domain, host, ntlm_debug = parse_ntlm_authenticate(ntlm3)
                 trace(client_ip, 'smb2_session_setup_r2',
                       user=user, domain=domain, host=host, has_ntlm=ntlm3 is not None)
+                if ntlm_debug and (
+                    len(ntlm_debug.get('candidates', [])) > 1
+                    or (user and len(user) <= 3)
+                    or user is None
+                ):
+                    trace(client_ip, 'ntlm_auth_debug',
+                          flags=ntlm_debug.get('flags'),
+                          selected_source=ntlm_debug.get('selected_source'),
+                          selected_score=ntlm_debug.get('selected_score'),
+                          candidates=ntlm_debug.get('candidates'),
+                          type3_preview=ntlm_debug.get('type3_preview'))
 
                 _emit_knock(client_ip, user, None, smb_version, domain, host,
                             smb_action='AUTH', trace_stage='knock_emitted_auth')
@@ -2044,10 +2125,11 @@ def _smb2_post_negotiate(client_sock, client_ip, smb_version, selected_dialect=0
                         'read_phase': 'open',
                     }
                     if pipe_kind == 'stdout' and remcom_state.get('last_command'):
-                        pipe_fids[(fid_p, fid_v)]['pending'] = _remcom_stdout_stub(
-                            remcom_state.get('last_command'))
-                    elif pipe_kind == 'stderr':
                         pipe_fids[(fid_p, fid_v)]['pending'] = b''
+                    elif pipe_kind == 'stderr':
+                        pipe_fids[(fid_p, fid_v)]['pending'] = (
+                            remcom_state.get('stderr_stub') or _remcom_stderr_stub(
+                                remcom_state.get('last_command')))
                     trace(client_ip, 'pipe_open', pipe=pipe_name, fid=fid_p)
                     _emit_knock(client_ip, user, 'IPC$', smb_version, domain, host,
                                 smb_file=f'OPEN:{pipe_raw}',
@@ -2287,11 +2369,14 @@ def _smb2_post_negotiate(client_sock, client_ip, smb_version, selected_dialect=0
                         if command_text:
                             remcom_state['last_command'] = command_text
                             remcom_state['last_command_time'] = time.time()
+                            remcom_state['stderr_stub'] = _remcom_stderr_stub(command_text)
                         pipe_state['pending'] = b''
                     elif pipe_kind == 'stdout':
-                        pipe_state['pending'] = _remcom_stdout_stub(remcom_state.get('last_command'))
-                    elif pipe_kind == 'stderr':
                         pipe_state['pending'] = b''
+                    elif pipe_kind == 'stderr':
+                        pipe_state['pending'] = (
+                            remcom_state.get('stderr_stub') or _remcom_stderr_stub(
+                                remcom_state.get('last_command')))
                     else:
                         pipe_state['pending'] = b''
                 else:
@@ -3309,11 +3394,23 @@ def handle_smb1(client_sock, client_ip, first_payload):
                     send_nbss(client_sock, build_smb1_session_setup_r1_response(hdr))
                 elif setup_round == 2:
                     ntlm3 = find_ntlmssp(sec_buf)
+                    ntlm_debug = None
                     if ntlm3:
-                        user, domain, host = parse_ntlm_authenticate(ntlm3)
+                        user, domain, host, ntlm_debug = parse_ntlm_authenticate(ntlm3)
                     trace(client_ip, 'smb1_session_setup_r2',
                           user=user, domain=domain, host=host,
                           has_ntlm=ntlm3 is not None)
+                    if ntlm_debug and (
+                        len(ntlm_debug.get('candidates', [])) > 1
+                        or (user and len(user) <= 3)
+                        or user is None
+                    ):
+                        trace(client_ip, 'ntlm_auth_debug',
+                              flags=ntlm_debug.get('flags'),
+                              selected_source=ntlm_debug.get('selected_source'),
+                              selected_score=ntlm_debug.get('selected_score'),
+                              candidates=ntlm_debug.get('candidates'),
+                              type3_preview=ntlm_debug.get('type3_preview'))
                     _emit_knock(client_ip, user, None, 'SMB1', domain, host,
                                 smb_action='AUTH', trace_stage='knock_emitted_auth')
                     got_auth = True

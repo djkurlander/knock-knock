@@ -991,9 +991,6 @@ def monitor(save_knocks=None, max_knocks=None):
                 raw_domain = knock.get("domain")
                 if raw_domain is not None and raw_domain:
                     package["domain"] = raw_domain
-            # SMB: only record username for AUTH knocks, not DIR/READ/WRITE etc.
-            if proto == "SMB" and knock.get("smb_action") != "AUTH":
-                raw_user = None
             # Source tagging — integer for SQLite, string+display for Redis/WebSocket
             _src_id = knock.get('source', SOURCE_ID)
             package['source_int']     = _ensure_source(_src_id, _src_encode, _src_decode)

@@ -418,7 +418,7 @@ def parse_ntlm_authenticate(data):
         if isinstance(workstation, bytes):
             workstation = workstation.decode('utf-16-le', errors='replace').strip('\x00')
         if username:
-            return username or None, domain or None, workstation or None
+            return username, domain or None, workstation or None
     except Exception:
         pass
 
@@ -432,7 +432,7 @@ def parse_ntlm_authenticate(data):
         username    = _decode_ntlm_text(_read_secbuf(data, 36), flags)
         domain      = _decode_ntlm_text(_read_secbuf(data, 28), flags)
         workstation = _decode_ntlm_text(_read_secbuf(data, 44), flags)
-        return username or None, domain or None, workstation or None
+        return username if username is not None else '', domain or None, workstation or None
     except Exception:
         return None, None, None
 
@@ -632,8 +632,7 @@ def _emit_knock(ip, user=None, smb_share=None, smb_version=None,
                 smb_file=None, smb_action=None, smb_service_name=None,
                 trace_stage='knock'):
     knock = {'type': 'KNOCK', 'proto': 'SMB', 'ip': ip}
-    if user:               knock['user']             = user.lower()
-    elif smb_action == 'AUTH': knock['user']         = ''   # real AUTH with no username → show as <none>
+    if user is not None:   knock['user']             = user.lower()
     if smb_share:          knock['smb_share']        = smb_share
     if smb_file:           knock['smb_file']         = smb_file
     knock['smb_action'] = smb_action or 'UNKNOWN'

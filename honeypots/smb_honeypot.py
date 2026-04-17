@@ -670,11 +670,12 @@ def _extract_utf16_pipe_name(buf):
 
 def _parse_fsctl_pipe_wait_name(buf):
     """Parse FSCTL_PIPE_WAIT input and return the requested pipe name, if present."""
-    if not buf or len(buf) < 13:
+    if not buf or len(buf) < 14:
         return None
     try:
         name_len = struct.unpack_from('<I', buf, 8)[0]
-        name_off = 13
+        # Layout is: Timeout(8) + NameLength(4) + TimeoutSpecified(1) + pad(1) + Name
+        name_off = 14
         if name_len <= 0 or name_off + name_len > len(buf):
             return None
         raw = buf[name_off:name_off + name_len]
@@ -1109,6 +1110,7 @@ _KNOWN_PIPES = {
     'NETLOGON',  # Net Logon — domain auth
     'WINREG',    # Remote Registry
     'SVCCTL',    # Service Control Manager
+    'REMCOM_COMMUNICATON',  # RemCom control pipe (client typo preserved)
     'EVENTLOG',  # Event Log
 }
 
@@ -1952,11 +1954,15 @@ def _smb2_post_negotiate(client_sock, client_ip, smb_version, selected_dialect=0
             clean   = (name or '').lstrip('\\').strip()
             if tree_id in ipc_tree_ids:
                 # Accept any known IPC named pipe; reject everything else on IPC$
-                pipe_name = clean.split('\\')[-1].upper()
+                pipe_raw = clean.split('\\')[-1]
+                pipe_name = pipe_raw.upper()
                 if pipe_name in _KNOWN_PIPES:
                     fid_p = fid_v = next_fid; next_fid += 1
                     pipe_fids[(fid_p, fid_v)] = {'pending': None, 'pipe': pipe_name}
                     trace(client_ip, 'pipe_open', pipe=pipe_name, fid=fid_p)
+                    _emit_knock(client_ip, user, 'IPC$', smb_version, domain, host,
+                                smb_file=f'OPEN:{pipe_raw}', smb_action='REMOTE_COMMAND',
+                                trace_stage='knock_emitted_remote_command')
                     send_nbss(client_sock, build_smb2_create_response(
                         hdr, session_id, tree_id, fid_p, fid_v, False))
                 else:
@@ -2047,7 +2053,7 @@ def _smb2_post_negotiate(client_sock, client_ip, smb_version, selected_dialect=0
                 trace(client_ip, 'smb2_pipe_wait',
                       pipe=pipe_name, input_count=in_cnt)
                 _emit_knock(client_ip, user, 'IPC$', smb_version, domain, host,
-                            smb_file=pipe_name, smb_action='REMOTE_COMMAND',
+                            smb_file=f'WAIT:{pipe_name}', smb_action='REMOTE_COMMAND',
                             trace_stage='knock_emitted_remote_command')
                 send_nbss(client_sock, build_smb2_ioctl_pipe_response(
                     hdr, session_id, hdr['tree_id'], ctl_code,
@@ -2078,7 +2084,8 @@ def _smb2_post_negotiate(client_sock, client_ip, smb_version, selected_dialect=0
                       input_preview=input_preview)
                 if ctl_code in (_FSCTL_PIPE_WAIT, _FSCTL_PIPE_TRANSCEIVE) and pipe_name:
                     _emit_knock(client_ip, user, 'IPC$', smb_version, domain, host,
-                                smb_file=pipe_name, smb_action='REMOTE_COMMAND',
+                                smb_file=f'WAIT:{pipe_name}' if ctl_code == _FSCTL_PIPE_WAIT else pipe_name,
+                                smb_action='REMOTE_COMMAND',
                                 trace_stage='knock_emitted_remote_command')
                     send_nbss(client_sock, build_smb2_ioctl_pipe_response(
                         hdr, session_id, hdr['tree_id'], ctl_code,

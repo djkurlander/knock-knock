@@ -21,6 +21,7 @@ DB_PATH = os.environ.get('DB_DIR', 'data') + '/knock_knock.db'
 BLOCKLIST_FILE = os.environ.get('DB_DIR', 'data') + '/blocklist.txt'
 
 TRACE_KNOCK     = os.environ.get('TRACE_KNOCK', '').lower() == 'true'
+REDIS_DB        = int(os.environ.get('REDIS_DB', '0'))
 SOURCE_ID       = os.environ.get('SOURCE_ID', socket.gethostname().split('.')[0])
 AGGREGATOR_HOST = os.environ.get('AGGREGATOR_HOST', '').strip()
 AGGREGATOR_PORT = int(os.environ.get('AGGREGATOR_PORT', '9999'))
@@ -279,7 +280,7 @@ def reset_all():
         except Exception as e:
             print(f"   [!] Error deleting {DB_PATH}: {e}")
     try:
-        r = redis.Redis(host=os.environ.get('REDIS_HOST', 'localhost'), port=6379, db=0, decode_responses=True)
+        r = redis.Redis(host=os.environ.get('REDIS_HOST', 'localhost'), port=6379, db=REDIS_DB, decode_responses=True)
         preserve = {'knock:blocked', 'knock:alerted:'}
         for key in r.scan_iter('knock:*'):
             if any(key == p or key.startswith(p) for p in preserve):
@@ -813,7 +814,7 @@ def monitor(save_knocks=None, max_knocks=None):
     elif save_protos:
         save_protos = save_protos & set(enabled_protocols)
     init_db(save_protos=save_protos, enabled_protocols=enabled_protocols)
-    r = redis.Redis(host=os.environ.get('REDIS_HOST', 'localhost'), port=6379, db=0, decode_responses=True)
+    r = redis.Redis(host=os.environ.get('REDIS_HOST', 'localhost'), port=6379, db=REDIS_DB, decode_responses=True)
     publish_protocol_config(r, enabled_protocols)
     entry_strs = [f"{p}:{port}" if port else p for p, port in proto_entries]
     print(f"🧭 Enabled protocols: {', '.join(entry_strs)}", flush=True)

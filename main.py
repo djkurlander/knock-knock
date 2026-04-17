@@ -113,7 +113,7 @@ if LOG_VISITORS:
 # This ensures /static/robot1.png is available immediately
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-r = redis.from_url(f"redis://{os.environ.get('REDIS_HOST', 'localhost')}", decode_responses=True)
+r = redis.from_url(f"redis://{os.environ.get('REDIS_HOST', 'localhost')}/{os.environ.get('REDIS_DB', '0')}", decode_responses=True)
 DB_PATH = os.environ.get('DB_DIR', 'data') + '/knock_knock.db'
 
 def _build_source_counts(raw):

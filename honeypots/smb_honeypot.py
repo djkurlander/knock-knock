@@ -800,11 +800,9 @@ def _remcom_stdout_stub(command_text: str | None) -> bytes:
 
 
 def _remcom_stderr_stub(command_text: str | None) -> bytes:
-    if not command_text:
-        return b'Windows Script Host: Access is denied.\r\n'
-    if 'tmp.vbs' in command_text.lower():
-        return b'Windows Script Host: Access is denied.\r\n'
-    return b'The command completed with an error.\r\n'
+    # Successful RemCom runs usually leave stderr empty; keep the pipe
+    # semantics intact without signaling a hard failure to the client.
+    return b''
 
 
 def _pipe_knock_action(pipe_name: str | None) -> str:
@@ -2125,7 +2123,8 @@ def _smb2_post_negotiate(client_sock, client_ip, smb_version, selected_dialect=0
                         'read_phase': 'open',
                     }
                     if pipe_kind == 'stdout' and remcom_state.get('last_command'):
-                        pipe_fids[(fid_p, fid_v)]['pending'] = b''
+                        pipe_fids[(fid_p, fid_v)]['pending'] = _remcom_stdout_stub(
+                            remcom_state.get('last_command'))
                     elif pipe_kind == 'stderr':
                         pipe_fids[(fid_p, fid_v)]['pending'] = (
                             remcom_state.get('stderr_stub') or _remcom_stderr_stub(
@@ -2372,7 +2371,8 @@ def _smb2_post_negotiate(client_sock, client_ip, smb_version, selected_dialect=0
                             remcom_state['stderr_stub'] = _remcom_stderr_stub(command_text)
                         pipe_state['pending'] = b''
                     elif pipe_kind == 'stdout':
-                        pipe_state['pending'] = b''
+                        pipe_state['pending'] = _remcom_stdout_stub(
+                            remcom_state.get('last_command'))
                     elif pipe_kind == 'stderr':
                         pipe_state['pending'] = (
                             remcom_state.get('stderr_stub') or _remcom_stderr_stub(

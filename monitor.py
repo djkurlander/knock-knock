@@ -756,7 +756,7 @@ def is_over_limit_and_block(redis_conn, ip, hits_since_cleared, proto, max_knock
         print(f"⛔ Dropped knock from blocked IP {ip} ({proto})", flush=True)
         return True
     limit = max_knocks.get(proto) or max_knocks.get(None)
-    if not limit or hits_since_cleared < limit:
+    if not limit or hits_since_cleared <= limit:
         return False
     add_to_blocklist(ip, redis_conn, proto=proto, knock_count=hits_since_cleared, ban_duration_days=ban_duration_days)
     print(f"⛔ Dropped knock from over-limit IP {ip} ({hits_since_cleared}>={limit} {proto})", flush=True)

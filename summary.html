@@ -2716,7 +2716,8 @@
                 div.className = 'bar-row';
                 div.setAttribute('data-id', `${prefix}-${rawId}`);
                 div.setAttribute('data-count', item.count);
-                div.innerHTML = `<div class="bar-label"><span>${label}</span><span style="color:#ffcc00">${item.count.toLocaleString()}</span></div><div class="bar-bg"><div class="bar-fill ${colorClass}" style="width: ${pct}%"></div></div>`;
+                const bannedBadge = (prefix === 'ip' && item.banned) ? ' 🚫' : '';
+                div.innerHTML = `<div class="bar-label"><span>${label}${bannedBadge}</span><span style="color:#ffcc00">${item.count.toLocaleString()}</span></div><div class="bar-bg"><div class="bar-fill ${colorClass}" style="width: ${pct}%"></div></div>`;
                 container.appendChild(div);
                 if (useFlags) twemoji.parse(div);
             });

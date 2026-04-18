@@ -18,13 +18,13 @@ def is_blocked(ip_or_client, ip=None):
     if ip is None:
         # New calling convention: is_blocked(ip)
         try:
-            return _redis.sismember('knock:blocked', ip_or_client)
+            return bool(_redis.exists(f'knock:blocked:{ip_or_client}'))
         except Exception:
             return False
     else:
         # Legacy calling convention: is_blocked(redis_client, ip)
         try:
-            return ip_or_client.sismember('knock:blocked', ip)
+            return bool(ip_or_client.exists(f'knock:blocked:{ip}'))
         except Exception:
             return False
 

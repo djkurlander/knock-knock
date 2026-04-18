@@ -1,4 +1,4 @@
-import asyncio, json, logging, sqlite3, os
+import asyncio, json, logging, sqlite3, os, time
 import redis.asyncio as redis
 import geoip2.database
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
@@ -230,7 +230,7 @@ class GlobalStatsCache:
                 "password": "SELECT password as label, hits as count FROM pass_intel ORDER BY hits DESC LIMIT 100",
                 "username": "SELECT username as label, hits as count FROM user_intel ORDER BY hits DESC LIMIT 100",
                 "isp":      "SELECT isp as label, hits as count FROM isp_intel ORDER BY hits DESC LIMIT 100",
-                "ip":       "SELECT ip as label, hits as count FROM ip_intel ORDER BY hits DESC LIMIT 100",
+                "ip":       "SELECT ip as label, hits as count, ban_until FROM ip_intel ORDER BY hits DESC LIMIT 100",
             }
             cur.execute(queries[stat_type])
         else:
@@ -239,12 +239,18 @@ class GlobalStatsCache:
                 "password": "SELECT password as label, hits as count FROM pass_intel_proto WHERE proto=? ORDER BY hits DESC LIMIT 100",
                 "username": "SELECT username as label, hits as count FROM user_intel_proto WHERE proto=? ORDER BY hits DESC LIMIT 100",
                 "isp":      "SELECT isp as label, hits as count FROM isp_intel_proto WHERE proto=? ORDER BY hits DESC LIMIT 100",
-                "ip":       "SELECT ip as label, hits as count FROM ip_intel_proto WHERE proto=? ORDER BY hits DESC LIMIT 100",
+                "ip":       "SELECT p.ip as label, p.hits as count, i.ban_until FROM ip_intel_proto p LEFT JOIN ip_intel i ON p.ip=i.ip WHERE p.proto=? ORDER BY p.hits DESC LIMIT 100",
             }
             cur.execute(queries[stat_type], (proto,))
         rows = cur.fetchall()
         conn.close()
-        return [dict(row) for row in rows]
+        now = int(time.time())
+        result = [dict(row) for row in rows]
+        if stat_type == "ip":
+            for row in result:
+                bu = row.pop("ban_until", None)
+                row["banned"] = bu is not None and (bu == 0 or bu > now)
+        return result
 
 # Initialize the global cache
 stats_cache = GlobalStatsCache()

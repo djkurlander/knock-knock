@@ -18,7 +18,6 @@ from datetime import datetime
 GEOIP_CITY_PATH = '/usr/share/GeoIP/GeoLite2-City.mmdb'
 GEOIP_ASN_PATH = '/usr/share/GeoIP/GeoLite2-ASN.mmdb'
 DB_PATH = os.environ.get('DB_DIR', 'data') + '/knock_knock.db'
-BLOCKLIST_FILE = os.environ.get('DB_DIR', 'data') + '/blocklist.txt'
 
 TRACE_KNOCK     = os.environ.get('TRACE_KNOCK', '').lower() == 'true'
 REDIS_DB        = int(os.environ.get('REDIS_DB', '0'))
@@ -281,7 +280,7 @@ def reset_all():
             print(f"   [!] Error deleting {DB_PATH}: {e}")
     try:
         r = redis.Redis(host=os.environ.get('REDIS_HOST', 'localhost'), port=6379, db=REDIS_DB, decode_responses=True)
-        preserve = {'knock:blocked', 'knock:alerted:'}
+        preserve = {'knock:alerted:'}
         for key in r.scan_iter('knock:*'):
             if any(key == p or key.startswith(p) for p in preserve):
                 continue
@@ -350,6 +349,13 @@ def init_db(save_protos=None, enabled_protocols=None):
     cur.execute("CREATE TABLE IF NOT EXISTS country_intel (iso_code TEXT PRIMARY KEY, country TEXT, hits INTEGER, last_seen DATETIME)")
     cur.execute("CREATE TABLE IF NOT EXISTS isp_intel (isp TEXT PRIMARY KEY, hits INTEGER, last_seen DATETIME, asn INTEGER)")
     cur.execute("CREATE TABLE IF NOT EXISTS ip_intel (ip TEXT PRIMARY KEY, hits INTEGER, last_seen DATETIME, lat REAL, lng REAL)")
+    _ip_intel_cols = [row[1] for row in cur.execute("PRAGMA table_info(ip_intel)").fetchall()]
+    if 'hits_since_cleared' not in _ip_intel_cols:
+        cur.execute("ALTER TABLE ip_intel ADD COLUMN hits_since_cleared INTEGER NOT NULL DEFAULT 0")
+    if 'ban_until' not in _ip_intel_cols:
+        cur.execute("ALTER TABLE ip_intel ADD COLUMN ban_until INTEGER")
+    if 'ban_count' not in _ip_intel_cols:
+        cur.execute("ALTER TABLE ip_intel ADD COLUMN ban_count INTEGER NOT NULL DEFAULT 0")
     if enabled_protocols and 'SIP' in enabled_protocols:
         cur.execute("""CREATE TABLE IF NOT EXISTS dial_intel
             (number TEXT PRIMARY KEY, hits INTEGER, first_seen DATETIME, last_seen DATETIME,
@@ -568,7 +574,10 @@ def log_to_enriched_db(data, save_protos=None):
             cur.execute("INSERT INTO pass_intel_proto VALUES (?, ?, 1, ?) ON CONFLICT(password, proto) DO UPDATE SET hits=hits+1, last_seen=?", (data['pass'], proto_int, now, now))
         cur.execute("INSERT INTO country_intel VALUES (?, ?, 1, ?) ON CONFLICT(iso_code) DO UPDATE SET hits=hits+1, last_seen=?, country=?", (data['iso'], data['country'], now, now, data['country']))
         cur.execute("INSERT INTO isp_intel VALUES (?, 1, ?, ?) ON CONFLICT(isp) DO UPDATE SET hits=hits+1, last_seen=?, asn=?", (data['isp'], now, data.get('asn'), now, data.get('asn')))
-        cur.execute("INSERT INTO ip_intel VALUES (?, 1, ?, ?, ?) ON CONFLICT(ip) DO UPDATE SET hits=hits+1, last_seen=?, lat=?, lng=?",
+        cur.execute("""INSERT INTO ip_intel (ip, hits, last_seen, lat, lng, hits_since_cleared)
+                       VALUES (?, 1, ?, ?, ?, 1)
+                       ON CONFLICT(ip) DO UPDATE SET
+                           hits=hits+1, last_seen=?, lat=?, lng=?, hits_since_cleared=hits_since_cleared+1""",
                     (data['ip'], now, data.get('lat'), data.get('lng'), now, data.get('lat'), data.get('lng')))
         cur.execute("INSERT INTO country_intel_proto VALUES (?, ?, ?, 1, ?) ON CONFLICT(iso_code, proto) DO UPDATE SET hits=hits+1, last_seen=?, country=?", (data['iso'], proto_int, data['country'], now, now, data['country']))
         cur.execute("INSERT INTO isp_intel_proto VALUES (?, ?, 1, ?, ?) ON CONFLICT(isp, proto) DO UPDATE SET hits=hits+1, last_seen=?, asn=?", (data['isp'], proto_int, now, data.get('asn'), now, data.get('asn')))
@@ -629,9 +638,10 @@ def get_intel_stats_before_update(data):
         row = cur.fetchone()
         stats['isp_hits_proto'], stats['isp_last_proto'] = (row[0] + 1, row[1]) if row else (1, None)
 
-        cur.execute("SELECT hits, last_seen FROM ip_intel WHERE ip=?", (data['ip'],))
+        cur.execute("SELECT hits, last_seen, hits_since_cleared FROM ip_intel WHERE ip=?", (data['ip'],))
         row = cur.fetchone()
         stats['ip_hits'], stats['ip_last'] = (row[0] + 1, row[1]) if row else (1, None)
+        stats['ip_hits_since_cleared'] = (row[2] or 0) + 1 if row else 1
         cur.execute("SELECT hits, last_seen FROM ip_intel_proto WHERE ip=? AND proto=?", (data['ip'], proto_int))
         row = cur.fetchone()
         stats['ip_hits_proto'], stats['ip_last_proto'] = (row[0] + 1, row[1]) if row else (1, None)
@@ -739,21 +749,17 @@ def store_mail_forensic(redis_conn, forensic):
     redis_conn.lpush("knock:forensics:mail_raw", json.dumps(forensic))
     redis_conn.ltrim("knock:forensics:mail_raw", 0, max(0, MAIL_FORENSICS_MAX - 1))
 
-def is_over_limit_and_block(redis_conn, ip, projected_hits, proto_hits, proto, max_knocks):
+def is_over_limit_and_block(redis_conn, ip, hits_since_cleared, proto, max_knocks, ban_duration_days=30):
     if not max_knocks:
         return False
-    if proto in max_knocks:
-        limit = max_knocks[proto]
-    else:
-        limit = max_knocks.get(None)
+    limit = max_knocks.get(proto) or max_knocks.get(None)
     if not limit:
         return False
-    hits = proto_hits if proto in max_knocks else projected_hits
-    if hits <= limit:
+    if hits_since_cleared <= limit:
         return False
-    if not redis_conn.sismember("knock:blocked", ip):
-        add_to_blocklist(ip, redis_conn, proto=proto, knock_count=hits)
-    print(f"⛔ Dropped knock from over-limit IP {ip} ({hits}>{limit} {proto})", flush=True)
+    if not redis_conn.exists(f"knock:blocked:{ip}"):
+        add_to_blocklist(ip, redis_conn, proto=proto, knock_count=hits_since_cleared, ban_duration_days=ban_duration_days)
+    print(f"⛔ Dropped knock from over-limit IP {ip} ({hits_since_cleared}>{limit} {proto})", flush=True)
     return True
 
 def format_cred_summary(user, pw):
@@ -786,20 +792,29 @@ def get_geo_enriched(ip, city_reader, asn_reader):
         pass
     return geo
 
-def add_to_blocklist(ip, r, proto=None, knock_count=None):
-    """Append ip to blocklist.txt and add to Redis knock:blocked set."""
+def add_to_blocklist(ip, r, proto=None, knock_count=None, ban_duration_days=30):
+    """Block ip: write ban_until to SQLite, set Redis key with TTL, reset hits_since_cleared."""
     try:
-        ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        now = int(time.time())
+        ban_until = 0 if ban_duration_days == 0 else now + int(ban_duration_days * 86400)
         proto_label = (proto or 'UNKNOWN').upper()
         count_label = int(knock_count) if knock_count is not None else '?'
-        with open(BLOCKLIST_FILE, 'a') as f:
-            f.write(f"{ip}  # autoblocked {ts}, {proto_label}, {count_label}\n")
-        r.sadd("knock:blocked", ip)
-        print(f"🚫 Auto-blocked {ip}", flush=True)
+        conn = sqlite3.connect(DB_PATH, timeout=10)
+        try:
+            conn.execute("UPDATE ip_intel SET hits_since_cleared=0, ban_until=?, ban_count=ban_count+1 WHERE ip=?", (ban_until, ip))
+            conn.commit()
+        finally:
+            conn.close()
+        if ban_until == 0:
+            r.set(f"knock:blocked:{ip}", 1)
+        else:
+            r.set(f"knock:blocked:{ip}", 1, ex=ban_until - now)
+        dur_str = "permanently" if ban_until == 0 else f"for {ban_duration_days}d"
+        print(f"🚫 Auto-blocked {ip} {dur_str} ({proto_label}, {count_label} knocks)", flush=True)
     except Exception as e:
-        print(f"⚠️ Could not write blocklist: {e}")
+        print(f"⚠️ Could not block {ip}: {e}")
 
-def monitor(save_knocks=None, max_knocks=None):
+def monitor(save_knocks=None, max_knocks=None, ban_duration_days=30):
     # Parse save_knocks: None from no flag, 'ALL' from bare --save-knocks, 'SIP,SMTP' from --save-knocks=SIP,SMTP
     if save_knocks == 'ALL':
         save_protos = None  # None means save all
@@ -828,16 +843,24 @@ def monitor(save_knocks=None, max_knocks=None):
             print(f"⏳ Waiting for GeoIP databases... ({e})")
             time.sleep(5)
 
-    # Seed knock:blocked Redis set from blocklist file BEFORE spawning honeypots
-    if os.path.exists(BLOCKLIST_FILE):
-        try:
-            with open(BLOCKLIST_FILE) as f:
-                ips = [line.split('#')[0].strip() for line in f if line.split('#')[0].strip()]
-            if ips:
-                r.sadd("knock:blocked", *ips)
-            print(f"🚫 Loaded {len(ips)} blocked IP(s) into Redis (knock:blocked)")
-        except Exception as e:
-            print(f"⚠️ Could not load blocklist: {e}")
+    # Seed knock:blocked:{ip} Redis keys from SQLite BEFORE spawning honeypots
+    try:
+        _now = int(time.time())
+        _bconn = sqlite3.connect(DB_PATH, timeout=10)
+        _brows = _bconn.execute("SELECT ip, ban_until FROM ip_intel WHERE ban_until IS NOT NULL").fetchall()
+        _bconn.close()
+        _seeded = 0
+        for _bip, _ban_until in _brows:
+            if _ban_until == 0:
+                r.set(f"knock:blocked:{_bip}", 1)
+                _seeded += 1
+            elif _ban_until > _now:
+                r.set(f"knock:blocked:{_bip}", 1, ex=int(_ban_until - _now))
+                _seeded += 1
+        if _seeded:
+            print(f"🚫 Seeded {_seeded} active block(s) into Redis", flush=True)
+    except Exception as e:
+        print(f"⚠️ Could not seed blocks from SQLite: {e}")
 
     # Seed Redis totals from SQLite on startup to stay in sync
     try:
@@ -1004,9 +1027,8 @@ def monitor(save_knocks=None, max_knocks=None):
                 package[k] = v
             try:
                 package.update(get_intel_stats_before_update(package))
-                projected_hits = int(package.get('ip_hits', 0) or 0)
-                proto_hits = int(package.get('ip_hits_proto', 0) or 0)
-                if is_over_limit_and_block(r, ip, projected_hits, proto_hits, proto, max_knocks):
+                hits_since_cleared = int(package.get('ip_hits_since_cleared', 0) or 0)
+                if is_over_limit_and_block(r, ip, hits_since_cleared, proto, max_knocks, ban_duration_days):
                     continue
                 store_mail_forensic(r, forensic)
                 log_to_enriched_db(package, save_protos=save_protos)
@@ -1042,11 +1064,10 @@ def monitor(save_knocks=None, max_knocks=None):
                 if TRACE_KNOCK:
                     cred = format_cred_summary(user, pw)
                     print(f"📡 {proto} {geo['iso']} | {cred} via {geo['isp']}")
-            if max_knocks and not r.sismember("knock:blocked", ip):
+            if max_knocks and not r.exists(f"knock:blocked:{ip}"):
                 limit = max_knocks.get(proto) or max_knocks.get(None)
-                hits = proto_hits if proto in max_knocks else projected_hits
-                if limit and hits >= limit:
-                    add_to_blocklist(ip, r, proto=proto, knock_count=hits)
+                if limit and hits_since_cleared >= limit:
+                    add_to_blocklist(ip, r, proto=proto, knock_count=hits_since_cleared, ban_duration_days=ban_duration_days)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Knock-Knock Monitor")
@@ -1055,6 +1076,8 @@ if __name__ == "__main__":
                         help="Save individual knocks to SQLite. Optional: comma-separated protocols (e.g. SIP,SMTP). Default: ALL")
     parser.add_argument("--max-knocks", default=None, metavar="LIMIT",
                         help="Auto-block IP after N knocks. Examples: 5000, RDP:500, 5000,RDP:500,SIP:NONE")
+    parser.add_argument("--ban-duration", type=int, default=30, metavar="DAYS",
+                        help="Duration of auto-ban in days (default: 30, 0 = permanent)")
     args = parser.parse_args()
     if args.reset_all: reset_all()
     # Parse --max-knocks: "5000" → {None: 5000}, "RDP:500" → {'RDP': 500}, "5000,RDP:500" → {None: 5000, 'RDP': 500}
@@ -1069,4 +1092,4 @@ if __name__ == "__main__":
                 max_knocks[proto_name.strip().upper()] = None if val == 'NONE' else int(val)
             else:
                 max_knocks[None] = int(part)
-    monitor(save_knocks=args.save_knocks, max_knocks=max_knocks)
+    monitor(save_knocks=args.save_knocks, max_knocks=max_knocks, ban_duration_days=args.ban_duration)

@@ -752,14 +752,14 @@ def store_mail_forensic(redis_conn, forensic):
 def is_over_limit_and_block(redis_conn, ip, hits_since_cleared, proto, max_knocks, ban_duration_days=30):
     if not max_knocks:
         return False
+    if redis_conn.exists(f"knock:blocked:{ip}"):
+        print(f"⛔ Dropped knock from blocked IP {ip} ({proto})", flush=True)
+        return True
     limit = max_knocks.get(proto) or max_knocks.get(None)
-    if not limit:
+    if not limit or hits_since_cleared < limit:
         return False
-    if hits_since_cleared <= limit:
-        return False
-    if not redis_conn.exists(f"knock:blocked:{ip}"):
-        add_to_blocklist(ip, redis_conn, proto=proto, knock_count=hits_since_cleared, ban_duration_days=ban_duration_days)
-    print(f"⛔ Dropped knock from over-limit IP {ip} ({hits_since_cleared}>{limit} {proto})", flush=True)
+    add_to_blocklist(ip, redis_conn, proto=proto, knock_count=hits_since_cleared, ban_duration_days=ban_duration_days)
+    print(f"⛔ Dropped knock from over-limit IP {ip} ({hits_since_cleared}>={limit} {proto})", flush=True)
     return True
 
 def format_cred_summary(user, pw):
@@ -1064,10 +1064,6 @@ def monitor(save_knocks=None, max_knocks=None, ban_duration_days=30):
                 if TRACE_KNOCK:
                     cred = format_cred_summary(user, pw)
                     print(f"📡 {proto} {geo['iso']} | {cred} via {geo['isp']}")
-            if max_knocks and not r.exists(f"knock:blocked:{ip}"):
-                limit = max_knocks.get(proto) or max_knocks.get(None)
-                if limit and hits_since_cleared >= limit:
-                    add_to_blocklist(ip, r, proto=proto, knock_count=hits_since_cleared, ban_duration_days=ban_duration_days)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Knock-Knock Monitor")

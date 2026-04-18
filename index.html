@@ -187,6 +187,7 @@
         @keyframes pulse-green { 0% { background: rgba(0, 255, 65, 0.4); } 100% { background: transparent; } }
         @keyframes paused-blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
         .paused-title { animation: paused-blink 1.2s ease-in-out infinite; color: var(--hazard-yellow, #ffcc00) !important; }
+        .paused-icon { animation: paused-blink 1.2s ease-in-out infinite; }
         @keyframes latest-proto-fade {
             0%    { opacity: 1; }
             16.67% { opacity: 1; }
@@ -628,7 +629,7 @@
         <div class="d-header-content">
             <div class="d-header-left" onclick="togglePause()" style="cursor:pointer;">
                 <h1 id="d-header-title">BOTS ARE KNOCKING <span class="status-dot"></span></h1>
-                <div id="d-header-tagline" style="font-size: 1em; color: var(--neon-green); margin-top: -8px; margin-bottom: 7px; font-style: italic;">... BUT THEY CAN'T COME IN. &nbsp;<span id="d-header-sound" style="font-style:normal; cursor:pointer;" onclick="toggleSound(); event.stopPropagation();">🔈</span></div>
+                <div id="d-header-tagline" style="font-size: 1em; color: var(--neon-green); margin-top: -8px; margin-bottom: 7px; font-style: italic;">... BUT THEY CAN'T COME IN. &nbsp;<span id="d-header-pause" style="font-style:normal; color:#1a1a1a; background-color:#aaa; font-size:1em; border-radius:3px; border:none; padding:0; line-height:0.85; position:relative; top:-1px;">⏸</span> <span id="d-header-sound" style="font-style:normal; cursor:pointer; position:relative; top:2px;" onclick="toggleSound(); event.stopPropagation();">🔈</span></div>
                 <div class="d-stats-wrap">
                     <div class="d-stats-block">
                         <div class="d-stats">
@@ -684,7 +685,7 @@
         <div class="m-header-content">
             <div class="m-header-left" onclick="togglePause()" style="cursor:pointer;">
                 <h1 id="m-header-title">BOTS ARE KNOCKING <span class="status-dot"></span></h1>
-                <div style="font-size: 0.85em; color: var(--neon-green); margin-top: -2px; margin-bottom: 8px; font-style: italic;">... BUT THEY CAN'T COME IN. &nbsp;<span id="m-header-sound" style="font-style:normal; cursor:pointer; padding:10px; margin:-10px;" onclick="toggleSound(); event.stopPropagation();">🔈</span></div>
+                <div style="font-size: 0.85em; color: var(--neon-green); margin-top: -2px; margin-bottom: 8px; font-style: italic;">... BUT THEY CAN'T COME IN. &nbsp;<span id="m-header-pause" style="font-style:normal; color:#888; font-size:1em; border:1px solid #888; border-radius:3px; padding:0; line-height:0.85; position:relative; top:-1px;">⏸</span> <span id="m-header-sound" style="font-style:normal; cursor:pointer; padding:10px 10px 10px 3px; margin:-10px -10px -10px 0;" onclick="toggleSound(); event.stopPropagation();">🔈</span></div>
                 <div class="m-stat-row">
                     <span id="m-total-label" class="stat-label">Total Knocks:</span>&nbsp;<span id="m-total" class="stat-value">0</span>
                 </div>
@@ -866,6 +867,12 @@
         document.querySelectorAll('#d-header-sound, #m-header-sound').forEach(el => {
             el.innerHTML = icon;
             twemoji.parse(el);
+        });
+    }
+
+    function updatePauseIcon() {
+        document.querySelectorAll('#d-header-pause, #m-header-pause').forEach(el => {
+            paused ? el.classList.add('paused-icon') : el.classList.remove('paused-icon');
         });
     }
 
@@ -1512,6 +1519,7 @@
                 el.classList.remove('paused-title');
             }
         });
+        updatePauseIcon();
         if (paused) {
             if (ws) ws.close();
         } else {
@@ -3526,6 +3534,7 @@
         setupJokesObserver();
         setupTriviaObserver();
         updateSoundIcon();
+        updatePauseIcon();
 
         // Add drag-aware click handler for desktop GLOBE pane
         const globeBox = document.getElementById('d-box-globe');

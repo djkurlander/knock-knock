@@ -1247,6 +1247,7 @@ _SVCCTL_R_OPEN_SC_MANAGER_W = 15   # opnum for ROpenSCManagerW (MS-SCMR §3.1.4.
 _SVCCTL_R_OPEN_SERVICE_W    = 16   # opnum for ROpenServiceW  (MS-SCMR §3.1.4.20)
 _SVCCTL_R_START_SERVICE_W   = 19   # opnum for RStartServiceW  (MS-SCMR §3.1.4.30)
 _SVCCTL_ERROR_SERVICE_DOES_NOT_EXIST = 1060
+_SVCCTL_ERROR_SERVICE_ALREADY_RUNNING = 1056
 _FSCTL_PIPE_WAIT              = 0x00110018  # SMB2 IOCTL code for waiting on a named pipe
 _FSCTL_PIPE_TRANSCEIVE        = 0x0011C017  # SMB2 IOCTL code for named-pipe transact
 _FSCTL_VALIDATE_NEGOTIATE_INFO = 0x00140204  # SMB3 post-negotiate validation (RFC MS-SMB2 §3.3.5.15.12)
@@ -1395,7 +1396,7 @@ def _parse_netr_share_enum_level(stub):
 
 def _handle_dcerpc_multi(data, client_ip, user=None, smb_version=None,
                          smb_domain=None, smb_host=None, pipe_name='SRVSVC',
-                         svc_handles=None):
+                         svc_handles=None, services_by_name=None):
     """
     Handle one or more concatenated DCERPC PDUs in a single buffer.
     Walks the buffer using frag_length (at offset 8 in each PDU header),
@@ -1413,7 +1414,8 @@ def _handle_dcerpc_multi(data, client_ip, user=None, smb_version=None,
         pdu  = data[offset:offset + frag_length]
         resp = _handle_dcerpc(pdu, client_ip, user=user, smb_version=smb_version,
                               smb_domain=smb_domain, smb_host=smb_host,
-                              pipe_name=pipe_name, svc_handles=svc_handles)
+                              pipe_name=pipe_name, svc_handles=svc_handles,
+                              services_by_name=services_by_name)
         if resp:
             responses.append(resp)
         offset += frag_length
@@ -1720,17 +1722,25 @@ def _dcerpc_svcctl_handle_response(call_id, ctx_id, handle=None, win_error=0):
     return _dcerpc_hdr(_DCERPC_RESPONSE, call_id, len(body)) + body
 
 
+def _normalize_service_name(name: str | None) -> str | None:
+    if name is None:
+        return None
+    cleaned = name.strip().strip('\x00')
+    return cleaned.lower() or None
+
+
 def _handle_dcerpc(data, client_ip, user=None, smb_version=None,
                    smb_domain=None, smb_host=None, pipe_name='SRVSVC',
-                   svc_handles=None):
+                   svc_handles=None, services_by_name=None):
     """
     Parse an incoming DCERPC PDU and return the response bytes, or None if unhandled.
     BIND → BIND_ACK (sec_addr reflects the actual pipe).
     For SRVSVC: REQUEST opnum 15 (NetrShareEnum) → share list response.
     For SVCCTL: opnum 15 (ROpenSCManagerW) → fake handle; opnum 12 (RCreateServiceW)
-                → fake service handle + knock; opnum 19 (RStartServiceW) → ACCESS_DENIED + knock.
+                → fake service handle + knock; opnum 19 (RStartServiceW) → success/already-running.
     For other known pipes: REQUEST → DCERPC FAULT (nca_s_op_rng_error).
-    svc_handles: session-level dict {handle_bytes: (svc_name, bin_path)} for handle correlation.
+    svc_handles: session-level dict {handle_bytes: service_key} for handle correlation.
+    services_by_name: session-level dict {service_key: {'name', 'bin_path', 'status'}}.
     """
     if len(data) < 16:
         return None
@@ -1776,17 +1786,29 @@ def _handle_dcerpc(data, client_ip, user=None, smb_version=None,
                 return _dcerpc_svcctl_handle_response(call_id, ctx_id, win_error=0)
             if opnum == _SVCCTL_R_OPEN_SERVICE_W:
                 svc_name, desired_access = _parse_svcctl_r_open_service_w(stub)
+                service_key = _normalize_service_name(svc_name)
+                service_info = (
+                    services_by_name.get(service_key)
+                    if (services_by_name is not None and service_key)
+                    else None
+                )
                 trace(client_ip, 'svcctl_open_service',
                       service_name=svc_name, desired_access=hex(desired_access or 0),
                       stub_len=len(stub), stub_preview=stub[:64].hex(),
                       has_object_uuid=req_meta.get('has_object_uuid'),
                       auth_length=req_meta.get('auth_length'),
                       auth_pad_length=req_meta.get('auth_pad_length'),
-                      result='service_not_found')
+                      result='opened' if service_info else 'service_not_found')
                 _emit_knock(client_ip, user, None, smb_version, smb_domain, smb_host,
                             smb_action='OPEN_SERVICE',
                             smb_service_name=svc_name,
                             trace_stage='knock_emitted_open_service')
+                if service_info:
+                    fake_handle = os.urandom(16) + b'\x00\x00\x00\x00'
+                    if svc_handles is not None:
+                        svc_handles[fake_handle] = service_key
+                    return _dcerpc_svcctl_handle_response(
+                        call_id, ctx_id, handle=fake_handle, win_error=0)
                 # Returning ERROR_SERVICE_DOES_NOT_EXIST nudges installers into CreateServiceW.
                 return _dcerpc_svcctl_handle_response(
                     call_id, ctx_id, handle=b'\x00' * 20,
@@ -1794,6 +1816,7 @@ def _handle_dcerpc(data, client_ip, user=None, smb_version=None,
                 )
             if opnum == _SVCCTL_R_CREATE_SERVICE_W:
                 svc_name, bin_path, create_meta = _parse_svcctl_r_create_service_w(stub)
+                service_key = _normalize_service_name(svc_name)
                 trace(client_ip, 'svcctl_create_service',
                       service_name=svc_name, binary_path=bin_path,
                       stub_len=len(stub), stub_preview=stub[:96].hex(),
@@ -1821,24 +1844,42 @@ def _handle_dcerpc(data, client_ip, user=None, smb_version=None,
                             trace_stage='knock_emitted_create_service')
                 # Return success with a fake handle so the worm proceeds to RStartServiceW
                 fake_handle = os.urandom(16) + b'\x00\x00\x00\x00'
+                if services_by_name is not None and service_key:
+                    services_by_name[service_key] = {
+                        'name': svc_name or service_key,
+                        'bin_path': bin_path,
+                        'status': 'created',
+                    }
                 if svc_handles is not None:
-                    svc_handles[fake_handle] = (svc_name, bin_path)
+                    svc_handles[fake_handle] = service_key
                 return _dcerpc_svcctl_handle_response(call_id, ctx_id,
                                                       handle=fake_handle, win_error=0)
             if opnum == _SVCCTL_R_START_SERVICE_W:
                 # hService handle is the first 20 bytes of the stub
                 handle_key = stub[:20] if len(stub) >= 20 else None
-                info = svc_handles.get(handle_key) if (svc_handles and handle_key) else None
-                svc_name  = info[0] if info else None
-                bin_path  = info[1] if info else None
+                service_key = svc_handles.get(handle_key) if (svc_handles and handle_key) else None
+                service_info = (
+                    services_by_name.get(service_key)
+                    if (services_by_name and service_key)
+                    else None
+                )
+                svc_name  = service_info.get('name') if service_info else None
+                bin_path  = service_info.get('bin_path') if service_info else None
                 trace(client_ip, 'svcctl_start_service',
-                      service_name=svc_name, binary_path=bin_path)
+                      service_name=svc_name, binary_path=bin_path,
+                      status=service_info.get('status') if service_info else None)
                 _emit_knock(client_ip, user, None, smb_version, smb_domain, smb_host,
                             smb_file=bin_path, smb_action='START_SERVICE',
                             smb_service_name=svc_name,
                             trace_stage='knock_emitted_start_service')
-                # Deny execution — DWORD-only response (RStartServiceW has no [out] handle)
-                return _dcerpc_svcctl_dword_response(call_id, ctx_id, win_error=5)
+                if service_info is None:
+                    return _dcerpc_svcctl_dword_response(
+                        call_id, ctx_id, win_error=_SVCCTL_ERROR_SERVICE_DOES_NOT_EXIST)
+                if service_info.get('status') == 'running':
+                    return _dcerpc_svcctl_dword_response(
+                        call_id, ctx_id, win_error=_SVCCTL_ERROR_SERVICE_ALREADY_RUNNING)
+                service_info['status'] = 'running'
+                return _dcerpc_svcctl_dword_response(call_id, ctx_id, win_error=0)
             trace(client_ip, 'dcerpc_stub_request', pipe=pipe_name, opnum=opnum,
                   opnum_name=_SVCCTL_OPNUM_NAMES.get(opnum, f'UNKNOWN_{opnum}'),
                   stub_len=len(stub), stub_preview=stub[:64].hex(),
@@ -2028,8 +2069,9 @@ def _smb2_post_negotiate(client_sock, client_ip, smb_version, selected_dialect=0
         'last_command_time': 0.0,
         'stderr_stub': None,
     }
-    # svc_handles: {handle_bytes: (svc_name, bin_path)} — maps fake SVCCTL handles to service info
+    # svc_handles: {handle_bytes: service_key} — maps fake SVCCTL handles to service info
     svc_handles  = {}
+    services_by_name = {}  # {service_key: {'name', 'bin_path', 'status'}}
     next_fid     = 1     # monotonic counter for allocating unique FileId values
     got_auth     = False
 
@@ -2265,7 +2307,8 @@ def _smb2_post_negotiate(client_sock, client_ip, smb_version, selected_dialect=0
                                                user=user, smb_version=smb_version,
                                                smb_domain=domain, smb_host=host,
                                                pipe_name=pipe_fids[fid_pair].get('pipe', 'SRVSVC'),
-                                               svc_handles=svc_handles)
+                                               svc_handles=svc_handles,
+                                               services_by_name=services_by_name)
                 if rpc_resp:
                     send_nbss(client_sock, build_smb2_ioctl_pipe_response(
                         hdr, session_id, hdr['tree_id'], ctl_code, fid_pair, rpc_resp))
@@ -2411,7 +2454,8 @@ def _smb2_post_negotiate(client_sock, client_ip, smb_version, selected_dialect=0
                         write_data, client_ip, user=user, smb_version=smb_version,
                         smb_domain=domain, smb_host=host,
                         pipe_name=pipe_name,
-                        svc_handles=svc_handles)
+                        svc_handles=svc_handles,
+                        services_by_name=services_by_name)
                 send_nbss(client_sock, build_smb2_write_response(
                     hdr, session_id, tree_id, data_length))
             elif tree_id in ipc_tree_ids:
@@ -3389,7 +3433,8 @@ def handle_smb1(client_sock, client_ip, first_payload):
     overlay_files = {}   # {share_upper: {share_relative_path: bytearray}}
     quarantined_paths = set()  # {(share_upper, share_relative_path)}
     pipe_fids    = {}    # {fid(int): {'pending': bytes|None, 'pipe': str}} for IPC named pipe handles
-    svc_handles  = {}    # {handle_bytes: (svc_name, bin_path)} — maps fake SVCCTL handles to service info
+    svc_handles  = {}    # {handle_bytes: service_key} — maps fake SVCCTL handles to service info
+    services_by_name = {}  # {service_key: {'name', 'bin_path', 'status'}}
     next_fid     = 1
     got_auth     = False
 
@@ -3511,7 +3556,8 @@ def handle_smb1(client_sock, client_ip, first_payload):
                                                                     user=user, smb_version='SMB1',
                                                                     smb_domain=domain, smb_host=host,
                                                                     pipe_name=pipe_fids[fid].get('pipe', 'SRVSVC'),
-                                                                    svc_handles=svc_handles)
+                                                                    svc_handles=svc_handles,
+                                                                    services_by_name=services_by_name)
                     # Acknowledge the write
                     ack_body = (struct.pack('<B', 6)        # WC=6
                                 + struct.pack('<B', 0xFF)   # AndXCmd=none
@@ -3569,7 +3615,8 @@ def handle_smb1(client_sock, client_ip, first_payload):
                                                    smb_version='SMB1',
                                                    smb_domain=domain, smb_host=host,
                                                    pipe_name=pipe_name,
-                                                   svc_handles=svc_handles)
+                                                   svc_handles=svc_handles,
+                                                   services_by_name=services_by_name)
                 if rpc_resp:
                     send_nbss(client_sock, build_smb1_transaction_response(
                         hdr, uid, tid, flags2, rpc_resp))

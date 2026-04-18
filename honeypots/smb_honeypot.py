@@ -2122,7 +2122,7 @@ def _smb2_post_negotiate(client_sock, client_ip, smb_version, selected_dialect=0
                           cross_check=ntlm_debug.get('cross_check'),
                           type3_preview=ntlm_debug.get('type3_preview'))
 
-                _emit_knock(client_ip, user if user is not None else '', None, smb_version, domain, host,
+                _emit_knock(client_ip, user, None, smb_version, domain, host,
                             smb_action='AUTH', trace_stage='knock_emitted_auth')
                 got_auth = True
 
@@ -3487,7 +3487,7 @@ def handle_smb1(client_sock, client_ip, first_payload):
                               strict_clean=ntlm_debug.get('strict_clean'),
                               cross_check=ntlm_debug.get('cross_check'),
                               type3_preview=ntlm_debug.get('type3_preview'))
-                    _emit_knock(client_ip, user if user is not None else '', None, 'SMB1', domain, host,
+                    _emit_knock(client_ip, user, None, 'SMB1', domain, host,
                                 smb_action='AUTH', trace_stage='knock_emitted_auth')
                     got_auth = True
                     uid = (int.from_bytes(os.urandom(2), 'little') or 1)
@@ -3500,7 +3500,7 @@ def handle_smb1(client_sock, client_ip, first_payload):
                 user, domain = _smb1_session_setup_nonext(payload, flags2)
                 trace(client_ip, 'smb1_session_setup_nonext',
                       user=user, domain=domain)
-                _emit_knock(client_ip, user if user is not None else '', None, 'SMB1', domain, None,
+                _emit_knock(client_ip, user, None, 'SMB1', domain, None,
                             smb_action='AUTH', trace_stage='knock_emitted_auth')
                 got_auth = True
                 uid = (int.from_bytes(os.urandom(2), 'little') or 1)

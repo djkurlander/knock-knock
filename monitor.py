@@ -992,7 +992,7 @@ def monitor(save_knocks=None, max_knocks=None, ban_duration_days=30):
             forensic = build_mail_forensic(knock, proto, ip)
             raw_user = knock.get("user")
             raw_pass = knock.get("pass")
-            user = raw_user if proto in USER_PANEL_PROTOCOLS and raw_user is not None else None
+            user = (raw_user if raw_user is not None else '') if proto in USER_PANEL_PROTOCOLS else None
             pw = raw_pass if proto in PASS_PANEL_PROTOCOLS and raw_pass is not None else None
             geo = get_geo_enriched(ip, c_reader, a_reader)
             package = {

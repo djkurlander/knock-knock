@@ -382,17 +382,39 @@ def parse_ntlm_authenticate(data):
     """
     Parse NTLM AUTHENTICATE (Type 3) message.
     Returns (username, domain, workstation) — any may be None on failure.
-    Copied verbatim from rdp_honeypot.py.
+    Deterministic parser: security buffers are authoritative; impacket is
+    only used as a debug cross-check.
     """
-    def _read_secbuf(buf, off):
+    def _read_secbuf(buf, off, label, debug):
         if len(buf) < off + 8:
+            debug['secbufs'][label] = {
+                'header_offset': off,
+                'header_present': False,
+            }
             return None
         length = struct.unpack_from('<H', buf, off)[0]
+        max_length = struct.unpack_from('<H', buf, off + 2)[0]
         offset = struct.unpack_from('<I', buf, off + 4)[0]
+        entry = {
+            'header_offset': off,
+            'header_present': True,
+            'length': length,
+            'max_length': max_length,
+            'buffer_offset': offset,
+        }
         if length <= 0:
+            entry['status'] = 'empty'
+            debug['secbufs'][label] = entry
             return b''
-        if offset < 0 or offset + length > len(buf):
+        if offset + length > len(buf):
+            entry['status'] = 'out_of_bounds'
+            entry['buffer_end'] = offset + length
+            entry['message_len'] = len(buf)
+            debug['secbufs'][label] = entry
             return None
+        entry['status'] = 'ok'
+        entry['buffer_end'] = offset + length
+        debug['secbufs'][label] = entry
         return buf[offset:offset + length]
 
     def _decode_ntlm_text(raw, flags):
@@ -415,29 +437,18 @@ def parse_ntlm_authenticate(data):
         printable = ''.join(ch for ch in value if ch.isprintable())
         return printable or None
 
-    def _plausibility_score(username, domain, workstation):
-        score = 0
-        if username:
-            score += 2
-            if len(username) >= 4:
-                score += 2
-            if re.fullmatch(r'[A-Za-z0-9._$@-]+', username or ''):
-                score += 1
-            if username.lower() in {'for', 'if', 'do', 'set', 'cmd', 'echo'}:
-                score -= 4
-        if domain:
-            score += 1
-        if workstation:
-            score += 1
-        return score
-
-    candidates = []
     debug = {
         'flags': None,
         'type3_preview': _trace_data_preview(data, limit=96),
+        'canonical_source': 'strict',
+        'secbufs': {},
+        'strict_raw': {},
+        'strict_clean': {},
+        'cross_check': {},
     }
 
-    # Primary path: impacket NTLMAuthChallengeResponse
+    # Debug-only cross-check path: useful when strict parsing yields an
+    # unexpected result, but it does not influence the canonical output.
     try:
         resp = ntlm.NTLMAuthChallengeResponse()
         resp.fromString(data)
@@ -450,50 +461,62 @@ def parse_ntlm_authenticate(data):
         workstation = resp.fields.get('host_name') or resp.fields.get('workstation')
         if isinstance(workstation, bytes):
             workstation = workstation.decode('utf-16-le', errors='replace').strip('\x00')
-        username = _clean_identity(username)
-        domain = _clean_identity(domain)
-        workstation = _clean_identity(workstation)
-        candidates.append(('impacket', username, domain, workstation))
-    except Exception:
-        pass
-
-    # Fallback: manual struct parser for Type-3 variants impacket doesn't decode cleanly
-    try:
-        if len(data) < 64 or not data.startswith(b'NTLMSSP\x00'):
-            return None, None, None, debug
-        if struct.unpack_from('<I', data, 8)[0] != 3:
-            return None, None, None, debug
-        flags       = struct.unpack_from('<I', data, 60)[0]
-        debug['flags'] = hex(flags)
-        username    = _decode_ntlm_text(_read_secbuf(data, 36), flags)
-        domain      = _decode_ntlm_text(_read_secbuf(data, 28), flags)
-        workstation = _decode_ntlm_text(_read_secbuf(data, 44), flags)
-        username = _clean_identity(username)
-        domain = _clean_identity(domain)
-        workstation = _clean_identity(workstation)
-        candidates.append(('manual', username, domain, workstation))
-    except Exception:
-        pass
-
-    if not candidates:
-        return None, None, None, debug
-    debug['candidates'] = [
-        {
-            'source': source,
-            'username': username,
-            'domain': domain,
-            'workstation': workstation,
-            'score': _plausibility_score(username, domain, workstation),
+        debug['cross_check']['impacket'] = {
+            'username': _clean_identity(username),
+            'domain': _clean_identity(domain),
+            'workstation': _clean_identity(workstation),
         }
-        for source, username, domain, workstation in candidates
-    ]
-    _source, username, domain, workstation = max(
-        candidates,
-        key=lambda item: _plausibility_score(item[1], item[2], item[3]))
-    debug['selected_source'] = _source
-    debug['selected_score'] = _plausibility_score(username, domain, workstation)
-    if debug['selected_score'] < 0:
+    except Exception as e:
+        debug['cross_check']['impacket_error'] = f'{type(e).__name__}: {e}'
+
+    if len(data) < 64:
+        debug['parse_error'] = f'type3_too_short:{len(data)}'
         return None, None, None, debug
+    if not data.startswith(b'NTLMSSP\x00'):
+        debug['parse_error'] = 'bad_signature'
+        return None, None, None, debug
+    msg_type = struct.unpack_from('<I', data, 8)[0]
+    if msg_type != 3:
+        debug['parse_error'] = f'unexpected_message_type:{msg_type}'
+        return None, None, None, debug
+
+    flags = struct.unpack_from('<I', data, 60)[0]
+    debug['flags'] = hex(flags)
+
+    username_raw = _decode_ntlm_text(_read_secbuf(data, 36, 'username', debug), flags)
+    domain_raw = _decode_ntlm_text(_read_secbuf(data, 28, 'domain', debug), flags)
+    workstation_raw = _decode_ntlm_text(_read_secbuf(data, 44, 'workstation', debug), flags)
+    debug['strict_raw'] = {
+        'username': username_raw,
+        'domain': domain_raw,
+        'workstation': workstation_raw,
+    }
+
+    invalid_fields = [
+        label for label, entry in debug['secbufs'].items()
+        if entry.get('status') == 'out_of_bounds'
+    ]
+    if invalid_fields:
+        debug['parse_error'] = f'invalid_secbuf:{",".join(invalid_fields)}'
+        return None, None, None, debug
+
+    username = _clean_identity(username_raw)
+    domain = _clean_identity(domain_raw)
+    workstation = _clean_identity(workstation_raw)
+    debug['strict_clean'] = {
+        'username': username,
+        'domain': domain,
+        'workstation': workstation,
+    }
+
+    impacket_result = debug['cross_check'].get('impacket')
+    if impacket_result is not None:
+        debug['cross_check']['matches_strict'] = (
+            impacket_result.get('username') == username
+            and impacket_result.get('domain') == domain
+            and impacket_result.get('workstation') == workstation
+        )
+
     return username, domain, workstation, debug
 
 # ---------------------------------------------------------------------------
@@ -2042,15 +2065,19 @@ def _smb2_post_negotiate(client_sock, client_ip, smb_version, selected_dialect=0
                 trace(client_ip, 'smb2_session_setup_r2',
                       user=user, domain=domain, host=host, has_ntlm=ntlm3 is not None)
                 if ntlm_debug and (
-                    len(ntlm_debug.get('candidates', [])) > 1
+                    ntlm_debug.get('parse_error')
+                    or ntlm_debug.get('cross_check', {}).get('matches_strict') is False
                     or (user and len(user) <= 3)
                     or user is None
                 ):
                     trace(client_ip, 'ntlm_auth_debug',
                           flags=ntlm_debug.get('flags'),
-                          selected_source=ntlm_debug.get('selected_source'),
-                          selected_score=ntlm_debug.get('selected_score'),
-                          candidates=ntlm_debug.get('candidates'),
+                          canonical_source=ntlm_debug.get('canonical_source'),
+                          parse_error=ntlm_debug.get('parse_error'),
+                          secbufs=ntlm_debug.get('secbufs'),
+                          strict_raw=ntlm_debug.get('strict_raw'),
+                          strict_clean=ntlm_debug.get('strict_clean'),
+                          cross_check=ntlm_debug.get('cross_check'),
                           type3_preview=ntlm_debug.get('type3_preview'))
 
                 _emit_knock(client_ip, user, None, smb_version, domain, host,
@@ -3401,15 +3428,19 @@ def handle_smb1(client_sock, client_ip, first_payload):
                           user=user, domain=domain, host=host,
                           has_ntlm=ntlm3 is not None)
                     if ntlm_debug and (
-                        len(ntlm_debug.get('candidates', [])) > 1
+                        ntlm_debug.get('parse_error')
+                        or ntlm_debug.get('cross_check', {}).get('matches_strict') is False
                         or (user and len(user) <= 3)
                         or user is None
                     ):
                         trace(client_ip, 'ntlm_auth_debug',
                               flags=ntlm_debug.get('flags'),
-                              selected_source=ntlm_debug.get('selected_source'),
-                              selected_score=ntlm_debug.get('selected_score'),
-                              candidates=ntlm_debug.get('candidates'),
+                              canonical_source=ntlm_debug.get('canonical_source'),
+                              parse_error=ntlm_debug.get('parse_error'),
+                              secbufs=ntlm_debug.get('secbufs'),
+                              strict_raw=ntlm_debug.get('strict_raw'),
+                              strict_clean=ntlm_debug.get('strict_clean'),
+                              cross_check=ntlm_debug.get('cross_check'),
                               type3_preview=ntlm_debug.get('type3_preview'))
                     _emit_knock(client_ip, user, None, 'SMB1', domain, host,
                                 smb_action='AUTH', trace_stage='knock_emitted_auth')

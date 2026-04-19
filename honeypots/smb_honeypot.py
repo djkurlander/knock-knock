@@ -1246,13 +1246,25 @@ _SVCCTL_R_CREATE_SERVICE_W = 12     # opnum for RCreateServiceW (MS-SCMR §3.1.4
 _SVCCTL_R_OPEN_SC_MANAGER_W = 15   # opnum for ROpenSCManagerW (MS-SCMR §3.1.4.1)
 _SVCCTL_R_OPEN_SERVICE_W    = 16   # opnum for ROpenServiceW  (MS-SCMR §3.1.4.20)
 _SVCCTL_R_START_SERVICE_W   = 19   # opnum for RStartServiceW  (MS-SCMR §3.1.4.30)
+_SVCCTL_R_CONTROL_SERVICE   = 1
+_SVCCTL_R_DELETE_SERVICE    = 2
 _SVCCTL_ERROR_SERVICE_DOES_NOT_EXIST = 1060
 _SVCCTL_ERROR_SERVICE_ALREADY_RUNNING = 1056
+_SVCCTL_ERROR_SERVICE_NOT_ACTIVE = 1062
+_SVCCTL_ERROR_SERVICE_MARKED_FOR_DELETE = 1072
+_SERVICE_CONTROL_STOP = 0x00000001
+_SERVICE_CONTROL_INTERROGATE = 0x00000004
+_SERVICE_STOPPED = 0x00000001
+_SERVICE_RUNNING = 0x00000004
+_SERVICE_WIN32_OWN_PROCESS = 0x00000010
+_SERVICE_ACCEPT_STOP = 0x00000001
 _FSCTL_PIPE_WAIT              = 0x00110018  # SMB2 IOCTL code for waiting on a named pipe
 _FSCTL_PIPE_TRANSCEIVE        = 0x0011C017  # SMB2 IOCTL code for named-pipe transact
 _FSCTL_VALIDATE_NEGOTIATE_INFO = 0x00140204  # SMB3 post-negotiate validation (RFC MS-SMB2 §3.3.5.15.12)
 
 _SVCCTL_OPNUM_NAMES = {
+    _SVCCTL_R_CONTROL_SERVICE: 'RControlService',
+    _SVCCTL_R_DELETE_SERVICE: 'RDeleteService',
     _SVCCTL_R_CREATE_SERVICE_W: 'RCreateServiceW',
     _SVCCTL_R_OPEN_SC_MANAGER_W: 'ROpenSCManagerW',
     _SVCCTL_R_OPEN_SERVICE_W: 'ROpenServiceW',
@@ -1722,11 +1734,47 @@ def _dcerpc_svcctl_handle_response(call_id, ctx_id, handle=None, win_error=0):
     return _dcerpc_hdr(_DCERPC_RESPONSE, call_id, len(body)) + body
 
 
+def _dcerpc_svcctl_status_response(call_id, ctx_id, current_state, win_error=0,
+                                   controls_accepted=0):
+    """DCERPC RESPONSE containing SERVICE_STATUS + DWORD return code."""
+    stub = (
+        struct.pack('<I', _SERVICE_WIN32_OWN_PROCESS)
+        + struct.pack('<I', current_state)
+        + struct.pack('<I', controls_accepted)
+        + struct.pack('<I', 0)  # dwWin32ExitCode
+        + struct.pack('<I', 0)  # dwServiceSpecificExitCode
+        + struct.pack('<I', 0)  # dwCheckPoint
+        + struct.pack('<I', 0)  # dwWaitHint
+        + struct.pack('<I', win_error)
+    )
+    body = (
+        struct.pack('<I', len(stub))
+        + struct.pack('<H', ctx_id)
+        + struct.pack('<H', 0)
+        + stub
+    )
+    return _dcerpc_hdr(_DCERPC_RESPONSE, call_id, len(body)) + body
+
+
 def _normalize_service_name(name: str | None) -> str | None:
     if name is None:
         return None
     cleaned = name.strip().strip('\x00')
     return cleaned.lower() or None
+
+
+def _parse_svcctl_r_control_service(stub):
+    """Parse RControlService and return (service_handle, control_code)."""
+    if len(stub) < 24:
+        return None, None
+    return stub[:20], struct.unpack_from('<I', stub, 20)[0]
+
+
+def _parse_svcctl_r_delete_service(stub):
+    """Parse RDeleteService and return the service handle."""
+    if len(stub) < 20:
+        return None
+    return stub[:20]
 
 
 def _handle_dcerpc(data, client_ip, user=None, smb_version=None,
@@ -1780,6 +1828,78 @@ def _handle_dcerpc(data, client_ip, user=None, smb_version=None,
                 return _dcerpc_fault(call_id, ctx_id)
             trace(client_ip, 'srvsvc_unsupported_opnum', opnum=opnum)
         elif pipe_name == 'SVCCTL':
+            if opnum == _SVCCTL_R_CONTROL_SERVICE:
+                handle_key, control_code = _parse_svcctl_r_control_service(stub)
+                service_key = svc_handles.get(handle_key) if (svc_handles and handle_key) else None
+                service_info = (
+                    services_by_name.get(service_key)
+                    if (services_by_name and service_key)
+                    else None
+                )
+                control_action = (
+                    'STOP_SERVICE' if control_code == _SERVICE_CONTROL_STOP
+                    else 'INTERROGATE_SERVICE' if control_code == _SERVICE_CONTROL_INTERROGATE
+                    else 'CONTROL_SERVICE'
+                )
+                trace(client_ip, 'svcctl_control_service',
+                      service_name=service_info.get('name') if service_info else None,
+                      binary_path=service_info.get('bin_path') if service_info else None,
+                      control_code=hex(control_code or 0),
+                      status=service_info.get('status') if service_info else None)
+                _emit_knock(client_ip, user, None, smb_version, smb_domain, smb_host,
+                            smb_file=service_info.get('bin_path') if service_info else None,
+                            smb_action=control_action,
+                            smb_service_name=service_info.get('name') if service_info else None,
+                            trace_stage='knock_emitted_control_service')
+                if service_info is None:
+                    return _dcerpc_svcctl_status_response(
+                        call_id, ctx_id, _SERVICE_STOPPED,
+                        win_error=_SVCCTL_ERROR_SERVICE_DOES_NOT_EXIST)
+                if control_code == _SERVICE_CONTROL_STOP:
+                    if service_info.get('status') == 'stopped':
+                        return _dcerpc_svcctl_status_response(
+                            call_id, ctx_id, _SERVICE_STOPPED,
+                            win_error=_SVCCTL_ERROR_SERVICE_NOT_ACTIVE)
+                    service_info['status'] = 'stopped'
+                    return _dcerpc_svcctl_status_response(
+                        call_id, ctx_id, _SERVICE_STOPPED, win_error=0)
+                current_state = (
+                    _SERVICE_RUNNING if service_info.get('status') == 'running'
+                    else _SERVICE_STOPPED
+                )
+                controls_accepted = (
+                    _SERVICE_ACCEPT_STOP if current_state == _SERVICE_RUNNING else 0
+                )
+                return _dcerpc_svcctl_status_response(
+                    call_id, ctx_id, current_state, win_error=0,
+                    controls_accepted=controls_accepted)
+            if opnum == _SVCCTL_R_DELETE_SERVICE:
+                handle_key = _parse_svcctl_r_delete_service(stub)
+                service_key = svc_handles.get(handle_key) if (svc_handles and handle_key) else None
+                service_info = (
+                    services_by_name.get(service_key)
+                    if (services_by_name and service_key)
+                    else None
+                )
+                trace(client_ip, 'svcctl_delete_service',
+                      service_name=service_info.get('name') if service_info else None,
+                      binary_path=service_info.get('bin_path') if service_info else None,
+                      status=service_info.get('status') if service_info else None,
+                      deleted=service_info.get('deleted') if service_info else None)
+                _emit_knock(client_ip, user, None, smb_version, smb_domain, smb_host,
+                            smb_file=service_info.get('bin_path') if service_info else None,
+                            smb_action='DELETE_SERVICE',
+                            smb_service_name=service_info.get('name') if service_info else None,
+                            trace_stage='knock_emitted_delete_service')
+                if service_info is None:
+                    return _dcerpc_svcctl_dword_response(
+                        call_id, ctx_id, win_error=_SVCCTL_ERROR_SERVICE_DOES_NOT_EXIST)
+                if service_info.get('deleted'):
+                    return _dcerpc_svcctl_dword_response(
+                        call_id, ctx_id, win_error=_SVCCTL_ERROR_SERVICE_MARKED_FOR_DELETE)
+                service_info['deleted'] = True
+                service_info['status'] = 'stopped'
+                return _dcerpc_svcctl_dword_response(call_id, ctx_id, win_error=0)
             if opnum == _SVCCTL_R_OPEN_SC_MANAGER_W:
                 # Return a fake SCM handle so the worm can proceed to RCreateServiceW
                 trace(client_ip, 'svcctl_open_sc_manager')
@@ -1849,6 +1969,7 @@ def _handle_dcerpc(data, client_ip, user=None, smb_version=None,
                         'name': svc_name or service_key,
                         'bin_path': bin_path,
                         'status': 'created',
+                        'deleted': False,
                     }
                 if svc_handles is not None:
                     svc_handles[fake_handle] = service_key

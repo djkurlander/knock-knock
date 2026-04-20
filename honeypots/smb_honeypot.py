@@ -1254,12 +1254,14 @@ _DCERPC_RESPONSE        = 0x02
 _DCERPC_FAULT           = 0x03
 _DCERPC_PFC_OBJECT_UUID = 0x80
 _SRVSVC_NETR_SHARE_ENUM = 15         # opnum for NetrShareEnum
+_SVCCTL_R_CLOSE_SERVICE_HANDLE = 0  # opnum for RCloseServiceHandle (MS-SCMR §3.1.4.1)
 _SVCCTL_R_CREATE_SERVICE_W = 12     # opnum for RCreateServiceW (MS-SCMR §3.1.4.12)
 _SVCCTL_R_OPEN_SC_MANAGER_W = 15   # opnum for ROpenSCManagerW (MS-SCMR §3.1.4.1)
 _SVCCTL_R_OPEN_SERVICE_W    = 16   # opnum for ROpenServiceW  (MS-SCMR §3.1.4.20)
 _SVCCTL_R_START_SERVICE_W   = 19   # opnum for RStartServiceW  (MS-SCMR §3.1.4.30)
 _SVCCTL_R_CONTROL_SERVICE   = 1
 _SVCCTL_R_DELETE_SERVICE    = 2
+_SVCCTL_ERROR_INVALID_HANDLE = 6
 _SVCCTL_ERROR_SERVICE_DOES_NOT_EXIST = 1060
 _SVCCTL_ERROR_SERVICE_ALREADY_RUNNING = 1056
 _SVCCTL_ERROR_SERVICE_NOT_ACTIVE = 1062
@@ -1275,6 +1277,7 @@ _FSCTL_PIPE_TRANSCEIVE        = 0x0011C017  # SMB2 IOCTL code for named-pipe tra
 _FSCTL_VALIDATE_NEGOTIATE_INFO = 0x00140204  # SMB3 post-negotiate validation (RFC MS-SMB2 §3.3.5.15.12)
 
 _SVCCTL_OPNUM_NAMES = {
+    _SVCCTL_R_CLOSE_SERVICE_HANDLE: 'RCloseServiceHandle',
     _SVCCTL_R_CONTROL_SERVICE: 'RControlService',
     _SVCCTL_R_DELETE_SERVICE: 'RDeleteService',
     _SVCCTL_R_CREATE_SERVICE_W: 'RCreateServiceW',
@@ -1746,6 +1749,13 @@ def _dcerpc_svcctl_handle_response(call_id, ctx_id, handle=None, win_error=0):
     return _dcerpc_hdr(_DCERPC_RESPONSE, call_id, len(body)) + body
 
 
+def _dcerpc_svcctl_close_handle_response(call_id, ctx_id, win_error=0):
+    """DCERPC RESPONSE for RCloseServiceHandle: null context handle + DWORD."""
+    return _dcerpc_svcctl_handle_response(
+        call_id, ctx_id, handle=b'\x00' * 20, win_error=win_error
+    )
+
+
 def _dcerpc_svcctl_status_response(call_id, ctx_id, current_state, win_error=0,
                                    controls_accepted=0):
     """DCERPC RESPONSE containing SERVICE_STATUS + DWORD return code."""
@@ -1784,6 +1794,13 @@ def _parse_svcctl_r_control_service(stub):
 
 def _parse_svcctl_r_delete_service(stub):
     """Parse RDeleteService and return the service handle."""
+    if len(stub) < 20:
+        return None
+    return stub[:20]
+
+
+def _parse_svcctl_r_close_service_handle(stub):
+    """Parse RCloseServiceHandle and return the service/SCM handle."""
     if len(stub) < 20:
         return None
     return stub[:20]
@@ -1840,6 +1857,33 @@ def _handle_dcerpc(data, client_ip, user=None, smb_version=None,
                 return _dcerpc_fault(call_id, ctx_id)
             trace(client_ip, 'srvsvc_unsupported_opnum', opnum=opnum)
         elif pipe_name == 'SVCCTL':
+            if opnum == _SVCCTL_R_CLOSE_SERVICE_HANDLE:
+                handle_key = _parse_svcctl_r_close_service_handle(stub)
+                service_key = svc_handles.get(handle_key) if (svc_handles and handle_key) else None
+                service_info = (
+                    services_by_name.get(service_key)
+                    if (services_by_name and service_key and service_key != '__scm__')
+                    else None
+                )
+                trace(client_ip, 'svcctl_close_service_handle',
+                      service_name=service_info.get('name') if service_info else None,
+                      binary_path=service_info.get('bin_path') if service_info else None,
+                      handle_known=bool(svc_handles and handle_key in svc_handles),
+                      is_scm_handle=(service_key == '__scm__'))
+                _emit_knock(client_ip, user, None, smb_version, smb_domain, smb_host,
+                            smb_file=service_info.get('bin_path') if service_info else None,
+                            smb_action='CLOSE_SERVICE',
+                            smb_service_name=service_info.get('name') if service_info else None,
+                            trace_stage='knock_emitted_close_service')
+                if not svc_handles or handle_key not in svc_handles:
+                    return _dcerpc_svcctl_close_handle_response(
+                        call_id, ctx_id, win_error=_SVCCTL_ERROR_INVALID_HANDLE)
+                closed_key = svc_handles.pop(handle_key)
+                if (services_by_name and closed_key and closed_key != '__scm__'):
+                    closed_info = services_by_name.get(closed_key)
+                    if closed_info and closed_info.get('deleted'):
+                        services_by_name.pop(closed_key, None)
+                return _dcerpc_svcctl_close_handle_response(call_id, ctx_id, win_error=0)
             if opnum == _SVCCTL_R_CONTROL_SERVICE:
                 handle_key, control_code = _parse_svcctl_r_control_service(stub)
                 service_key = svc_handles.get(handle_key) if (svc_handles and handle_key) else None
@@ -1914,8 +1958,12 @@ def _handle_dcerpc(data, client_ip, user=None, smb_version=None,
                 return _dcerpc_svcctl_dword_response(call_id, ctx_id, win_error=0)
             if opnum == _SVCCTL_R_OPEN_SC_MANAGER_W:
                 # Return a fake SCM handle so the worm can proceed to RCreateServiceW
+                fake_handle = os.urandom(16) + b'\x00\x00\x00\x00'
+                if svc_handles is not None:
+                    svc_handles[fake_handle] = '__scm__'
                 trace(client_ip, 'svcctl_open_sc_manager')
-                return _dcerpc_svcctl_handle_response(call_id, ctx_id, win_error=0)
+                return _dcerpc_svcctl_handle_response(
+                    call_id, ctx_id, handle=fake_handle, win_error=0)
             if opnum == _SVCCTL_R_OPEN_SERVICE_W:
                 svc_name, desired_access = _parse_svcctl_r_open_service_w(stub)
                 service_key = _normalize_service_name(svc_name)

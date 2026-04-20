@@ -406,9 +406,8 @@ def parse_ntlm_authenticate(data):
         if isinstance(workstation, bytes):
             workstation = workstation.decode('utf-16-le', errors='replace').strip('\x00')
         workstation = workstation or None
-        username = username or None
         domain = domain or None
-        if username:
+        if username is not None:
             return username, domain, workstation
     except Exception:
         pass
@@ -428,7 +427,7 @@ def parse_ntlm_authenticate(data):
         username = _decode_ntlm_text(user_raw, flags)
         domain = _decode_ntlm_text(domain_raw, flags)
         workstation = _decode_ntlm_text(workstation_raw, flags)
-        return username or None, domain or None, workstation or None
+        return username, domain or None, workstation or None
     except Exception:
         return None, None, None
 
@@ -551,7 +550,7 @@ def do_nla(raw_sock, client_ip, session_id='-'):
                 return captures, f'nla_attempts:{len(captures)}'
 
             username, domain, workstation = parse_ntlm_authenticate(ntlm_auth)
-            if not username and data:
+            if username is None and data:
                 # Some clients deliver fragmented/auth-variant payloads.
                 original_timeout = tls.gettimeout()
                 tls.settimeout(NLA_STEP3_EXTRA_TIMEOUT)
@@ -567,14 +566,14 @@ def do_nla(raw_sock, client_ip, session_id='-'):
                         if not ntlm_auth:
                             continue
                         username, domain, workstation = parse_ntlm_authenticate(ntlm_auth)
-                        if username:
+                        if username is not None:
                             break
                 except (socket.timeout, TimeoutError):
                     pass
                 finally:
                     tls.settimeout(original_timeout)
             trace(session_id, client_ip, 'nla_step3_parsed', attempt=attempt, user=username, domain=domain, workstation=workstation)
-            if username:
+            if username is not None:
                 captures.append((username, domain, workstation))
 
             # Step 4: send STATUS_LOGON_FAILURE
@@ -629,7 +628,7 @@ def handle_connection(client_sock, client_ip):
                     session_id=session_id,
                 )
                 final_stage = classic_status
-                if username:
+                if username is not None:
                     emit_user = normalize_knock_username(username)
                     knock = {"type": "KNOCK", "proto": "RDP",
                              "ip": client_ip, "user": emit_user, "rdp_source": "classic"}

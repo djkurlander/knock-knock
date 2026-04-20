@@ -710,12 +710,24 @@ def trace(client_ip, stage, **fields):
     print(f'SMBTRACE ip={client_ip} stage={stage} {suffix}'.rstrip(), flush=True)
 
 
+def _normalize_knock_username(value):
+    """Normalize SMB usernames for emitted knocks and session carry-forward."""
+    if value is None:
+        return ''
+    value = str(value).strip().strip('\x00')
+    if not value or value.upper() == 'NULL':
+        return ''
+    printable = ''.join(ch for ch in value if ch.isprintable())
+    return printable or ''
+
+
 def _emit_knock(ip, user=None, smb_share=None, smb_version=None,
                 smb_domain=None, smb_host=None,
                 smb_file=None, smb_action=None, smb_service_name=None,
                 trace_stage='knock'):
     knock = {'type': 'KNOCK', 'proto': 'SMB', 'ip': ip}
-    if user is not None:   knock['user']             = user.lower()
+    if user is not None and (smb_action or 'UNKNOWN') == 'AUTH':
+        knock['user'] = user.lower()
     if smb_share:          knock['smb_share']        = smb_share
     if smb_file:           knock['smb_file']         = smb_file
     knock['smb_action'] = smb_action or 'UNKNOWN'
@@ -2173,7 +2185,7 @@ def _smb2_post_negotiate(client_sock, client_ip, smb_version, selected_dialect=0
       3. READ on _FAKE_FILENAME (always — high-value event)
     """
     session_id   = 0
-    user         = None
+    user         = ''
     domain       = None
     host         = None
     setup_round  = 0
@@ -2223,15 +2235,17 @@ def _smb2_post_negotiate(client_sock, client_ip, smb_version, selected_dialect=0
             elif setup_round == 2:
                 ntlm3 = find_ntlmssp(sec_buf)
                 ntlm_debug = None
+                parsed_user = None
                 if ntlm3:
-                    user, domain, host, ntlm_debug = parse_ntlm_authenticate(ntlm3)
+                    parsed_user, domain, host, ntlm_debug = parse_ntlm_authenticate(ntlm3)
+                    user = _normalize_knock_username(parsed_user)
                 trace(client_ip, 'smb2_session_setup_r2',
                       user=user, domain=domain, host=host, has_ntlm=ntlm3 is not None)
                 if ntlm_debug and (
                     ntlm_debug.get('parse_error')
                     or ntlm_debug.get('cross_check', {}).get('matches_strict') is False
                     or (user and len(user) <= 3)
-                    or user is None
+                    or parsed_user is None
                 ):
                     trace(client_ip, 'ntlm_auth_debug',
                           flags=ntlm_debug.get('flags'),
@@ -3544,7 +3558,7 @@ def handle_smb1(client_sock, client_ip, first_payload):
     send_nbss(client_sock, build_smb1_negotiate_response(hdr, nt_lm_index))
 
     uid          = 0
-    user         = None
+    user         = ''
     domain       = None
     host         = None
     setup_round  = 0
@@ -3588,8 +3602,10 @@ def handle_smb1(client_sock, client_ip, first_payload):
                 elif setup_round == 2:
                     ntlm3 = find_ntlmssp(sec_buf)
                     ntlm_debug = None
+                    parsed_user = None
                     if ntlm3:
-                        user, domain, host, ntlm_debug = parse_ntlm_authenticate(ntlm3)
+                        parsed_user, domain, host, ntlm_debug = parse_ntlm_authenticate(ntlm3)
+                        user = _normalize_knock_username(parsed_user)
                     trace(client_ip, 'smb1_session_setup_r2',
                           user=user, domain=domain, host=host,
                           has_ntlm=ntlm3 is not None)
@@ -3597,7 +3613,7 @@ def handle_smb1(client_sock, client_ip, first_payload):
                         ntlm_debug.get('parse_error')
                         or ntlm_debug.get('cross_check', {}).get('matches_strict') is False
                         or (user and len(user) <= 3)
-                        or user is None
+                        or parsed_user is None
                     ):
                         trace(client_ip, 'ntlm_auth_debug',
                               flags=ntlm_debug.get('flags'),
@@ -3618,7 +3634,8 @@ def handle_smb1(client_sock, client_ip, first_payload):
                     break
             else:
                 # Non-extended path: plain/empty password, single round
-                user, domain = _smb1_session_setup_nonext(payload, flags2)
+                parsed_user, domain = _smb1_session_setup_nonext(payload, flags2)
+                user = _normalize_knock_username(parsed_user)
                 trace(client_ip, 'smb1_session_setup_nonext',
                       user=user, domain=domain)
                 _emit_knock(client_ip, user, None, 'SMB1', domain, None,

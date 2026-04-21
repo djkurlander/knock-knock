@@ -190,6 +190,9 @@
 
         .status-dot { height: 14px; width: 14px; border-radius: 50%; background: var(--hazard-red); display: inline-block; vertical-align: 0.2em; margin-left: 10px; }
         .status-online { background: var(--neon-green); box-shadow: 0 0 10px var(--neon-green); }
+        @keyframes paused-blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+        .paused-title { animation: paused-blink 1.2s ease-in-out infinite; color: var(--hazard-yellow, #ffcc00) !important; }
+        .paused-icon { animation: paused-blink 1.2s ease-in-out infinite; }
 
         /* --- 2. DESKTOP VIEW (> 800px) --- */
         @media (min-width: 801px) {
@@ -694,9 +697,9 @@
         <div class="panel-intro" data-intro="feed"></div>
         <div class="header-panel">
             <div class="d-header-content">
-                <div class="d-header-left" onclick="toggleSound()" style="cursor:pointer;">
-                    <h1>BOTS ARE KNOCKING <span class="status-dot"></span></h1>
-                    <div id="d-header-tagline" style="font-size: 1em; color: var(--neon-green); margin-top: -8px; margin-bottom: 7px; font-style: italic;">... BUT THEY CAN'T COME IN. &nbsp;<span id="d-header-sound" style="font-style:normal; cursor:pointer;">🔈</span></div>
+                <div class="d-header-left" onclick="togglePause()" style="cursor:pointer;">
+                    <h1 id="d-header-title">BOTS ARE KNOCKING <span class="status-dot"></span></h1>
+                    <div id="d-header-tagline" style="font-size: 1em; color: var(--neon-green); margin-top: -8px; margin-bottom: 7px; font-style: italic;">... BUT THEY CAN'T COME IN. &nbsp;<span id="d-header-pause" style="display:inline-block; color:#aaa; position:relative; top:6px; line-height:0;"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><line x1="10" x2="10" y1="15" y2="9"/><line x1="14" x2="14" y1="15" y2="9"/></svg></span> <span id="d-header-sound" style="font-style:normal; cursor:pointer; position:relative; top:2px;" onclick="toggleSound(); event.stopPropagation();">🔈</span></div>
                     <div class="d-stats-wrap">
                         <div class="d-stats-block">
                             <div class="d-stats">
@@ -775,9 +778,9 @@
         <div class="panel-intro" data-intro="feed"></div>
         <div class="header-panel">
             <div class="m-header-content">
-                <div class="m-header-left" onclick="toggleSound()" style="cursor:pointer;">
-                    <h1>BOTS ARE KNOCKING <span class="status-dot"></span></h1>
-                    <div style="font-size: 0.85em; color: var(--neon-green); margin-top: -2px; margin-bottom: 8px; font-style: italic;">... BUT THEY CAN'T COME IN. &nbsp;<span id="m-header-sound" style="font-style:normal; cursor:pointer;">🔈</span></div>
+                <div class="m-header-left" onclick="togglePause()" style="cursor:pointer;">
+                    <h1 id="m-header-title">BOTS ARE KNOCKING <span class="status-dot"></span></h1>
+                    <div style="font-size: 0.85em; color: var(--neon-green); margin-top: -2px; margin-bottom: 8px; font-style: italic;">... BUT THEY CAN'T COME IN. &nbsp;<span id="m-header-pause" style="font-style:normal; color:#888; font-size:1em; line-height:0.85; position:relative; top:-1px;">⏸</span> <span id="m-header-sound" style="font-style:normal; cursor:pointer; padding:10px 10px 10px 3px; margin:-10px -10px -10px 0; position:relative; top:1px;" onclick="toggleSound(); event.stopPropagation();">🔈</span></div>
                     <div class="m-stat-row">
                         <span id="m-total-label" class="stat-label">Total Knocks:</span>&nbsp;<span id="m-total" class="stat-value">0</span>
                     </div>
@@ -872,6 +875,8 @@
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsUrl = `${protocol}//${window.location.host}/ws`;
     let ws;
+    let paused = false;
+    let autoPaused = false;
     let audioCtx = null;
     let soundEnabled = localStorage.getItem('soundEnabled') === 'true';
 
@@ -997,6 +1002,48 @@
         updateSoundIcon();
         if (soundEnabled) { initAudio(); audioCtx.resume().then(() => playUIClick()); }
     }
+
+    function updatePauseIcon() {
+        document.querySelectorAll('#d-header-pause, #m-header-pause').forEach(el => {
+            paused ? el.classList.add('paused-icon') : el.classList.remove('paused-icon');
+        });
+    }
+
+    function togglePause() {
+        paused = !paused;
+        const titles = [document.getElementById('d-header-title'), document.getElementById('m-header-title')];
+        titles.forEach(el => {
+            if (!el) return;
+            if (paused) {
+                el.dataset.origHtml = el.innerHTML;
+                el.innerHTML = 'BOTS ARE PAUSED <span class="status-dot status-online"></span>';
+                el.classList.add('paused-title');
+            } else {
+                el.innerHTML = el.dataset.origHtml || 'BOTS ARE KNOCKING <span class="status-dot"></span>';
+                el.classList.remove('paused-title');
+            }
+        });
+        updatePauseIcon();
+        if (paused) {
+            if (ws) ws.close();
+        } else {
+            connect();
+        }
+    }
+
+    document.addEventListener('keydown', (e) => {
+        if (e.code === 'Space' && e.target === document.body) {
+            e.preventDefault();
+            togglePause();
+        }
+    });
+    document.addEventListener('visibilitychange', () => {
+        if (document.hidden) {
+            if (!paused) { autoPaused = true; togglePause(); }
+        } else {
+            if (autoPaused) { autoPaused = false; togglePause(); }
+        }
+    });
 
     const DEFAULT_PROTOCOL_META = {
         SSH:  { proto_int: 0, enabled: true, supports_user_panel: true,  supports_pass_panel: true,  color: '#00ff41' },
@@ -3275,7 +3322,7 @@
         ws.onclose = (e) => {
             debugLog(`WS: closed (code=${e.code}, reason=${e.reason || 'none'})`);
             document.querySelectorAll('.status-dot').forEach(d => d.classList.remove('status-online'));
-            setTimeout(connect, 3000);
+            if (!paused) setTimeout(connect, 3000);
         };
         ws.onerror = (e) => debugLog('WS: error event');
         ws.onmessage = (event) => {
@@ -3572,6 +3619,7 @@
         initPaneGlobes();
         setupTriviaObserver();
         updateSoundIcon();
+        updatePauseIcon();
 
         // Add drag-aware click handler for desktop GLOBE pane
         const globeBox = document.getElementById('d-box-globe');

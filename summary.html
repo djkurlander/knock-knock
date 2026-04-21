@@ -2732,7 +2732,7 @@
 
     const fillClasses = { loc: 'loc-fill', pass: 'password-fill', prov: 'provider-fill', user: 'user-fill', ip: 'ip-fill' };
 
-    function incrementAndSort(prefix, id, displayName) {
+    function incrementAndSort(prefix, id, displayName, serverCount) {
         const mode = getCurrentMode();
         if ((prefix === 'pass' && !isPassPanelRelevant(mode)) || (prefix === 'user' && !isUserPanelRelevant(mode))) {
             return;
@@ -2753,14 +2753,16 @@
                 row = document.createElement('div');
                 row.className = 'bar-row';
                 row.setAttribute('data-id', uniqueId);
-                row.setAttribute('data-count', 1);
-                row.innerHTML = `<div class="bar-label"><span>${label}</span><span style="color:#ffcc00">1</span></div><div class="bar-bg"><div class="bar-fill ${fillClasses[prefix] || ''}" style="width: 0%"></div></div>`;
+                const initCount = serverCount ?? 1;
+                row.setAttribute('data-count', initCount);
+                row.innerHTML = `<div class="bar-label"><span>${label}</span><span style="color:#ffcc00">${initCount.toLocaleString()}</span></div><div class="bar-bg"><div class="bar-fill ${fillClasses[prefix] || ''}" style="width: 0%"></div></div>`;
                 container.appendChild(row);
                 if (prefix === 'loc') twemoji.parse(row);
-                newCount = 1;
+                newCount = initCount;
             } else {
                 const countSpan = row.querySelector('span:last-child');
-                newCount = (parseInt(countSpan.innerText.replace(/\D/g, '')) || 0) + 1;
+                const existingCount = (parseInt(countSpan.innerText.replace(/\D/g, '')) || 0);
+                newCount = Math.max(existingCount, serverCount ?? (existingCount + 1));
                 countSpan.innerText = newCount.toLocaleString();
                 row.setAttribute('data-count', newCount);
             }
@@ -3307,11 +3309,12 @@
                 pulseProtoStatsRow(d.proto);
                 pulseSourceStatsRow(d.source);
                 if (knockMatchesFilter(d)) {
-                    incrementAndSort('loc', d.iso, d.country);
-                    if (hasPassField(d)) incrementAndSort('pass', d.pass);
-                    incrementAndSort('prov', d.isp);
-                    if (hasUserField(d)) incrementAndSort('user', d.user);
-                    incrementAndSort('ip', d.ip);
+                    const lbFiltered = PROTO_MODES[protoModeIdx] !== 'ALL';
+                    incrementAndSort('loc',  d.iso,  d.country, lbFiltered ? (d.country_hits_proto ?? d.country_hits) : d.country_hits);
+                    if (hasPassField(d)) incrementAndSort('pass', d.pass, undefined, lbFiltered ? (d.pass_hits_proto ?? d.pass_hits) : d.pass_hits);
+                    incrementAndSort('prov', d.isp,  undefined,  lbFiltered ? (d.isp_hits_proto    ?? d.isp_hits)    : d.isp_hits);
+                    if (hasUserField(d)) incrementAndSort('user', d.user, undefined, lbFiltered ? (d.user_hits_proto ?? d.user_hits) : d.user_hits);
+                    incrementAndSort('ip',   d.ip,   undefined,  lbFiltered ? (d.ip_hits_proto     ?? d.ip_hits)     : d.ip_hits);
                 }
                 if (knockMatchesFilter(d)) {
                     refreshStatsAndTrivia();

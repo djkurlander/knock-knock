@@ -1,8 +1,9 @@
 #!/bin/bash
-# Fetches latest Cloudflare IP ranges and updates UFW rules for ports 80 and 443.
+# Fetches latest Cloudflare IP ranges and updates UFW rules for port 8080.
 # Intended to run daily via cron.
+# Port 80 is intentionally excluded — it is a honeypot port and must remain open to all.
 
-PORTS="80 8080"
+PORTS="8080"
 COMMENT="Cloudflare"
 TMPFILE=$(mktemp)
 trap "rm -f $TMPFILE" EXIT

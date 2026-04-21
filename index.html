@@ -2417,7 +2417,7 @@
     setInterval(() => {
         const t = isFiltered ? getFilteredLastKnockTime() : lastKnockTime;
         if (t) {
-            const secs = Math.floor(Date.now() / 1000 - t) + 's';
+            const secs = Math.max(0, Math.floor(Date.now() / 1000 - t)) + 's';
             document.getElementById('m-since').innerText = secs;
             document.getElementById('d-since').innerText = secs;
         }

@@ -2897,7 +2897,7 @@
         const label = (d.source_display !== d.source)
             ? `${escapeHtml(d.source)} (${escapeHtml(d.source_display)})`
             : escapeHtml(d.source);
-        return `<div><span style="color:var(--ui-label)">source:</span> <span style="color:var(--data-blue)">${label}</span></div>`;
+        return `<div><span style="color:var(--ui-label)">reported by:</span> <span style="color:var(--data-blue)">${label}</span></div>`;
     }
 
     function getProtoBadge(proto) {

@@ -1419,6 +1419,7 @@
         renderLeaderboards(active);
         refreshHeatGlobe(active.loc);
         refreshFeed();
+        document.querySelectorAll('.d-content, .m-content').forEach(el => el.scrollTop = 0);
         applyProtocolPanelVisibility(preferredIdx);
         const topKnock = feedData[newMode]?.[0];
         if (topKnock) {

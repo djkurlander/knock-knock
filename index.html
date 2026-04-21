@@ -969,14 +969,16 @@
         }
         lines.push(`<div style="${ROW}"><span style="${L};${LW}">Version:</span><span style="${G}">2.0.0-beta.3</span></div>`);
         if (isAggregator && sourceCountsCache.length > 0) {
-            const cityMap = {};
+            const nameMap = {};
             sourceCountsCache.forEach(r => {
-                const city = r.display_name !== r.source_id ? r.display_name : null;
-                const key = city || r.source_id;
-                cityMap[key] = (cityMap[key] || 0) + 1;
+                const name = r.display_name !== r.source_id ? r.display_name : r.source_id;
+                if (!nameMap[name]) nameMap[name] = [];
+                nameMap[name].push(r.source_id);
             });
-            const cityList = Object.entries(cityMap)
-                .map(([city, count]) => count > 1 ? `${escapeHtml(city)} (${count})` : escapeHtml(city))
+            const cityList = Object.entries(nameMap)
+                .map(([name, ids]) => ids.length === 1 && ids[0] === name
+                    ? escapeHtml(name)
+                    : `${escapeHtml(name)} (${ids.map(escapeHtml).join(', ')})`)
                 .join(', ');
             lines.unshift(`<div style="margin-bottom:12px;color:var(--neon-green)">Aggregated view across ${sourceCountsCache.length} server${sourceCountsCache.length !== 1 ? 's' : ''} worldwide: ${cityList}</div>`);
         }

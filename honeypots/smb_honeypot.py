@@ -1849,10 +1849,10 @@ def _handle_dcerpc(data, client_ip, user=None, smb_version=None,
                     ]
                     share_names = ','.join(name for name, _, _ in shares if name != 'IPC$')
                     _emit_knock(client_ip, user, share_names, smb_version, smb_domain, smb_host,
-                                smb_action='ENUM', trace_stage='knock_emitted_enum')
+                                smb_action='LIST_SHARES', trace_stage='knock_emitted_enum')
                     return _srvsvc_netr_share_enum_response(call_id, ctx_id, shares)
                 _emit_knock(client_ip, user, None, smb_version, smb_domain, smb_host,
-                            smb_action='ENUM', trace_stage='knock_emitted_enum')
+                            smb_action='LIST_SHARES', trace_stage='knock_emitted_enum')
                 trace(client_ip, 'srvsvc_unsupported_level', opnum=opnum, level=level)
                 return _dcerpc_fault(call_id, ctx_id)
             trace(client_ip, 'srvsvc_unsupported_opnum', opnum=opnum)

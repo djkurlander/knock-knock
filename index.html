@@ -2883,8 +2883,8 @@
                     return line1Parts.map((p, i) => i ? `${sep}${p}` : p).join('');
                 }
 
-                if (d.smb_action === 'CONNECT' || d.smb_action === 'ENUM') {
-                    const shareLabel = d.smb_action === 'ENUM' ? 'shares' : 'share';
+                if (d.smb_action === 'CONNECT' || d.smb_action === 'LIST_SHARES') {
+                    const shareLabel = d.smb_action === 'LIST_SHARES' ? 'shares' : 'share';
                     if (share) line1Parts.push(lbl(shareLabel, share));
                     return line1Parts.map((p, i) => i ? `${sep}${p}` : p).join('');
                 }

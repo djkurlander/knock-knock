@@ -845,7 +845,7 @@ def _pipe_knock_action(pipe_name: str | None) -> str:
     if pipe_upper == 'SVCCTL':
         return 'SERVICE_CONTROL'
     if pipe_upper == 'SRVSVC':
-        return 'SHARE_ENUM'
+        return 'OPEN_PIPE'
     if pipe_upper == 'REMCOM_COMMUNICATON':
         return 'REMOTE_COMMAND'
     if (pipe_upper.startswith('REMCOM_STDIN')

@@ -3078,7 +3078,7 @@
 
                 // DIR, READ, WRITE, CREATE — action: share: file/dir: on line1
                 if (share) line1Parts.push(lbl('share', share));
-                const fileLabel   = d.smb_action === 'DIR' ? 'dir' : 'file';
+                const fileLabel   = d.smb_action === 'LIST_FILES' ? 'dir' : 'file';
                 const fileDisplay = file || '&lt;root&gt;';
                 line1Parts.push(lbl(fileLabel, fileDisplay));
                 return line1Parts.map((p, i) => i ? `${sep}${p}` : p).join('');

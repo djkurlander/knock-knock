@@ -2748,7 +2748,7 @@ def _smb2_post_negotiate(client_sock, client_ip, smb_version, selected_dialect=0
                       entries=[(n, 'dir' if d else 'file') for n, _, d in children])
                 _emit_knock(client_ip, user, share_upper, smb_version, domain, host,
                             smb_file=dir_path or None,
-                            smb_action='DIR', trace_stage='knock_emitted_dir')
+                            smb_action='LIST_FILES', trace_stage='knock_emitted_dir')
                 send_nbss(client_sock, build_smb2_query_directory_response(
                     hdr, session_id, tree_id, children, file_info_class))
 

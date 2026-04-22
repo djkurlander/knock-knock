@@ -1091,7 +1091,8 @@
         });
 
         // Update feed panel label
-        const feedLabel = (TRACKED_PROTOCOLS.length === 1 && TRACKED_PROTOCOLS[0] === 'SSH')
+        const LOGIN_PROTOCOLS = new Set(['SSH', 'TNET', 'FTP', 'SMTP', 'RDP']);
+        const feedLabel = activeProtocols.every(p => LOGIN_PROTOCOLS.has(p))
             ? 'LIVE FEED: LOGIN ATTEMPTS'
             : 'LIVE FEED: HOSTILE TRAFFIC';
         ['d-feed-label', 'm-feed-label'].forEach(id => {

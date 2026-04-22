@@ -724,7 +724,7 @@
             </div>
         </div>
         <div class="panel-intro" data-intro="feed2"></div>
-        <div class="d-box" id="d-box-feed"><h2 style="display:flex;justify-content:space-between;align-items:center;">LIVE FEED: LOGIN ATTEMPTS<span id="d-feed-proto-btn" class="proto-dropdown"><span class="proto-dropdown-trigger">ALL<span style="letter-spacing:0;margin-left:3px;font-size:1.2em">▾</span></span><span class="proto-dropdown-menu"></span></span></h2><div id="d-feed" class="d-content"></div></div>
+        <div class="d-box" id="d-box-feed"><h2 style="display:flex;justify-content:space-between;align-items:center;"><span id="d-feed-label">LIVE FEED: LOGIN ATTEMPTS</span><span id="d-feed-proto-btn" class="proto-dropdown"><span class="proto-dropdown-trigger">ALL<span style="letter-spacing:0;margin-left:3px;font-size:1.2em">▾</span></span><span class="proto-dropdown-menu"></span></span></h2><div id="d-feed" class="d-content"></div></div>
         <div class="panel-intro" data-intro="feed3"></div>
         <div class="panel-intro"><div class="proto-guide-panel"><div class="proto-guide-row"><span class="proto-badge" style="color:#00ff41"><span class="proto-badge-label">SSH</span></span><span>SSH allows humans and bots to log into remote servers. (port 22)</span></div><div class="proto-guide-row"><span class="proto-badge" style="color:#00fbff"><span class="proto-badge-label">TNET</span></span><span>TELNET is an older protocol for logging into remote machines. (port 23)</span></div><div class="proto-guide-row"><span class="proto-badge" style="color:#FFFF77"><span class="proto-badge-label">FTP</span></span><span>FTP is a legacy protocol, allowing files to be accessed remotely. (port 21)</span></div><div class="proto-guide-row"><span class="proto-badge" style="color:#ff1a1a"><span class="proto-badge-label">RDP</span></span><span>RDP supports logging in with a virtual desktop, usually on Windows. (port 3389)</span></div><div class="proto-guide-row"><span class="proto-badge" style="color:#d6d9df"><span class="proto-badge-label">SMB</span></span><span>SMB is a remote file access protocol, introduced by Windows. (port 445)</span></div><div class="proto-guide-row"><span class="proto-badge" style="color:#ff7a00"><span class="proto-badge-label">SIP</span></span><span>SIP allows humans and bots to make phone calls. (port 5060)</span></div><div class="proto-guide-row"><span class="proto-badge" style="color:#00ffaa"><span class="proto-badge-label">HTTP</span></span><span>HTTP is the web protocol, and bots probe it for exploitable apps and known vulnerabilities. (ports 80, 443)</span></div><div class="proto-guide-row"><span class="proto-badge" style="color:#ff00ff"><span class="proto-badge-label">SMTP</span></span><span>SMTP is the email protocol, which bots exploit to relay spam across the net. (ports 25, 587)</span></div></div></div>
 
@@ -795,7 +795,7 @@
             </div>
         </div>
         <div class="panel-intro" data-intro="feed2"></div>
-        <div class="m-pane" id="m-pane-feed"><h2 style="display:flex;justify-content:space-between;align-items:center;">LIVE FEED: LOGIN ATTEMPTS<span id="m-feed-proto-btn" class="proto-dropdown"><span class="proto-dropdown-trigger">ALL<span style="letter-spacing:0;margin-left:3px;font-size:1.2em">▾</span></span><span class="proto-dropdown-menu"></span></span></h2><div id="m-feed" class="m-content"></div></div>
+        <div class="m-pane" id="m-pane-feed"><h2 style="display:flex;justify-content:space-between;align-items:center;"><span id="m-feed-label">LIVE FEED: LOGIN ATTEMPTS</span><span id="m-feed-proto-btn" class="proto-dropdown"><span class="proto-dropdown-trigger">ALL<span style="letter-spacing:0;margin-left:3px;font-size:1.2em">▾</span></span><span class="proto-dropdown-menu"></span></span></h2><div id="m-feed" class="m-content"></div></div>
         <div class="panel-intro" data-intro="feed3"></div>
         <div class="panel-intro"><div class="proto-guide-panel"><div class="proto-guide-row"><span class="proto-badge" style="color:#00ff41"><span class="proto-badge-label">SSH</span></span><span>SSH allows humans and bots to log into remote servers. (port 22)</span></div><div class="proto-guide-row"><span class="proto-badge" style="color:#00fbff"><span class="proto-badge-label">TNET</span></span><span>TELNET is an older protocol for logging into remote machines. (port 23)</span></div><div class="proto-guide-row"><span class="proto-badge" style="color:#FFFF77"><span class="proto-badge-label">FTP</span></span><span>FTP is a legacy protocol, allowing files to be accessed remotely. (port 21)</span></div><div class="proto-guide-row"><span class="proto-badge" style="color:#ff1a1a"><span class="proto-badge-label">RDP</span></span><span>RDP supports logging in with a virtual desktop, usually on Windows. (port 3389)</span></div><div class="proto-guide-row"><span class="proto-badge" style="color:#d6d9df"><span class="proto-badge-label">SMB</span></span><span>SMB is a remote file access protocol, introduced by Windows. (port 445)</span></div><div class="proto-guide-row"><span class="proto-badge" style="color:#ff7a00"><span class="proto-badge-label">SIP</span></span><span>SIP allows humans and bots to make phone calls. (port 5060)</span></div><div class="proto-guide-row"><span class="proto-badge" style="color:#00ffaa"><span class="proto-badge-label">HTTP</span></span><span>HTTP is the web protocol, and bots probe it for exploitable apps and known vulnerabilities. (ports 80, 443)</span></div><div class="proto-guide-row"><span class="proto-badge" style="color:#ff00ff"><span class="proto-badge-label">SMTP</span></span><span>SMTP is the email protocol, which bots exploit to relay spam across the net. (ports 25, 587)</span></div></div></div>
         <div class="panel-intro" data-intro="globe"></div>
@@ -1248,6 +1248,15 @@
         ['d-total-label', 'm-total-label'].forEach(id => {
             const el = document.getElementById(id);
             if (el) el.textContent = knockLabel;
+        });
+
+        // Update feed panel label
+        const feedLabel = (TRACKED_PROTOCOLS.length === 1 && TRACKED_PROTOCOLS[0] === 'SSH')
+            ? 'LIVE FEED: LOGIN ATTEMPTS'
+            : 'LIVE FEED: HOSTILE TRAFFIC';
+        ['d-feed-label', 'm-feed-label'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.textContent = feedLabel;
         });
 
         // Panel visibility based on protocol capabilities

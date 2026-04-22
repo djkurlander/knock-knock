@@ -1708,7 +1708,7 @@
                 const kpm = r.hits / elapsedMinutes;
                 return `
                 <div class="proto-stats-row" data-source="${escapeHtml(r.source_id)}" style="display:grid;grid-template-columns:1fr 0.82fr 1.45fr 0.73fr;gap:8px;padding:4px 0;border-bottom:1px solid #222;">
-                    <span style="font-weight:bold;color:var(--ui-label);padding-left:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escapeHtml(r.source_id)}">${escapeHtml(r.display_name)}</span>
+                    <span style="font-weight:bold;color:var(--ui-label);padding-left:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escapeHtml(r.display_name)}">${escapeHtml(r.source_id)}</span>
                     <span style="color:var(--neon-green);text-align:center;">${pct >= 99.95 ? '100' : pct.toFixed(1)}%</span>
                     <span style="color:var(--data-blue);text-align:center;">${r.hits.toLocaleString()}</span>
                     <span style="color:var(--neon-green);text-align:center;">${kpm.toFixed(1)}</span>

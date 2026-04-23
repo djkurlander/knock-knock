@@ -2101,7 +2101,7 @@
             const name = d.properties?.ADMIN || d.properties?.NAME || '';
             if (!name) return '';
             const h = hitsMap[d.properties?.ISO_A2] || 0;
-            return `<span style="color:#00ff41">${name}</span><br/>${h.toLocaleString()} knock${h !== 1 ? 's' : ''}`;
+            return `<span style="color:#00ff41">${name}</span><br/><span style="color:#00fbff">${h.toLocaleString()} knock${h !== 1 ? 's' : ''}</span>`;
         });
         if (globe._paneMousemoveHandler) {
             globe.renderer().domElement.removeEventListener('mousemove', globe._paneMousemoveHandler);

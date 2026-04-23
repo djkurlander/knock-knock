@@ -1723,6 +1723,7 @@
     let protoBreakdownCache = {};
     let sourceCountsCache = [];   // [{source_id, display_name, hits}] sorted by hits desc
     let uptimeMinutesCache = 0;
+    let hitsMap = {};
 
     // Per-protocol feed arrays (newest at index 0)
     const feedData = { ALL: [] };
@@ -1935,7 +1936,7 @@
 
     function refreshHeatGlobe(locData) {
         if (!GLOBE_STYLES[paneGlobeStyleIdx].extruded) return;
-        const hitsMap = {};
+        hitsMap = {};
         let maxHits = 1;
         (locData || []).forEach(c => {
             hitsMap[c.iso] = c.count;
@@ -1948,18 +1949,25 @@
                 const h = hitsMap[d.properties.ISO_A2] || 0;
                 if (!h) return 'rgba(0, 255, 65, 0.05)';
                 const t = Math.log(1 + h) / logMax;
-                return `rgb(${Math.round(255 * t)}, ${Math.round(255 * (1 - t))}, 0)`;
+                if (t < 0.5) { const s = t / 0.5; return `rgb(${Math.round(255 * s)}, 255, 0)`; }
+                else { const s = (t - 0.5) / 0.5; return `rgb(255, ${Math.round(255 * (1 - s))}, 0)`; }
             });
             g.polygonSideColor(d => {
                 const h = hitsMap[d.properties.ISO_A2] || 0;
                 if (!h) return 'rgba(0,0,0,0)';
                 const t = Math.log(1 + h) / logMax;
-                return `rgba(255, ${Math.round(200 * (1 - t))}, 0, 0.6)`;
+                if (t < 0.5) { const s = t / 0.5; return `rgba(${Math.round(255 * s)}, 255, 0, 0.6)`; }
+                else { const s = (t - 0.5) / 0.5; return `rgba(255, ${Math.round(255 * (1 - s))}, 0, 0.6)`; }
             });
             g.polygonAltitude(d => {
                 const h = hitsMap[d.properties.ISO_A2] || 0;
                 if (!h) return 0.002;
                 return 0.002 + 0.12 * Math.log(1 + h) / logMax;
+            });
+            g.polygonLabel(d => {
+                const name = d.properties.ADMIN || d.properties.NAME || '';
+                const h = hitsMap[d.properties.ISO_A2] || 0;
+                return `${name}<br/>${h.toLocaleString()} knock${h !== 1 ? 's' : ''}`;
             });
             // Spread to new array reference — globe.gl skips its digest when the
             // same array reference is passed again, so accessors never re-evaluate.
@@ -2169,7 +2177,7 @@
             globe.polygonAltitude(0.006);
             globe.labelsData([]);
         } else if (style.extruded && countriesData) {
-            const hitsMap = {};
+            hitsMap = {};
             let maxHits = 1;
             getActiveLeaderboards().loc.forEach(c => {
                 hitsMap[c.iso] = c.count;
@@ -2182,15 +2190,15 @@
                 const h = hitsMap[d.properties.ISO_A2] || 0;
                 if (!h) return 'rgba(0, 255, 65, 0.05)';
                 const t = Math.log(1 + h) / logMax;
-                const r = Math.round(255 * t);
-                const g = Math.round(255 * (1 - t));
-                return `rgb(${r}, ${g}, 0)`;
+                if (t < 0.5) { const s = t / 0.5; return `rgb(${Math.round(255 * s)}, 255, 0)`; }
+                else { const s = (t - 0.5) / 0.5; return `rgb(255, ${Math.round(255 * (1 - s))}, 0)`; }
             });
             globe.polygonSideColor(d => {
                 const h = hitsMap[d.properties.ISO_A2] || 0;
                 if (!h) return 'rgba(0,0,0,0)';
                 const t = Math.log(1 + h) / logMax;
-                return `rgba(255, ${Math.round(200 * (1 - t))}, 0, 0.6)`;
+                if (t < 0.5) { const s = t / 0.5; return `rgba(${Math.round(255 * s)}, 255, 0, 0.6)`; }
+                else { const s = (t - 0.5) / 0.5; return `rgba(255, ${Math.round(255 * (1 - s))}, 0, 0.6)`; }
             });
             globe.polygonStrokeColor(() => 'rgb(10, 30, 10)');
             globe.polygonAltitude(d => {
@@ -3357,6 +3365,7 @@
                     document.getElementById('m-since').innerText = '0s';
                     document.getElementById('d-since').innerText = '0s';
                 }
+                if (d.iso) hitsMap[d.iso] = (hitsMap[d.iso] || 0) + 1;
                 addToFeed(d);
                 renderKnock(d, true);
                 if (Number.isFinite(Number(d.uptime_minutes))) uptimeMinutesCache = Number(d.uptime_minutes);

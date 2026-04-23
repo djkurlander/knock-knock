@@ -597,11 +597,15 @@
             .panel-intro, .summary-title, .header-panel { max-width: 100%; }
         }
 
+        .pane-globe-bottom-bar {
+            position: absolute; bottom: 8px; left: 8px; right: 8px; z-index: 2;
+            display: flex; align-items: center;
+            pointer-events: none;
+        }
         .pane-globe-style-label {
-            position: absolute; bottom: 8px; right: 8px; z-index: 2;
             display: flex; align-items: center; gap: 4px;
             color: var(--ui-label); font-size: 0.9em; font-family: monospace;
-            user-select: none;
+            user-select: none; pointer-events: auto;
         }
         .pane-globe-style-btn {
             color: var(--neon-green); font-size: 1em; cursor: pointer;
@@ -611,6 +615,16 @@
             text-transform: uppercase;
         }
         @media (hover: hover) { .pane-globe-style-btn:hover { border-color: rgba(0,255,65,0.7); } }
+        .heat-scale {
+            display: none; align-items: center; gap: 4px; margin-left: auto;
+            font-size: 0.88em; font-family: monospace; color: var(--ui-label);
+            user-select: none; pointer-events: auto;
+        }
+        .heat-scale-bar {
+            width: 105px; height: 8px; border-radius: 3px;
+            background: linear-gradient(to right, #00ff41, #ffff00, #ff0000);
+        }
+        #m-pane-globe .heat-scale-bar { width: 63px; }
 
         .proto-cycle-btn {
             display: inline-grid; place-items: center; vertical-align: 0.2em;
@@ -2258,22 +2272,19 @@
         localStorage.setItem('globeStyle', paneGlobeStyleIdx);
         if (paneGlobeDesktop) applyGlobeStyle(paneGlobeDesktop, paneGlobeStyleIdx);
         if (paneGlobeMobile) applyGlobeStyle(paneGlobeMobile, paneGlobeStyleIdx);
-        // Update button labels
+        // Update button labels and heat scale visibility
         const name = GLOBE_STYLES[paneGlobeStyleIdx].name;
         document.querySelectorAll('.pane-globe-style-btn').forEach(b => b.textContent = '⟳ ' + name);
+        const isHeat = GLOBE_STYLES[paneGlobeStyleIdx].extruded;
+        document.querySelectorAll('.heat-scale').forEach(s => s.style.display = isHeat ? 'flex' : 'none');
     }
 
     function addStyleButton(parentBox) {
         parentBox.style.position = 'relative';
-        const wrap = document.createElement('div');
-        wrap.className = 'pane-globe-style-label';
-        wrap.innerHTML = 'Style:';
-        const btn = document.createElement('div');
-        btn.className = 'pane-globe-style-btn';
-        btn.textContent = '⟳ ' + GLOBE_STYLES[paneGlobeStyleIdx].name;
-        btn.addEventListener('click', (e) => { e.stopPropagation(); cyclePaneGlobeStyle(); });
-        wrap.appendChild(btn);
-        parentBox.appendChild(wrap);
+        parentBox.insertAdjacentHTML('beforeend',
+            `<div class="pane-globe-bottom-bar"><div class="pane-globe-style-label">Style: <div class="pane-globe-style-btn">⟳ ${GLOBE_STYLES[paneGlobeStyleIdx].name}</div></div><div class="heat-scale">low <div class="heat-scale-bar"></div> high</div></div>`);
+        parentBox.querySelector('.pane-globe-style-btn')
+            .addEventListener('click', (e) => { e.stopPropagation(); cyclePaneGlobeStyle(); });
     }
 
     const PANE_GLOBE_CFG = {
@@ -2345,6 +2356,8 @@
             applyGlobeStyle(globe, paneGlobeStyleIdx);
         });
         addStyleButton(document.getElementById(cfg.btnParentId));
+        if (GLOBE_STYLES[paneGlobeStyleIdx].extruded)
+            document.querySelectorAll('.heat-scale').forEach(s => s.style.display = 'flex');
     }
 
     function destroyPaneGlobe(which) {

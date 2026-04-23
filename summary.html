@@ -1936,13 +1936,13 @@
     }
 
     function refreshHeatGlobe(locData) {
-        if (!GLOBE_STYLES[paneGlobeStyleIdx].extruded) return;
         hitsMap = {};
         let maxHits = 1;
         (locData || []).forEach(c => {
             hitsMap[c.iso] = c.count;
             if (c.count > maxHits) maxHits = c.count;
         });
+        if (!GLOBE_STYLES[paneGlobeStyleIdx].extruded) return;
         const logMax = Math.log(1 + maxHits);
         [paneGlobeDesktop, paneGlobeMobile].forEach(g => {
             if (!g) return;

@@ -128,6 +128,7 @@
             z-index: 1;
         }
         .bar-label { display: flex; justify-content: space-between; align-items: center; font-size: 1.1em; margin-bottom: 6px; gap: 10px; }
+        .mono-num { font-variant-numeric: tabular-nums; font-size: 0.95em; position: relative; top: 0.13em; }
         .bar-label span:first-child { display: flex; align-items: center; gap: 0.3em; }
         .knock-location { display: flex; align-items: center; gap: 0.3em; justify-content: space-between; }
         .globe-loc-line {
@@ -2607,7 +2608,7 @@
                 div.setAttribute('data-id', `${prefix}-${rawId}`);
                 div.setAttribute('data-count', item.count);
                 const bannedBadge = (prefix === 'ip' && item.banned) ? ' ' + BANNED_SVG : '';
-                div.innerHTML = `<div class="bar-label"><span>${label}${bannedBadge}</span><span style="color:#ffcc00">${item.count.toLocaleString()}</span></div><div class="bar-bg"><div class="bar-fill ${colorClass}" style="width: ${pct}%"></div></div>`;
+                div.innerHTML = `<div class="bar-label"><span>${label}${bannedBadge}</span><span class="mono-num" style="color:#ffcc00">${item.count.toLocaleString()}</span></div><div class="bar-bg"><div class="bar-fill ${colorClass}" style="width: ${pct}%"></div></div>`;
                 container.appendChild(div);
                 if (useFlags) twemoji.parse(div);
             });
@@ -2644,7 +2645,7 @@
                 row.setAttribute('data-id', uniqueId);
                 const initCount = serverCount ?? 1;
                 row.setAttribute('data-count', initCount);
-                row.innerHTML = `<div class="bar-label"><span>${label}</span><span style="color:#ffcc00">${initCount.toLocaleString()}</span></div><div class="bar-bg"><div class="bar-fill ${fillClasses[prefix] || ''}" style="width: 0%"></div></div>`;
+                row.innerHTML = `<div class="bar-label"><span>${label}</span><span class="mono-num" style="color:#ffcc00">${initCount.toLocaleString()}</span></div><div class="bar-bg"><div class="bar-fill ${fillClasses[prefix] || ''}" style="width: 0%"></div></div>`;
                 container.appendChild(row);
                 if (prefix === 'loc') twemoji.parse(row);
                 newCount = initCount;

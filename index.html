@@ -2063,15 +2063,15 @@
                 const h = hitsMap[d.properties.ISO_A2] || 0;
                 if (!h) return 'rgba(0, 255, 65, 0.05)';
                 const t = Math.log(1 + h) / logMax;
-                const r = Math.round(255 * t);
-                const g = Math.round(255 * (1 - t));
-                return `rgb(${r}, ${g}, 0)`;
+                if (t < 0.5) { const s = t / 0.5; return `rgb(${Math.round(255 * s)}, 255, 0)`; }
+                else { const s = (t - 0.5) / 0.5; return `rgb(255, ${Math.round(255 * (1 - s))}, 0)`; }
             });
             globe.polygonSideColor(d => {
                 const h = hitsMap[d.properties.ISO_A2] || 0;
                 if (!h) return 'rgba(0,0,0,0)';
                 const t = Math.log(1 + h) / logMax;
-                return `rgba(255, ${Math.round(200 * (1 - t))}, 0, 0.6)`;
+                if (t < 0.5) { const s = t / 0.5; return `rgba(${Math.round(255 * s)}, 255, 0, 0.6)`; }
+                else { const s = (t - 0.5) / 0.5; return `rgba(255, ${Math.round(255 * (1 - s))}, 0, 0.6)`; }
             });
             globe.polygonStrokeColor(() => 'rgb(10, 30, 10)');
             globe.polygonAltitude(d => {

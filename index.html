@@ -2222,13 +2222,20 @@
             }
             const cam = globe.camera();
             const globeEdge = Math.asin(1 / (cfg.altitude + 1)) / ((cam.fov / 2) * Math.PI / 180) * 100;
-            const closestSide = Math.min(pane.clientWidth, pane.clientHeight) / 2;
-            const glowSpread = Math.min(globeEdge * 0.25 / 100 * closestSide, cfg.glowCap);
-            const glowOuter = Math.min(globeEdge + glowSpread / closestSide * 100, 100);
-            pane.style.setProperty('--globe-edge', globeEdge.toFixed(1) + '%');
-            pane.style.setProperty('--glow-outer', glowOuter.toFixed(1) + '%');
+            function updateGlowAndSize() {
+                const newSize = Math.min(pane.clientWidth, pane.clientHeight) || cfg.fallbackSize;
+                globe.width(newSize).height(newSize);
+                const closestSide = newSize / 2;
+                const glowSpread = Math.min(globeEdge * 0.25 / 100 * closestSide, cfg.glowCap);
+                const glowOuter = Math.min(globeEdge + glowSpread / closestSide * 100, 100);
+                pane.style.setProperty('--globe-edge', globeEdge.toFixed(1) + '%');
+                pane.style.setProperty('--glow-outer', glowOuter.toFixed(1) + '%');
+                if (paneGlobeVisible[which]) { globe.resumeAnimation(); schedulePaneGlobePause(); }
+            }
+            updateGlowAndSize();
             pane.classList.add('glow-active');
             applyGlobeStyle(globe, paneGlobeStyleIdx);
+            new ResizeObserver(updateGlowAndSize).observe(pane);
         });
         addStyleButton(document.getElementById(cfg.btnParentId));
         if (GLOBE_STYLES[paneGlobeStyleIdx].extruded)

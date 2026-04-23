@@ -1724,7 +1724,7 @@
     let protoBreakdownCache = {};
     let sourceCountsCache = [];   // [{source_id, display_name, hits}] sorted by hits desc
     let uptimeMinutesCache = 0;
-    let hitsMap = {};
+    let hitsMap = {}, rankMap = {};
 
     // Per-protocol feed arrays (newest at index 0)
     const feedData = { ALL: [] };
@@ -1935,13 +1935,19 @@
         schedulePaneGlobePause();
     }
 
-    function refreshHeatGlobe(locData) {
-        hitsMap = {};
+    function rebuildMaps(locData) {
+        hitsMap = {}; rankMap = {};
         let maxHits = 1;
-        (locData || []).forEach(c => {
+        (locData || []).forEach((c, i) => {
             hitsMap[c.iso] = c.count;
+            rankMap[c.iso] = i + 1;
             if (c.count > maxHits) maxHits = c.count;
         });
+        return maxHits;
+    }
+
+    function refreshHeatGlobe(locData) {
+        const maxHits = rebuildMaps(locData);
         if (!GLOBE_STYLES[paneGlobeStyleIdx].extruded) return;
         const logMax = Math.log(1 + maxHits);
         [paneGlobeDesktop, paneGlobeMobile].forEach(g => {
@@ -2173,12 +2179,7 @@
             globe.polygonAltitude(0.006);
             globe.labelsData([]);
         } else if (style.extruded && countriesData) {
-            hitsMap = {};
-            let maxHits = 1;
-            getActiveLeaderboards().loc.forEach(c => {
-                hitsMap[c.iso] = c.count;
-                if (c.count > maxHits) maxHits = c.count;
-            });
+            const maxHits = rebuildMaps(getActiveLeaderboards().loc);
             const logMax = Math.log(1 + maxHits);
             globe.hexPolygonsData([]);
             globe.polygonsData(countriesData);
@@ -2225,7 +2226,9 @@
             const name = d.properties?.ADMIN || d.properties?.NAME || '';
             if (!name) return '';
             const h = hitsMap[d.properties?.ISO_A2] || 0;
-            return `<span style="color:#00ff41">${name}</span><br/><span style="color:#00fbff">${h.toLocaleString()} knock${h !== 1 ? 's' : ''}</span>`;
+            const rank = rankMap[d.properties?.ISO_A2];
+            const rankStr = rank ? `#${rank} · ` : '';
+            return `<span style="color:#00ff41">${rankStr}${name}</span><br/><span style="color:#00fbff">${h.toLocaleString()} knock${h !== 1 ? 's' : ''}</span>`;
         });
         if (globe._paneMousemoveHandler) {
             globe.renderer().domElement.removeEventListener('mousemove', globe._paneMousemoveHandler);

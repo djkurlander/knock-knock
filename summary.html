@@ -1965,11 +1965,6 @@
                 if (!h) return 0.002;
                 return 0.002 + 0.12 * Math.log(1 + h) / logMax;
             });
-            g.polygonLabel(d => {
-                const name = d.properties.ADMIN || d.properties.NAME || '';
-                const h = hitsMap[d.properties.ISO_A2] || 0;
-                return `${name}<br/>${h.toLocaleString()} knock${h !== 1 ? 's' : ''}`;
-            });
             // Spread to new array reference — globe.gl skips its digest when the
             // same array reference is passed again, so accessors never re-evaluate.
             if (countriesData) g.polygonsData([...countriesData]);
@@ -2226,7 +2221,12 @@
                 .labelAltitude(0.015)
                 .labelResolution(2);
         }
-        globe.polygonLabel(d => d.properties && d.properties.ADMIN ? `<span style="color:#00ff41">${d.properties.ADMIN}</span>` : '');
+        globe.polygonLabel(d => {
+            const name = d.properties?.ADMIN || d.properties?.NAME || '';
+            if (!name) return '';
+            const h = hitsMap[d.properties?.ISO_A2] || 0;
+            return `<span style="color:#00ff41">${name}</span><br/>${h.toLocaleString()} knock${h !== 1 ? 's' : ''}`;
+        });
         if (globe._paneMousemoveHandler) {
             globe.renderer().domElement.removeEventListener('mousemove', globe._paneMousemoveHandler);
         }

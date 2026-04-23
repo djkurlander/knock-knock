@@ -1811,6 +1811,11 @@
         schedulePaneGlobePause();
     }
 
+    function heatColor(t, alpha) {
+        if (t < 0.5) { const s = t / 0.5; return alpha ? `rgba(${Math.round(255*s)},255,0,${alpha})` : `rgb(${Math.round(255*s)},255,0)`; }
+        else { const s = (t-0.5)/0.5; return alpha ? `rgba(255,${Math.round(255*(1-s))},0,${alpha})` : `rgb(255,${Math.round(255*(1-s))},0)`; }
+    }
+
     function rebuildMaps(locData) {
         hitsMap = {}; rankMap = {};
         let maxHits = 1;
@@ -1831,16 +1836,12 @@
             g.polygonCapColor(d => {
                 const h = hitsMap[d.properties.ISO_A2] || 0;
                 if (!h) return 'rgba(0, 255, 65, 0.05)';
-                const t = Math.log(1 + h) / logMax;
-                if (t < 0.5) { const s = t / 0.5; return `rgb(${Math.round(255 * s)}, 255, 0)`; }
-                else { const s = (t - 0.5) / 0.5; return `rgb(255, ${Math.round(255 * (1 - s))}, 0)`; }
+                return heatColor(Math.log(1 + h) / logMax);
             });
             g.polygonSideColor(d => {
                 const h = hitsMap[d.properties.ISO_A2] || 0;
                 if (!h) return 'rgba(0,0,0,0)';
-                const t = Math.log(1 + h) / logMax;
-                if (t < 0.5) { const s = t / 0.5; return `rgba(${Math.round(255 * s)}, 255, 0, 0.6)`; }
-                else { const s = (t - 0.5) / 0.5; return `rgba(255, ${Math.round(255 * (1 - s))}, 0, 0.6)`; }
+                return heatColor(Math.log(1 + h) / logMax, 0.6);
             });
             g.polygonAltitude(d => {
                 const h = hitsMap[d.properties.ISO_A2] || 0;
@@ -2062,16 +2063,12 @@
             globe.polygonCapColor(d => {
                 const h = hitsMap[d.properties.ISO_A2] || 0;
                 if (!h) return 'rgba(0, 255, 65, 0.05)';
-                const t = Math.log(1 + h) / logMax;
-                if (t < 0.5) { const s = t / 0.5; return `rgb(${Math.round(255 * s)}, 255, 0)`; }
-                else { const s = (t - 0.5) / 0.5; return `rgb(255, ${Math.round(255 * (1 - s))}, 0)`; }
+                return heatColor(Math.log(1 + h) / logMax);
             });
             globe.polygonSideColor(d => {
                 const h = hitsMap[d.properties.ISO_A2] || 0;
                 if (!h) return 'rgba(0,0,0,0)';
-                const t = Math.log(1 + h) / logMax;
-                if (t < 0.5) { const s = t / 0.5; return `rgba(${Math.round(255 * s)}, 255, 0, 0.6)`; }
-                else { const s = (t - 0.5) / 0.5; return `rgba(255, ${Math.round(255 * (1 - s))}, 0, 0.6)`; }
+                return heatColor(Math.log(1 + h) / logMax, 0.6);
             });
             globe.polygonStrokeColor(() => 'rgb(10, 30, 10)');
             globe.polygonAltitude(d => {

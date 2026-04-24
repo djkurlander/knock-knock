@@ -2977,7 +2977,7 @@
             const div = makeKnockEl(d);
             const scrollTop = el.scrollTop;
             if (isNew) el.prepend(div); else el.appendChild(div);
-            if (isNew && scrollTop > 0) el.scrollTop = scrollTop;
+            if (isNew && scrollTop > 0) el.scrollTop = scrollTop + div.getBoundingClientRect().height;
             if (isNew) triggerPulseClass(div);
             if (el.children.length > MAX_PER_PANEL) el.lastChild.remove();
         });

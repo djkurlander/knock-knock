@@ -2976,8 +2976,11 @@
             const el = document.getElementById(id);
             const div = makeKnockEl(d);
             const scrollTop = el.scrollTop;
+            const scrollHeight = el.scrollHeight;
             if (isNew) el.prepend(div); else el.appendChild(div);
-            if (isNew && scrollTop > 0) el.scrollTop = scrollTop + div.getBoundingClientRect().height;
+            if (isNew && scrollTop > 0) {
+                el.scrollTop = scrollTop + (el.scrollHeight - scrollHeight);
+            }
             if (isNew) triggerPulseClass(div);
             if (el.children.length > MAX_PER_PANEL) el.lastChild.remove();
         });

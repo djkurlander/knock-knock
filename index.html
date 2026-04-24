@@ -2581,25 +2581,6 @@
                 });
             });
         });
-
-        document.querySelectorAll('.d-content, .m-content').forEach((content) => {
-            let timer = null, lastTop = content.scrollTop;
-            const check = () => {
-                const top = content.scrollTop;
-                if (top === lastTop) {
-                    delete content.dataset.userScrolling;
-                    timer = null;
-                    return;
-                }
-                lastTop = top;
-                timer = setTimeout(check, 120);
-            };
-            content.addEventListener('scroll', () => {
-                content.dataset.userScrolling = '1';
-                lastTop = content.scrollTop;
-                if (!timer) timer = setTimeout(check, 120);
-            }, { passive: true });
-        });
     }
 
     installPanelHeaderScrollToTop();
@@ -2997,7 +2978,7 @@
             const scrollTop = el.scrollTop;
             const scrollHeight = el.scrollHeight;
             if (isNew) el.prepend(div); else el.appendChild(div);
-            if (isNew && scrollTop > 0 && el.dataset.userScrolling !== '1') {
+            if (isNew && scrollTop > 0) {
                 el.scrollTop = scrollTop + (el.scrollHeight - scrollHeight);
             }
             if (isNew) triggerPulseClass(div);

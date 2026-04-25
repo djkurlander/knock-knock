@@ -44,7 +44,7 @@ Check it out at https://knock-knock.net, or install it on your own server. Don't
 - **Password:** the most common passwords attempted
 - **ISP:** the ISP Wall of Shame
 - **IP:** the worst offending IP addresses
-- **Last:** further info on the country, user, password, ISP, and IP of the last knock
+- **Last:** knock counts and rankings for the country, user, password, ISP, and IP of the last knock
 - **Stats:** the relative protocol frequencies, and (if aggregated) the frequency of knocks from the feeder servers
 - **Trivia:** learn why a username or password may have been chosen
 - **Jokes:** some very bad knock-knock jokes

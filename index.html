@@ -1536,6 +1536,11 @@
     document.addEventListener('touchstart', initAudio, { once: true });
 
     function togglePause() {
+        const mobileFeed = document.getElementById('m-feed');
+        if (paused && mobileFeedAutoPaused && mobileFeed) {
+            mobileFeed.scrollTop = 0;
+            mobileFeedAutoPaused = false;
+        }
         paused = !paused;
         const titles = [document.getElementById('d-header-title'), document.getElementById('m-header-title')];
         titles.forEach(el => {
@@ -1570,10 +1575,10 @@
     }
 
     document.addEventListener('keydown', (e) => {
-        if (e.code === 'Space' && !['INPUT', 'TEXTAREA', 'SELECT', 'BUTTON'].includes(e.target.tagName)) {
-            e.preventDefault();
-            togglePause();
-        }
+        if (e.code !== 'Space') return;
+        if (e.target?.closest?.('input, textarea, select, [contenteditable="true"]')) return;
+        e.preventDefault();
+        togglePause();
     });
     document.addEventListener('visibilitychange', () => {
         if (document.hidden) {

@@ -1570,7 +1570,7 @@
     }
 
     document.addEventListener('keydown', (e) => {
-        if (e.code === 'Space' && e.target === document.body) {
+        if (e.code === 'Space' && !['INPUT', 'TEXTAREA', 'SELECT', 'BUTTON'].includes(e.target.tagName)) {
             e.preventDefault();
             togglePause();
         }

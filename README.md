@@ -4,7 +4,11 @@
 
 **Live demo:** https://knock-knock.net
 
-_**Watch** the bots trying to break into unprotected Internet servers, in this information-packed dashboard! **Discover** the most frequent countries of origin! **Be shocked** by the most common usernames and passwords! **Scoff at and ridicule** the worst offending ISPs and IPs! **Find out** why the bots are choosing these usernames and passwords! **Marvel** at the spinning globe visualizations! Wait, is one of those globes a heat map too - how is that even possible? **View** current break-in attempts and fascinating historic stats, in a series of dynamic, informative, and engaging panels! **Behold** bots attacking via SSH, Telnet, FTP, RDP, SMB, SIP, HTTP, and SMTP. So, so, many protocols! What? You want more servers too? Yes, aggregate the attacks from multiple servers, and the data will come in so fast your head will spin, just like the globe! **Click** on the speaker icon to hear a virtual geiger counter measure what has been called **the background radiation of the Internet.**_ 
+_**Watch** the bots trying to break into unprotected Internet servers, in this information-packed dashboard! **Discover** the most frequent countries of origin! **Be shocked** by the most common usernames and passwords! **Scoff at and ridicule** the worst offending ISPs and IPs! **Find out** why the bots are choosing these usernames and passwords!_
+
+_**Marvel** at the spinning globe visualizations! Wait, is one of those globes a heat map too - how is that even possible? **Click** on the speaker icon to hear a virtual geiger counter measure what has been called **the background radiation of the Internet!**_
+
+_**View** current break-in attempts and fascinating historic stats, in a series of dynamic, informative, and engaging panels! **Behold** bots attacking via SSH, Telnet, FTP, RDP, SMB, SIP, HTTP, and SMTP. So, so, many protocols! What? You want more servers too? Yes, aggregate the attacks from multiple servers, and the data will come in so fast your head will spin, just like the globe!_
 
 
 Check it out at https://knock-knock.net, or install it on your own server. Don't worry, these bots may be knocking, but they can't come in!

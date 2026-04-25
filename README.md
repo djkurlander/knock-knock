@@ -4,9 +4,10 @@
 
 **Live demo:** https://knock-knock.net
 
-_**Watch** the bots knocking on an exposed SSH port on this live, information-packed dashboard! **Discover** the most frequent countries of origin! **Be shocked** by the most common usernames and passwords! **Scoff at and ridicule** the worst offending ISPs and IPs! **Find out** why the bots are choosing these usernames and passwords! **Marvel** at the spinning globe visualizations! Wait, is one of those globes a heat map too - how is that even possible? **View** current break-in attempts and fascinating historic stats, in a series of dynamic, informative, and engaging panels!_
+_**Watch** the bots trying to break into unprotected Internet servers, in this information-packed dashboard! **Discover** the most frequent countries of origin! **Be shocked** by the most common usernames and passwords! **Scoff at and ridicule** the worst offending ISPs and IPs! **Find out** why the bots are choosing these usernames and passwords! **Marvel** at the spinning globe visualizations! Wait, is one of those globes a heat map too - how is that even possible? **View** current break-in attempts and fascinating historic stats, in a series of dynamic, informative, and engaging panels! **Behold** bots attacking via SSH, Telnet, FTP, RDP, SMB, SIP, HTTP, and SMTP. So, so, many protocols! What? You want more servers too? Yes, aggregate the attacks from multiple servers, and the data will come in so fast your head will spin, just like the globe! **Click** on the speaker icon to hear a virtual geiger counter measure what has been called **the background radiation of the Internet.**_ 
 
-Check it out at https://knock-knock.net, or install it on your own server with an exposed SSH (22) port. Don't worry, these bots may be knocking, but they can't come in!
+
+Check it out at https://knock-knock.net, or install it on your own server. Don't worry, these bots may be knocking, but they can't come in!
 
 ## Screenshots
 
@@ -31,20 +32,22 @@ Check it out at https://knock-knock.net, or install it on your own server with a
 
 ## Features
 
-- **Live Feed:** a realtime feed of bots trying to log in to port 22 (knocks). Includes the location, username, password, ISP, and IP
+- **Multi-Protocol:** View attacks across all the protocols (SSH, Telnet, FTP, RDP, SMB, SIP, HTTP, SMTP), or select a specific protocol to view.
+- **Live Feed:** a realtime feed of bots trying to attack the server (knocks). Includes the location, username, password, ISP, and IP
 - **Globe View:** a 3D globe showing the location of the last knock. Six different globe styles are available, including a cool extruded country heat map of worst offenders
 - **Location:** the countries with the highest knock counts
 - **Username:** the most popular usernames tried by the bots
 - **Password:** the most common passwords attempted
 - **ISP:** the ISP Wall of Shame
 - **IP:** the worst offending IP addresses
-- **Stats:** statistics on the country, user, password, ISP, and IP of the last knock
+- **Last:** further info on the country, user, password, ISP, and IP of the last knock
+- **Stats:** the relative protocol frequencies, and (if aggregated) the frequency of knocks from the feeder servers
 - **Trivia:** learn why a username or password may have been chosen
 - **Jokes:** some very bad knock-knock jokes
 
 ## How It Works
 
-- Listens on the SSH port (22) and captures every unauthorized login attempt
+- Listens on the protocol ports and captures all uninvited traffic
 - Enriches attacker IPs with GeoIP (city, country, ISP, ASN)
 - Streams live events to the dashboard via WebSockets
 - Maintains leaderboards and stats (top countries, users, passwords, ISPs)
@@ -61,9 +64,9 @@ Knock-Knock supports three different installation methods, with docker being the
 ## Architecture (In One Breath)
 
 ```
-SSH Attacker
+Attacker
   ↓
-ssh_honeypot.py (port 22)
+protocol-specific honeypots
   ↓
 monitor.py (GeoIP lookup)
   ↓

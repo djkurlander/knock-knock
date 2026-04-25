@@ -37,7 +37,7 @@ Check it out at https://knock-knock.net, or install it on your own server. Don't
 ## Features
 
 - **Multi-Protocol:** View attacks across all the protocols (SSH, Telnet, FTP, RDP, SMB, SIP, HTTP, SMTP), or select a specific protocol to view.
-- **Live Feed:** a realtime feed of bots trying to attack the server (knocks). Includes the location, username, password, ISP, and IP
+- **Live Feed:** a realtime feed of bots trying to attack the server (knocks). Includes the location, username, password, ISP, IP, and protocol
 - **Globe View:** a 3D globe showing the location of the last knock. Six different globe styles are available, including a cool extruded country heat map of worst offenders
 - **Location:** the countries with the highest knock counts
 - **Username:** the most popular usernames tried by the bots
@@ -70,7 +70,7 @@ Knock-Knock supports three different installation methods, with docker being the
 ```
 Attacker
   ↓
-protocol-specific honeypots
+protocol-specific honeypots (SSH, Telnet, FTP, RDP, SMB, SIP, HTTP, SMTP)
   ↓
 monitor.py (GeoIP lookup)
   ↓

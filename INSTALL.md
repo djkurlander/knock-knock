@@ -321,7 +321,7 @@ systemctl restart knock-monitor
 
 ### Selecting Protocols (`ENABLED_PROTOCOLS`)
 
-By default, all honeypots run (SSH, TNET, FTP, RDP, SMB, SIP, HTTP, SMTP). To run only specific protocols, set the `ENABLED_PROTOCOLS` environment variable to a comma-separated list.
+By default, all eight honeypots run (SSH, TNET, FTP, RDP, SMB, SIP, HTTP, SMTP). To run a subset — for example, if you have no interest in RDP — set `ENABLED_PROTOCOLS` to a comma-separated list of the protocols you want active, e.g. `SSH,TNET,FTP,SMB,SIP,HTTP,SMTP`.
 
 **Docker:** Copy the example override file (if you haven't already) and uncomment the `ENABLED_PROTOCOLS` setting:
 ```bash

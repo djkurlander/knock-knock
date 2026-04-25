@@ -898,7 +898,7 @@
     let paused = false;
     let autoPaused = false;
     let audioCtx = null;
-    let soundEnabled = localStorage.getItem('soundEnabled') === 'true';
+    let soundEnabled = false;
 
     // --- DEBUG OVERLAY (add ?debug to URL to enable) ---
     const URL_PARAMS = new URLSearchParams(window.location.search);
@@ -1018,7 +1018,6 @@
 
     function toggleSound() {
         soundEnabled = !soundEnabled;
-        localStorage.setItem('soundEnabled', soundEnabled);
         updateSoundIcon();
         if (soundEnabled) { initAudio(); audioCtx.resume().then(() => playUIClick()); }
     }

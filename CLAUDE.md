@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Knock-Knock is a multi-protocol honeypot monitoring system that captures unauthorized login attempts on SSH (port 22), Telnet (port 23), and SMTP (port 587), and displays real-time attack data through a live web dashboard. It can be deployed via Docker or as two coordinated systemd services.
+Knock-Knock is a multi-protocol honeypot monitoring system that captures unauthorized login attempts across eight protocols (SSH, Telnet, FTP, RDP, SMB, SIP, HTTP, SMTP) and displays real-time attack data through a live web dashboard. It can be deployed via Docker or as two coordinated systemd services.
 
 ## Commands
 
@@ -16,7 +16,7 @@ Knock-Knock is a multi-protocol honeypot monitoring system that captures unautho
 # Reset all data and restart (blocklist is preserved)
 ./restart.sh --reset-all
 
-# Reset blocklist only (deletes blocklist.txt + clears knock:blocked in Redis)
+# Reset blocklist only (deletes blocklist.txt + clears knock:blocked:* in Redis)
 python monitor.py --reset-blocklist
 
 # Individual service control
@@ -32,17 +32,25 @@ docker compose logs -f
 ```bash
 source .venv/bin/activate
 
-# Individual honeypots (ports 22, 23, 587)
-python ssh_honeypot.py
-python telnet_honeypot.py
-python smtp_honeypot.py
+# Individual honeypots
+python honeypots/ssh_honeypot_asyncssh.py   # SSH (port 22, active version)
+python honeypots/telnet_honeypot.py          # Telnet (port 23)
+python honeypots/ftp_honeypot.py             # FTP (port 21)
+python honeypots/rdp_honeypot.py             # RDP (port 3389)
+python honeypots/smb_honeypot.py             # SMB (port 445)
+python honeypots/sip_honeypot.py             # SIP (port 5060)
+python honeypots/http_honeypot.py            # HTTP (ports 80 and 443)
+python honeypots/smtp_honeypot.py            # SMTP (ports 25 and 587)
 
-# Log monitor + geo-enricher — spawns all three honeypots as subprocesses
+# Log monitor + geo-enricher — spawns all honeypots as subprocesses
 # Add --save-knocks to store individual knocks in SQLite (all protocols)
 # Add --save-knocks=SIP,SMTP to store only specific protocols
+# Add --max-knocks=5000 to auto-ban IPs exceeding a threshold (global)
+# Add --max-knocks=5000,RDP:50 to set per-protocol overrides
+# Add --ban-duration=30 to set ban length in days (default 30; 0 = permanent)
 python monitor.py
 
-# Web server (HTTP, default port 8080 — Cloudflare Origin Rule proxies 80→8080)
+# Web server (HTTP, default port 8080 — Cloudflare Origin Rule proxies 443→8080)
 python3 -m uvicorn main:app --host 0.0.0.0 --port 8080 \
   --proxy-headers --forwarded-allow-ips='*' --workers 2
 
@@ -63,7 +71,7 @@ docker compose logs -f honeypot-monitor
 docker compose logs -f web
 
 # Database queries
-sqlite3 data/knock_knock.db "SELECT * FROM knocks ORDER BY id DESC LIMIT 10;"
+sqlite3 data/knock_knock.db "SELECT * FROM knocks_ssh ORDER BY id DESC LIMIT 10;"
 
 # Redis connectivity
 redis-cli ping
@@ -71,36 +79,51 @@ redis-cli ping
 # Check per-protocol feed lists
 redis-cli llen knock:recent:ssh
 redis-cli llen knock:recent:tnet
+redis-cli llen knock:recent:ftp
+redis-cli llen knock:recent:rdp
+redis-cli llen knock:recent:smb
+redis-cli llen knock:recent:sip
+redis-cli llen knock:recent:http
 redis-cli llen knock:recent:smtp
 
-# Watch for SMTP connections (even without AUTH — honeypot logs every connect)
-journalctl -u knock-monitor -f | grep SMTP
+# Check protocol knock counts
+redis-cli hgetall knock:proto_counts
+
+# Check enabled protocols
+redis-cli get knock:config:enabled_protocols
 ```
 
 ## Architecture
 
 ```
-SSH Attacker  → ssh_honeypot.py  (port 22)  ─┐
-Telnet Attacker → telnet_honeypot.py (port 23) ─┼→ stdout → monitor.py
-SMTP Attacker → smtp_honeypot.py (port 587) ─┘        (GeoIP, DB, Redis)
-                                                              ↓
-                                                  SQLite DB (data/) + Redis pub/sub
-                                                              ↓
-                                                   main.py (FastAPI, port 8080/8443)
-                                                              ↓
-                                               Browser WebSocket → Live Dashboard
+SSH Attacker    → honeypots/ssh_honeypot_asyncssh.py  (port 22)   ─┐
+Telnet Attacker → honeypots/telnet_honeypot.py         (port 23)   ─┤
+FTP Attacker    → honeypots/ftp_honeypot.py            (port 21)   ─┤
+RDP Attacker    → honeypots/rdp_honeypot.py            (port 3389) ─┤→ stdout → monitor.py
+SMB Attacker    → honeypots/smb_honeypot.py            (port 445)  ─┤      (GeoIP, DB, Redis)
+SIP Attacker    → honeypots/sip_honeypot.py            (port 5060) ─┤              ↓
+HTTP Attacker   → honeypots/http_honeypot.py           (ports 80,443)─┤  SQLite DB (data/) + Redis pub/sub
+SMTP Attacker   → honeypots/smtp_honeypot.py           (ports 25,587)┘              ↓
+                                                                       main.py (FastAPI, port 8080/8443)
+                                                                                      ↓
+                                                                    Browser WebSocket → Live Dashboard
 ```
 
 **Two Services:**
-- `monitor.py`: Spawns all three honeypots as subprocesses, merges their stdout via a shared `queue.Queue`, performs GeoIP lookups, updates SQLite intel tables, publishes to Redis. Individual knocks saved to per-protocol SQLite tables with `--save-knocks` (all) or `--save-knocks=SIP,SMTP` (selective). Honeypots check `knock:blocked` Redis set on each connection to reject blocked IPs instantly.
+- `monitor.py`: Spawns all honeypots as subprocesses, merges their stdout via a shared `queue.Queue`, performs GeoIP lookups, updates SQLite intel tables, publishes to Redis. Individual knocks saved to per-protocol SQLite tables with `--save-knocks` (all) or `--save-knocks=SIP,SMTP` (selective). Honeypots check `knock:blocked:{ip}` Redis keys on each connection to reject blocked IPs instantly.
 - `main.py`: FastAPI server with WebSocket endpoint `/ws`, subscribes to Redis, broadcasts to all connected browsers.
 
 **Data Flow:**
 - Monitor spawns honeypots as subprocesses and reads their stdout (both systemd and Docker)
-- Each honeypot emits JSON: `{"type": "KNOCK", "proto": "SSH"|"TNET"|"SMTP", "ip": ..., "user": ..., "pass": ...}`
+- Each honeypot emits JSON: `{"type": "KNOCK", "proto": "SSH"|"TNET"|"FTP"|..., "ip": ..., "user": ..., "pass": ...}`
 - Inter-service communication via Redis pub/sub channel `knocks_stream`
 - Stats cached in memory, refreshed every 60 seconds and broadcast to all clients
 - SQLite databases in `data/` directory for persistence
+
+**Multi-server / aggregator mode:**
+- Set `AGGREGATOR_HOST` on feeder servers to forward all knocks to a central aggregator
+- Set `INGEST_PORT` on the aggregator to accept incoming knock streams
+- `SOURCE_ID` identifies each feeder server in the dashboard
 
 **Deployment modes:**
 - **Docker:** `docker compose up -d` — monitor spawns all honeypots internally
@@ -110,13 +133,21 @@ SMTP Attacker → smtp_honeypot.py (port 587) ─┘        (GeoIP, DB, Redis)
 
 | File | Purpose |
 |------|---------|
-| `ssh_honeypot.py` | SSH honeypot (port 22) — legacy paramiko version (unused, kept as fallback) |
-| `telnet_honeypot.py` | Telnet honeypot (port 23), raw socket with IAC negotiation |
-| `smtp_honeypot.py` | SMTP honeypot (port 587), AUTH LOGIN + AUTH PLAIN |
+| `honeypots/ssh_honeypot_asyncssh.py` | SSH honeypot (port 22) — active version using asyncssh |
+| `honeypots/ssh_honeypot.py` | SSH honeypot — legacy paramiko version (kept as fallback) |
+| `honeypots/telnet_honeypot.py` | Telnet honeypot (port 23), raw socket with IAC negotiation |
+| `honeypots/ftp_honeypot.py` | FTP honeypot (port 21) |
+| `honeypots/rdp_honeypot.py` | RDP honeypot (port 3389), NLA/CredSSP handshake |
+| `honeypots/smb_honeypot.py` | SMB honeypot (port 445), SMB1/2/3 with decoy file shares |
+| `honeypots/sip_honeypot.py` | SIP honeypot (port 5060 UDP+TCP), captures toll fraud dial attempts |
+| `honeypots/http_honeypot.py` | HTTP honeypot (ports 80 and 443), captures web scanning and exploit attempts |
+| `honeypots/smtp_honeypot.py` | SMTP honeypot (ports 25 and 587), AUTH LOGIN + AUTH PLAIN |
+| `honeypots/stub_honeypot.py` | Minimal stub for adding new protocol honeypots |
 | `monitor.py` | Spawns honeypots, GeoIP enrichment, DB writes, Redis publish |
 | `main.py` | FastAPI server, `ConnectionManager`, `GlobalStatsCache`, WebSocket |
-| `constants.py` | Shared protocol enum: `PROTO` dict and `PROTO_NAME` reverse lookup |
+| `constants.py` | Shared protocol enum, UI order, metadata, and `DEFAULT_ENABLED_PROTOCOLS` |
 | `index.html` | Single-page dashboard with WebSocket client |
+| `summary.html` | Alternate compact dashboard view (kept in sync with index.html) |
 | `restart.sh` | Service orchestration (systemd and Docker) |
 | `Dockerfile` | Single image for honeypot-monitor and web containers |
 | `docker-compose.yml` | Docker deployment (Redis, honeypot+monitor, web) |
@@ -130,8 +161,9 @@ All persistent data lives in `data/`:
 - `data/knock_knock.db` — main attack database
 - `data/visitors.db` — dashboard visitor tracking
 - `data/blocklist.txt` — IPs to reject immediately (durable source of truth; seeded into Redis on startup)
+- `data/geocode_cache.json` — SIP dial number geocode cache
 
-**Note:** `blocklist.txt` and `knock:blocked` survive `--reset-all` intentionally. Use `--reset-blocklist` to clear them.
+**Note:** `blocklist.txt` and `knock:blocked:*` keys survive `--reset-all` intentionally. Use `--reset-blocklist` to clear them.
 
 ## Port Configuration
 
@@ -141,67 +173,170 @@ The web UI runs on port 8080 by default (`WEB_PORT=8080`). Most deployments just
 - Honeypot ports (21, 22, 23, 25, 80, 445, 587, 3389, 5060): open to all — intentional
 - Port 8080 (web UI): open to all, accessible at `http://your-server-ip:8080`
 
-### This deployment (knock-knock.net servers, Cloudflare-protected)
-All servers use a Cloudflare Origin Rule (443 → 8080) so visitors connect on standard HTTPS while the web UI runs on 8080, restricted to Cloudflare IPs only.
+### Cloudflare-protected deployment
+Use a Cloudflare Origin Rule (443 → 8080) so visitors connect on standard HTTPS while the web UI runs on 8080, restricted to Cloudflare IPs only.
 
-**Systemd servers:**
+**Systemd deployments:**
 - Port 8080: UFW restricts to Cloudflare IPs via `extras/cloudflare-ufw/update-cloudflare-ufw.sh`
 - `knock-web.service` runs uvicorn on `${WEB_PORT:-8080}` with SSL (Cloudflare Origin CA cert)
 
-**Docker server (ny):**
+**Docker deployments:**
 Docker bypasses UFW, so nginx enforces the restriction instead:
-- nginx listens on 8080, enforces Cloudflare IP allowlist, proxies to web container on 8081
-- Web container: `WEB_PORT=8081`, `WEB_LISTEN=127.0.0.1` (set in `.env` for compose binding)
-- `docker-compose.override.yml`: `ENABLE_SSL=true`, `WEB_PORT=8081`, certs volume
+- nginx listens on 8080, enforces Cloudflare IP allowlist, proxies to the web container on an internal port
+- Web container: set `WEB_LISTEN=127.0.0.1` and a non-public `WEB_PORT` in `.env`
+- `docker-compose.override.yml`: `ENABLE_SSL=true`, matching `WEB_PORT`, certs volume
 - nginx IP list auto-updated via `NGINX_IP_INCLUDE=/etc/nginx/cloudflare_ips.conf` in crontab
 
 ### HTTP honeypot and port 80
-Port 80 is open to all — it's a honeypot port. Port 443 is not mapped to the HTTP honeypot (it can't do TLS). On the Docker server, nginx owns port 8080; port 80 goes to the honeypot container.
+Port 80 is open to all — it's a honeypot port. Port 443 can also be mapped to the HTTP honeypot; it auto-enables TLS when `HTTP_PORT=443` (or `--ssl-cert`/`--ssl-key` flags are provided). On the Docker server, nginx owns port 8080; port 80 goes to the honeypot container.
 
 ---
 
 ## Environment Variables
 
+### Core / Infrastructure
+
 | Variable | Default | Purpose |
 |----------|---------|---------|
 | `REDIS_HOST` | `localhost` | Redis server hostname (set to `redis` in Docker) |
-| `DB_DIR` | `data` | Directory for SQLite databases and blocklist |
-| `ENABLE_SSL` | unset | Set to `true` to enable HTTPS on the web UI |
-| `WEB_PORT` | `8080` | Port the web UI listens on; also used in Docker Compose port binding via `.env` |
-| `WEB_LISTEN` | `0.0.0.0` | Interface the web UI binds to; set to `127.0.0.1` in Docker to restrict to localhost |
+| `REDIS_DB` | `0` | Redis database index |
+| `DB_DIR` | `data` | Directory for SQLite databases, blocklist, and caches |
+| `ENABLED_PROTOCOLS` | all protocols | Comma-separated list of active protocols with optional port overrides, e.g. `SSH,SMTP:25,SMTP:587,HTTP:80,HTTP:443`. Empty string = ingest-only mode (no local honeypots). |
+
+### Web Server (`main.py`)
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `ENABLE_SSL` | unset | Set to `true` to enable HTTPS |
+| `WEB_PORT` | `8080` | Port the web UI listens on |
+| `WEB_LISTEN` | `0.0.0.0` | Interface the web UI binds to |
 | `LOG_VISITORS` | unset | Set to `true` to log dashboard visitors to `visitors.db` |
-| `SMTP_HOSTNAME` | reverse DNS | Override SMTP banner/cert hostname (default: reverse DNS of server IP) |
-| `SMB_DECOY_DIR` | `honeypots/decoys` | Directory of decoy share folders (e.g. `honeypots/decoys/PUBLIC/passwords.txt`). Defaults to `decoys/` next to the script. Loaded at startup; zero FS access after that. Falls back to hardcoded `PUBLIC/passwords.txt` if directory is missing or empty. |
+| `LOG_UNHANDLED_HTTP` | unset | Set to `true` to log 404s in the web server |
+
+### Monitor (`monitor.py`)
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `SOURCE_ID` | hostname | Identifier for this server in multi-server deployments |
+| `AGGREGATOR_HOST` | unset | Hostname of central aggregator to forward knocks to |
+| `AGGREGATOR_PORT` | `9999` | TCP port of the aggregator ingest listener |
+| `INGEST_PORT` | unset | TCP port to listen on for incoming knock streams (aggregator role) |
+| `TRACE_KNOCK` | unset | Set to `true` to print full knock details to stdout |
+| `MAIL_FORENSICS_MAX` | `100` | Max raw SMTP messages to retain in Redis forensics buffer |
+| `REDACT_SELF_IPS` | unset | Comma-separated IPs to redact from knock output (self-protection) |
+| `REDACT_SELF_HOSTS` | unset | Comma-separated hostnames to redact |
+| `REDACT_SELF_DOMAINS` | unset | Comma-separated domain suffixes to redact |
+| `REDACT_SELF_HOST_SUFFIXES` | unset | Comma-separated hostname suffixes to redact |
+
+### SSH Honeypot
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `SSH_PORT` | `22` | Listening port |
+| `SSH_HOST_KEY_PATH` | `data/server.key` | RSA host key path |
+| `SSH_ED25519_KEY_PATH` | `data/server_ed25519.key` | Ed25519 host key path |
+| `SSH_PROFILE` | `openssh_8_9_ubuntu` | Banner/fingerprint profile to emulate |
+| `SSH_LOGIN_TIMEOUT` | `120` | Seconds before unauthenticated connection is dropped |
+| `SSH_MAX_AUTH_ATTEMPTS` | `6` | Max auth attempts per connection |
+
+### SMTP Honeypot
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `SMTP_HOSTNAME` | reverse DNS | Override SMTP banner and certificate hostname |
+| `SMTP_FINGERPRINT` | `postfix` | MTA fingerprint to emulate |
+| `SMTP587_REQUIRE_AUTH` | `false` | Require AUTH on port 587 before accepting mail |
+| `SMTP_TLS_CERT_PATH` | `data/smtp.crt` | TLS certificate path (auto-generated if missing) |
+| `SMTP_TLS_KEY_PATH` | `data/smtp.key` | TLS key path |
+| `SMTP_TRACE` | unset | Set to `true` to trace all SMTP sessions to stdout |
+| `SMTP_TRACE_IP` | unset | Trace only sessions from this specific IP |
+
+### SMB Honeypot
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `SMB_PORT` | `445` | Listening port |
+| `SMB_DECOY_DIR` | `honeypots/decoys` | Directory of decoy share folders. Loaded at startup; zero FS access after that. Falls back to hardcoded `PUBLIC/passwords.txt` if missing or empty. |
+| `SMB_SERVER_NAME` | hostname | NetBIOS server name advertised |
+| `SMB_SERVER_DOMAIN` | unset | Domain name advertised in SMB negotiation |
+| `SMB_QUARANTINE_DIR` | unset | Directory to save uploaded files from attackers |
+| `SMB_DEDUP_WINDOW_SEC` | `60` | Seconds to suppress duplicate knocks from the same IP |
+| `SMB_NBSS_MAX` | `4194304` | Max NetBIOS session message size (4 MB) |
+| `SMB_TRACE` | unset | Set to `true` to trace SMB sessions to stdout |
+| `SMB_TRACE_IP` | unset | Trace only sessions from this specific IP |
+
+### SIP Honeypot
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `SIP_PORT` | `5060` | Listening port (UDP + TCP) |
+| `SIP_REALM` | `asterisk` | SIP realm in authentication challenge |
+| `SIP_AUTH_CHALLENGE_MODE` | `mixed` | `always`, `never`, or `mixed` |
+| `SIP_INVITE_MODE` | `answer` | How to respond to INVITE: `answer` or `reject` |
+| `SIP_MAX_MESSAGES_PER_CONN` | `6` | Max SIP messages per connection |
+| `SIP_CONN_TIMEOUT` | `20` | Connection timeout in seconds |
+| `SIP_DEDUP_WINDOW_SEC` | `60` | Seconds to suppress duplicate knocks from the same IP |
+| `SIP_TRACE` | unset | Set to `true` to trace SIP sessions to stdout |
+| `SIP_TRACE_IP` | unset | Trace only sessions from this specific IP |
+
+### HTTP Honeypot
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `HTTP_PORT` | `80` | Listening port |
+| `HTTP_TIMEOUT` | `15` | Connection timeout in seconds |
+| `HTTP_MAX_HEADERS` | `8192` | Max header bytes to read |
+| `HTTP_MAX_BODY` | `4096` | Max body bytes to read |
+| `HTTPS_CERT_PATH` | `data/https.crt` | TLS certificate for HTTPS port (if enabled) |
+| `HTTPS_KEY_PATH` | `data/https.key` | TLS key |
+| `HTTP_TRACE` | unset | Set to `true` to trace HTTP requests to stdout |
+| `HTTP_TRACE_IP` | unset | Trace only requests from this specific IP |
+
+### RDP Honeypot
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `RDP_TRACE` | unset | Set to `true` to trace RDP sessions to stdout |
+| `RDP_TRACE_IP` | unset | Trace only sessions from this specific IP |
+| `RDP_MAX_NLA_ATTEMPTS` | `3` | Max NLA authentication rounds |
+| `RDP_CLASSIC_CAPTURE` | `false` | Also capture classic RDP (non-NLA) credentials |
 
 ## Protocol Enum
 
 Defined in `constants.py`, imported by both `monitor.py` and `main.py`:
 
 ```python
-PROTO = {'SSH': 0, 'TNET': 1, 'SMTP': 2, 'RDP': 3}
-PROTO_NAME = {v: k for k, v in PROTO.items()}
+PROTO = {'SSH': 0, 'TNET': 1, 'SMTP': 2, 'RDP': 3, 'FTP': 5, 'SIP': 6, 'SMB': 7, 'HTTP': 8}
+PROTO_NAME = {v: k for k, v in PROTO.items()}  # reverse lookup: 0 → 'SSH' etc.
+
+PROTOCOL_UI_ORDER = ['SSH', 'TNET', 'FTP', 'RDP', 'SMB', 'SIP', 'HTTP', 'SMTP']
+DEFAULT_ENABLED_PROTOCOLS = list(PROTOCOL_UI_ORDER)
 ```
+
+`PROTOCOL_META` in `constants.py` holds per-protocol display name, default port, and capability flags (`supports_user_panel`, `supports_pass_panel`, etc.).
 
 ## Database Schema
 
 ```sql
--- Per-protocol knock tables (only populated with --save-knocks; only saved protocols get tables)
+-- Per-protocol knock tables (only populated with --save-knocks; only enabled protocols get tables)
 -- Common columns: id, timestamp, ip_address, iso_code, city, region, country, isp, asn
 knocks_ssh(... username, password)
 knocks_tnet(... username, password)
 knocks_ftp(... username, password)
 knocks_smtp(... username, password, smtp_stage, smtp_mail_from, smtp_rcpt_to, subject, body)
-knocks_mail(... username, password, smtp_stage, smtp_mail_from, smtp_rcpt_to, subject, body)
-knocks_sip(... sip_method, sip_dial_string, sip_dial_number, sip_call_id, sip_cseq, sip_extension, sip_dial_country, sip_dial_country_name, sip_dial_lat, sip_dial_lng)
+knocks_sip(... sip_method, sip_dial_string, sip_dial_number, sip_call_id, sip_cseq,
+           sip_extension, sip_dial_country, sip_dial_country_name, sip_dial_lat, sip_dial_lng)
 knocks_smb(... username, smb_action, smb_share, smb_file, smb_version, smb_domain, smb_host)
 knocks_rdp(... username, rdp_source, domain)
+knocks_http(... http_method, http_path, http_user_agent, http_body)
 
 -- ALL intel tables (aggregated counts, indexed hits for fast top-N queries)
 user_intel(username PRIMARY KEY, hits, last_seen)               -- INDEX on hits DESC
 pass_intel(password PRIMARY KEY, hits, last_seen)               -- INDEX on hits DESC
 country_intel(iso_code PRIMARY KEY, country, hits, last_seen)   -- INDEX on hits DESC
 isp_intel(isp PRIMARY KEY, hits, last_seen, asn)                -- INDEX on hits DESC
-ip_intel(ip PRIMARY KEY, hits, last_seen, lat, lng)             -- INDEX on hits DESC
+ip_intel(ip PRIMARY KEY, hits, last_seen, lat, lng,
+         hits_since_cleared, ban_until, ban_count)              -- INDEX on hits DESC
 
 -- Per-protocol intel tables (same structure, composite PK)
 user_intel_proto(username, proto INTEGER, hits, last_seen)      -- INDEX on (proto, hits DESC)
@@ -213,25 +348,42 @@ ip_intel_proto(ip, proto INTEGER, hits, last_seen, lat, lng)
 -- SIP toll fraud destination tracking (only created when SIP is enabled)
 dial_intel(number TEXT PRIMARY KEY, hits, first_seen, last_seen, country, country_name, lat, lng)
 
--- Uptime tracking for KPM calculation
-monitor_heartbeats(id, uptime_minutes)
+-- Multi-server source tracking
+sources(id INTEGER PRIMARY KEY, source_id TEXT UNIQUE, display_name, hits, first_seen, last_seen, active)
+
+-- Uptime tracking for KPM calculation (single-row, upserted each minute)
+monitor_heartbeats(id INTEGER PRIMARY KEY, uptime_minutes INTEGER)
 ```
 
 Each knock writes 10 upserts: 5 to ALL tables + 5 to `_proto` tables. ALL tables serve as fast rollup for the ALL leaderboard; `_proto` tables serve per-protocol leaderboards.
 
+`ip_intel.hits_since_cleared` resets to 0 when an IP is banned (used with `--max-knocks` auto-ban). `ban_until` is a Unix timestamp (nullable); `ban_count` is the lifetime ban counter.
+
 ## Redis Keys
 
-- `knock:total_global` - Total attack count (all protocols)
-- `knock:uptime_minutes` - Monitor uptime in minutes
-- `knock:last_time` - Unix timestamp of last knock
-- `knock:last_lat` - Latitude of last knock location
-- `knock:last_lng` - Longitude of last knock location
-- `knock:recent` - Last 100 knocks, all protocols (JSON list)
-- `knock:recent:ssh` - Last 100 SSH knocks
-- `knock:recent:tnet` - Last 100 Telnet knocks
-- `knock:recent:smtp` - Last 100 SMTP knocks
-- `knock:blocked` - Set of blocked IPs (seeded from `blocklist.txt` on startup; checked by honeypot on each connection)
-- `knocks_stream` - Pub/sub channel for real-time events
+| Key | Type | Purpose |
+|-----|------|---------|
+| `knock:total_global` | string | Total attack count (all protocols) |
+| `knock:proto_counts` | hash | Per-protocol knock counts, e.g. `{SSH: 12345, SMTP: 6789}` |
+| `knock:source_counts` | hash | Per-source-server knock counts |
+| `knock:uptime_minutes` | string | Total monitor uptime in minutes |
+| `knock:uptime:{proto}` | string | Per-protocol uptime minutes (e.g. `knock:uptime:ssh`) |
+| `knock:last_time` | string | Unix timestamp of last knock (any protocol) |
+| `knock:last_time:{proto}` | string | Unix timestamp of last knock per protocol |
+| `knock:last_lat` | string | Latitude of last knock location |
+| `knock:last_lng` | string | Longitude of last knock location |
+| `knock:recent` | list | Last 100 knocks, all protocols (JSON) |
+| `knock:recent:{proto}` | list | Last 100 knocks per protocol (e.g. `knock:recent:ssh`) |
+| `knock:config:enabled_protocols` | string | JSON array of enabled protocol names |
+| `knock:config:protocol_meta` | string | JSON object of per-protocol metadata |
+| `knock:blocked:{ip}` | string | Set if IP is blocked; has TTL if ban expires, no TTL for permanent blocks |
+| `knock:is_aggregator` | string | Set to `"1"` if this monitor is running as an aggregator |
+| `knock:diag:{proto}:no_knock` | list | Last 500 non-knock events per protocol (diagnostic) |
+| `knock:diag:{proto}:last` | string | Most recent diagnostic event for a protocol |
+| `knock:diag:{proto}:reason_counts` | hash | Counts of no-knock reasons per protocol |
+| `knock:forensics:mail_raw` | list | Raw SMTP session forensics buffer (up to `MAIL_FORENSICS_MAX`) |
+| `knock:alerted:{tag}` | string | Cooldown key used by `knock-watch.sh` (TTL-based; not used by the app) |
+| `knocks_stream` | pub/sub | Real-time event channel between monitor and web server |
 
 ## Globe Rendering Rules
 
@@ -249,12 +401,12 @@ Additionally, `polygonsData(sameRef)` may be short-circuited by globe.gl — alw
 
 ## Frontend Features
 
-- **3D Globe** (globe.gl): Displays attack location, rotates on new knocks; heat map mode extrudes countries by hit count
-- **Protocol Filter**: Cycles ALL → SSH → TNET → SMTP → ALL; filters live feed, leaderboards, globe rotation, and heat map
+- **3D Globe** (globe.gl): Displays attack location, rotates on new knocks; heat map mode extrudes countries by hit count with a color scale legend
+- **Protocol Filter**: Dropdown selector on each pane (mobile) and a header switcher (desktop); choose ALL or any single protocol to filter the live feed, leaderboards, globe rotation, and heat map
 - **Live Feed**: Real-time attack log with protocol badge, username/password/location
 - **Leaderboards**: Top countries, usernames, passwords, ISPs, IPs — per-protocol or ALL
 - **Trivia & Jokes**: Context about why usernames/passwords are chosen, plus knock-knock jokes
-- **Sound Effects**: Optional audio notifications for new knocks
+- **Sound Effects**: Optional audio notifications for new knocks (off by default; UI interaction sounds also respect the mute state)
 - **About**: Project info section
 - **Classic Mode**: Automatically activates when only one protocol is active — hides protocol switcher, cycle buttons, proto badges, proto chip pulses, and Proto Stats pane for a clean single-protocol UI. Header label changes from "Total Knocks" to "[PROTO] Knocks"
 - **`?show` URL Parameter**: Subset which protocols are visible (e.g., `?show=SSH`, `?show=SSH,RDP`). Intersected with server's enabled protocols; invalid values fall back to all enabled. Single-protocol `?show` triggers classic mode. When filtered, header stats (total, KPM, ago) reflect only the active protocols, computed client-side from `protoBreakdownCache` and `lastKnockTimeByProto`

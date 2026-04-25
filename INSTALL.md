@@ -7,7 +7,7 @@ Knock-Knock can be installed most simply and universally using Docker, but also 
 All installation methods require:
 
 - Server with root access
-- Public IP address (for receiving SSH attacks)
+- Public IP address (for receiving attacks)
 - Ability to expose port 22 to internet traffic
 - **Real SSH moved to a non-standard port** (the honeypot needs port 22)
 
@@ -321,7 +321,7 @@ systemctl restart knock-monitor
 
 ### Selecting Protocols (`ENABLED_PROTOCOLS`)
 
-By default, all honeypots run (SSH, TNET, FTP, RDP, SMB, SIP, SMTP, HTTP). To run only specific protocols, set the `ENABLED_PROTOCOLS` environment variable to a comma-separated list.
+By default, all honeypots run (SSH, TNET, FTP, RDP, SMB, SIP, HTTP, SMTP). To run only specific protocols, set the `ENABLED_PROTOCOLS` environment variable to a comma-separated list.
 
 **Docker:** Copy the example override file (if you haven't already) and uncomment the `ENABLED_PROTOCOLS` setting:
 ```bash
@@ -359,7 +359,7 @@ systemctl restart knock-web
 
 ### IP Blocklist
 
-To immediately reject connections from specific IPs, add them to `data/blocklist.txt` (one per line). The honeypot reloads this file automatically every 60 seconds. Lines starting with `#` are ignored.
+To immediately reject connections from specific IPs, add them to `data/blocklist.txt` (one per line). The file is loaded into Redis at monitor startup; to apply changes while running, restart `knock-monitor`. Lines starting with `#` are ignored.
 
 ### Hiding Your Server IP
 
@@ -410,7 +410,8 @@ systemctl status redis-server   # or: systemctl status redis
 
 ### View database contents
 ```bash
-sqlite3 /root/knock-knock/data/knock_knock.db "SELECT * FROM knocks ORDER BY id DESC LIMIT 5;"
+sqlite3 /root/knock-knock/data/knock_knock.db "SELECT * FROM knocks_ssh ORDER BY id DESC LIMIT 5;"
+# Per-protocol tables: knocks_ssh, knocks_tnet, knocks_ftp, knocks_rdp, knocks_smb, knocks_sip, knocks_http, knocks_smtp
 ```
 
 ## Maintenance

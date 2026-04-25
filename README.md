@@ -24,14 +24,14 @@ Check it out at https://knock-knock.net, or install it on your own server. Don't
 **Mobile (carousel panes)**
 
 <p align="center">
-  <img src="pix/Mobile_Feed.PNG" alt="Mobile feed" width="210" />
-  <img src="pix/Mobile_Globe.PNG" alt="Mobile globe" width="210" />
-  <img src="pix/Mobile_Loc.PNG" alt="Mobile locations" width="210" />
+  <img src="pix/Mobile_Feed.png" alt="Mobile feed" width="210" />
+  <img src="pix/Mobile_Globe.png" alt="Mobile globe" width="210" />
+  <img src="pix/Mobile_User.png" alt="Mobile usernames" width="210" />
 </p>
 <p align="center">
-  <img src="pix/Mobile_User.PNG" alt="Mobile usernames" width="210" />
-  <img src="pix/Mobile_Passwd.PNG" alt="Mobile passwords" width="210" />
-  <img src="pix/Mobile_Trivia.PNG" alt="Mobile trivia" width="210" />
+  <img src="pix/Mobile_Passwd.png" alt="Mobile passwords" width="210" />
+  <img src="pix/Mobile_Stats.png" alt="Mobile stats" width="210" />
+  <img src="pix/Mobile_Trivia.png" alt="Mobile trivia" width="210" />
 </p>
 
 ## Features

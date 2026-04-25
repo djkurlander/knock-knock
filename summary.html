@@ -1715,7 +1715,7 @@
     }
 
     function playClick() { if (soundEnabled) playTone(800, 'sine', 0.1, 0.05); }
-    function playUIClick() { playTone(1200, 'triangle', 0.08, 0.08); }
+    function playUIClick() { if (soundEnabled) playTone(1200, 'triangle', 0.08, 0.08); }
     let lastKnockTime = null;
     let currentKnock = null;
     let mobileGlobe = null;

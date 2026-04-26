@@ -875,25 +875,53 @@
 
 <script>
     // --- PANEL INTRO TEXT (single source of truth for both layouts) ---
+    // Keys with an `_agg` variant swap in when isAggregator is true.
     const PANEL_INTROS = {
-        feed:   '<p>Set up an unprotected server on the net, and the bots start swarming. This site shows their break-in and exploitation attempts in real-time: where the bots come from, what credentials they try, and why. We have deployed a seemingly unprotected server on the internet, and on this page you will see all of the hostile infiltration attempts, live! You\'ll see brute force attacks, where bots rely on dictionary attacks or credential stuffing to try to break in. You\'ll see email spam bots trying to hijack this server as a relay for their malevolent goals. You\'ll see mercenary bots attempting to commandeer this server to place phone calls around the world for internet revenue sharing fraud. AND THAT\'S NOT ALL! Watch it here, as it happens.</p><p>Want the raw live view instead? <a href="/">Open the Live Control Panel</a>. Otherwise, continue below for the full guided explanation.</p>',
-        feed2:  '<p>Each bot attempt to infiltrate this server is referred to as a \'knock\'. In the box above you can see the number of knocks, the knocks per minute, and how long ago the last knock occurred. Enable the speaker icon to hear the knocks as they arrive. The globe spins to display the origin of the knock.</p><p>In the panel below, we see a scrollable history of the last 100 knocks received on this server.</p>',
+        feed:       '<p>Set up an unprotected server on the net, and the bots start swarming. This site shows their break-in and exploitation attempts in real-time: where the bots come from, what credentials they try, and why. We have deployed a seemingly unprotected server on the internet, and on this page you will see all of the hostile infiltration attempts, live! You\'ll see brute force attacks, where bots rely on dictionary attacks or credential stuffing to try to break in. You\'ll see email spam bots trying to hijack this server as a relay for their malevolent goals. You\'ll see mercenary bots attempting to commandeer this server to place phone calls around the world for internet revenue sharing fraud. AND THAT\'S NOT ALL! Watch it here, as it happens.</p><p>Want the raw live view instead? <a href="/">Open the Live Control Panel</a>. Otherwise, continue below for the full guided explanation.</p>',
+        feed_agg:   null, // built dynamically in updatePanelIntros()
+        feed2:      '<p>Each bot attempt to infiltrate this server is referred to as a \'knock\'. In the box above you can see the number of knocks, the knocks per minute, and how long ago the last knock occurred. To temporarily halt the incoming data, which can arrive fast and furious, press the pause button. Enable the speaker icon to hear the knocks as they arrive, reminiscent of the clicks on a virtual geiger counter measuring what is sometimes referred to as the "background radiation of the internet". The globe spins to display the origin of the knock.</p><p>In the panel below, we see a scrollable history of the last 100 knocks received on this server.</p>',
+        feed2_agg:  '<p>Each bot attempt to infiltrate a server is referred to as a \'knock\'. In the box above you can see the total number of knocks across all servers, the knocks per minute, and how long ago the last knock occurred. To temporarily halt the incoming data, which can arrive fast and furious, press the pause button. Enable the speaker icon to hear the knocks as they arrive, reminiscent of the clicks on a virtual geiger counter measuring what is sometimes referred to as the "background radiation of the internet". The globe spins to display the origin of the knock.</p><p>In the panel below, we see a scrollable history of the last 100 knocks received across all servers.</p>',
         feed3:  '<p>You can use the protocol drop down menu, at the right of the header, to filter the knocks to a specific protocol. Each of the live knocks above has a protocol badge to the right. Protocols are used to gain access to services on a remote computer, and the protocols monitored here are listed below.</p>',
         globe:  '<p>Half the fun (at least for me) is seeing where all these knocks originate. This project started when I showed my kids raw login-attempt logs (initially SSH), and they asked: where are all these bots coming from? In the globe view, each knock is plotted as a dot on a 3D globe to show the bot\'s origin. Take it out for a spin (literally, you can spin it interactively). You can also cycle through multiple visual styles with the Style button at the bottom of the panel. One of the most interesting is HEAT, a 3D heatmap that highlights the worst-offending countries and territories.</p>',
         loc:    '<p>To see these origins in a textual leaderboard, check out the LOCATION panel below. Here you can see the worst-offending bot origin countries. Technically, just because a bot is hosted there does not mean it is controlled by bad actors in that country; the attackers may be elsewhere, using servers they rent or infect.</p>',
         user:   '<p>Many bots try to log in with username/password credentials. These are often pulled from dictionaries of common credentials, which is why this is called dictionary-based attack traffic and credential stuffing. Check out the live leaderboard below for the most commonly attempted usernames. Usually, root leads by a wide margin: on Unix/Linux systems, it\'s the superuser account with full control of the server.</p>',
         pass:   '<p>The next panel shows the most frequent passwords attempted by bots. Life Pro Tip: do not use one of these passwords. Almost always, the Space Balls \'12345\' password is in the top 10. It may be hard to imagine that people actually use these passwords, but they do, and many of the bots attempting these passwords are running on servers they broke into using these same passwords. Note that common passwords differ somewhat by protocol.</p>',
         isp:    '<p>Internet Service Providers (ISPs) provide network access that enables bots to attack other machines. ISPs can suspend or revoke access for abusive servers, but enforcement varies widely. Below is the ISP Wall of Shame.</p>',
-        ip:     '<p>Each bot reveals its IP address, a unique network identifier, when attacking our server. Because we\'re interested in attack patterns, we often let bots continue for a while. Occasionally, we cap a bot at a fixed number of attacks before banning it; when that happens, you\'ll see some IPs max out at that fixed count.</p>',
+        ip:         '<p>Each bot reveals its IP address, a unique network identifier, when attacking our server. Because we\'re interested in attack patterns, we often let bots continue for a while. Occasionally, we cap a bot at a fixed number of attacks before banning it; when that happens, you\'ll see some IPs max out at that fixed count, marked with a red ban symbol.</p>',
+        ip_agg:     '<p>Each bot reveals its IP address, a unique network identifier, when attacking our servers. Because we\'re interested in attack patterns, we often let bots continue for a while. Occasionally, we cap a bot at a fixed number of attacks before banning it; when that happens, you\'ll see some IPs max out at that fixed count, marked with a red ban symbol.</p>',
         info:   '<p>The LAST KNOCK panel shows details from the most recent bot attack: country, user, password, ISP, and IP address. For each value, it shows how long ago it was last seen, total sightings, and a rank badge: gold for top 10, silver for 11-50, and red for 51-100.</p>',
         proto:  '<p>As described earlier, this site monitors multiple protocols, and bots target some protocols much more than others. The panel below shows each monitored protocol, along with its percentage of total knocks, raw knock count, and knocks per minute.</p>',
+        proto_agg: '<p>As described earlier, this site monitors multiple protocols, and bots target some protocols much more than others. The panel below shows each monitored protocol, along with its percentage of total knocks, raw knock count, and knocks per minute. Below the protocol breakdown, you\'ll also find a table showing the contribution from each server in the network.</p>',
         trivia: '<p>It\'s fascinating why some usernames or passwords are chosen, sometimes rooted in system administration history, other times drawn from credential leaks. The Trivia panel explains why the latest username or password may have been used in a credential-stuffing attack. It also includes a bit of trivia about the country of origin of the latest knock.</p>',
-        about:  '<p>Now that you understand the interface, you may prefer to use the <a href="/">streamlined control panel</a>. Feel free to send questions or comments to the email address in the panel below. Also included is information on service uptime, monitored protocols, and the service version. Knock-knock installations can report offending bot IPs to AbuseIPDB, which helps system administrators and ISPs identify bad actors. The badge at the bottom shows how many malevolent bot IPs knock-knock servers have identified and reported so far.</p>',
+        about:  null, // built dynamically in updatePanelIntros()
     };
-    document.querySelectorAll('.panel-intro[data-intro]').forEach(el => {
-        const html = PANEL_INTROS[el.dataset.intro];
-        if (html) el.innerHTML = html;
-    });
+    function buildFeedAgg() {
+        let serverPhrase = 'across multiple servers';
+        if (sourceCountsCache.length > 0) {
+            const nameMap = {};
+            sourceCountsCache.forEach(r => {
+                const name = r.display_name !== r.source_id ? r.display_name : r.source_id;
+                if (!nameMap[name]) nameMap[name] = 0;
+                nameMap[name]++;
+            });
+            const cityList = Object.entries(nameMap)
+                .map(([name, count]) => count > 1 ? `${escapeHtml(name)} (${count})` : escapeHtml(name))
+                .join(', ');
+            serverPhrase = `across ${sourceCountsCache.length} server${sourceCountsCache.length !== 1 ? 's' : ''}: ${cityList}`;
+        }
+        return `<p>Set up unprotected servers on the net, and the bots start swarming. This site aggregates break-in and exploitation attempts in real-time: displaying where the bots come from, what credentials they try, and why. You will see all of the hostile infiltration attempts, live, ${serverPhrase}. You\'ll see brute force attacks, where bots rely on dictionary attacks or credential stuffing to try to break in. You\'ll see email spam bots trying to hijack these servers as relays for their malevolent goals. You\'ll see mercenary bots attempting to commandeer these servers to place phone calls around the world for internet revenue sharing fraud. AND THAT\'S NOT ALL! Watch it here, as it happens.</p><p>Want the raw live view instead? <a href="/">Open the Live Control Panel</a>. Otherwise, continue below for the full guided explanation.</p>`;
+    }
+    function updatePanelIntros() {
+        if (isAggregator) PANEL_INTROS.feed_agg = buildFeedAgg();
+        const networkSuffix = isAggregator ? ', and the list of servers in the monitoring network' : '';
+        PANEL_INTROS.about = `<p>Now that you understand the interface, you may prefer to use the <a href="/">streamlined control panel</a>. Feel free to send questions or comments to the email address in the panel below. Also included is information on ${isAggregator ? 'the servers being monitored, ' : ''}service uptime, monitored protocols, and the service version. Knock-knock installations can report offending bot IPs to AbuseIPDB, which helps system administrators and ISPs identify bad actors. The badge at the bottom shows the number of malevolent bot IPs that have been reported by the knock-knock servers so far.</p>`;
+        document.querySelectorAll('.panel-intro[data-intro]').forEach(el => {
+            const key = el.dataset.intro;
+            const html = (isAggregator && PANEL_INTROS[key + '_agg']) ? PANEL_INTROS[key + '_agg'] : PANEL_INTROS[key];
+            if (html) el.innerHTML = html;
+        });
+    }
+    updatePanelIntros();
 
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsUrl = `${protocol}//${window.location.host}/ws`;
@@ -3470,6 +3498,7 @@
                 document.querySelector('.m-dots').style.visibility = 'visible';
                 renderProtoStats();
                 updateAboutServerInfo();
+                updatePanelIntros();
                 // Refresh Heat extrusion colors/heights without re-setting image or polygon data
                 refreshHeatGlobe(getActiveLeaderboards().loc);
 

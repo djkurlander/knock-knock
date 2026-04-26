@@ -2,7 +2,7 @@
 
 [![Live Demo](https://img.shields.io/badge/LIVE-DEMO-brightgreen?style=for-the-badge)](https://knock-knock.net)
 
-**Live demo:** https://knock-knock.net
+**Live demo:** https://knock-knock.net &nbsp;|&nbsp; **Live tutorial:** https://knock-knock.net/summary
 
 _**Watch** the bots trying to break into unprotected Internet servers, in this information-packed dashboard! **Discover** the most frequent countries of origin! **Be shocked** by the most common usernames and passwords! **Scoff at and ridicule** the worst offending ISPs and IPs! **Find out** why the bots are choosing these usernames and passwords!_
 

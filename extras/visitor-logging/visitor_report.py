@@ -39,6 +39,7 @@ SMTP_HOST = os.environ.get('SMTP_HOST', 'localhost')
 SMTP_PORT = int(os.environ.get('SMTP_PORT', 25))
 SMTP_USER = os.environ.get('SMTP_USER', '')
 SMTP_PASS = os.environ.get('SMTP_PASS', '')
+SERVER_ID = os.environ.get('SOURCE_ID', socket.gethostname().split('.')[0])
 
 # --- IPs to exclude from reports (e.g., your own IPs or domains) ---
 # Supports exact IPs, domains (resolved to IPs), and prefix matching with * wildcard
@@ -141,7 +142,7 @@ def format_report(period_name, days):
     summary = get_visitor_summary(days)
 
     report = []
-    report.append(f"KNOCK-KNOCK.NET - {period_name} Visitor Report")
+    report.append(f"KNOCK-KNOCK.NET [{SERVER_ID}] - {period_name} Visitor Report")
     report.append(f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     report.append("=" * 50)
     report.append("")
@@ -187,7 +188,7 @@ def format_report(period_name, days):
 def send_email(report, period_name, total_visitors):
     """Send the report via email."""
     msg = MIMEText(report)
-    msg['Subject'] = f"Knock-Knock.net {period_name} Visitor Report - {total_visitors} Visitors"
+    msg['Subject'] = f"Knock-Knock.net [{SERVER_ID}] {period_name} Visitor Report - {total_visitors} Visitors"
     msg['From'] = EMAIL_FROM
     msg['To'] = EMAIL_TO
 

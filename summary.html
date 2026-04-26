@@ -921,7 +921,6 @@
             if (html) el.innerHTML = html;
         });
     }
-    updatePanelIntros();
 
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsUrl = `${protocol}//${window.location.host}/ws`;
@@ -1145,6 +1144,7 @@
     let showProtoChip         = true;
     let showProtoBadges       = true;
     let isAggregator = false;
+    updatePanelIntros();
     let showProtoStatsPane    = true;
     let showUsernamePanel     = true;
     let showPasswordPanel     = true;

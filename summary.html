@@ -897,7 +897,7 @@
     };
     function buildFeedAgg() {
         let serverPhrase = 'across multiple servers';
-        if (sourceCountsCache.length > 0) {
+        if (typeof sourceCountsCache !== 'undefined' && sourceCountsCache.length > 0) {
             const nameMap = {};
             sourceCountsCache.forEach(r => {
                 const name = r.display_name !== r.source_id ? r.display_name : r.source_id;

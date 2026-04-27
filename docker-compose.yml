@@ -20,6 +20,9 @@ services:
     image: ghcr.io/djkurlander/knock-knock:latest
     build: .  # Used when running: docker compose up --build
     command: python -u monitor.py
+    env_file:
+      - path: .env
+        required: false
     environment:
       - REDIS_HOST=redis
     ports:
@@ -46,6 +49,9 @@ services:
     image: ghcr.io/djkurlander/knock-knock:latest
     build: .  # Used when running: docker compose up --build
     command: ["python", "main.py"]
+    env_file:
+      - path: .env
+        required: false
     environment:
       - REDIS_HOST=redis
     ports:

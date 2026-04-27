@@ -973,16 +973,9 @@ def monitor(save_knocks=None, max_knocks=None, ban_duration_days=30):
             elif TRACE_KNOCK:
                 print(line, end='', flush=True)  # pass through diagnostic output from honeypots
             continue
-        # Sanitize credential fields before any processing or forwarding
-        # Sanitize credential fields once, before forwarding or any local processing
+        # Sanitize credential fields once, before any processing or forwarding
         if knock.get('type') == 'KNOCK':
             knock = sanitize_knock(knock)
-        # Feeder: forward sanitized knock to aggregator before local enrichment
-        if AGGREGATOR_HOST and knock.get('type') == 'KNOCK':
-            try:
-                _forward_queue.put_nowait({**knock, 'source': SOURCE_ID})
-            except queue.Full:
-                pass
         if knock.get("type") == "SMTP_DIAG":
             store_smtp_diag(r, build_smtp_diag(knock))
             continue
@@ -1015,22 +1008,27 @@ def monitor(save_knocks=None, max_knocks=None, ban_duration_days=30):
                 raw_domain = knock.get("domain")
                 if raw_domain is not None and raw_domain:
                     package["domain"] = raw_domain
-            # Source tagging — integer for SQLite, string+display for Redis/WebSocket
-            _src_id = knock.get('source', SOURCE_ID)
-            package['source_int']     = _ensure_source(_src_id, _src_encode, _src_decode)
-            package['source']         = _src_id
-            package['source_display'] = _src_decode.get(package['source_int'], _src_id)
-            # Pass through protocol-specific extended telemetry into Redis/websocket payloads.
-            # This is intentionally not persisted in SQLite.
-            for k, v in knock.items():
-                if not isinstance(k, str) or not k.startswith(_SANITIZE_PROTO_PREFIXES):
-                    continue
-                package[k] = v
             try:
+                # Source tagging — integer for SQLite, string+display for Redis/WebSocket
+                _src_id = knock.get('source', SOURCE_ID)
+                package['source_int']     = _ensure_source(_src_id, _src_encode, _src_decode)
+                package['source']         = _src_id
+                package['source_display'] = _src_decode.get(package['source_int'], _src_id)
+                # Pass through protocol-specific extended telemetry into Redis/websocket payloads.
+                # This is intentionally not persisted in SQLite.
+                for k, v in knock.items():
+                    if not isinstance(k, str) or not k.startswith(_SANITIZE_PROTO_PREFIXES):
+                        continue
+                    package[k] = v
                 package.update(get_intel_stats_before_update(package))
                 hits_since_cleared = int(package.get('ip_hits_since_cleared', 0) or 0)
                 if is_over_limit_and_block(r, ip, hits_since_cleared, proto, max_knocks, ban_duration_days):
                     continue
+                if AGGREGATOR_HOST:
+                    try:
+                        _forward_queue.put_nowait({**knock, 'source': SOURCE_ID})
+                    except queue.Full:
+                        pass
                 store_mail_forensic(r, forensic)
                 log_to_enriched_db(package, save_protos=save_protos)
             except Exception as e:

@@ -1073,20 +1073,25 @@ if __name__ == "__main__":
                         help="Save individual knocks to SQLite. Optional: comma-separated protocols (e.g. SIP,SMTP). Default: ALL")
     parser.add_argument("--max-knocks", default=None, metavar="LIMIT",
                         help="Auto-block IP after N knocks. Examples: 5000, RDP:500, 5000,RDP:500,SIP:NONE")
-    parser.add_argument("--ban-duration", type=int, default=30, metavar="DAYS",
+    parser.add_argument("--ban-duration", type=int, default=None, metavar="DAYS",
                         help="Duration of auto-ban in days (default: 30, 0 = permanent)")
     args = parser.parse_args()
     if args.reset_all: reset_all()
-    # Parse --max-knocks: "5000" → {None: 5000}, "RDP:500" → {'RDP': 500}, "5000,RDP:500" → {None: 5000, 'RDP': 500}
+    # CLI takes precedence; fall back to env vars
+    save_knocks = args.save_knocks
+    if save_knocks is None:
+        env = os.environ.get('SAVE_KNOCKS', '').strip()
+        save_knocks = 'ALL' if env.upper() in ('TRUE', '1') else env or None
+    # Parse --max-knocks / MAX_KNOCKS: "5000" → {None: 5000}, "RDP:500" → {'RDP': 500}, "5000,RDP:500" → {None: 5000, 'RDP': 500}
     max_knocks = None
-    if args.max_knocks:
-        max_knocks = {}
-        for part in args.max_knocks.split(','):
-            part = part.strip()
-            if ':' in part:
-                proto_name, val = part.split(':', 1)
-                val = val.strip().upper()
-                max_knocks[proto_name.strip().upper()] = None if val == 'NONE' else int(val)
-            else:
-                max_knocks[None] = int(part)
-    monitor(save_knocks=args.save_knocks, max_knocks=max_knocks, ban_duration_days=args.ban_duration)
+    for part in (args.max_knocks or os.environ.get('MAX_KNOCKS', '')).split(','):
+        part = part.strip()
+        if not part: continue
+        max_knocks = max_knocks or {}
+        if ':' in part:
+            proto_name, val = part.split(':', 1)
+            max_knocks[proto_name.strip().upper()] = None if val.strip().upper() == 'NONE' else int(val)
+        else:
+            max_knocks[None] = int(part)
+    ban_duration = args.ban_duration if args.ban_duration is not None else int(os.environ.get('BAN_DURATION', 30))
+    monitor(save_knocks=save_knocks, max_knocks=max_knocks, ban_duration_days=ban_duration)

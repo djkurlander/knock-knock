@@ -43,11 +43,12 @@ python honeypots/http_honeypot.py            # HTTP (ports 80 and 443)
 python honeypots/smtp_honeypot.py            # SMTP (ports 25 and 587)
 
 # Log monitor + geo-enricher — spawns all honeypots as subprocesses
-# Add --save-knocks to store individual knocks in SQLite (all protocols)
-# Add --save-knocks=SIP,SMTP to store only specific protocols
-# Add --max-knocks=5000 to auto-ban IPs exceeding a threshold (global)
-# Add --max-knocks=5000,RDP:50 to set per-protocol overrides
-# Add --ban-duration=30 to set ban length in days (default 30; 0 = permanent)
+# CLI flags (or equivalent env vars in .env / systemd unit):
+# --save-knocks / SAVE_KNOCKS=true       store individual knocks in SQLite (all protocols)
+# --save-knocks=SIP,SMTP / SAVE_KNOCKS=SIP,SMTP   selective protocols only
+# --max-knocks=5000 / MAX_KNOCKS=5000    auto-ban IPs exceeding a threshold (global)
+# --max-knocks=5000,RDP:50 / MAX_KNOCKS=5000,RDP:50   per-protocol overrides
+# --ban-duration=30 / BAN_DURATION=30   ban length in days (0 = permanent)
 python monitor.py
 
 # Web server (HTTP, default port 8080 — Cloudflare Origin Rule proxies 443→8080)
@@ -222,6 +223,9 @@ Port 80 is open to all — it's a honeypot port. Port 443 can also be mapped to 
 | `AGGREGATOR_PORT` | `9999` | TCP port of the aggregator ingest listener |
 | `INGEST_PORT` | unset | TCP port to listen on for incoming knock streams (aggregator role) |
 | `TRACE_KNOCK` | unset | Set to `true` to print full knock details to stdout |
+| `SAVE_KNOCKS` | unset | `true` or `1` = save all protocols; comma-separated = selective (e.g. `SIP,SMTP`) |
+| `MAX_KNOCKS` | unset | Auto-ban threshold, same syntax as `--max-knocks` (e.g. `5000` or `5000,RDP:500`) |
+| `BAN_DURATION` | `30` | Auto-ban duration in days (`0` = permanent) |
 | `MAIL_FORENSICS_MAX` | `100` | Max raw SMTP messages to retain in Redis forensics buffer |
 | `REDACT_SELF_IPS` | unset | Comma-separated IPs to redact from knock output (self-protection) |
 | `REDACT_SELF_HOSTS` | unset | Comma-separated hostnames to redact |

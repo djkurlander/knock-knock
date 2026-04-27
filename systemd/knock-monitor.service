@@ -6,30 +6,6 @@ After=network.target redis-server.service
 User=root
 WorkingDirectory=/root/knock-knock
 EnvironmentFile=-/root/knock-knock/.env
-# Store individual knock records in SQLite (all protocols, or comma-separated list e.g. SIP,SMTP)
-# Environment=SAVE_KNOCKS=true
-# Environment=SAVE_KNOCKS=SIP,SMTP
-# Auto-block IPs: global limit, per-protocol, or mixed (NONE = disable for a protocol)
-# Environment=MAX_KNOCKS=5000
-# Environment=MAX_KNOCKS=5000,RDP:500,SIP:NONE
-# Environment=BAN_DURATION=30
-# To select which honeypots to run, uncomment and edit the Environment line below (default: all).
-# Protocols: SSH, TNET, FTP, RDP, SMB, SIP, SMTP, MAIL
-# Environment=ENABLED_PROTOCOLS=SSH
-# Environment=ENABLED_PROTOCOLS=SSH,TNET,SMTP
-# Override SMTP banner hostname (default: reverse DNS of server IP)
-# Environment=SMTP_HOSTNAME=mail.local
-# Log each knock to the journal (default: off — keeps journal small)
-# Environment=TRACE_KNOCK=true
-# Federation — feeder mode: forward knocks to an aggregator server
-# SOURCE_ID defaults to hostname; keep it short (e.g. ams2, lon1, ny)
-# Only set AGGREGATOR_HOST to enable forwarding; local honeypots still run normally
-# Environment=SOURCE_ID=la5
-# Environment=AGGREGATOR_HOST=aggregator.example.com
-# Environment=AGGREGATOR_PORT=9999
-# Federation — aggregator mode: receive forwarded knocks from feeder servers
-# Open INGEST_PORT in your firewall to feeder IPs only (no auth token — firewall is the gate)
-# Environment=INGEST_PORT=9999
 ExecStart=/root/knock-knock/.venv/bin/python -u monitor.py
 Restart=always
 RestartSec=5

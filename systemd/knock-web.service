@@ -6,16 +6,6 @@ After=network.target redis-server.service knock-monitor.service
 User=root
 WorkingDirectory=/root/knock-knock
 EnvironmentFile=-/root/knock-knock/.env
-# Web UI port (default 8080)
-# Environment=WEB_PORT=8080
-# Interface to bind (default 0.0.0.0)
-# Environment=WEB_LISTEN=0.0.0.0
-# HTTPS — set ENABLE_SSL=true and optionally override cert paths:
-# Environment=ENABLE_SSL=true
-# Environment=KNOCK_KEYFILE=certs/key.pem
-# Environment=KNOCK_CERTFILE=certs/cert.pem
-# Log dashboard visitors to visitors.db
-# Environment=LOG_VISITORS=true
 ExecStart=/root/knock-knock/.venv/bin/python main.py
 Restart=always
 RestartSec=5

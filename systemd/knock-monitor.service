@@ -5,6 +5,7 @@ After=network.target redis-server.service
 [Service]
 User=root
 WorkingDirectory=/root/knock-knock
+EnvironmentFile=-/root/knock-knock/.env
 # Store individual knock records in SQLite (all protocols, or comma-separated list e.g. SIP,SMTP)
 # Environment=SAVE_KNOCKS=true
 # Environment=SAVE_KNOCKS=SIP,SMTP

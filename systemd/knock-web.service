@@ -5,6 +5,7 @@ After=network.target redis-server.service knock-monitor.service
 [Service]
 User=root
 WorkingDirectory=/root/knock-knock
+EnvironmentFile=-/root/knock-knock/.env
 # Plain HTTP (default — port 8080, Cloudflare Origin Rule proxies 80→8080)
 ExecStart=/root/knock-knock/.venv/bin/python3 -m uvicorn main:app \
     --host 0.0.0.0 \

@@ -182,9 +182,16 @@ source .venv/bin/activate
 uv pip install asyncssh==2.22.0 geoip2 redis fastapi uvicorn[standard] python-dotenv impacket phonenumbers
 ```
 
-### Install Systemd Services
+### Configure
 
-Sample unit files are in the `systemd/` directory:
+```bash
+cp .env.example .env
+vi .env   # Set SOURCE_ID, enable SSL, configure auto-ban, etc.
+```
+
+See `.env.example` for all available options with descriptions.
+
+### Install Systemd Services
 
 ```bash
 cp systemd/*.service /etc/systemd/system/
@@ -264,9 +271,18 @@ source .venv/bin/activate
 uv pip install asyncssh==2.22.0 geoip2 redis fastapi uvicorn[standard] python-dotenv impacket phonenumbers
 ```
 
+### Configure
+
+```bash
+cp .env.example .env
+vi .env   # Set SOURCE_ID, enable SSL, configure auto-ban, etc.
+```
+
+See `.env.example` for all available options with descriptions.
+
 ### Install Systemd Services
 
-Sample unit files are in the `systemd/` directory. The Redis service name may differ on RHEL-based systems:
+The Redis service name may differ on RHEL-based systems:
 
 ```bash
 cp systemd/*.service /etc/systemd/system/
@@ -300,40 +316,41 @@ See [Optional Configuration](#optional-configuration) for various site-specific 
 
 ## Optional Configuration
 
-### Saving Individual Knocks (`--save-knocks`)
+Most configuration is done via `.env` — see `.env.example` for all available options with descriptions. The sections below cover the most common customizations.
 
-By default, the monitor only updates aggregated intel tables (top usernames, passwords, countries, ISPs, IPs). To also store every individual knock in per-protocol SQLite tables for later analysis, enable the `--save-knocks` flag. This uses more disk space (~600 MB/year at typical traffic levels).
+### Saving Individual Knocks (`SAVE_KNOCKS`)
 
-To save only specific protocols, pass a comma-separated list: `--save-knocks=SIP,SMTP`. Only the specified protocols will get knock tables created.
+By default, the monitor only updates aggregated intel tables (top usernames, passwords, countries, ISPs, IPs). To also store every individual knock in per-protocol SQLite tables for later analysis, set `SAVE_KNOCKS` in `.env`. Can result in large databases depending on traffic and protocols chosen.
 
-**Docker:** Copy the example override file and uncomment the `--save-knocks` command:
 ```bash
-cp docker-compose.override.yml.example docker-compose.override.yml
-# Edit docker-compose.override.yml and uncomment the honeypot-monitor command
-docker compose up -d
+# All protocols:
+SAVE_KNOCKS=true
+
+# Selective — only specific protocols:
+SAVE_KNOCKS=SIP,SMTP
 ```
 
-**Systemd:** Append `--save-knocks` to the `ExecStart` line in `/etc/systemd/system/knock-monitor.service`, then reload:
+Restart after changing:
 ```bash
-systemctl daemon-reload
+# Docker
+docker compose up -d
+
+# Systemd
 systemctl restart knock-monitor
 ```
 
 ### Selecting Protocols (`ENABLED_PROTOCOLS`)
 
-By default, all eight honeypots run (SSH, TNET, FTP, RDP, SMB, SIP, HTTP, SMTP). To run a subset — for example, if you have no interest in RDP — set `ENABLED_PROTOCOLS` to a comma-separated list of the protocols you want active, e.g. `SSH,TNET,FTP,SMB,SIP,HTTP,SMTP`.
+By default, all eight honeypots run (SSH, TNET, FTP, RDP, SMB, SIP, HTTP, SMTP). To run a subset, set `ENABLED_PROTOCOLS` in `.env`:
 
-**Docker:** Copy the example override file (if you haven't already) and uncomment the `ENABLED_PROTOCOLS` setting:
 ```bash
-cp docker-compose.override.yml.example docker-compose.override.yml
-# Edit docker-compose.override.yml and uncomment/edit the ENABLED_PROTOCOLS line
-docker compose up -d
+ENABLED_PROTOCOLS=SSH,TNET,FTP,SMB,SIP,HTTP,SMTP
 ```
 
-**Systemd:** Uncomment and edit the `Environment=ENABLED_PROTOCOLS=` line in `/etc/systemd/system/knock-monitor.service`, then reload:
+**Docker:** also copy the example override file if you haven't already:
 ```bash
-systemctl daemon-reload
-systemctl restart knock-monitor
+cp docker-compose.override.yml.example docker-compose.override.yml
+docker compose up -d
 ```
 
 ### Enabling HTTPS

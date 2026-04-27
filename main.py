@@ -485,7 +485,7 @@ if __name__ == "__main__":
         port=int(os.environ.get('WEB_PORT', 8080)),
         proxy_headers=True,
         forwarded_allow_ips='*',
-        workers=int(os.environ.get('WEB_WORKERS', 2)),
+        workers=int(os.environ.get('WEB_WORKERS', 1 if os.path.exists('/.dockerenv') else 2)),
         timeout_keep_alive=30,
         log_level='warning',
         **ssl_args)

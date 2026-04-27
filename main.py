@@ -1,4 +1,5 @@
 import asyncio, json, logging, sqlite3, os, time, uvicorn
+from contextlib import asynccontextmanager
 import redis.asyncio as redis
 import geoip2.database
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
@@ -7,7 +8,14 @@ from datetime import datetime
 from fastapi.staticfiles import StaticFiles
 from constants import PROTO, PROTO_NAME, PROTOCOL_META, DEFAULT_ENABLED_PROTOCOLS, sort_protocols_for_ui
 
-app = FastAPI()
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    print("🚀 Knock-Knock Web Active...", flush=True)
+    asyncio.create_task(redis_listener())
+    asyncio.create_task(stats_cache.update_and_broadcast())
+    yield
+
+app = FastAPI(lifespan=lifespan)
 logger = logging.getLogger("uvicorn.error")
 LOG_UNHANDLED_HTTP = os.environ.get('LOG_UNHANDLED_HTTP', '').lower() == 'true'
 
@@ -411,11 +419,6 @@ async def redis_listener():
             payload = json.dumps({"type": "new_knock", "data": data})
             await manager.broadcast(payload)
 
-@app.on_event("startup")
-async def startup_event():
-    print("🚀 Knock-Knock Web Active...", flush=True)
-    asyncio.create_task(redis_listener())
-    asyncio.create_task(stats_cache.update_and_broadcast())
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):

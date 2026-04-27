@@ -344,16 +344,20 @@ certs/cert.pem   # Certificate or fullchain
 certs/key.pem    # Private key
 ```
 
-**Docker:** Copy the example override file (if you haven't already) and uncomment the SSL settings:
-```bash
-cp docker-compose.override.yml.example docker-compose.override.yml
-# Edit docker-compose.override.yml and uncomment ENABLE_SSL and the certs volume
-docker compose up -d
+**Docker and Systemd:** Add to `.env`:
+```
+ENABLE_SSL=true
+# Optional — defaults to certs/key.pem and certs/cert.pem
+# KNOCK_KEYFILE=certs/key.pem
+# KNOCK_CERTFILE=certs/cert.pem
 ```
 
-**Systemd:** In `/etc/systemd/system/knock-web.service`, replace the HTTP `ExecStart` line with the commented-out HTTPS block, then reload:
+Then restart:
 ```bash
-systemctl daemon-reload
+# Docker
+docker compose up -d
+
+# Systemd
 systemctl restart knock-web
 ```
 

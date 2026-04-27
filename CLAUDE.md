@@ -51,14 +51,8 @@ python honeypots/smtp_honeypot.py            # SMTP (ports 25 and 587)
 # --ban-duration=30 / BAN_DURATION=30   ban length in days (0 = permanent)
 python monitor.py
 
-# Web server (HTTP, default port 8080 — Cloudflare Origin Rule proxies 443→8080)
-python3 -m uvicorn main:app --host 0.0.0.0 --port 8080 \
-  --proxy-headers --forwarded-allow-ips='*' --workers 2
-
-# Web server (HTTPS, default port 8443)
-python3 -m uvicorn main:app --host 0.0.0.0 --port 8443 \
-  --ssl-keyfile certs/key.pem --ssl-certfile certs/cert.pem \
-  --proxy-headers --forwarded-allow-ips='*' --workers 2
+# Web server — reads WEB_PORT, WEB_LISTEN, ENABLE_SSL, KNOCK_KEYFILE, KNOCK_CERTFILE from env
+python main.py
 ```
 
 ### Debugging

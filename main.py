@@ -1,4 +1,4 @@
-import asyncio, json, logging, sqlite3, os, time
+import asyncio, json, logging, sqlite3, os, time, uvicorn
 import redis.asyncio as redis
 import geoip2.database
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
@@ -469,3 +469,20 @@ async def get_robots():
         media_type="text/plain",
         headers={"Cache-Control": "no-cache"},
     )
+
+if __name__ == "__main__":
+    ssl_args = {}
+    if os.environ.get('ENABLE_SSL', '').lower() == 'true':
+        ssl_args = {
+            'ssl_keyfile': os.environ.get('KNOCK_KEYFILE', 'certs/key.pem'),
+            'ssl_certfile': os.environ.get('KNOCK_CERTFILE', 'certs/cert.pem'),
+        }
+    uvicorn.run("main:app",
+        host=os.environ.get('WEB_LISTEN', '0.0.0.0'),
+        port=int(os.environ.get('WEB_PORT', 8080)),
+        proxy_headers=True,
+        forwarded_allow_ips='*',
+        workers=2,
+        timeout_keep_alive=30,
+        log_level='warning',
+        **ssl_args)

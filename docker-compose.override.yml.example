@@ -5,15 +5,17 @@
 services:
 
   ## Store every individual knock in SQLite (uses ~600 MB/year)
-  ## Use --save-knocks for all protocols, or --save-knocks=SIP,SMTP for selective
+  ## SAVE_KNOCKS=true for all protocols, or SAVE_KNOCKS=SIP,SMTP for selective
   # honeypot-monitor:
-  #   command: python -u monitor.py --save-knocks
+  #   environment:
+  #     - SAVE_KNOCKS=true
 
   ## Auto-add IPs to blocklist.txt after N total hits (disabled by default)
   ## Note: counts all-time hits, so existing high-hit IPs will be blocked on their next knock
+  ## Per-protocol: MAX_KNOCKS=RDP:500  or  MAX_KNOCKS=5000,RDP:500,SIP:NONE
   # honeypot-monitor:
-  #   command: python -u monitor.py --max-knocks 5000
-  ## Per-protocol: --max-knocks RDP:500  or  --max-knocks 5000,RDP:500,SIP:NONE
+  #   environment:
+  #     - MAX_KNOCKS=5000
 
   ## Override SMTP banner hostname (default: reverse DNS of server IP)
   # honeypot-monitor:
@@ -41,8 +43,8 @@ services:
   #   ports:
   #     - "9090:9090"
 
-  ## HTTPS — uncomment the block below, then place certs in certs/
-  ## Place cert.pem and key.pem in certs/ (e.g. Let's Encrypt or Cloudflare Origin CA)
+  ## HTTPS — place cert.pem and key.pem in certs/, then set ENABLE_SSL=true
+  ## Optionally override paths with KNOCK_KEYFILE / KNOCK_CERTFILE
   # web:
   #   environment:
   #     - ENABLE_SSL=true

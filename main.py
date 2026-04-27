@@ -68,9 +68,8 @@ if LOG_VISITORS:
         conn = sqlite3.connect(VISITORS_DB_PATH, timeout=10)
         cur = conn.cursor()
         cur.execute("""CREATE TABLE IF NOT EXISTS visitors (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-            ip TEXT,
+            ip TEXT NOT NULL,
+            date TEXT NOT NULL,
             city TEXT,
             region TEXT,
             country TEXT,
@@ -78,7 +77,11 @@ if LOG_VISITORS:
             isp TEXT,
             asn INTEGER,
             referrer TEXT,
-            user_agent TEXT
+            user_agent TEXT,
+            visit_count INTEGER NOT NULL DEFAULT 1,
+            first_seen DATETIME DEFAULT CURRENT_TIMESTAMP,
+            last_seen DATETIME DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (ip, date)
         )""")
         conn.commit()
         conn.close()
@@ -102,14 +105,18 @@ if LOG_VISITORS:
         return geo
 
     def log_visitor(ip, referrer=None, user_agent=None):
-        """Log a visitor to the separate visitors database."""
+        """Log a visitor to the separate visitors database — one row per IP per day."""
         try:
             geo = get_visitor_geo(ip)
+            today = datetime.now().strftime('%Y-%m-%d')
             conn = sqlite3.connect(VISITORS_DB_PATH, timeout=10)
-            cur = conn.cursor()
-            cur.execute("""INSERT INTO visitors (ip, city, region, country, iso_code, isp, asn, referrer, user_agent)
-                           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                        (ip, geo['city'], geo['region'], geo['country'], geo['iso'], geo['isp'], geo['asn'], referrer, user_agent))
+            conn.execute("""
+                INSERT INTO visitors (ip, date, city, region, country, iso_code, isp, asn, referrer, user_agent)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(ip, date) DO UPDATE SET
+                    visit_count = visit_count + 1,
+                    last_seen = CURRENT_TIMESTAMP
+            """, (ip, today, geo['city'], geo['region'], geo['country'], geo['iso'], geo['isp'], geo['asn'], referrer, user_agent))
             conn.commit()
             conn.close()
         except Exception as e:

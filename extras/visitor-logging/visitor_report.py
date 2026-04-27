@@ -76,15 +76,15 @@ def get_visitors(days):
     conn.row_factory = sqlite3.Row
     cur = conn.cursor()
 
-    since = (datetime.now() - timedelta(days=days)).strftime('%Y-%m-%d %H:%M:%S')
+    since = (datetime.now() - timedelta(days=days)).strftime('%Y-%m-%d')
 
     cur.execute("""
         SELECT ip, city, region, country, iso_code, isp, referrer, user_agent,
-               COUNT(*) as visit_count
+               SUM(visit_count) as visit_count
         FROM visitors
-        WHERE timestamp >= ?
+        WHERE date >= ?
         GROUP BY ip
-        ORDER BY MAX(timestamp) DESC
+        ORDER BY MAX(last_seen) DESC
     """, (since,))
 
     visitors = [dict(row) for row in cur.fetchall() if not is_excluded(row['ip'])]
@@ -96,10 +96,10 @@ def get_referrers_for_ip(days, ip):
     """Get unique referrers for a specific IP."""
     conn = sqlite3.connect(VISITORS_DB)
     cur = conn.cursor()
-    since = (datetime.now() - timedelta(days=days)).strftime('%Y-%m-%d %H:%M:%S')
+    since = (datetime.now() - timedelta(days=days)).strftime('%Y-%m-%d')
     cur.execute("""
         SELECT DISTINCT referrer FROM visitors
-        WHERE timestamp >= ? AND ip = ? AND referrer IS NOT NULL AND referrer != ''
+        WHERE date >= ? AND ip = ? AND referrer IS NOT NULL AND referrer != ''
     """, (since, ip))
     referrers = [row[0] for row in cur.fetchall()]
     conn.close()

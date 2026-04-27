@@ -48,7 +48,25 @@ services:
   web:
     image: ghcr.io/djkurlander/knock-knock:latest
     build: .  # Used when running: docker compose up --build
-    command: ["python", "main.py"]
+    command:
+      - sh
+      - -c
+      - |
+        if [ "$$ENABLE_SSL" = 'true' ]; then
+          exec python -m uvicorn main:app \
+            --host $${WEB_LISTEN:-0.0.0.0} \
+            --port $${WEB_PORT:-8080} \
+            --ssl-keyfile $${KNOCK_KEYFILE:-certs/key.pem} \
+            --ssl-certfile $${KNOCK_CERTFILE:-certs/cert.pem} \
+            --proxy-headers --forwarded-allow-ips='*' \
+            --workers 2 --timeout-keep-alive 30 --log-level warning;
+        else
+          exec python -m uvicorn main:app \
+            --host $${WEB_LISTEN:-0.0.0.0} \
+            --port $${WEB_PORT:-8080} \
+            --proxy-headers --forwarded-allow-ips='*' \
+            --workers 2 --timeout-keep-alive 30 --log-level warning;
+        fi
     env_file:
       - path: .env
         required: false

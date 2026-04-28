@@ -139,13 +139,27 @@
             align-items: center;
             justify-content: center;
             gap: 0.35em;
-            flex-wrap: wrap;
+            flex-wrap: nowrap;
+            overflow: hidden;
+            max-width: 100%;
+        }
+        .globe-loc-line > span:nth-child(2) {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            min-width: 0;
         }
         #d-globe-location, #m-globe-location {
             display: grid;
-            grid-template-rows: minmax(1.35em, auto) minmax(1.2em, auto);
+            grid-template-rows: 1.35em 1.2em;
             align-content: start;
             row-gap: 0;
+            overflow: hidden;
+        }
+        #d-globe-loc-isp, #m-globe-loc-isp {
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
         .globe-loc-line .proto-badge {
             font-size: 0.7em;
@@ -673,7 +687,7 @@
     
     <div class="d-grid" id="d-slider-container">
         <div class="d-box" id="d-box-feed"><h2 style="display:flex;justify-content:space-between;align-items:center;"><span id="d-feed-label">LIVE FEED: LOGIN ATTEMPTS</span><span id="d-feed-proto-btn" class="proto-cycle-btn desktop-readonly" style="vertical-align:initial;">ALL</span></h2><div id="d-feed" class="d-content"></div></div>
-        <div class="d-box" id="d-box-globe"><h2 style="display:flex;justify-content:space-between;align-items:center;">GLOBE VIEW<span class="proto-cycle-btn desktop-readonly" style="vertical-align:initial;">ALL</span></h2><div id="d-globe-location" style="text-align:center; margin-bottom:10px; min-height:44px;"><div id="d-globe-loc-text" style="color:var(--neon-green);"></div><div id="d-globe-loc-isp" style="color:var(--data-blue); font-size:0.85em;"></div></div><div id="d-globe-pane" class="d-content globe-pane"></div></div>
+        <div class="d-box" id="d-box-globe"><h2 style="display:flex;justify-content:space-between;align-items:center;">GLOBE VIEW<span class="proto-cycle-btn desktop-readonly" style="vertical-align:initial;">ALL</span></h2><div id="d-globe-location" style="text-align:center; margin-bottom:10px;"><div id="d-globe-loc-text" style="color:var(--neon-green);"></div><div id="d-globe-loc-isp" style="color:var(--data-blue); font-size:0.85em;"></div></div><div id="d-globe-pane" class="d-content globe-pane"></div></div>
         <div class="d-box"><h2 style="display:flex;justify-content:space-between;align-items:center;">LOCATION<span class="proto-cycle-btn desktop-readonly" style="vertical-align:initial;">ALL</span></h2><div id="d-loc" class="d-content"></div></div>
         <div class="d-box" id="d-box-user"><h2 style="display:flex;justify-content:space-between;align-items:center;">USERNAME<span class="proto-cycle-btn desktop-readonly" style="vertical-align:initial;">ALL</span></h2><div id="d-user" class="d-content"></div></div>
         <div class="d-box" id="d-box-pass"><h2 style="display:flex;justify-content:space-between;align-items:center;">PASSWORD<span class="proto-cycle-btn desktop-readonly" style="vertical-align:initial;">ALL</span></h2><div id="d-pass" class="d-content"></div></div>
@@ -719,7 +733,7 @@
     <div class="m-progress-container"><div id="m-progress-bar"></div></div>
     <div class="m-viewport" id="m-viewport">
         <div class="m-pane" id="m-pane-feed"><h2 style="display:flex;justify-content:space-between;align-items:center;"><span id="m-feed-label">LIVE FEED: LOGIN ATTEMPTS</span><span id="m-feed-proto-btn" class="proto-dropdown"><span class="proto-dropdown-trigger">ALL<span style="letter-spacing:0;margin-left:3px;font-size:1.2em">▾</span></span><span class="proto-dropdown-menu"></span></span></h2><div id="m-feed" class="m-content"></div></div>
-        <div class="m-pane" id="m-pane-globe"><h2 style="display:flex;justify-content:space-between;align-items:center;">GLOBE VIEW<span class="proto-dropdown"><span class="proto-dropdown-trigger">ALL<span style="letter-spacing:0;margin-left:3px;font-size:1.2em">▾</span></span><span class="proto-dropdown-menu"></span></span></h2><div id="m-globe-location" style="text-align:center; margin-bottom:10px; min-height:44px;"><div id="m-globe-loc-text" style="color:var(--neon-green);"></div><div id="m-globe-loc-isp" style="color:var(--data-blue); font-size:0.85em;"></div></div><div id="m-globe-pane" class="m-content globe-pane" style="display:flex; justify-content:center; align-items:center;"></div></div>
+        <div class="m-pane" id="m-pane-globe"><h2 style="display:flex;justify-content:space-between;align-items:center;">GLOBE VIEW<span class="proto-dropdown"><span class="proto-dropdown-trigger">ALL<span style="letter-spacing:0;margin-left:3px;font-size:1.2em">▾</span></span><span class="proto-dropdown-menu"></span></span></h2><div id="m-globe-location" style="text-align:center; margin-bottom:10px;"><div id="m-globe-loc-text" style="color:var(--neon-green);"></div><div id="m-globe-loc-isp" style="color:var(--data-blue); font-size:0.85em;"></div></div><div id="m-globe-pane" class="m-content globe-pane" style="display:flex; justify-content:center; align-items:center;"></div></div>
         <div class="m-pane" id="m-pane-loc"><h2 style="display:flex;justify-content:space-between;align-items:center;">LOCATION<span class="proto-dropdown"><span class="proto-dropdown-trigger">ALL<span style="letter-spacing:0;margin-left:3px;font-size:1.2em">▾</span></span><span class="proto-dropdown-menu"></span></span></h2><div id="m-loc" class="m-content"></div></div>
         <div class="m-pane" id="m-pane-user"><h2 style="display:flex;justify-content:space-between;align-items:center;">USERNAME<span class="proto-dropdown"><span class="proto-dropdown-trigger">ALL<span style="letter-spacing:0;margin-left:3px;font-size:1.2em">▾</span></span><span class="proto-dropdown-menu"></span></span></h2><div id="m-user" class="m-content"></div></div>
         <div class="m-pane" id="m-pane-pass"><h2 style="display:flex;justify-content:space-between;align-items:center;">PASSWORD<span class="proto-dropdown"><span class="proto-dropdown-trigger">ALL<span style="letter-spacing:0;margin-left:3px;font-size:1.2em">▾</span></span><span class="proto-dropdown-menu"></span></span></h2><div id="m-pass" class="m-content"></div></div>

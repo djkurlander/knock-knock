@@ -136,13 +136,27 @@
             align-items: center;
             justify-content: center;
             gap: 0.35em;
-            flex-wrap: wrap;
+            flex-wrap: nowrap;
+            overflow: hidden;
+            max-width: 100%;
+        }
+        .globe-loc-line > span:nth-child(2) {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            min-width: 0;
         }
         #d-globe-location, #m-globe-location {
             display: grid;
-            grid-template-rows: minmax(1.35em, auto) minmax(1.2em, auto);
+            grid-template-rows: 1.35em 1.2em;
             align-content: start;
             row-gap: 0;
+            overflow: hidden;
+        }
+        #d-globe-loc-isp, #m-globe-loc-isp {
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
         .globe-loc-line .proto-badge {
             font-size: 0.7em;
@@ -752,7 +766,7 @@
         <div class="panel-intro"><div class="proto-guide-panel"><div class="proto-guide-row"><span class="proto-badge" style="color:#00ff41"><span class="proto-badge-label">SSH</span></span><span>SSH allows humans and bots to log into remote servers. (port 22)</span></div><div class="proto-guide-row"><span class="proto-badge" style="color:#00fbff"><span class="proto-badge-label">TNET</span></span><span>TELNET is an older protocol for logging into remote machines. (port 23)</span></div><div class="proto-guide-row"><span class="proto-badge" style="color:#FFFF77"><span class="proto-badge-label">FTP</span></span><span>FTP is a legacy protocol, allowing files to be accessed remotely. (port 21)</span></div><div class="proto-guide-row"><span class="proto-badge" style="color:#ff1a1a"><span class="proto-badge-label">RDP</span></span><span>RDP supports logging in with a virtual desktop, usually on Windows. (port 3389)</span></div><div class="proto-guide-row"><span class="proto-badge" style="color:#d6d9df"><span class="proto-badge-label">SMB</span></span><span>SMB is a remote file access protocol, introduced by Windows. (port 445)</span></div><div class="proto-guide-row"><span class="proto-badge" style="color:#ff7a00"><span class="proto-badge-label">SIP</span></span><span>SIP allows humans and bots to make phone calls. (port 5060)</span></div><div class="proto-guide-row"><span class="proto-badge" style="color:#00ffaa"><span class="proto-badge-label">HTTP</span></span><span>HTTP is the web protocol, and bots probe it for exploitable apps and known vulnerabilities. (ports 80, 443)</span></div><div class="proto-guide-row"><span class="proto-badge" style="color:#ff00ff"><span class="proto-badge-label">SMTP</span></span><span>SMTP is the email protocol, which bots exploit to relay spam across the net. (ports 25, 587)</span></div></div></div>
 
         <div class="panel-intro" data-intro="globe"></div>
-        <div class="d-box" id="d-box-globe"><h2 style="display:flex;justify-content:space-between;align-items:center;">GLOBE VIEW<span class="proto-dropdown"><span class="proto-dropdown-trigger">ALL<span style="letter-spacing:0;margin-left:3px;font-size:1.2em">▾</span></span><span class="proto-dropdown-menu"></span></span></h2><div id="d-globe-location" style="text-align:center; margin-bottom:10px; min-height:44px;"><div id="d-globe-loc-text" style="color:var(--neon-green);"></div><div id="d-globe-loc-isp" style="color:var(--data-blue); font-size:0.85em;"></div></div><div id="d-globe-pane" class="d-content globe-pane"></div></div>
+        <div class="d-box" id="d-box-globe"><h2 style="display:flex;justify-content:space-between;align-items:center;">GLOBE VIEW<span class="proto-dropdown"><span class="proto-dropdown-trigger">ALL<span style="letter-spacing:0;margin-left:3px;font-size:1.2em">▾</span></span><span class="proto-dropdown-menu"></span></span></h2><div id="d-globe-location" style="text-align:center; margin-bottom:10px;"><div id="d-globe-loc-text" style="color:var(--neon-green);"></div><div id="d-globe-loc-isp" style="color:var(--data-blue); font-size:0.85em;"></div></div><div id="d-globe-pane" class="d-content globe-pane"></div></div>
 
         <div class="panel-intro" data-intro="loc"></div>
         <div class="d-box"><h2 style="display:flex;justify-content:space-between;align-items:center;">LOCATION<span class="proto-dropdown"><span class="proto-dropdown-trigger">ALL<span style="letter-spacing:0;margin-left:3px;font-size:1.2em">▾</span></span><span class="proto-dropdown-menu"></span></span></h2><div id="d-loc" class="d-content"></div></div>
@@ -822,7 +836,7 @@
         <div class="panel-intro" data-intro="feed3"></div>
         <div class="panel-intro"><div class="proto-guide-panel"><div class="proto-guide-row"><span class="proto-badge" style="color:#00ff41"><span class="proto-badge-label">SSH</span></span><span>SSH allows humans and bots to log into remote servers. (port 22)</span></div><div class="proto-guide-row"><span class="proto-badge" style="color:#00fbff"><span class="proto-badge-label">TNET</span></span><span>TELNET is an older protocol for logging into remote machines. (port 23)</span></div><div class="proto-guide-row"><span class="proto-badge" style="color:#FFFF77"><span class="proto-badge-label">FTP</span></span><span>FTP is a legacy protocol, allowing files to be accessed remotely. (port 21)</span></div><div class="proto-guide-row"><span class="proto-badge" style="color:#ff1a1a"><span class="proto-badge-label">RDP</span></span><span>RDP supports logging in with a virtual desktop, usually on Windows. (port 3389)</span></div><div class="proto-guide-row"><span class="proto-badge" style="color:#d6d9df"><span class="proto-badge-label">SMB</span></span><span>SMB is a remote file access protocol, introduced by Windows. (port 445)</span></div><div class="proto-guide-row"><span class="proto-badge" style="color:#ff7a00"><span class="proto-badge-label">SIP</span></span><span>SIP allows humans and bots to make phone calls. (port 5060)</span></div><div class="proto-guide-row"><span class="proto-badge" style="color:#00ffaa"><span class="proto-badge-label">HTTP</span></span><span>HTTP is the web protocol, and bots probe it for exploitable apps and known vulnerabilities. (ports 80, 443)</span></div><div class="proto-guide-row"><span class="proto-badge" style="color:#ff00ff"><span class="proto-badge-label">SMTP</span></span><span>SMTP is the email protocol, which bots exploit to relay spam across the net. (ports 25, 587)</span></div></div></div>
         <div class="panel-intro" data-intro="globe"></div>
-        <div class="m-pane" id="m-pane-globe"><h2 style="display:flex;justify-content:space-between;align-items:center;">GLOBE VIEW<span class="proto-dropdown"><span class="proto-dropdown-trigger">ALL<span style="letter-spacing:0;margin-left:3px;font-size:1.2em">▾</span></span><span class="proto-dropdown-menu"></span></span></h2><div id="m-globe-location" style="text-align:center; margin-bottom:10px; min-height:44px;"><div id="m-globe-loc-text" style="color:var(--neon-green);"></div><div id="m-globe-loc-isp" style="color:var(--data-blue); font-size:0.85em;"></div></div><div id="m-globe-pane" class="m-content globe-pane" style="display:flex; justify-content:center; align-items:center;"></div></div>
+        <div class="m-pane" id="m-pane-globe"><h2 style="display:flex;justify-content:space-between;align-items:center;">GLOBE VIEW<span class="proto-dropdown"><span class="proto-dropdown-trigger">ALL<span style="letter-spacing:0;margin-left:3px;font-size:1.2em">▾</span></span><span class="proto-dropdown-menu"></span></span></h2><div id="m-globe-location" style="text-align:center; margin-bottom:10px;"><div id="m-globe-loc-text" style="color:var(--neon-green);"></div><div id="m-globe-loc-isp" style="color:var(--data-blue); font-size:0.85em;"></div></div><div id="m-globe-pane" class="m-content globe-pane" style="display:flex; justify-content:center; align-items:center;"></div></div>
         <div class="panel-intro" data-intro="loc"></div>
         <div class="m-pane" id="m-pane-loc"><h2 style="display:flex;justify-content:space-between;align-items:center;">LOCATION<span class="proto-dropdown"><span class="proto-dropdown-trigger">ALL<span style="letter-spacing:0;margin-left:3px;font-size:1.2em">▾</span></span><span class="proto-dropdown-menu"></span></span></h2><div id="m-loc" class="m-content"></div></div>
         <div class="panel-intro" data-intro="user"></div>

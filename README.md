@@ -1,5 +1,7 @@
 # Knock-Knock: Watch the Bots Try to Break In!
 
+<video src="static/demo.mp4" autoplay loop muted playsinline width="100%"></video>
+
 [![Live Demo](https://img.shields.io/badge/LIVE-DEMO-brightgreen?style=for-the-badge)](https://knock-knock.net)
 
 **Live demo:** https://knock-knock.net &nbsp;|&nbsp; **Live tutorial:** https://knock-knock.net/summary

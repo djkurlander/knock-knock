@@ -1,8 +1,28 @@
 #!/usr/bin/env python3
 import socket
 import threading
+import time
 import json
+import os
 from common import create_dualstack_tcp_listener, is_blocked, normalize_ip
+
+TNET_DEDUP_WINDOW_SEC = int(os.environ.get('TNET_DEDUP_WINDOW_SEC', '30'))
+_dedup_lock = threading.Lock()
+_dedup_seen: dict = {}
+
+def should_emit(ip):
+    if TNET_DEDUP_WINDOW_SEC <= 0:
+        return True
+    now = time.time()
+    with _dedup_lock:
+        cutoff = now - TNET_DEDUP_WINDOW_SEC
+        stale = [k for k, ts in _dedup_seen.items() if ts < cutoff]
+        for k in stale:
+            _dedup_seen.pop(k, None)
+        if ip in _dedup_seen:
+            return False
+        _dedup_seen[ip] = now
+        return True
 
 # Telnet protocol constants (RFC 854)
 IAC  = 0xFF  # Interpret As Command
@@ -84,8 +104,9 @@ def handle_connection(client_sock, client_ip):
         client_sock.sendall(b"\r\nPassword: ")
         password = recv_line(client_sock, echo=False)  # no echo for password
 
-        print(json.dumps({"type": "KNOCK", "proto": "TNET",
-                          "ip": client_ip, "user": username, "pass": password}), flush=True)
+        if should_emit(client_ip):
+            print(json.dumps({"type": "KNOCK", "proto": "TNET",
+                              "ip": client_ip, "user": username, "pass": password}), flush=True)
 
         client_sock.sendall(b"\r\nLogin incorrect\r\n\r\n")
 

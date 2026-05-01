@@ -42,17 +42,17 @@ def rename_in_sqlite(db_path, old_id, new_id, dry_run):
     ]
 
     # Look up integer IDs for old and new source
-    old_row = conn.execute("SELECT id, hits FROM sources WHERE source_id=?", (old_id,)).fetchone()
+    old_row = conn.execute("SELECT id, hits, first_seen, last_seen FROM sources WHERE source_id=?", (old_id,)).fetchone()
     if not old_row:
         print(f"⚠️  No source '{old_id}' found in sources table — nothing to do.")
         conn.close()
         return
-    old_int, old_hits = old_row
+    old_int, old_hits, old_first, old_last = old_row
     print(f"Found source '{old_id}': id={old_int}, {old_hits} hits")
 
-    new_row = conn.execute("SELECT id, hits FROM sources WHERE source_id=?", (new_id,)).fetchone()
+    new_row = conn.execute("SELECT id, hits, first_seen, last_seen FROM sources WHERE source_id=?", (new_id,)).fetchone()
     if new_row:
-        new_int, new_hits = new_row
+        new_int, new_hits, new_first, new_last = new_row
         merged_hits = old_hits + new_hits
         print(f"Target '{new_id}' already exists: id={new_int}, {new_hits} hits — will merge (total: {merged_hits})")
     else:
@@ -79,10 +79,13 @@ def rename_in_sqlite(db_path, old_id, new_id, dry_run):
         return
 
     if new_int is not None:
-        # Merge: remap knock rows to new_int, update hits, delete old entry
+        # Merge: remap knock rows to new_int, update hits/dates, delete old entry
+        merged_first = min(f for f in (old_first, new_first) if f) if (old_first or new_first) else None
+        merged_last  = max(l for l in (old_last,  new_last)  if l) if (old_last  or new_last)  else None
         for table in knock_tables:
             conn.execute(f"UPDATE {table} SET source=? WHERE source=?", (new_int, old_int))
-        conn.execute("UPDATE sources SET hits=? WHERE source_id=?", (merged_hits, new_id))
+        conn.execute("UPDATE sources SET hits=?, first_seen=?, last_seen=? WHERE source_id=?",
+                     (merged_hits, merged_first, merged_last, new_id))
         conn.execute("DELETE FROM sources WHERE source_id=?", (old_id,))
         print(f"✅ SQLite sources: merged '{old_id}' (id={old_int}) into '{new_id}' (id={new_int}), hits: {merged_hits}")
     else:

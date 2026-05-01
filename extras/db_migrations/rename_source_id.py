@@ -3,6 +3,7 @@
 Rename or merge a SOURCE_ID in knock_knock.db and Redis.
 
 If the target ID already exists, hits are merged and the old entry is deleted.
+Knock rows reference sources by integer ID, so the script remaps those too.
 
 Usage:
     python extras/db_migrations/rename_source_id.py --from ams2 --to AMS2
@@ -40,55 +41,54 @@ def rename_in_sqlite(db_path, old_id, new_id, dry_run):
         conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'knocks_%'").fetchall()
     ]
 
-    # Check old source
-    old_row = conn.execute("SELECT hits FROM sources WHERE source_id=?", (old_id,)).fetchone()
+    # Look up integer IDs for old and new source
+    old_row = conn.execute("SELECT id, hits FROM sources WHERE source_id=?", (old_id,)).fetchone()
     if not old_row:
         print(f"⚠️  No source '{old_id}' found in sources table — nothing to do.")
         conn.close()
         return
-    old_hits = old_row[0]
-    print(f"Found source '{old_id}': {old_hits} hits")
+    old_int, old_hits = old_row
+    print(f"Found source '{old_id}': id={old_int}, {old_hits} hits")
 
-    # Check if target already exists (merge case)
-    new_row = conn.execute("SELECT hits FROM sources WHERE source_id=?", (new_id,)).fetchone()
+    new_row = conn.execute("SELECT id, hits FROM sources WHERE source_id=?", (new_id,)).fetchone()
     if new_row:
-        merged_hits = old_hits + new_row[0]
-        print(f"Target '{new_id}' already exists: {new_row[0]} hits — will merge (total: {merged_hits})")
+        new_int, new_hits = new_row
+        merged_hits = old_hits + new_hits
+        print(f"Target '{new_id}' already exists: id={new_int}, {new_hits} hits — will merge (total: {merged_hits})")
     else:
+        new_int = None
         print(f"Target '{new_id}' does not exist — simple rename")
 
-    # Count knock rows to be updated
+    # Count knock rows to be updated (by integer source ID)
     knock_counts = {}
     for table in knock_tables:
-        count = conn.execute(f"SELECT COUNT(*) FROM {table} WHERE source=?", (old_id,)).fetchone()[0]
+        count = conn.execute(f"SELECT COUNT(*) FROM {table} WHERE source=?", (old_int,)).fetchone()[0]
         if count:
             knock_counts[table] = count
 
     if knock_counts:
-        print(f"Knock rows to update:")
+        print(f"Knock rows to update (source={old_int}):")
         for table, count in knock_counts.items():
             print(f"  {table}: {count} rows")
     else:
-        print(f"No rows with source='{old_id}' in any knocks_* table")
+        print(f"No rows with source={old_int} in any knocks_* table")
 
     if dry_run:
         print("Dry run — no changes made.")
         conn.close()
         return
 
-    # Apply updates
-    if new_row:
-        # Merge: update hits on existing target, delete old entry
+    if new_int is not None:
+        # Merge: remap knock rows to new_int, update hits, delete old entry
+        for table in knock_tables:
+            conn.execute(f"UPDATE {table} SET source=? WHERE source=?", (new_int, old_int))
         conn.execute("UPDATE sources SET hits=? WHERE source_id=?", (merged_hits, new_id))
         conn.execute("DELETE FROM sources WHERE source_id=?", (old_id,))
-        print(f"✅ SQLite sources: merged '{old_id}' into '{new_id}' (hits: {merged_hits})")
+        print(f"✅ SQLite sources: merged '{old_id}' (id={old_int}) into '{new_id}' (id={new_int}), hits: {merged_hits}")
     else:
-        # Simple rename
+        # Simple rename — just update the source_id string, integer ID stays the same
         conn.execute("UPDATE sources SET source_id=? WHERE source_id=?", (new_id, old_id))
-        print(f"✅ SQLite sources: renamed '{old_id}' → '{new_id}'")
-
-    for table in knock_tables:
-        conn.execute(f"UPDATE {table} SET source=? WHERE source=?", (new_id, old_id))
+        print(f"✅ SQLite sources: renamed '{old_id}' → '{new_id}' (id={old_int} unchanged)")
 
     conn.commit()
     conn.close()

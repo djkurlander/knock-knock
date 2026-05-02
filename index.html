@@ -3270,6 +3270,10 @@
             else if (msg.type === 'init_stats') {
                 debugLog(`init_stats received (total=${d.total})`);
                 if (d.is_aggregator !== undefined) isAggregator = d.is_aggregator;
+                if (d.show_jokes === false) {
+                    ['d-box-jokes', 'm-pane-jokes'].forEach(id => { const el = document.getElementById(id); if (el) el.style.display = 'none'; });
+                    document.querySelectorAll('.d-nav-item, .nav-item').forEach(el => { if (el.textContent.includes('JOKES')) el.style.display = 'none'; });
+                }
                 if (Array.isArray(d.enabled_protocols) || (d.protocol_meta && typeof d.protocol_meta === 'object')) {
                     applyProtocolConfig(d.enabled_protocols, d.protocol_meta);
                 }

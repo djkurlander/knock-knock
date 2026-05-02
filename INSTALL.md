@@ -89,6 +89,17 @@ cp .env.example .env
 nano .env   # Fill in your Account ID and License Key
 ```
 
+### Configure Ports
+
+Port bindings are managed in `docker-compose.override.yml`. Copy the example and remove any ports you don't want exposed (e.g. if the host already uses port 22 for SSH, or you don't want a particular honeypot):
+
+```bash
+cp docker-compose.override.yml.example docker-compose.override.yml
+nano docker-compose.override.yml   # Remove ports you don't need
+```
+
+Also set `ENABLED_PROTOCOLS` in `.env` to match — Docker binds ports independently of which honeypots are running, so the two should stay in sync.
+
 ### Start
 
 ```bash
@@ -347,11 +358,7 @@ By default, all eight honeypots run (SSH, TNET, FTP, RDP, SMB, SIP, HTTP, SMTP).
 ENABLED_PROTOCOLS=SSH,TNET,FTP,SMB,SIP,HTTP,SMTP
 ```
 
-**Docker:** also copy the example override file if you haven't already:
-```bash
-cp docker-compose.override.yml.example docker-compose.override.yml
-docker compose up -d
-```
+**Docker:** also remove the corresponding port from `docker-compose.override.yml` — Docker binds ports regardless of which honeypots are running.
 
 ### Enabling HTTPS
 

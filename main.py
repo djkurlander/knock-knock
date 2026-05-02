@@ -18,6 +18,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(lifespan=lifespan)
 logger = logging.getLogger("uvicorn.error")
 LOG_UNHANDLED_HTTP = os.environ.get('LOG_UNHANDLED_HTTP', '').lower() == 'true'
+SHOW_JOKES = os.environ.get('SHOW_JOKES', 'true').lower() != 'false'
 
 def get_request_client_ip(request: Request) -> str:
     """Extract real client IP: CF-Connecting-IP > X-Forwarded-For > direct."""
@@ -388,6 +389,7 @@ class ConnectionManager:
                     "last_knock_stats": history[0] if history else None,
                     "is_aggregator": stats.get("is_aggregator", False),
                     "source_counts": stats.get("source_counts", []),
+                    "show_jokes": SHOW_JOKES,
                 }
             }
             await websocket.send_json(payload)

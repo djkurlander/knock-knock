@@ -1,75 +1,43 @@
 # Copy this file to docker-compose.override.yml and uncomment the options you need.
 # Docker Compose automatically merges it with docker-compose.yml.
 # This file is gitignored, so your settings won't conflict with git pull.
+#
+# Most configuration (ENABLED_PROTOCOLS, SAVE_KNOCKS, MAX_KNOCKS, etc.) goes in .env —
+# Docker Compose picks it up automatically. This file is only needed for things
+# that can't be set via environment variables: port bindings and volumes.
 
 services:
 
-  ## Store every individual knock in SQLite (uses ~600 MB/year)
-  ## SAVE_KNOCKS=true for all protocols, or SAVE_KNOCKS=SIP,SMTP for selective
-  # honeypot-monitor:
-  #   environment:
-  #     - SAVE_KNOCKS=true
+  ## Remove honeypot ports you don't want exposed.
+  ## Must match ENABLED_PROTOCOLS in .env — Docker binds ports independently of
+  ## which honeypots are actually running, so unused ports should be removed here too.
+  honeypot-monitor:
+    ports:
+      - "21:21"     # FTP
+      - "22:22"     # SSH
+      - "23:23"     # Telnet
+      - "25:25"     # SMTP
+      - "80:80"     # HTTP
+      - "443:443"   # HTTP (HTTPS scanning)
+      - "587:587"   # SMTP submission
+      - "3389:3389" # RDP
+      - "445:445"   # SMB
+      - "5060:5060" # SIP (TCP)
+      - "5060:5060/udp" # SIP (UDP)
 
-  ## Auto-add IPs to blocklist.txt after N total hits (disabled by default)
-  ## Note: counts all-time hits, so existing high-hit IPs will be blocked on their next knock
-  ## Per-protocol: MAX_KNOCKS=RDP:500  or  MAX_KNOCKS=5000,RDP:500,SIP:NONE
-  # honeypot-monitor:
-  #   environment:
-  #     - MAX_KNOCKS=5000
-
-  ## Override SMTP banner hostname (default: reverse DNS of server IP)
-  # honeypot-monitor:
-  #   environment:
-  #     - SMTP_HOSTNAME=mail.local
-
-  ## Log each knock to stdout/journal (default: off — keeps journal small)
-  # honeypot-monitor:
-  #   environment:
-  #     - TRACE_KNOCK=true
-
-  ## Select which honeypots to run (default: all)
-  ## Protocols: SSH, TNET, FTP, RDP, SMB, SIP, SMTP, HTTP
-  ## Use PROTO:PORT syntax to run the same protocol on multiple ports
-  # honeypot-monitor:
-  #   environment:
-  #     - ENABLED_PROTOCOLS=SSH
-  #     # or: ENABLED_PROTOCOLS=SSH,TNET,SMTP:25,SMTP:587,HTTP:80,HTTP:443
-
-  ## Override the web UI port (default: 8080)
-  ## Set up a Cloudflare Origin Rule to forward port 80/443 → this port
+  ## Override the web UI port (default: 8080). Also set WEB_PORT=9090 in .env.
+  ## The port must match in both places — the env var controls uvicorn,
+  ## the ports entry controls Docker's host binding.
   # web:
-  #   environment:
-  #     - WEB_PORT=9090
   #   ports:
   #     - "9090:9090"
 
-  ## HTTPS — place cert.pem and key.pem in certs/, then set ENABLE_SSL=true
-  ## Optionally override paths with KNOCK_KEYFILE / KNOCK_CERTFILE
+  ## HTTPS — place cert.pem and key.pem in certs/, set ENABLE_SSL=true in .env
   # web:
-  #   environment:
-  #     - ENABLE_SSL=true
   #   volumes:
   #     - ./certs:/app/certs:ro
 
-  ## Log dashboard visitors to visitors.db
-  # web:
-  #   environment:
-  #     - LOG_VISITORS=true
-
-  ## Federation — feeder mode: forward knocks to an aggregator server
-  ## SOURCE_ID defaults to hostname; keep it short (e.g. ams2, lon1, ny)
-  ## Only set AGGREGATOR_HOST to enable forwarding; local honeypots still run normally
+  ## Federation — aggregator mode: open ingest port. Also set INGEST_PORT=9999 in .env.
   # honeypot-monitor:
-  #   environment:
-  #     - SOURCE_ID=ams2
-  #     - AGGREGATOR_HOST=aggregator.example.com
-  #     - AGGREGATOR_PORT=9999      # default
-
-  ## Federation — aggregator mode: receive forwarded knocks from feeder servers
-  ## Open INGEST_PORT in your firewall to feeder IPs only (no auth token — firewall is the gate)
-  ## Source badges and SOURCES section appear in the UI automatically when INGEST_PORT is set
-  # honeypot-monitor:
-  #   environment:
-  #     - INGEST_PORT=9999
   #   ports:
   #     - "9999:9999"

@@ -351,7 +351,7 @@
             #d-box-feed {
                 flex: 0 0 425px;
             }
-            #d-box-info {
+            #d-box-last {
                 flex: 0 0 290px;
             }
             #d-box-globe {
@@ -363,7 +363,7 @@
             #d-box-trivia {
                 flex: 0 0 300px;
             }
-            #d-box-proto {
+            #d-box-stats {
                 flex: 0 0 288px;
             }
             #d-globe-pane {
@@ -688,16 +688,16 @@
     <div class="d-grid" id="d-slider-container">
         <div class="d-box" id="d-box-feed"><h2 style="display:flex;justify-content:space-between;align-items:center;"><span id="d-feed-label">LIVE FEED: LOGIN ATTEMPTS</span><span id="d-feed-proto-btn" class="proto-cycle-btn desktop-readonly" style="vertical-align:initial;">ALL</span></h2><div id="d-feed" class="d-content"></div></div>
         <div class="d-box" id="d-box-globe"><h2 style="display:flex;justify-content:space-between;align-items:center;">GLOBE VIEW<span class="proto-cycle-btn desktop-readonly" style="vertical-align:initial;">ALL</span></h2><div id="d-globe-location" style="text-align:center; margin-bottom:10px;"><div id="d-globe-loc-text" style="color:var(--neon-green);"></div><div id="d-globe-loc-isp" style="color:var(--data-blue); font-size:0.85em;"></div></div><div id="d-globe-pane" class="d-content globe-pane"></div></div>
-        <div class="d-box"><h2 style="display:flex;justify-content:space-between;align-items:center;">LOCATION<span class="proto-cycle-btn desktop-readonly" style="vertical-align:initial;">ALL</span></h2><div id="d-loc" class="d-content"></div></div>
+        <div class="d-box" id="d-box-loc"><h2 style="display:flex;justify-content:space-between;align-items:center;">LOCATION<span class="proto-cycle-btn desktop-readonly" style="vertical-align:initial;">ALL</span></h2><div id="d-loc" class="d-content"></div></div>
         <div class="d-box" id="d-box-user"><h2 style="display:flex;justify-content:space-between;align-items:center;">USERNAME<span class="proto-cycle-btn desktop-readonly" style="vertical-align:initial;">ALL</span></h2><div id="d-user" class="d-content"></div></div>
         <div class="d-box" id="d-box-pass"><h2 style="display:flex;justify-content:space-between;align-items:center;">PASSWORD<span class="proto-cycle-btn desktop-readonly" style="vertical-align:initial;">ALL</span></h2><div id="d-pass" class="d-content"></div></div>
-        <div class="d-box"><h2 style="display:flex;justify-content:space-between;align-items:center;">ISP<span class="proto-cycle-btn desktop-readonly" style="vertical-align:initial;">ALL</span></h2><div id="d-prov" class="d-content"></div></div>
-        <div class="d-box"><h2 style="display:flex;justify-content:space-between;align-items:center;">IP ADDRESS<span class="proto-cycle-btn desktop-readonly" style="vertical-align:initial;">ALL</span></h2><div id="d-ip" class="d-content"></div></div>
-        <div class="d-box" id="d-box-info"><h2 style="display:flex;justify-content:space-between;align-items:center;">LAST KNOCK<span class="proto-cycle-btn desktop-readonly" style="vertical-align:initial;">ALL</span></h2><div id="d-details" class="d-content"></div></div>
-        <div class="d-box" id="d-box-proto"><h2>STATS</h2><div id="d-proto-stats" class="d-content"></div></div>
+        <div class="d-box" id="d-box-isp"><h2 style="display:flex;justify-content:space-between;align-items:center;">ISP<span class="proto-cycle-btn desktop-readonly" style="vertical-align:initial;">ALL</span></h2><div id="d-prov" class="d-content"></div></div>
+        <div class="d-box" id="d-box-ip"><h2 style="display:flex;justify-content:space-between;align-items:center;">IP ADDRESS<span class="proto-cycle-btn desktop-readonly" style="vertical-align:initial;">ALL</span></h2><div id="d-ip" class="d-content"></div></div>
+        <div class="d-box" id="d-box-last"><h2 style="display:flex;justify-content:space-between;align-items:center;">LAST KNOCK<span class="proto-cycle-btn desktop-readonly" style="vertical-align:initial;">ALL</span></h2><div id="d-details" class="d-content"></div></div>
+        <div class="d-box" id="d-box-stats"><h2>STATS</h2><div id="d-proto-stats" class="d-content"></div></div>
         <div class="d-box" id="d-box-trivia"><h2 style="display:flex;justify-content:space-between;align-items:center;">TRIVIA<span class="proto-cycle-btn desktop-readonly" style="vertical-align:initial;">ALL</span></h2><div id="d-trivia" class="d-content"></div></div>
         <div class="d-box" id="d-box-jokes"><h2>KNOCK-KNOCK JOKES</h2><div id="d-jokes" class="d-content" style="color:var(--neon-green); line-height:1.6;"></div></div>
-	        <div class="d-box"><h2>ABOUT</h2><div class="d-content" style="color:var(--neon-green); line-height:1.6;">
+	        <div class="d-box" id="d-box-about"><h2>ABOUT</h2><div class="d-content" style="color:var(--neon-green); line-height:1.6;">
 		    <p>Set up an unprotected server on the net, and the bots start swarming! This site shows their break-in attempts in real-time: where they come from, what credentials they try, and why.</p>
 	            <p><a href="/summary" style="color:var(--data-blue)">Click here for a tutorial</a></p>
 	            <p>Questions and comments to: <a class="contact-email" href="#" style="color:var(--data-blue)"></a></p>
@@ -737,10 +737,10 @@
         <div class="m-pane" id="m-pane-loc"><h2 style="display:flex;justify-content:space-between;align-items:center;">LOCATION<span class="proto-dropdown"><span class="proto-dropdown-trigger">ALL<span style="letter-spacing:0;margin-left:3px;font-size:1.2em">▾</span></span><span class="proto-dropdown-menu"></span></span></h2><div id="m-loc" class="m-content"></div></div>
         <div class="m-pane" id="m-pane-user"><h2 style="display:flex;justify-content:space-between;align-items:center;">USERNAME<span class="proto-dropdown"><span class="proto-dropdown-trigger">ALL<span style="letter-spacing:0;margin-left:3px;font-size:1.2em">▾</span></span><span class="proto-dropdown-menu"></span></span></h2><div id="m-user" class="m-content"></div></div>
         <div class="m-pane" id="m-pane-pass"><h2 style="display:flex;justify-content:space-between;align-items:center;">PASSWORD<span class="proto-dropdown"><span class="proto-dropdown-trigger">ALL<span style="letter-spacing:0;margin-left:3px;font-size:1.2em">▾</span></span><span class="proto-dropdown-menu"></span></span></h2><div id="m-pass" class="m-content"></div></div>
-        <div class="m-pane" id="m-pane-prov"><h2 style="display:flex;justify-content:space-between;align-items:center;">ISP<span class="proto-dropdown"><span class="proto-dropdown-trigger">ALL<span style="letter-spacing:0;margin-left:3px;font-size:1.2em">▾</span></span><span class="proto-dropdown-menu"></span></span></h2><div id="m-prov" class="m-content"></div></div>
+        <div class="m-pane" id="m-pane-isp"><h2 style="display:flex;justify-content:space-between;align-items:center;">ISP<span class="proto-dropdown"><span class="proto-dropdown-trigger">ALL<span style="letter-spacing:0;margin-left:3px;font-size:1.2em">▾</span></span><span class="proto-dropdown-menu"></span></span></h2><div id="m-prov" class="m-content"></div></div>
         <div class="m-pane" id="m-pane-ip"><h2 style="display:flex;justify-content:space-between;align-items:center;">IP ADDRESS<span class="proto-dropdown"><span class="proto-dropdown-trigger">ALL<span style="letter-spacing:0;margin-left:3px;font-size:1.2em">▾</span></span><span class="proto-dropdown-menu"></span></span></h2><div id="m-ip" class="m-content"></div></div>
-        <div class="m-pane" id="m-pane-details"><h2 style="display:flex;justify-content:space-between;align-items:center;">LAST KNOCK<span class="proto-dropdown"><span class="proto-dropdown-trigger">ALL<span style="letter-spacing:0;margin-left:3px;font-size:1.2em">▾</span></span><span class="proto-dropdown-menu"></span></span></h2><div id="m-details" class="m-content"></div></div>
-        <div class="m-pane" id="m-pane-proto"><h2>STATS</h2><div id="m-proto-stats" class="m-content"></div></div>
+        <div class="m-pane" id="m-pane-last"><h2 style="display:flex;justify-content:space-between;align-items:center;">LAST KNOCK<span class="proto-dropdown"><span class="proto-dropdown-trigger">ALL<span style="letter-spacing:0;margin-left:3px;font-size:1.2em">▾</span></span><span class="proto-dropdown-menu"></span></span></h2><div id="m-details" class="m-content"></div></div>
+        <div class="m-pane" id="m-pane-stats"><h2>STATS</h2><div id="m-proto-stats" class="m-content"></div></div>
         <div class="m-pane" id="m-pane-trivia"><h2 style="display:flex;justify-content:space-between;align-items:center;">TRIVIA<span class="proto-dropdown"><span class="proto-dropdown-trigger">ALL<span style="letter-spacing:0;margin-left:3px;font-size:1.2em">▾</span></span><span class="proto-dropdown-menu"></span></span></h2><div id="m-trivia" class="m-content"></div></div>
         <div class="m-pane" id="m-pane-jokes"><h2>KNOCK-KNOCK JOKES</h2><div id="m-jokes" class="m-content" style="color:var(--neon-green); line-height:1.6;"></div></div>
 	        <div class="m-pane" id="m-pane-about"><h2>ABOUT</h2><div class="m-content" style="color:var(--neon-green); line-height:1.6;">
@@ -789,6 +789,7 @@
     const URL_PARAMS = new URLSearchParams(window.location.search);
     const DEBUG = URL_PARAMS.has('debug');
     const SHOW_PARAM = URL_PARAMS.get('show');
+    const EXCLUDE_PANELS_PARAM = URL_PARAMS.get('EXCLUDE_PANELS') || URL_PARAMS.get('exclude_panels');
     let debugDiv = null;
     let knockCount = 0;
     let paused = false;
@@ -954,9 +955,18 @@
         chipId: 'm-fixed-proto-chip',
         glowVar: '--m-fixed-proto-glow',
     };
-    const USER_PANEL_INDEX = 3;
-    const PASS_PANEL_INDEX = 4;
-    const PROTO_STATS_PANEL_INDEX = 8;
+    const PANEL_NAMES = ['FEED', 'GLOBE', 'LOC', 'USER', 'PASS', 'ISP', 'IP', 'LAST', 'STATS', 'TRIVIA', 'JOKES', 'ABOUT'];
+
+    function panelIndex(name) {
+        return PANEL_NAMES.indexOf(String(name || '').toUpperCase());
+    }
+
+    function parsePanelList(value) {
+        return String(value || '')
+            .split(',')
+            .map(name => name.trim().toUpperCase())
+            .filter(name => PANEL_NAMES.includes(name));
+    }
 
     let activeProtocols = [];
     let classicView = false;
@@ -969,6 +979,7 @@
     let showProtoStatsPane    = true;
     let showUsernamePanel     = true;
     let showPasswordPanel     = true;
+    let excludedPanels = new Set(parsePanelList(EXCLUDE_PANELS_PARAM));
     const lastKnockTimeByProto = {};
 
     function formatUptimeCompact(minutes) {
@@ -1014,10 +1025,8 @@
             lines.unshift(`<div style="margin-bottom:12px;color:var(--neon-green)">Aggregated view across ${sourceCountsCache.length} server${sourceCountsCache.length !== 1 ? 's' : ''} worldwide: ${cityList}</div>`);
         }
         const html = lines.join('');
-        ['d-about-server-info', 'm-about-server-info'].forEach(id => {
-            const el = document.getElementById(id);
-            if (el) el.innerHTML = html;
-        });
+        const aboutEl = document.getElementById(currentLayout + 'about-server-info');
+        if (aboutEl) aboutEl.innerHTML = html;
     }
 
     function getFilteredTotal() {
@@ -1086,7 +1095,7 @@
         const enabled = Array.isArray(enabledProtocols)
             ? enabledProtocols.map(p => String(p || '').toUpperCase()).filter(p => fallbackTracked.includes(p))
             : fallbackTracked;
-        TRACKED_PROTOCOLS = enabled.length ? enabled : fallbackTracked;
+        TRACKED_PROTOCOLS = Array.isArray(enabledProtocols) ? enabled : fallbackTracked;
         SERVER_PROTOCOL_META = { ...DEFAULT_PROTOCOL_META, ...(protocolMeta || {}) };
         PROTO_INT = Object.fromEntries(
             Object.keys(DEFAULT_PROTOCOL_META).map(p => [p, Number(SERVER_PROTOCOL_META[p]?.proto_int ?? DEFAULT_PROTOCOL_META[p].proto_int)])
@@ -1219,6 +1228,20 @@
         el.style.display = visible ? displayValue : 'none';
     }
 
+    function setPanelVisibleByName(name, visible, elements = {}) {
+        const idx = panelIndex(name);
+        if (idx < 0) return;
+        const panelName = PANEL_NAMES[idx];
+        const key = panelName.toLowerCase();
+        const shouldShow = visible && !excludedPanels.has(panelName);
+
+        setVisible(document.getElementById('d-box-' + key), shouldShow, 'flex');
+        setVisible(document.getElementById('m-pane-' + key), shouldShow, 'flex');
+        setVisible(elements.dNavItems?.[idx], shouldShow, 'flex');
+        setVisible(elements.mNavItems?.[idx], shouldShow, 'flex');
+        setVisible(elements.dots?.[idx], shouldShow, 'block');
+    }
+
     function nearestVisibleIndex(targetIdx, visibleIdxs) {
         if (!visibleIdxs.length) return 0;
         if (visibleIdxs.includes(targetIdx)) return targetIdx;
@@ -1296,31 +1319,18 @@
         const desktopAnchorBefore = desktopBoxesBefore[desktopCurrentIdx] || null;
         const desktopAnchorLeftBefore = desktopAnchorBefore ? desktopAnchorBefore.getBoundingClientRect().left : null;
         const mobileCurrentIdx = getMobileCurrentOriginalIndex();
-        // Username panel — hide if no active protocol supports usernames
-        setVisible(document.getElementById('d-box-user'), showUsernamePanel, 'flex');
-        setVisible(document.getElementById('m-pane-user'), showUsernamePanel, 'flex');
-        // Password panel — hide if no active protocol supports passwords
-        setVisible(document.getElementById('d-box-pass'), showPasswordPanel, 'flex');
-        setVisible(document.getElementById('m-pane-pass'), showPasswordPanel, 'flex');
-
-        const dNavItems = document.querySelectorAll('.d-nav-item');
-        setVisible(dNavItems[USER_PANEL_INDEX], showUsernamePanel, 'flex');
-        setVisible(dNavItems[PASS_PANEL_INDEX], showPasswordPanel, 'flex');
-
-        const mNavItems = document.querySelectorAll('.m-nav .nav-item');
-        setVisible(mNavItems[USER_PANEL_INDEX], showUsernamePanel, 'flex');
-        setVisible(mNavItems[PASS_PANEL_INDEX], showPasswordPanel, 'flex');
-
-        const dots = document.querySelectorAll('.m-dots .dot');
-        setVisible(dots[USER_PANEL_INDEX], showUsernamePanel, 'block');
-        setVisible(dots[PASS_PANEL_INDEX], showPasswordPanel, 'block');
-
-        // Proto Stats pane — hide in classic mode
-        setVisible(document.getElementById('d-box-proto'), showProtoStatsPane, 'flex');
-        setVisible(document.getElementById('m-pane-proto'), showProtoStatsPane, 'flex');
-        setVisible(dNavItems[PROTO_STATS_PANEL_INDEX], showProtoStatsPane, 'flex');
-        setVisible(mNavItems[PROTO_STATS_PANEL_INDEX], showProtoStatsPane, 'flex');
-        setVisible(dots[PROTO_STATS_PANEL_INDEX], showProtoStatsPane, 'block');
+        const panelElements = {
+            dNavItems: document.querySelectorAll('.d-nav-item'),
+            mNavItems: document.querySelectorAll('.m-nav .nav-item'),
+            dots: document.querySelectorAll('.m-dots .dot'),
+        };
+        PANEL_NAMES.forEach(name => {
+            let visible = true;
+            if (name === 'USER') visible = showUsernamePanel;
+            else if (name === 'PASS') visible = showPasswordPanel;
+            else if (name === 'STATS') visible = showProtoStatsPane;
+            setPanelVisibleByName(name, visible, panelElements);
+        });
 
         const mobilePanes = getMobilePanes();
         const visibleMobileIdxs = mobilePanes
@@ -1464,7 +1474,6 @@
         refreshHeatGlobe(active.loc);
         refreshFeed();
         document.querySelectorAll('.d-content, .m-content').forEach(el => el.scrollTop = 0);
-        applyProtocolPanelVisibility(preferredIdx);
         const topKnock = feedData[newMode]?.[0];
         if (topKnock) {
             updateGlobeLocation(topKnock);
@@ -1649,6 +1658,7 @@
     let sourceCountsCache = [];   // [{source_id, display_name, hits}] sorted by hits desc
     let uptimeMinutesCache = 0;
     let hitsMap = {}, rankMap = {};
+    let currentLayout = window.innerWidth > 800 ? 'd-' : 'm-';
 
     // Per-protocol feed arrays (newest at index 0)
     const feedData = { ALL: [] };
@@ -1910,11 +1920,8 @@
     function refreshFeed() {
         const mode = PROTO_MODES[protoModeIdx];
         const data = feedData[mode] || feedData.ALL;
-        ['d-feed', 'm-feed'].forEach(id => {
-            const el = document.getElementById(id);
-            el.innerHTML = '';
-            data.forEach(d => el.appendChild(makeKnockEl(d)));
-        });
+        const el = document.getElementById(currentLayout + 'feed');
+        if (el) { el.innerHTML = ''; data.forEach(d => el.appendChild(makeKnockEl(d))); }
     }
 
     function getRank(list, value, key = 'label') {
@@ -2469,7 +2476,14 @@
         const wasMobile = lastWidth <= 800;
 
         if (isMobile !== wasMobile) {
-            // Crossed the breakpoint
+            // Crossed the breakpoint — update layout and re-render all panes
+            currentLayout = isMobile ? 'm-' : 'd-';
+            renderLeaderboards(getActiveLeaderboards());
+            renderProtoStats();
+            if (currentKnock) { renderInfo(currentKnock); renderTrivia(currentKnock); } else renderInfoEmpty();
+            refreshFeed();
+            updateAboutServerInfo();
+
             const mobileContainer = document.getElementById('globe-container');
             const desktopContainer = document.getElementById('d-globe-container');
 
@@ -2517,7 +2531,9 @@
         const visible = getMobileVisiblePanes();
         let target = panes[idx];
         if (!target || getComputedStyle(target).display === 'none') {
-            target = visible[0];
+            const visibleIdxs = visible.map(pane => mobilePaneOriginalIndex(pane)).filter(i => i >= 0);
+            const nearestIdx = nearestVisibleIndex(idx, visibleIdxs);
+            target = panes[nearestIdx];
         }
         if (!target) return;
         const visibleIdx = visible.indexOf(target);
@@ -2578,7 +2594,9 @@
         const navItems = document.querySelectorAll('.d-nav-item');
         let targetBox = boxes[idx];
         if (!targetBox || getComputedStyle(targetBox).display === 'none') {
-            targetBox = visibleBoxes[0];
+            const visibleIdxs = visibleBoxes.map(box => boxes.indexOf(box)).filter(i => i >= 0);
+            const nearestIdx = nearestVisibleIndex(idx, visibleIdxs);
+            targetBox = boxes[nearestIdx];
         }
         if (!targetBox) return;
         const targetIdx = boxes.indexOf(targetBox);
@@ -2626,7 +2644,8 @@
     };
 
     function renderBars(prefix, data, colorClass = '', useFlags = false) {
-        ['d-', 'm-'].forEach(layout => {
+        {
+            const layout = currentLayout;
             const container = document.getElementById(layout + prefix);
             if (!container) return;
             container.innerHTML = '';
@@ -2671,7 +2690,7 @@
                 const notProvidedRow = container.querySelector('.bar-row[data-id="pass-<not provided>"]');
                 if (notProvidedRow) container.appendChild(notProvidedRow);
             }
-        });
+        }
     }
 
     const fillClasses = { loc: 'loc-fill', pass: 'password-fill', prov: 'provider-fill', user: 'user-fill', ip: 'ip-fill' };
@@ -2681,7 +2700,8 @@
         if ((prefix === 'pass' && !isPassPanelRelevant(mode)) || (prefix === 'user' && !isUserPanelRelevant(mode))) {
             return;
         }
-        ['d-', 'm-'].forEach(layout => {
+        {
+            const layout = currentLayout;
             const container = document.getElementById(layout + prefix);
             if (!container) return;
             const uniqueId = `${prefix}-${id}`;
@@ -2729,7 +2749,7 @@
                 const notProvidedRow = container.querySelector('.bar-row[data-id="pass-<not provided>"]');
                 if (notProvidedRow) container.appendChild(notProvidedRow);
             }
-        });
+        }
     }
 
     function formatLocation(d) {
@@ -3007,13 +3027,13 @@
 
     function renderKnock(d, isNew = true) {
         if (!knockMatchesFilter(d)) return;
-        ['d-feed', 'm-feed'].forEach(id => {
-            const el = document.getElementById(id);
+        const el = document.getElementById(currentLayout + 'feed');
+        if (el) {
             const div = makeKnockEl(d);
             if (isNew) el.prepend(div); else el.appendChild(div);
             if (isNew) triggerPulseClass(div);
             if (el.children.length > MAX_PER_PANEL) el.lastChild.remove();
-        });
+        }
     }
 
     function formatTimeSince(lastSeen) {
@@ -3108,11 +3128,8 @@
                 <div><span style="color:var(--ui-label)">last seen:</span> <span style="color:var(--neon-green)">${formatTimeSince(ipLast)}</span></div>
             </div>
         `;
-        ['d-details', 'm-details'].forEach(id => {
-            const el = document.getElementById(id);
-            el.innerHTML = html;
-            twemoji.parse(el);
-        });
+        const detailsEl = document.getElementById(currentLayout + 'details');
+        if (detailsEl) { detailsEl.innerHTML = html; twemoji.parse(detailsEl); }
     }
 
     function renderInfoEmpty() {
@@ -3126,10 +3143,8 @@
                 <span style="color:var(--neon-green)">${escapeHtml(msg)}</span>
             </div>
         `;
-        ['d-details', 'm-details'].forEach(id => {
-            const el = document.getElementById(id);
-            if (el) el.innerHTML = html;
-        });
+        const detailsEl = document.getElementById(currentLayout + 'details');
+        if (detailsEl) detailsEl.innerHTML = html;
     }
 
     function renderTrivia(d) {
@@ -3198,11 +3213,8 @@
                 ${triviaContent}
             </div>
         `;
-        ['d-trivia', 'm-trivia'].forEach(id => {
-            const el = document.getElementById(id);
-            el.innerHTML = html;
-            twemoji.parse(el);
-        });
+        const triviaEl = document.getElementById(currentLayout + 'trivia');
+        if (triviaEl) { triviaEl.innerHTML = html; twemoji.parse(triviaEl); }
     }
 
     function connect() {
@@ -3270,12 +3282,16 @@
             else if (msg.type === 'init_stats') {
                 debugLog(`init_stats received (total=${d.total})`);
                 if (d.is_aggregator !== undefined) isAggregator = d.is_aggregator;
-                if (d.show_jokes === false) {
-                    ['d-box-jokes', 'm-pane-jokes'].forEach(id => { const el = document.getElementById(id); if (el) el.style.display = 'none'; });
-                    document.querySelectorAll('.d-nav-item, .nav-item').forEach(el => { if (el.textContent.includes('JOKES')) el.style.display = 'none'; });
+                let panelVisibilityMayHaveChanged = false;
+                if (Array.isArray(d.exclude_panels)) {
+                    const serverExcludedPanels = parsePanelList(d.exclude_panels.join(','));
+                    const urlExcludedPanels = parsePanelList(EXCLUDE_PANELS_PARAM);
+                    excludedPanels = new Set([...serverExcludedPanels, ...urlExcludedPanels]);
+                    panelVisibilityMayHaveChanged = true;
                 }
                 if (Array.isArray(d.enabled_protocols) || (d.protocol_meta && typeof d.protocol_meta === 'object')) {
                     applyProtocolConfig(d.enabled_protocols, d.protocol_meta);
+                    panelVisibilityMayHaveChanged = true;
                 }
                 uptimeMinutesCache = Number(d.uptime_minutes || 0);
                 if (d.last_knock_time) lastKnockTime = d.last_knock_time;
@@ -3314,7 +3330,7 @@
                     }
                 }
                 applyProtoButtons(getCurrentMode());
-                applyProtocolPanelVisibility();
+                if (panelVisibilityMayHaveChanged) applyProtocolPanelVisibility();
                 document.querySelector('.d-nav').style.visibility = 'visible';
                 document.querySelector('.m-nav').style.visibility = 'visible';
                 document.querySelector('.m-dots').style.visibility = 'visible';
@@ -3522,16 +3538,12 @@
         const joke = jokesData[jokeIndex];
         const intro = `<p style="margin-bottom:15px;">Here are some knock knock jokes, courtesy of ChatGPT. You may not find them funny, but to an LLM they are hilarious.</p>`;
 
-        ['d-jokes', 'm-jokes'].forEach(id => {
-            const el = document.getElementById(id);
-            if (el) el.innerHTML = intro + `<div id="${id}-content" style="font-size:1.2em;"></div>`;
-        });
+        const jokesEl = document.getElementById(currentLayout + 'jokes');
+        if (jokesEl) jokesEl.innerHTML = intro + `<div id="${currentLayout}jokes-content" style="font-size:1.2em;"></div>`;
 
         const updateContent = (html) => {
-            ['d-jokes-content', 'm-jokes-content'].forEach(id => {
-                const el = document.getElementById(id);
-                if (el) el.innerHTML = html;
-            });
+            const el = document.getElementById(currentLayout + 'jokes-content');
+            if (el) el.innerHTML = html;
         };
 
         let lines = '';

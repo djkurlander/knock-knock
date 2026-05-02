@@ -18,7 +18,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(lifespan=lifespan)
 logger = logging.getLogger("uvicorn.error")
 LOG_UNHANDLED_HTTP = os.environ.get('LOG_UNHANDLED_HTTP', '').lower() == 'true'
-SHOW_JOKES = os.environ.get('SHOW_JOKES', 'true').lower() != 'false'
+EXCLUDE_PANELS = set(p.strip().upper() for p in os.environ.get('EXCLUDE_PANELS', '').split(',') if p.strip())
 
 def get_request_client_ip(request: Request) -> str:
     """Extract real client IP: CF-Connecting-IP > X-Forwarded-For > direct."""
@@ -165,8 +165,6 @@ async def load_protocol_runtime_config():
     except Exception:
         enabled_protocols = list(DEFAULT_ENABLED_PROTOCOLS)
     enabled_protocols = sort_protocols_for_ui([p for p in enabled_protocols if p in PROTO])
-    if not enabled_protocols:
-        enabled_protocols = list(DEFAULT_ENABLED_PROTOCOLS)
 
     default_protocol_meta = {
         name: {
@@ -389,7 +387,7 @@ class ConnectionManager:
                     "last_knock_stats": history[0] if history else None,
                     "is_aggregator": stats.get("is_aggregator", False),
                     "source_counts": stats.get("source_counts", []),
-                    "show_jokes": SHOW_JOKES,
+                    "exclude_panels": list(EXCLUDE_PANELS),
                 }
             }
             await websocket.send_json(payload)

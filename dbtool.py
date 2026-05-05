@@ -6,7 +6,8 @@ import os
 import sqlite3
 import sys
 
-DB_PATH = os.environ.get('DB_DIR', 'data') + '/knock_knock.db'
+DB_PATH          = os.environ.get('DB_DIR', 'data') + '/knock_knock.db'
+VISITORS_DB_PATH = os.environ.get('DB_DIR', 'data') + '/visitors.db'
 
 def list_tables(db_path):
     conn = sqlite3.connect(db_path)
@@ -96,7 +97,9 @@ def main():
     parser.add_argument('--list-tables', action='store_true',
                         help='List all tables with row counts')
     parser.add_argument('--backup', metavar='NAME',
-                        help='Backup database to data/NAME (safe with concurrent writers)')
+                        help='Backup knock_knock.db to data/NAME (safe with concurrent writers)')
+    parser.add_argument('--backup-visitors', metavar='NAME',
+                        help='Backup visitors.db to data/NAME (safe with concurrent writers)')
     parser.add_argument('--remove-knocks', nargs='?', const=None, default=False, metavar='PROTOS',
                         help='Remove knock tables and VACUUM. Optional: comma-separated protocols (e.g. SIP,SMTP). Default: all')
     parser.add_argument('--yes', '-y', action='store_true',
@@ -107,12 +110,18 @@ def main():
         print(f"Error: {DB_PATH} not found", file=sys.stderr)
         sys.exit(1)
 
-    if not any([args.list_tables, args.backup, args.remove_knocks is not False]):
+    if not any([args.list_tables, args.backup, args.backup_visitors, args.remove_knocks is not False]):
         parser.print_help()
         sys.exit(1)
 
     if args.backup:
         backup_db(DB_PATH, args.backup)
+
+    if args.backup_visitors:
+        if not os.path.exists(VISITORS_DB_PATH):
+            print(f"Error: {VISITORS_DB_PATH} not found", file=sys.stderr)
+            sys.exit(1)
+        backup_db(VISITORS_DB_PATH, args.backup_visitors)
 
     if args.remove_knocks is not False:
         remove_knocks(DB_PATH, args.remove_knocks, skip_confirm=args.yes)

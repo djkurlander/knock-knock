@@ -30,7 +30,7 @@ def list_tables(db_path):
     else:
         print(f"\nDB size: {size / 1024:.0f} KB")
 
-def backup_db(db_path, name):
+def backup_db(db_path, name, vacuum=True):
     dest = os.path.join(os.path.dirname(db_path), name)
     if os.path.exists(dest):
         print(f"Error: {dest} already exists", file=sys.stderr)
@@ -38,7 +38,8 @@ def backup_db(db_path, name):
     conn = sqlite3.connect(db_path)
     dest_conn = sqlite3.connect(dest)
     conn.backup(dest_conn)
-    dest_conn.execute("VACUUM")
+    if vacuum:
+        dest_conn.execute("VACUUM")
     dest_conn.close()
     conn.close()
     size = os.path.getsize(dest)
@@ -102,6 +103,8 @@ def main():
                         help='Backup visitors.db to data/NAME (safe with concurrent writers)')
     parser.add_argument('--remove-knocks', nargs='?', const=None, default=False, metavar='PROTOS',
                         help='Remove knock tables and VACUUM. Optional: comma-separated protocols (e.g. SIP,SMTP). Default: all')
+    parser.add_argument('--no-vacuum', action='store_true',
+                        help='Skip VACUUM after backup (preserves page layout for efficient rsync deltas)')
     parser.add_argument('--yes', '-y', action='store_true',
                         help='Skip confirmation prompts')
     args = parser.parse_args()
@@ -115,13 +118,13 @@ def main():
         sys.exit(1)
 
     if args.backup:
-        backup_db(DB_PATH, args.backup)
+        backup_db(DB_PATH, args.backup, vacuum=not args.no_vacuum)
 
     if args.backup_visitors:
         if not os.path.exists(VISITORS_DB_PATH):
             print(f"Error: {VISITORS_DB_PATH} not found", file=sys.stderr)
             sys.exit(1)
-        backup_db(VISITORS_DB_PATH, args.backup_visitors)
+        backup_db(VISITORS_DB_PATH, args.backup_visitors, vacuum=not args.no_vacuum)
 
     if args.remove_knocks is not False:
         remove_knocks(DB_PATH, args.remove_knocks, skip_confirm=args.yes)

@@ -1,4 +1,7 @@
 # Protocol enum — stored as INTEGER in knocks/proto intel tables
+import importlib.util
+import os
+
 from protocol_api import validate_protocol_definition
 
 _BASE_PROTO = {'SSH': 0, 'TNET': 1, 'SMTP': 2, 'RDP': 3, 'FTP': 5, 'SIP': 6, 'SMB': 7, 'HTTP': 8}
@@ -70,15 +73,35 @@ _BASE_PROTOCOL_META = {
 }
 
 
-def _load_registered_protocols():
+_ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
+
+
+def _load_builtin_protocols():
     try:
         from protocols.registry import DEFINITIONS
     except ModuleNotFoundError:
         return []
-    return list(DEFINITIONS)
+    return [(definition, True) for definition in DEFINITIONS]
 
 
-REGISTERED_PROTOCOLS = _load_registered_protocols()
+def _load_extension_protocols():
+    path = os.path.join(_ROOT_DIR, "extensions.py")
+    if not os.path.exists(path):
+        return []
+    spec = importlib.util.spec_from_file_location("knock_knock_extensions", path)
+    if not spec or not spec.loader:
+        raise ValueError(f"Could not load extension protocol file: {path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    extensions = getattr(module, "EXTENSIONS", None)
+    if extensions is None:
+        raise ValueError("extensions.py must define EXTENSIONS = [...]")
+    if isinstance(extensions, (str, bytes)) or not hasattr(extensions, "__iter__"):
+        raise ValueError("extensions.py EXTENSIONS must be an iterable of ProtocolDefinition objects")
+    return [(definition, False) for definition in extensions]
+
+
+REGISTERED_PROTOCOLS = _load_builtin_protocols() + _load_extension_protocols()
 REGISTERED_PROTOCOL_MAP = {}
 
 PROTO = dict(_BASE_PROTO)
@@ -87,8 +110,8 @@ PROTOCOL_META = {name: dict(meta) for name, meta in _BASE_PROTOCOL_META.items()}
 _ui_order = {name: idx * 10 for idx, name in enumerate(_BASE_PROTOCOL_UI_ORDER, start=1)}
 _seen_ids = {proto_id: name for name, proto_id in PROTO.items()}
 
-for definition in REGISTERED_PROTOCOLS:
-    validate_protocol_definition(definition, built_in=True)
+for definition, built_in in REGISTERED_PROTOCOLS:
+    validate_protocol_definition(definition, built_in=built_in)
     name = str(definition.name).upper()
     if name in PROTO or name in REGISTERED_PROTOCOL_MAP:
         raise ValueError(f"Duplicate protocol name in registry: {name}")

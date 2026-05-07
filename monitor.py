@@ -12,7 +12,9 @@ import time
 import argparse
 import re
 import socket
+import importlib
 from datetime import datetime
+from dataclasses import dataclass
 
 # --- Configuration ---
 GEOIP_CITY_PATH = '/usr/share/GeoIP/GeoLite2-City.mmdb'
@@ -33,12 +35,109 @@ PASS_PANEL_PROTOCOLS = {name for name, meta in PROTOCOL_META.items() if meta.get
 MAIL_FORENSICS_MAX = int(os.environ.get("MAIL_FORENSICS_MAX", "100"))
 
 _DEFAULT_ENABLED_STR = 'SSH,TNET,FTP,RDP,SMB,SIP,SMTP:25,SMTP:587,HTTP:80,HTTP:443'
+_UNKNOWN_PROTO_WARNED = set()
+
+
+@dataclass(frozen=True)
+class ProtocolEntry:
+    proto: str
+    port: int | None = None
+    options: tuple[str, ...] = ()
+
+    def label(self):
+        parts = [self.proto]
+        if self.port is not None:
+            parts.append(str(self.port))
+        parts.extend(self.options)
+        return ':'.join(parts)
+
+
+def _protocol_options(proto):
+    definition = (PROTOCOL_META.get(proto) or {}).get('definition')
+    if not definition:
+        return set()
+    return set(definition.option_args) | set(definition.option_env)
+
+
+def _parse_protocol_entry(token):
+    parts = [part.strip().upper() for part in token.split(':')]
+    if not parts or not parts[0]:
+        return None
+    proto = parts[0]
+    if proto not in PROTO:
+        print(f"⚠️ Ignoring unknown protocol in ENABLED_PROTOCOLS: {proto}", flush=True)
+        return None
+    port = None
+    option_start = 1
+    if len(parts) > 1 and parts[1]:
+        try:
+            port = int(parts[1])
+        except ValueError:
+            print(f"⚠️ Ignoring malformed token in ENABLED_PROTOCOLS: {token}", flush=True)
+            return None
+        option_start = 2
+    options = tuple(part for part in parts[option_start:] if part)
+    allowed = _protocol_options(proto)
+    bad_options = [opt for opt in options if opt not in allowed]
+    if bad_options:
+        print(
+            f"⚠️ Ignoring token with unsupported option(s) in ENABLED_PROTOCOLS: "
+            f"{token} ({proto}: {', '.join(bad_options)})",
+            flush=True,
+        )
+        return None
+    return ProtocolEntry(proto, port, options)
+
+
+def _apply_port_arg(args, port):
+    if port is None:
+        return args
+    args = list(args)
+    if '--port' in args:
+        args[args.index('--port') + 1] = str(port)
+    else:
+        args = ['--port', str(port)] + args
+    return args
+
+
+def _spawn_config(entry):
+    meta = PROTOCOL_META.get(entry.proto, {})
+    definition = meta.get('definition')
+    script = meta.get("honeypot_script")
+    args = list(meta.get("honeypot_args", []))
+    env = None
+
+    if definition:
+        script = definition.honeypot_script
+        args = list(definition.honeypot_args)
+        env_updates = {}
+        for option in entry.options:
+            args.extend(definition.option_args.get(option, []))
+            env_updates.update(definition.option_env.get(option, {}))
+        if env_updates:
+            env = os.environ.copy()
+            env.update(env_updates)
+
+    return script, _apply_port_arg(args, entry.port), env
+
+
+def _warn_unknown_proto(proto, ip=None, source=None):
+    if proto in _UNKNOWN_PROTO_WARNED:
+        return
+    _UNKNOWN_PROTO_WARNED.add(proto)
+    detail = f" proto={proto!r}"
+    if ip:
+        detail += f" ip={ip}"
+    if source:
+        detail += f" source={source!r}"
+    print(f"⚠️ Dropping knock for unknown protocol:{detail}", flush=True)
+
 
 def parse_enabled_protocols():
     """
-    Parse ENABLED_PROTOCOLS env var (e.g. 'SSH,SMTP:25,SMTP:587,HTTP:80') into:
+    Parse ENABLED_PROTOCOLS env var (e.g. 'SSH,SMTP:25,MQTT:8883:TLS') into:
       - names: ordered list of unique protocol names (for DB init, UI config, etc.)
-      - entries: list of (proto, port_or_None) tuples (for spawning)
+      - entries: list of ProtocolEntry objects (for spawning)
     Returns (names, entries).
     """
     raw_env = os.environ.get("ENABLED_PROTOCOLS")  # None=unset, ""=explicitly empty
@@ -50,34 +149,26 @@ def parse_enabled_protocols():
     entries = []
     names = []
     for token in raw.split(','):
-        token = token.strip().upper()
+        token = token.strip()
         if not token:
             continue
-        if ':' in token:
-            proto, port_str = token.split(':', 1)
-            try:
-                port = int(port_str)
-            except ValueError:
-                print(f"⚠️ Ignoring malformed token in ENABLED_PROTOCOLS: {token}", flush=True)
-                continue
-        else:
-            proto, port = token, None
-        if proto not in PROTO:
-            print(f"⚠️ Ignoring unknown protocol in ENABLED_PROTOCOLS: {proto}", flush=True)
+        entry = _parse_protocol_entry(token)
+        if not entry:
             continue
-        entries.append((proto, port))
-        if proto not in names:
-            names.append(proto)
+        entries.append(entry)
+        if entry.proto not in names:
+            names.append(entry.proto)
     if not entries:
         print("⚠️ ENABLED_PROTOCOLS resolved to empty set; using defaults", flush=True)
         entries = []
         names = []
         for token in _DEFAULT_ENABLED_STR.split(','):
-            proto, _, port_str = token.partition(':')
-            port = int(port_str) if port_str else None
-            entries.append((proto, port))
-            if proto not in names:
-                names.append(proto)
+            entry = _parse_protocol_entry(token)
+            if not entry:
+                continue
+            entries.append(entry)
+            if entry.proto not in names:
+                names.append(entry.proto)
     return names, entries
 
 def publish_protocol_config(redis_conn, enabled_protocols):
@@ -269,6 +360,126 @@ _PROTO_KEY_MAP = {
     'RDP':  [('user', 'username'), ('rdp_source', 'rdp_source'), ('domain', 'domain'), ('rdp_workstation', 'rdp_workstation')],
 }
 
+_SQL_IDENT_RE = re.compile(r'^[A-Za-z_][A-Za-z0-9_]*$')
+
+
+def _sql_ident(name):
+    if not _SQL_IDENT_RE.fullmatch(str(name or '')):
+        raise ValueError(f"Unsafe SQL identifier: {name!r}")
+    return str(name)
+
+
+def _registered_saved_definitions(save_protos):
+    for proto, meta in PROTOCOL_META.items():
+        definition = meta.get('definition')
+        if definition and definition.knock_table and (save_protos is None or (save_protos and proto in save_protos)):
+            yield proto, definition
+
+
+def _column_sql(column):
+    return f"{_sql_ident(column.name)} {column.type}"
+
+
+def _ensure_columns(cur, table, columns):
+    table = _sql_ident(table)
+    existing = {row[1] for row in cur.execute(f"PRAGMA table_info({table})").fetchall()}
+    for column in columns:
+        if column.name not in existing:
+            cur.execute(f"ALTER TABLE {table} ADD COLUMN {_column_sql(column)}")
+
+
+def _registered_knock_mapping(proto_name):
+    definition = (PROTOCOL_META.get(proto_name) or {}).get('definition')
+    if not definition or not definition.knock_table:
+        return None
+    field_map = [(column.name, column.name) for column in definition.columns]
+    overrides = {mapped.column: mapped.source for mapped in definition.field_map}
+    return definition.knock_table, [(overrides.get(col, key), col) for key, col in field_map]
+
+
+def _build_passthrough_policies():
+    out = {}
+    for proto, meta in PROTOCOL_META.items():
+        definition = meta.get('definition')
+        if not definition:
+            continue
+        fields = {}
+        for item in definition.passthrough_fields:
+            fields[item if isinstance(item, str) else item.key] = item
+        out[proto] = (fields, tuple(definition.passthrough_prefixes))
+    return out
+
+
+_PASSTHROUGH_POLICIES = _build_passthrough_policies()
+
+
+def _resolve_hook(path):
+    if not path:
+        return None
+    module_name, sep, func_name = path.partition(':')
+    if not sep or not module_name or not func_name:
+        raise ValueError(f"Invalid hook path: {path!r}")
+    func = getattr(importlib.import_module(module_name), func_name)
+    if not callable(func):
+        raise ValueError(f"Hook is not callable: {path!r}")
+    return func
+
+
+def _build_hooks():
+    hooks = {}
+    for proto, meta in PROTOCOL_META.items():
+        definition = meta.get('definition')
+        if not definition:
+            continue
+        process = _resolve_hook(definition.process_knock)
+        after = _resolve_hook(definition.after_save)
+        if process or after:
+            hooks[proto] = {'process': process, 'after_save': after}
+    return hooks
+
+
+_PROTOCOL_HOOKS = _build_hooks()
+
+
+def _hook_context(proto):
+    return {'proto': proto, 'db_path': DB_PATH, 'source_id': SOURCE_ID}
+
+
+def _process_knock_hook(proto, knock):
+    hook = (_PROTOCOL_HOOKS.get(proto) or {}).get('process')
+    if not hook:
+        return knock
+    try:
+        return hook(knock, _hook_context(proto))
+    except Exception as e:
+        print(f"⚠️ process_knock hook failed for {proto}; dropping knock: {e}", flush=True)
+        return None
+
+
+def _after_save_hook(proto, knock, package):
+    hook = (_PROTOCOL_HOOKS.get(proto) or {}).get('after_save')
+    if not hook:
+        return
+    try:
+        hook(knock, package, _hook_context(proto))
+    except Exception as e:
+        print(f"⚠️ after_save hook failed for {proto}: {e}", flush=True)
+
+
+def _registered_passthrough_items(knock):
+    policy = _PASSTHROUGH_POLICIES.get(str(knock.get('proto', '')).upper())
+    if not policy:
+        return []
+    fields, prefixes = policy
+    items = []
+    for key, value in knock.items():
+        if key in fields:
+            items.append((key, value, fields[key]))
+        elif prefixes and isinstance(key, str) and key.startswith(prefixes):
+            items.append((key, value, None))
+    return items
+
+
 def reset_all():
     """Wipes the SQLite database and clears relevant Redis keys."""
     print("🧹 Resetting all data as requested...")
@@ -344,6 +555,19 @@ def init_db(save_protos=None, enabled_protocols=None):
                 "timestamp TEXT DEFAULT (strftime('%Y-%m-%d %H:%M:%S','now'))"]
         cols += _COMMON_KNOCK_COLS + extra_cols
         cur.execute(f"CREATE TABLE IF NOT EXISTS {table} ({', '.join(cols)})")
+    for _, definition in _registered_saved_definitions(save_protos):
+        table = _sql_ident(definition.knock_table)
+        proto_cols = [_column_sql(column) for column in definition.columns]
+        cols = ['id INTEGER PRIMARY KEY AUTOINCREMENT',
+                "timestamp TEXT DEFAULT (strftime('%Y-%m-%d %H:%M:%S','now'))"]
+        cols += _COMMON_KNOCK_COLS + proto_cols
+        cur.execute(f"CREATE TABLE IF NOT EXISTS {table} ({', '.join(cols)})")
+        _ensure_columns(cur, table, definition.columns)
+        for extra in definition.extra_tables:
+            extra_table = _sql_ident(extra.name)
+            extra_cols = [_column_sql(column) for column in extra.columns]
+            cur.execute(f"CREATE TABLE IF NOT EXISTS {extra_table} ({', '.join(extra_cols)})")
+            _ensure_columns(cur, extra_table, extra.columns)
     cur.execute("CREATE TABLE IF NOT EXISTS user_intel (username TEXT PRIMARY KEY, hits INTEGER, last_seen DATETIME)")
     cur.execute("CREATE TABLE IF NOT EXISTS pass_intel (password TEXT PRIMARY KEY, hits INTEGER, last_seen DATETIME)")
     cur.execute("CREATE TABLE IF NOT EXISTS country_intel (iso_code TEXT PRIMARY KEY, country TEXT, hits INTEGER, last_seen DATETIME)")
@@ -382,8 +606,10 @@ def init_db(save_protos=None, enabled_protocols=None):
     if 'active' not in _src_cols:
         cur.execute("ALTER TABLE sources ADD COLUMN active INTEGER NOT NULL DEFAULT 1")
     # Add source column to any existing knock tables that predate this feature
-    for _tname in [f"knocks_{p.lower()}" for p in _KNOCK_EXTRA_COLS]:
+    _registered_tables = [d.knock_table for _, d in _registered_saved_definitions(save_protos)]
+    for _tname in [f"knocks_{p.lower()}" for p in _KNOCK_EXTRA_COLS] + _registered_tables:
         try:
+            _tname = _sql_ident(_tname)
             _tcols = [row[1] for row in cur.execute(f"PRAGMA table_info({_tname})").fetchall()]
             if _tcols and 'source' not in _tcols:
                 cur.execute(f"ALTER TABLE {_tname} ADD COLUMN source INTEGER DEFAULT 0")
@@ -555,15 +781,22 @@ def log_to_enriched_db(data, save_protos=None):
         proto_name = data.get('proto', 'SSH')
         should_save = (save_protos is None or
                        (save_protos and proto_name in save_protos))
-        if should_save and proto_name in _PROTO_KEY_MAP:
-            table = f"knocks_{proto_name.lower()}"
+        registered_mapping = _registered_knock_mapping(proto_name)
+        if should_save and (registered_mapping or proto_name in _PROTO_KEY_MAP):
+            if registered_mapping:
+                table, proto_key_map = registered_mapping
+            else:
+                table = f"knocks_{proto_name.lower()}"
+                proto_key_map = _PROTO_KEY_MAP[proto_name]
+            table = _sql_ident(table)
             col_names = [col for _, col in _COMMON_KEY_MAP]
             values = [data.get(key) for key, _ in _COMMON_KEY_MAP]
-            for key, col in _PROTO_KEY_MAP[proto_name]:
+            for key, col in proto_key_map:
                 col_names.append(col)
                 values.append(data.get(key))
             placeholders = ', '.join(['?'] * len(col_names))
-            cur.execute(f"INSERT INTO {table} ({', '.join(col_names)}) VALUES ({placeholders})", values)
+            col_sql = ', '.join(_sql_ident(col) for col in col_names)
+            cur.execute(f"INSERT INTO {table} ({col_sql}) VALUES ({placeholders})", values)
         now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         proto_int = PROTO.get(data.get('proto', 'SSH'), 0)
         if data.get('user') is not None:
@@ -674,17 +907,37 @@ def sanitize_body(s, max_len=2000):
 _SANITIZE_SIMPLE_FIELDS = ('user', 'pass', 'subject', 'domain')
 _SANITIZE_PROTO_PREFIXES = ("sip_", "smtp_", "mail_", "smb_", "rdp_", "http_")
 
+
+def sanitize_passthrough_value(value, policy=None):
+    if not isinstance(value, str):
+        return value
+    sanitizer = getattr(policy, 'sanitizer', 'credential') if policy else 'credential'
+    max_len = getattr(policy, 'max_len', None) if policy else None
+    if sanitizer == 'body':
+        return sanitize_body(value, max_len=max_len or 2000)
+    value = sanitize_credential(value)
+    return value[:max_len] if max_len and value else value
+
+
 def sanitize_knock(knock):
-    """Redact this server's own IPs/hostnames from all credential fields in a raw knock."""
+    """Sanitize raw knock fields and return (knock, passthrough_keys)."""
+    passthrough_keys = []
     for field in _SANITIZE_SIMPLE_FIELDS:
         if field in knock:
             knock[field] = sanitize_credential(knock[field] if isinstance(knock[field], str) else str(knock[field]))
     if 'body' in knock:
         knock['body'] = sanitize_body(knock['body'])
+    registered_items = _registered_passthrough_items(knock)
+    if registered_items:
+        for k, v, policy in registered_items:
+            knock[k] = sanitize_passthrough_value(v, policy)
+            passthrough_keys.append(k)
+        return knock, passthrough_keys
     for k, v in knock.items():
         if isinstance(k, str) and k.startswith(_SANITIZE_PROTO_PREFIXES):
             knock[k] = sanitize_credential(v if isinstance(v, str) else str(v)) if v is not None else v
-    return knock
+            passthrough_keys.append(k)
+    return knock, passthrough_keys
 
 def build_smtp_diag(knock):
     return {
@@ -831,7 +1084,7 @@ def monitor(save_knocks=None, max_knocks=None, ban_duration_days=30):
     init_db(save_protos=save_protos, enabled_protocols=enabled_protocols)
     r = redis.Redis(host=os.environ.get('REDIS_HOST', 'localhost'), port=6379, db=REDIS_DB, decode_responses=True)
     publish_protocol_config(r, enabled_protocols)
-    entry_strs = [f"{p}:{port}" if port else p for p, port in proto_entries]
+    entry_strs = [entry.label() for entry in proto_entries]
     print(f"🧭 Enabled protocols: {', '.join(entry_strs)}", flush=True)
     while True:
         try:
@@ -899,21 +1152,16 @@ def monitor(save_knocks=None, max_knocks=None, ban_duration_days=30):
 
     # Spawn enabled honeypots as subprocesses
     honeypots = {}
-    for proto, port_override in proto_entries:
-        meta = PROTOCOL_META.get(proto, {})
-        script = meta.get("honeypot_script")
+    for entry in proto_entries:
+        proto = entry.proto
+        script, args, env = _spawn_config(entry)
         if not script:
             print(f"⚠️ No honeypot script configured for protocol {proto}; skipping", flush=True)
             continue
-        args = list(meta.get("honeypot_args", []))
-        if port_override is not None:
-            if '--port' in args:
-                args[args.index('--port') + 1] = str(port_override)
-            else:
-                args = ['--port', str(port_override)] + args
-        key = f"{proto}_{port_override}" if port_override is not None else proto
+        key = entry.label().replace(':', '_')
         honeypots[key] = subprocess.Popen(
             [sys.executable, "-u", script] + args,
+            env=env,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
@@ -973,14 +1221,26 @@ def monitor(save_knocks=None, max_knocks=None, ban_duration_days=30):
             elif TRACE_KNOCK:
                 print(line, end='', flush=True)  # pass through diagnostic output from honeypots
             continue
+        passthrough_keys = []
         # Sanitize credential fields once, before any processing or forwarding
         if knock.get('type') == 'KNOCK':
-            knock = sanitize_knock(knock)
+            knock, passthrough_keys = sanitize_knock(knock)
         if knock.get("type") == "SMTP_DIAG":
             store_smtp_diag(r, build_smtp_diag(knock))
             continue
         if knock.get("type") == "KNOCK":
             proto = str(knock.get("proto", "SSH")).upper()
+            if proto not in PROTO:
+                _warn_unknown_proto(proto, ip=knock.get("ip"), source=knock.get("source"))
+                continue
+            processed = _process_knock_hook(proto, knock)
+            if processed is None:
+                continue
+            knock = processed
+            proto = str(knock.get("proto", proto)).upper()
+            if proto not in PROTO:
+                _warn_unknown_proto(proto, ip=knock.get("ip"), source=knock.get("source"))
+                continue
             ip = knock["ip"]
             forensic = build_mail_forensic(knock, proto, ip)
             has_user = "user" in knock
@@ -1016,10 +1276,8 @@ def monitor(save_knocks=None, max_knocks=None, ban_duration_days=30):
                 package['source_display'] = _src_decode.get(package['source_int'], _src_id)
                 # Pass through protocol-specific extended telemetry into Redis/websocket payloads.
                 # This is intentionally not persisted in SQLite.
-                for k, v in knock.items():
-                    if not isinstance(k, str) or not k.startswith(_SANITIZE_PROTO_PREFIXES):
-                        continue
-                    package[k] = v
+                for k in passthrough_keys:
+                    package[k] = knock.get(k)
                 package.update(get_intel_stats_before_update(package))
                 hits_since_cleared = int(package.get('ip_hits_since_cleared', 0) or 0)
                 if is_over_limit_and_block(r, ip, hits_since_cleared, proto, max_knocks, ban_duration_days):
@@ -1034,6 +1292,7 @@ def monitor(save_knocks=None, max_knocks=None, ban_duration_days=30):
             except Exception as e:
                 print(f"⚠️ DB error (knock dropped): {e}", flush=True)
                 continue
+            _after_save_hook(proto, knock, package)
             r.lpush("knock:recent", json.dumps(package))
             r.ltrim("knock:recent", 0, 99)
             proto_key = "knock:recent:" + package['proto'].lower()

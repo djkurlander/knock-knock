@@ -1091,14 +1091,16 @@
     }
 
     function applyProtocolConfig(enabledProtocols, protocolMeta) {
+        const serverMeta = protocolMeta && typeof protocolMeta === 'object' ? protocolMeta : {};
         const fallbackTracked = Object.keys(DEFAULT_PROTOCOL_META);
+        const knownProtocols = Array.from(new Set([...fallbackTracked, ...Object.keys(serverMeta)]));
         const enabled = Array.isArray(enabledProtocols)
-            ? enabledProtocols.map(p => String(p || '').toUpperCase()).filter(p => fallbackTracked.includes(p))
+            ? enabledProtocols.map(p => String(p || '').toUpperCase()).filter(p => knownProtocols.includes(p))
             : fallbackTracked;
         TRACKED_PROTOCOLS = Array.isArray(enabledProtocols) ? enabled : fallbackTracked;
-        SERVER_PROTOCOL_META = { ...DEFAULT_PROTOCOL_META, ...(protocolMeta || {}) };
+        SERVER_PROTOCOL_META = { ...DEFAULT_PROTOCOL_META, ...serverMeta };
         PROTO_INT = Object.fromEntries(
-            Object.keys(DEFAULT_PROTOCOL_META).map(p => [p, Number(SERVER_PROTOCOL_META[p]?.proto_int ?? DEFAULT_PROTOCOL_META[p].proto_int)])
+            knownProtocols.map(p => [p, Number(SERVER_PROTOCOL_META[p]?.proto_int)])
         );
         PROTO_COLORS = { ...DEFAULT_PROTO_COLORS };
         TRACKED_PROTOCOLS.forEach(p => {

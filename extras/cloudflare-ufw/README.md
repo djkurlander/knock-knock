@@ -79,6 +79,10 @@ ufw allow 5060      # SIP
 # Your real SSH port
 ufw allow 2222/tcp  # replace with your actual port
 
+# Remove any broad dashboard exposure from the default install instructions.
+# If these rules do not exist, UFW will print an error; that is fine.
+ufw delete allow 8080/tcp
+
 # Port 8080 (web dashboard) — Cloudflare IPs only
 for cidr in $(curl -sf https://www.cloudflare.com/ips-v4) $(curl -sf https://www.cloudflare.com/ips-v6); do
     ufw allow from "$cidr" to any port 8080 proto tcp comment "Cloudflare"
@@ -86,6 +90,14 @@ done
 
 ufw enable
 ```
+
+After setup, confirm there is no broad `8080` allow rule left:
+
+```bash
+ufw status verbose | grep '8080/tcp .*Anywhere' && echo "ERROR: broad 8080 rule remains"
+```
+
+Expected result: no output. The only `8080` rules should be Cloudflare CIDR ranges.
 
 ### 4. Keep Cloudflare IPs up to date (cron)
 

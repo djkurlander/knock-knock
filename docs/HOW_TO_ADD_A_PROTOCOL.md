@@ -36,6 +36,17 @@ Required fields:
 Use `user` and `pass` if the protocol captures credentials. Use
 protocol-prefixed fields such as `xtest_action` for protocol details.
 
+Some built-in honeypots can be reused by a local extension. MQTT and Node-RED
+default to emitting `MQTT` and `NRED`, but accept `KNOCK_PROTO` to override the
+emitted protocol name:
+
+```bash
+KNOCK_PROTO=XTEST python honeypots/mqtt_honeypot.py --port 12345
+```
+
+When launching through the monitor, pass that environment value from the
+protocol definition with `option_env` for now.
+
 ## Add `extensions.py`
 
 Create a repo-root `extensions.py`. This file is intentionally not present in

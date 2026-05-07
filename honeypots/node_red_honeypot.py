@@ -30,6 +30,7 @@ from common import (
 
 
 NRED_PORT = int(os.environ.get('NRED_PORT', '1880'))
+KNOCK_PROTO = os.environ.get('KNOCK_PROTO', 'NRED').strip().upper() or 'NRED'
 NRED_TIMEOUT = int(os.environ.get('NRED_TIMEOUT', '15'))
 NRED_MAX_HEADERS = int(os.environ.get('NRED_MAX_HEADERS', '8192'))
 NRED_MAX_BODY = int(os.environ.get('NRED_MAX_BODY', '8192'))
@@ -489,7 +490,7 @@ def handle_connection(sock, client_ip):
 
         knock = {
             'type': 'KNOCK',
-            'proto': 'NRED',
+            'proto': KNOCK_PROTO,
             'ip': client_ip,
             'nred_port': _NRED_PORT,
             'nred_method': method,

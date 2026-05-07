@@ -25,6 +25,7 @@ from common import (
 
 
 MQTT_PORT = int(os.environ.get('MQTT_PORT', '1883'))
+KNOCK_PROTO = os.environ.get('KNOCK_PROTO', 'MQTT').strip().upper() or 'MQTT'
 MQTT_TLS_CERT_PATH = os.environ.get('MQTT_TLS_CERT_PATH', 'data/mqtt.crt')
 MQTT_TLS_KEY_PATH = os.environ.get('MQTT_TLS_KEY_PATH', 'data/mqtt.key')
 MAX_PACKET_SIZE = int(os.environ.get('MQTT_MAX_PACKET_SIZE', str(256 * 1024)))
@@ -374,7 +375,7 @@ def parse_publish_topic(body, flags):
 
 
 def emit_knock(payload):
-    if payload.get('proto') == 'MQTT' and not payload.get('display_format'):
+    if payload.get('proto') == KNOCK_PROTO and not payload.get('display_format'):
         set_display_format(payload)
     clean = {k: v for k, v in payload.items() if v is not None}
     print(json.dumps(clean), flush=True)
@@ -435,7 +436,7 @@ def handle_connection(client_sock, client_ip, port, tls_active=False):
                 )
             emit_knock(annotate_signature({
                 'type': 'KNOCK',
-                'proto': 'MQTT',
+                'proto': KNOCK_PROTO,
                 'ip': client_ip,
                 'mqtt_port': port,
                 'mqtt_tls': tls_active,
@@ -461,7 +462,7 @@ def handle_connection(client_sock, client_ip, port, tls_active=False):
 
         knock = {
             'type': 'KNOCK',
-            'proto': 'MQTT',
+            'proto': KNOCK_PROTO,
             'ip': client_ip,
             'mqtt_port': port,
             'mqtt_tls': tls_active,
@@ -510,7 +511,7 @@ def handle_connection(client_sock, client_ip, port, tls_active=False):
                 )
             followup = {
                 'type': 'KNOCK',
-                'proto': 'MQTT',
+                'proto': KNOCK_PROTO,
                 'ip': client_ip,
                 'mqtt_port': port,
                 'mqtt_tls': tls_active,

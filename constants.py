@@ -1,4 +1,6 @@
 # Protocol enum — stored as INTEGER in knocks/proto intel tables
+from protocol_api import validate_protocol_definition
+
 _BASE_PROTO = {'SSH': 0, 'TNET': 1, 'SMTP': 2, 'RDP': 3, 'FTP': 5, 'SIP': 6, 'SMB': 7, 'HTTP': 8}
 
 # Canonical built-in protocol order for UI controls and displays.
@@ -86,6 +88,7 @@ _ui_order = {name: idx * 10 for idx, name in enumerate(_BASE_PROTOCOL_UI_ORDER, 
 _seen_ids = {proto_id: name for name, proto_id in PROTO.items()}
 
 for definition in REGISTERED_PROTOCOLS:
+    validate_protocol_definition(definition, built_in=True)
     name = str(definition.name).upper()
     if name in PROTO or name in REGISTERED_PROTOCOL_MAP:
         raise ValueError(f"Duplicate protocol name in registry: {name}")

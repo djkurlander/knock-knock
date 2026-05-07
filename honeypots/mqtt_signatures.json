@@ -1,0 +1,74 @@
+[
+  {
+    "name": "Censys MQTT scanner",
+    "priority": 50,
+    "purpose": "research_scanner",
+    "client_id_pattern": "^CENSYS$"
+  },
+  {
+    "name": "ONYPHE MQTT scanner",
+    "priority": 55,
+    "purpose": "research_scanner",
+    "client_id_pattern": "^ONYPHE$"
+  },
+  {
+    "name": "Paho broad subscription probe",
+    "priority": 100,
+    "purpose": "broker_recon",
+    "stage_pattern": "^subscribe$",
+    "client_id_pattern": "^paho/",
+    "topic_pattern": "^(#|\\$SYS/#)$"
+  },
+  {
+    "name": "Broker system topic probe",
+    "priority": 150,
+    "purpose": "broker_metadata_probe",
+    "stage_pattern": "^subscribe$",
+    "topic_pattern": "^\\$SYS/#$"
+  },
+  {
+    "name": "Full wildcard topic subscription",
+    "priority": 160,
+    "purpose": "topic_tap_probe",
+    "stage_pattern": "^subscribe$",
+    "topic_pattern": "^#$"
+  },
+  {
+    "name": "Go MQTT Client Probe",
+    "priority": 250,
+    "purpose": "client_probe",
+    "client_id_pattern": "^go$"
+  },
+  {
+    "name": "iw MQTT Client Probe",
+    "priority": 250,
+    "purpose": "client_probe",
+    "client_id_pattern": "^iw-[0-9a-f]+$"
+  },
+  {
+    "name": "Nmap MQTT Probe",
+    "priority": 250,
+    "purpose": "client_probe",
+    "client_id_pattern": "^nmap$"
+  },
+  {
+    "name": "Anonymous MQTT client",
+    "priority": 300,
+    "purpose": "anonymous_connect",
+    "stage_pattern": "^connect$",
+    "client_id_pattern": "^$"
+  },
+  {
+    "name": "MQTT 3.1 legacy protocol probe",
+    "priority": 350,
+    "purpose": "legacy_client_probe",
+    "stage_pattern": "^connect$",
+    "protocol_name_pattern": "^MQIsdp$"
+  },
+  {
+    "name": "Non-CONNECT first packet",
+    "priority": 400,
+    "purpose": "protocol_probe",
+    "stage_pattern": "^non_connect$"
+  }
+]

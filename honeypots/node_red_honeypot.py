@@ -436,6 +436,24 @@ def _flow_summary(body):
     }
 
 
+def _display_format(method, path_only, purpose, exploit_name):
+    if path_only in ('/auth/login', '/auth/token', '/credentials'):
+        return 'auth'
+    if method in ('POST', 'PUT') and path_only == '/flows':
+        return 'flow'
+    exploit_purposes = {
+        'remote_code_execution',
+        'credential_attempt',
+        'node_install',
+        'file_write',
+        'mqtt_flow_deploy',
+        'post_exploit_cleanup',
+    }
+    if purpose in exploit_purposes:
+        return 'exploit'
+    return 'request'
+
+
 def handle_connection(sock, client_ip):
     try:
         raw = _recv_headers(sock)
@@ -478,6 +496,7 @@ def handle_connection(sock, client_ip):
             'nred_path': path,
             'nred_purpose': purpose,
             'nred_auth_mode': NRED_AUTH_MODE,
+            'display_format': _display_format(method, path_only, purpose, exploit_name),
         }
         if exploit_name:
             knock['nred_exploit'] = exploit_name
@@ -500,6 +519,9 @@ def handle_connection(sock, client_ip):
         summary = _flow_summary(body) if method in ('POST', 'PUT') and path_only == '/flows' else None
         if summary:
             knock['nred_flow_summary'] = summary
+            knock['nred_flow_node_count'] = summary.get('node_count')
+            knock['nred_flow_has_exec'] = summary.get('has_exec')
+            knock['nred_flow_has_mqtt'] = summary.get('has_mqtt')
         if body:
             knock['nred_body'] = _body_preview(body)
 

@@ -176,13 +176,25 @@ def publish_protocol_config(redis_conn, enabled_protocols):
     meta = {}
     for name in PROTO.keys():
         base = PROTOCOL_META.get(name, {})
+        definition = base.get("definition")
         meta[name] = {
             "proto_int": PROTO.get(name),
             "enabled": name in enabled,
             "supports_user_panel": bool(base.get("supports_user_panel", False)),
             "supports_pass_panel": bool(base.get("supports_pass_panel", False)),
             "color": base.get("color", "#ffcc00"),
+            "badge": base.get("badge", name),
         }
+        if definition:
+            meta[name]["display_fields"] = [
+                {"key": f.key, "label": f.label, "format": f.format}
+                for f in definition.display_fields
+            ]
+            meta[name]["display_formats"] = definition.display_formats
+            if definition.display_format_field:
+                meta[name]["display_format_field"] = definition.display_format_field
+            if definition.default_display_format:
+                meta[name]["default_display_format"] = definition.default_display_format
     redis_conn.set("knock:config:enabled_protocols", json.dumps(enabled))
     redis_conn.set("knock:config:protocol_meta", json.dumps(meta))
 
@@ -1264,6 +1276,10 @@ def monitor(save_knocks=None, max_knocks=None, ban_duration_days=30):
                 package["subject"] = knock["subject"]
             if knock.get("body"):
                 package["body"] = knock["body"]
+            if knock.get("display_format"):
+                package["display_format"] = knock["display_format"]
+            if knock.get("display_lines"):
+                package["display_lines"] = knock["display_lines"]
             if proto == "RDP":
                 raw_domain = knock.get("domain")
                 if raw_domain is not None and raw_domain:

@@ -173,9 +173,23 @@ async def load_protocol_runtime_config():
             "supports_user_panel": bool(PROTOCOL_META.get(name, {}).get("supports_user_panel", False)),
             "supports_pass_panel": bool(PROTOCOL_META.get(name, {}).get("supports_pass_panel", False)),
             "color": PROTOCOL_META.get(name, {}).get("color", "#ffcc00"),
+            "badge": PROTOCOL_META.get(name, {}).get("badge", name),
         }
         for name in PROTO.keys()
     }
+    for name, meta in default_protocol_meta.items():
+        definition = PROTOCOL_META.get(name, {}).get("definition")
+        if not definition:
+            continue
+        meta["display_fields"] = [
+            {"key": f.key, "label": f.label, "format": f.format}
+            for f in definition.display_fields
+        ]
+        meta["display_formats"] = definition.display_formats
+        if definition.display_format_field:
+            meta["display_format_field"] = definition.display_format_field
+        if definition.default_display_format:
+            meta["default_display_format"] = definition.default_display_format
     try:
         protocol_meta = json.loads(protocol_meta_raw) if protocol_meta_raw else default_protocol_meta
     except Exception:

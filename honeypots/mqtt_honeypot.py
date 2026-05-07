@@ -134,6 +134,20 @@ def annotate_signature(knock):
     return knock
 
 
+def set_display_format(knock):
+    stage = str(knock.get('mqtt_stage') or '').lower()
+    formats = {
+        'connect',
+        'malformed_connect',
+        'non_connect',
+        'subscribe',
+        'publish',
+        'pingreq',
+    }
+    knock['display_format'] = stage if stage in formats else 'packet'
+    return knock
+
+
 def safe_text(value, limit=300):
     if value is None:
         return None
@@ -360,6 +374,8 @@ def parse_publish_topic(body, flags):
 
 
 def emit_knock(payload):
+    if payload.get('proto') == 'MQTT' and not payload.get('display_format'):
+        set_display_format(payload)
     clean = {k: v for k, v in payload.items() if v is not None}
     print(json.dumps(clean), flush=True)
 
@@ -517,6 +533,9 @@ def handle_connection(client_sock, client_ip, port, tls_active=False):
                     packet_id, subscriptions = parse_subscribe_topics(body, level)
                     followup['mqtt_packet_id'] = packet_id
                     followup['mqtt_subscriptions'] = subscriptions
+                    if subscriptions:
+                        followup['mqtt_topic'] = subscriptions[0].get('topic')
+                        followup['mqtt_qos'] = subscriptions[0].get('qos')
                 elif packet_valid and packet_type == 3:
                     topic, payload_len, qos = parse_publish_topic(body, flags)
                     followup['mqtt_topic'] = topic

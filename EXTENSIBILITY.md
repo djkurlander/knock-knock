@@ -294,7 +294,55 @@ display_fields=[
 ]
 ```
 
-`index.html` should prefer a generic renderer for these fields for simple protocols. For protocol knocks whose display depends on packet type, stage, action, or other protocol-specific rules, the protocol's trusted Python hook in `monitor.py` should normalize the Redis/websocket package into structured display hints before publish.
+`index.html` should prefer a generic renderer for these fields for simple protocols. For protocol knocks whose display depends on packet type, stage, action, or other protocol-specific rules, protocol definitions may also declare reusable display formats. A knock can then select one of those formats with a short symbolic name instead of sending the same `display_lines` structure in every Redis/websocket payload.
+
+Example protocol-level display formats:
+
+```python
+display_formats={
+    "connect": [
+        [
+            {"label": "action", "value": "connect"},
+            {"label": "client", "value_key": "mqtt_client_id"},
+        ],
+        [
+            {"label": "version", "value_key": "mqtt_version"},
+            {"label": "auth", "value_key": "mqtt_auth_result"},
+        ],
+    ],
+    "subscribe": [
+        [
+            {"label": "action", "value": "subscribe"},
+            {"label": "client", "value_key": "mqtt_client_id"},
+        ],
+        [
+            {"label": "topic", "value_key": "mqtt_topic", "format": "code"},
+            {"label": "qos", "value_key": "mqtt_qos"},
+        ],
+    ],
+}
+```
+
+Example knock selecting a reusable format:
+
+```json
+{
+  "proto": "MQTT",
+  "mqtt_stage": "connect",
+  "mqtt_client_id": "paho/1AD14D4A91025A4DC0",
+  "mqtt_version": "3.1.1",
+  "mqtt_auth_result": "accepted",
+  "display_format": "connect"
+}
+```
+
+Prefer symbolic format names such as `"connect"` or `"subscribe"` over numeric IDs. They are easier to inspect in Redis, browser logs, test fixtures, and operator debugging. Compact numeric aliases can be added later only if payload size becomes a demonstrated problem.
+
+For protocols where the display format naturally follows an existing knock field, the definition may declare a format selector field such as `display_format_field="mqtt_stage"`. The monitor can then set or infer `display_format` from that field when the value matches a declared display format. Explicit per-knock `display_format` should take precedence over inferred values.
+
+Protocols may also have only one reusable format. For example, SSH might declare a single `"ssh"` format for username/password-oriented feed display. In that case, the definition may declare a default such as `default_display_format="ssh"` so every knock does not need to repeat `"display_format": "ssh"`. Explicit per-knock `display_format` should still override the default.
+
+For unusual one-off cases, the protocol's trusted Python hook in `monitor.py` may still normalize the Redis/websocket package into per-knock structured `display_lines` before publish.
 
 Example per-knock display shape:
 
@@ -324,15 +372,24 @@ The browser should render `display_lines` with a small fixed vocabulary:
 - `value_key`: key to read from the knock package.
 - Optional `format`: known safe formatter such as `boolean`, `code`, `truncate`, or `list`.
 
-The browser must escape all values. It should ignore malformed display entries instead of throwing.
+The same row-and-field shape is used by per-protocol `display_formats` and per-knock `display_lines`. The browser should resolve display details in this order:
+
+1. Per-knock `display_lines`.
+2. Per-knock `display_format` resolved against the current protocol metadata.
+3. Protocol `default_display_format` resolved against the current protocol metadata.
+4. Protocol `display_fields`.
+5. Existing built-in protocol-specific renderers during the migration period.
+6. Generic credential fallback.
+
+The browser must escape all labels and values. It should ignore malformed display entries instead of throwing. It should validate that `display_format` is a string, that the format exists for the knock's protocol, that rows are arrays, that field specs are objects, and that field specs use only the allowed keys `label`, `value`, `value_key`, and `format`.
 
 The browser should render only protocols present in its current protocol metadata. If a knock arrives before protocol metadata has loaded, or if the knock's `proto` is absent from the current frontend protocol registry, the browser should ignore that knock client-side. Do not invent fallback colors, labels, panels, or filter entries for unknown protocols. Server-side unknown-protocol rejection remains the primary guardrail; this browser behavior is a second guardrail for startup ordering, stale cached pages, or mismatched services.
 
 This keeps conditional protocol-specific decisions in Python, where the extension already lives, while keeping `index.html` as a stable renderer.
 
-No protocol extension should provide raw HTML for browser rendering. Extensions should provide structured fields only.
+No protocol extension should provide raw HTML for browser rendering. Extensions should provide structured fields, reusable display formats, or per-knock display lines only.
 
-Do not support loadable plugin JavaScript in v1. Existing built-in JavaScript formatters may remain for complex built-in protocols, but extension protocols should use metadata and/or `display_lines`.
+Do not support loadable plugin JavaScript in v1. Existing built-in JavaScript formatters may remain for complex built-in protocols, but extension protocols should use metadata, `display_formats`, and/or `display_lines`.
 
 Adding a protocol or changing protocol metadata is a restart-time operation in v1. It is acceptable to require restarting both monitor and web services so the merged registry, Redis protocol config, and browser initial state agree.
 
@@ -353,7 +410,7 @@ Start by moving declarative facts into the registry:
 
 Leave existing honeypot scripts alone.
 
-Leave existing special-case browser formatters in place initially, especially SMB and richer SIP/HTTP rendering. Simple protocols such as SSH, TNET, FTP, RDP, and much of SMTP can move to metadata-driven rendering. New extension protocols should prefer backend-prepared `display_lines` instead of adding new frontend procedural branches.
+Leave existing special-case browser formatters in place initially, especially SMB and richer SIP/HTTP rendering. Simple protocols such as SSH, TNET, FTP, RDP, and much of SMTP can move to metadata-driven rendering. New extension protocols should prefer declarative `display_fields` or reusable `display_formats`; use backend-prepared `display_lines` only for unusual per-knock layouts that cannot be expressed with a reusable format.
 
 Leave existing special-case monitor behavior in place initially, except where it naturally becomes a small hook. SIP phone-number aggregation is the clearest candidate for a future `after_save` hook.
 

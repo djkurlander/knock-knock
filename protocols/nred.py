@@ -47,4 +47,56 @@ DEFINITION = ProtocolDefinition(
         DisplayField("nred_purpose", "Purpose"),
         DisplayField("nred_exploit", "Exploit"),
     ],
+    display_formats={
+        "request": [
+            [
+                {"label": "method", "value_key": "nred_method"},
+                {"label": "path", "value_key": "nred_path", "format": "code"},
+            ],
+            [
+                {"label": "purpose", "value_key": "nred_purpose"},
+                {"label": "detail", "value_key": "nred_exploit", "format": "truncate"},
+            ],
+            [
+                {"label": "ua", "value_key": "nred_user_agent", "format": "truncate"},
+            ],
+        ],
+        "auth": [
+            [
+                {"label": "method", "value_key": "nred_method"},
+                {"label": "path", "value_key": "nred_path", "format": "code"},
+            ],
+            [
+                {"label": "user", "value_key": "nred_user"},
+                {"label": "grant", "value_key": "nred_grant_type"},
+                {"label": "client", "value_key": "nred_client_id"},
+            ],
+        ],
+        "flow": [
+            [
+                {"label": "method", "value_key": "nred_method"},
+                {"label": "path", "value_key": "nred_path", "format": "code"},
+            ],
+            [
+                {"label": "purpose", "value_key": "nred_purpose"},
+                {"label": "exploit", "value_key": "nred_exploit", "format": "truncate"},
+            ],
+            [
+                {"label": "nodes", "value_key": "nred_flow_node_count"},
+                {"label": "exec", "value_key": "nred_flow_has_exec", "format": "boolean"},
+                {"label": "mqtt", "value_key": "nred_flow_has_mqtt", "format": "boolean"},
+            ],
+        ],
+        "exploit": [
+            [
+                {"label": "method", "value_key": "nred_method"},
+                {"label": "path", "value_key": "nred_path", "format": "code"},
+            ],
+            [
+                {"label": "purpose", "value_key": "nred_purpose"},
+                {"label": "exploit", "value_key": "nred_exploit", "format": "truncate"},
+            ],
+        ],
+    },
+    default_display_format="request",
 )

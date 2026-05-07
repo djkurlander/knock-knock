@@ -2879,6 +2879,89 @@
         return lines.join('<br>');
     }
 
+    const DISPLAY_FIELD_KEYS = new Set(['label', 'value', 'value_key', 'format']);
+    const DISPLAY_FORMATS = new Set(['boolean', 'code', 'truncate', 'list']);
+
+    function isBlankDisplayValue(v) {
+        return v === undefined || v === null || v === '';
+    }
+
+    function formatDisplayValue(v, fmt) {
+        if (isBlankDisplayValue(v)) return null;
+        if (!DISPLAY_FORMATS.has(String(fmt || ''))) fmt = null;
+        if (fmt === 'boolean') {
+            return v ? 'yes' : 'no';
+        }
+        if (fmt === 'list') {
+            const list = Array.isArray(v) ? v : [v];
+            const rendered = list
+                .filter(item => !isBlankDisplayValue(item))
+                .map(item => {
+                    if (typeof item === 'object') return oneLinePreview(JSON.stringify(item), 80);
+                    return oneLinePreview(item, 80);
+                });
+            return rendered.length ? escapeHtml(rendered.join(', ')) : null;
+        }
+        const maxLen = fmt === 'truncate' ? 80 : 140;
+        const text = oneLinePreview(v, maxLen);
+        const escaped = escapeHtml(text);
+        return fmt === 'code' ? `<span style="color:var(--neon-green)">${escaped}</span>` : escaped;
+    }
+
+    function renderDisplaySpec(spec, d) {
+        if (!spec || typeof spec !== 'object' || Array.isArray(spec)) return null;
+        if (Object.keys(spec).some(k => !DISPLAY_FIELD_KEYS.has(k))) return null;
+        const label = typeof spec.label === 'string' ? spec.label.trim() : '';
+        if (!label) return null;
+        let rawValue;
+        if (Object.prototype.hasOwnProperty.call(spec, 'value')) {
+            rawValue = spec.value;
+        } else if (typeof spec.value_key === 'string' && spec.value_key) {
+            rawValue = d?.[spec.value_key];
+        } else {
+            return null;
+        }
+        const value = formatDisplayValue(rawValue, spec.format);
+        if (value === null) return null;
+        return `<span style="color:var(--ui-label)">${escapeHtml(label)}:</span> <span>${value}</span>`;
+    }
+
+    function renderDisplayRows(rows, d) {
+        if (!Array.isArray(rows)) return null;
+        const lines = [];
+        rows.slice(0, 4).forEach(row => {
+            if (!Array.isArray(row)) return;
+            const parts = row.slice(0, 4).map(spec => renderDisplaySpec(spec, d)).filter(Boolean);
+            if (parts.length) lines.push(parts.map((p, i) => i ? `<span style="margin-left:10px;"></span>${p}` : p).join(''));
+        });
+        return lines.length ? lines.join('<br>') : null;
+    }
+
+    function renderDisplayFields(fields, d) {
+        if (!Array.isArray(fields)) return null;
+        const specs = fields.slice(0, 6)
+            .filter(f => f && typeof f === 'object' && typeof f.key === 'string' && typeof f.label === 'string')
+            .map(f => ({ label: f.label, value_key: f.key, format: f.format }));
+        if (!specs.length) return null;
+        return renderDisplayRows([specs.slice(0, 3), specs.slice(3, 6)], d);
+    }
+
+    function renderMetadataFeedFields(d, proto) {
+        const meta = SERVER_PROTOCOL_META?.[proto];
+        if (!meta || !TRACKED_PROTOCOLS.includes(proto)) return null;
+        const directLines = renderDisplayRows(d?.display_lines, d);
+        if (directLines) return directLines;
+        const formats = meta.display_formats && typeof meta.display_formats === 'object' ? meta.display_formats : {};
+        const formatName = typeof d?.display_format === 'string' && d.display_format
+            ? d.display_format
+            : (typeof meta.default_display_format === 'string' ? meta.default_display_format : null);
+        if (formatName && Object.prototype.hasOwnProperty.call(formats, formatName)) {
+            const rendered = renderDisplayRows(formats[formatName], d);
+            if (rendered) return rendered;
+        }
+        return renderDisplayFields(meta.display_fields, d);
+    }
+
     const PROTOCOL_FEED_SCHEMAS = [
         {
             name: 'sip_account',
@@ -3002,6 +3085,8 @@
 
     function protocolFeedFields(d) {
         const proto = (d?.proto || '').toUpperCase();
+        const metadataRendered = renderMetadataFeedFields(d, proto);
+        if (metadataRendered) return metadataRendered;
         const schema = PROTOCOL_FEED_SCHEMAS.find(s => s.match(d, proto));
         return schema ? schema.render(d, proto) : renderDefaultCredBlock(d);
     }

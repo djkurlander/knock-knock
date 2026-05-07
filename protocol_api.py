@@ -55,6 +55,9 @@ class ProtocolDefinition:
     passthrough_fields: list[str | PassthroughField] = field(default_factory=list)
     passthrough_prefixes: list[str] = field(default_factory=list)
     display_fields: list[DisplayField] = field(default_factory=list)
+    display_formats: dict[str, list[list[dict]]] = field(default_factory=dict)
+    display_format_field: str | None = None
+    default_display_format: str | None = None
     extra_tables: list[TableDefinition] = field(default_factory=list)
     process_knock: str | None = None
     after_save: str | None = None

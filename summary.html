@@ -1108,34 +1108,13 @@
         }
     });
 
-    const DEFAULT_PROTOCOL_META = {
-        SSH:  { proto_int: 0, enabled: true, supports_user_panel: true,  supports_pass_panel: true,  color: '#00ff41' },
-        TNET: { proto_int: 1, enabled: true, supports_user_panel: true,  supports_pass_panel: true,  color: '#00fbff' },
-        FTP:  { proto_int: 5, enabled: true, supports_user_panel: true,  supports_pass_panel: true,  color: '#FFFF77' },
-        RDP:  { proto_int: 3, enabled: true, supports_user_panel: true,  supports_pass_panel: false, color: '#ff1a1a' },
-        SMB:  { proto_int: 7, enabled: true, supports_user_panel: true,  supports_pass_panel: false, color: '#d6d9df' },
-        SIP:  { proto_int: 6, enabled: true, supports_user_panel: false, supports_pass_panel: false, color: '#ff7a00' },
-        HTTP: { proto_int: 8, enabled: true, supports_user_panel: false, supports_pass_panel: false, color: '#00ffaa' },
-        SMTP: { proto_int: 2, enabled: true, supports_user_panel: true,  supports_pass_panel: true,  color: '#ff00ff' },
-    };
-    const DEFAULT_PROTO_COLORS = {
-        ALL:  '#ffcc00',
-        SSH:  '#00ff41',
-        TNET: '#00fbff',
-        SMTP: '#ff00ff',
-        HTTP: '#00ffaa',
-        RDP:  '#ff1a1a',
-        FTP:  '#FFFF77',
-        SIP:  '#ff7a00',
-        SMB:  '#d6d9df',
-    };
-    let SERVER_PROTOCOL_META = { ...DEFAULT_PROTOCOL_META };
-    let TRACKED_PROTOCOLS = Object.keys(DEFAULT_PROTOCOL_META);
-    let PROTO_MODES = ['ALL', ...TRACKED_PROTOCOLS];
-    let USERNAME_PROTOCOLS = new Set(['SSH', 'TNET', 'FTP', 'RDP', 'SMTP']);
-    let PASSWORD_PROTOCOLS = new Set(['SSH', 'TNET', 'FTP', 'SMTP']);
-    let PROTO_COLORS = { ...DEFAULT_PROTO_COLORS };
-    let PROTO_INT = Object.fromEntries(TRACKED_PROTOCOLS.map(p => [p, Number(DEFAULT_PROTOCOL_META[p]?.proto_int)]));
+    let SERVER_PROTOCOL_META = {};
+    let TRACKED_PROTOCOLS = [];
+    let PROTO_MODES = ['ALL'];
+    let USERNAME_PROTOCOLS = new Set();
+    let PASSWORD_PROTOCOLS = new Set();
+    let PROTO_COLORS = { ALL: '#ffcc00' };
+    let PROTO_INT = {};
     let protoModeIdx = 0;
     const PROTO_CHIP_TIMEOUTS = Object.create(null);
     const DESKTOP_LATEST_PROTO_CHIP = {
@@ -1275,16 +1254,16 @@
     }
 
     function applyProtocolConfig(enabledProtocols, protocolMeta) {
-        const fallbackTracked = Object.keys(DEFAULT_PROTOCOL_META);
-        const enabled = Array.isArray(enabledProtocols)
-            ? enabledProtocols.map(p => String(p || '').toUpperCase()).filter(p => fallbackTracked.includes(p))
-            : fallbackTracked;
-        TRACKED_PROTOCOLS = enabled.length ? enabled : fallbackTracked;
-        SERVER_PROTOCOL_META = { ...DEFAULT_PROTOCOL_META, ...(protocolMeta || {}) };
+        const serverMeta = protocolMeta && typeof protocolMeta === 'object' ? protocolMeta : {};
+        const knownProtocols = Object.keys(serverMeta);
+        TRACKED_PROTOCOLS = Array.isArray(enabledProtocols)
+            ? enabledProtocols.map(p => String(p || '').toUpperCase()).filter(p => knownProtocols.includes(p))
+            : knownProtocols;
+        SERVER_PROTOCOL_META = { ...serverMeta };
         PROTO_INT = Object.fromEntries(
-            Object.keys(DEFAULT_PROTOCOL_META).map(p => [p, Number(SERVER_PROTOCOL_META[p]?.proto_int ?? DEFAULT_PROTOCOL_META[p].proto_int)])
+            knownProtocols.map(p => [p, Number(SERVER_PROTOCOL_META[p]?.proto_int)])
         );
-        PROTO_COLORS = { ...DEFAULT_PROTO_COLORS };
+        PROTO_COLORS = { ALL: '#ffcc00' };
         TRACKED_PROTOCOLS.forEach(p => {
             const c = SERVER_PROTOCOL_META[p]?.color;
             if (typeof c === 'string' && c) PROTO_COLORS[p] = c;
@@ -1315,8 +1294,7 @@
         });
 
         // Update feed panel label
-        const LOGIN_PROTOCOLS = new Set(['SSH', 'TNET', 'FTP', 'SMTP', 'RDP']);
-        const feedLabel = activeProtocols.every(p => LOGIN_PROTOCOLS.has(p))
+        const feedLabel = activeProtocols.every(p => USERNAME_PROTOCOLS.has(p))
             ? 'LIVE FEED: LOGIN ATTEMPTS'
             : 'LIVE FEED: HOSTILE TRAFFIC';
         ['d-feed-label', 'm-feed-label'].forEach(id => {
@@ -1965,7 +1943,7 @@
     }
 
     function addToFeed(d) {
-        const proto = (d.proto || 'SSH').toUpperCase();
+        const proto = (d.proto || '').toUpperCase();
         if (!activeProtocols.includes(proto)) return;
         feedData.ALL.unshift(d);
         if (feedData[proto]) feedData[proto].unshift(d);
@@ -2990,14 +2968,10 @@
 
     function getProtoBadge(proto) {
         if (!showProtoBadges) return '';
-        const label = (proto || 'SSH').toUpperCase().slice(0, 4);
+        const label = (proto || '').toUpperCase().slice(0, 4);
         const cls = label.toLowerCase().replace(/[^a-z]/g, '');
         const color = PROTO_COLORS[label] || PROTO_COLORS.ALL;
         return `<span class="proto-badge proto-${cls}" style="color:${escapeHtml(color)}"><span class="proto-badge-label">${escapeHtml(label)}</span></span>`;
-    }
-
-    function sipDialString(d) {
-        return d.sip_dial_string || null;
     }
 
     function oneLinePreview(v, maxLen = 140) {
@@ -3006,30 +2980,7 @@
         return s.slice(0, maxLen) + '...';
     }
 
-    function emailFeedExtraLines(d) {
-        const lines = [];
-        if (d.subject) {
-            lines.push(`<span style="color:var(--ui-label)">subject:</span> <span style="color:var(--neon-green)">${escapeHtml(d.subject)}</span>`);
-        }
-        if (d.body) {
-            lines.push(`<span style="color:var(--ui-label)">body:</span> <span style="color:var(--neon-green)">${escapeHtml(oneLinePreview(d.body))}</span>`);
-        }
-        return lines;
-    }
-
     const NA_INLINE = '<span style="color:var(--ui-grey-dim)">n/a</span>';
-    const SMTP_MESSAGE_STAGES = new Set(['preauth_envelope', 'postauth_envelope', 'preauth_message']);
-
-    function renderFromToBlock(d, fromKey, toKey, includeContent = true) {
-        const mf = d[fromKey] ? escapeHtml(d[fromKey]) : NA_INLINE;
-        const mt = d[toKey] ? escapeHtml(d[toKey]) : NA_INLINE;
-        const lines = [
-            `<span style="color:var(--ui-label)">from:</span> <span style="color:var(--neon-green)">${mf}</span>`,
-            `<span style="color:var(--ui-label)">to:</span> <span style="color:var(--neon-green)">${mt}</span>`,
-        ];
-        if (includeContent) lines.push(...emailFeedExtraLines(d));
-        return lines.join('<br>');
-    }
 
     function renderDefaultCredBlock(d) {
         const safeUser = hasUserField(d) ? displayUsername(d.user) : NA_INLINE;
@@ -3038,146 +2989,98 @@
             <span style="color:var(--ui-label); margin-left:10px;">password:</span> <span class="knock-pass">${safePass}</span>`;
     }
 
-    function renderSipAccountBlock(d) {
-        const uriUser = sipDialString(d);
-        const lines = [];
-        const ext = d.sip_extension || d.sip_auth_user || d.sip_uri_user || null;
-        if (ext) {
-            lines.push(`<span style="color:var(--ui-label)">from:</span> <span>${displayUsername(ext)}</span>`);
-        }
-        const dialTarget = uriUser ? displayUsername(uriUser) : NA_INLINE;
-        lines.push(`<span style="color:var(--ui-label)">dialing:</span> <span>${dialTarget}</span>`);
-        if (d.sip_dial_country_name) {
-            lines.push(`<span style="color:var(--ui-label)">toll call to:</span> <span>${escapeHtml(d.sip_dial_country_name)}</span> <span style="font-size:0.75em;vertical-align:middle">${getFlag(d.sip_dial_country)}</span>`);
-        }
-        return lines.join('<br>');
+    const DISPLAY_FIELD_KEYS = new Set(['label', 'value', 'value_key', 'format', 'max_len', 'flag_key']);
+    const DISPLAY_FORMATS = new Set(['boolean', 'truncate', 'list', 'username', 'password']);
+
+    function isBlankDisplayValue(v) {
+        return v === undefined || v === null || v === '';
     }
 
-    const PROTOCOL_FEED_SCHEMAS = [
-        {
-            name: 'sip_account',
-            match: (d, proto) => proto === 'SIP',
-            render: d => renderSipAccountBlock(d),
-        },
-        {
-            name: 'http_request',
-            match: (d, proto) => proto === 'HTTP',
-            render: d => {
-                const HTTP_PURPOSE_LABELS = {
-                    'rce':                  'remote code execution',
-                    'credential_theft':     'credential theft',
-                    'device_infiltration':  'device infiltration',
-                    'config_exposure':      'data exfiltration',
-                    'path_traversal':       'path traversal',
-                    'proxy_abuse':          'proxy abuse',
-                    'research_scanner':     'research scanner',
-                    'protocol_probe':       'protocol probe',
-                    'mass_scanner':         'mass scanner',
-                    'unknown':              'unknown',
-                };
-                const L   = 'color:var(--ui-label)';
-                const sep = `<span style="margin-left:10px;"></span>`;
-                const lbl = (k, v) => `<span style="${L}">${k}:</span> <span>${v}</span>`;
-                const rawPurpose = d.http_purpose || 'unknown';
-                const purpose = HTTP_PURPOSE_LABELS[rawPurpose] || rawPurpose.replace(/_/g, ' ');
-                const method  = escapeHtml(d.http_method  || '');
-                const path    = escapeHtml((d.http_path || '/').slice(0, 80));
-                const lines = [lbl('purpose', escapeHtml(purpose))];
-                if (d.http_exploit) lines.push(lbl(rawPurpose === 'research_scanner' ? 'scanner' : 'exploit', escapeHtml(d.http_exploit)));
-                const methodPath = [];
-                if (method) methodPath.push(lbl('method', method));
-                if (path)   methodPath.push(lbl('path', path));
-                if (methodPath.length) lines.push(methodPath.map((p, i) => i ? `${sep}${p}` : p).join(''));
-                if (['POST', 'PUT', 'PATCH'].includes(d.http_method) && d.http_body) {
-                    lines.push(lbl('body', escapeHtml(oneLinePreview(d.http_body, 40))));
-                }
-                return lines.join('<br>');
-            },
-        },
-        {
-            name: 'rdp_username',
-            match: (d, proto) => proto === 'RDP',
-            render: d => {
-                const L   = 'color:var(--ui-label)';
-                const sep = `<span style="margin-left:10px;"></span>`;
-                const lbl = (k, v) => `<span style="${L}">${k}:</span> <span>${v}</span>`;
-                const u    = hasUserField(d) ? displayUsername(d.user) : NA_INLINE;
-                const domain = d.domain      ? escapeHtml(d.domain)      : '';
-                const host   = d.rdp_workstation ? escapeHtml(d.rdp_workstation) : '';
-                const parts  = [lbl('user', u)];
-                if (domain) parts.push(lbl('domain', domain));
-                if (host)   parts.push(lbl('host',   host));
-                return parts.map((p, i) => i ? `${sep}${p}` : p).join('');
-            },
-        },
-        {
-            name: 'smb_username',
-            match: (d, proto) => proto === 'SMB',
-            render: d => {
-                const L   = 'color:var(--ui-label)';
-                const sep = `<span style="margin-left:10px;"></span>`;
-                const lbl = (k, v) => `<span style="${L}">${k}:</span> <span>${v}</span>`;
+    function formatDisplayValue(v, fmt, maxLenOverride = null) {
+        if (!DISPLAY_FORMATS.has(String(fmt || ''))) fmt = null;
+        if (fmt === 'username' || fmt === 'password') {
+            const value = (v === undefined || v === null) ? NA_INLINE : displayCredential(v);
+            return fmt === 'password' ? `<span class="knock-pass">${value}</span>` : value;
+        }
+        if (isBlankDisplayValue(v)) return null;
+        if (fmt === 'boolean') {
+            return v ? 'yes' : 'no';
+        }
+        if (fmt === 'list') {
+            const list = Array.isArray(v) ? v : [v];
+            const rendered = list
+                .filter(item => !isBlankDisplayValue(item))
+                .map(item => {
+                    if (typeof item === 'object') return oneLinePreview(JSON.stringify(item), 80);
+                    return oneLinePreview(item, 80);
+                });
+            return rendered.length ? escapeHtml(rendered.join(', ')) : null;
+        }
+        const maxLen = Number.isInteger(maxLenOverride) && maxLenOverride > 0 ? maxLenOverride : (fmt === 'truncate' ? 80 : 140);
+        const text = oneLinePreview(v, maxLen);
+        return escapeHtml(text);
+    }
 
-                const action  = escapeHtml(d.smb_action || 'UNKNOWN');
-                const version = d.smb_version      ? escapeHtml(d.smb_version)      : '';
-                const share   = d.smb_share        ? escapeHtml(d.smb_share)        : '';
-                const file    = d.smb_file         ? escapeHtml(d.smb_file)         : '';
-                const svcname = d.smb_service_name ? escapeHtml(d.smb_service_name) : '';
-                const domain  = d.smb_domain       ? escapeHtml(d.smb_domain)       : '';
-                const host    = d.smb_host         ? escapeHtml(d.smb_host)         : '';
+    function renderDisplaySpec(spec, d) {
+        if (!spec || typeof spec !== 'object' || Array.isArray(spec)) return null;
+        if (Object.keys(spec).some(k => !DISPLAY_FIELD_KEYS.has(k))) return null;
+        const label = typeof spec.label === 'string' ? spec.label.trim() : '';
+        if (!label) return null;
+        let rawValue;
+        if (Object.prototype.hasOwnProperty.call(spec, 'value')) {
+            rawValue = spec.value;
+        } else if (typeof spec.value_key === 'string' && spec.value_key) {
+            rawValue = d?.[spec.value_key];
+        } else {
+            return null;
+        }
+        const maxLen = Number.isInteger(spec.max_len) && spec.max_len > 0 && spec.max_len <= 500 ? spec.max_len : null;
+        const value = formatDisplayValue(rawValue, spec.format, maxLen);
+        if (value === null) return null;
+        const flagIso = typeof spec.flag_key === 'string' ? d?.[spec.flag_key] : null;
+        const flagHtml = flagIso ? ` <span style="font-size:0.75em;vertical-align:middle">${getFlag(flagIso)}</span>` : '';
+        return `<span style="color:var(--ui-label)">${escapeHtml(label)}:</span> <span>${value}</span>${flagHtml}`;
+    }
 
-                // line1 always starts with action:
-                const line1Parts = [lbl('action', action)];
+    function renderDisplayRows(rows, d) {
+        if (!Array.isArray(rows)) return null;
+        const lines = [];
+        rows.forEach(row => {
+            if (!Array.isArray(row)) return;
+            const parts = row.map(spec => renderDisplaySpec(spec, d)).filter(Boolean);
+            if (parts.length) lines.push(parts.map((p, i) => i ? `<span style="margin-left:10px;"></span>${p}` : p).join(''));
+        });
+        return lines.length ? lines.join('<br>') : null;
+    }
 
-                if (d.smb_action === 'PROBE') {
-                    return line1Parts.join('');
-                }
+    function renderDisplayFields(fields, d) {
+        if (!Array.isArray(fields)) return null;
+        const specs = fields.slice(0, 6)
+            .filter(f => f && typeof f === 'object' && typeof f.key === 'string' && typeof f.label === 'string')
+            .map(f => ({ label: f.label, value_key: f.key, format: f.format }));
+        if (!specs.length) return null;
+        return renderDisplayRows([specs.slice(0, 3), specs.slice(3, 6)], d);
+    }
 
-                if (d.smb_action === 'AUTH') {
-                    const u = displayUsername(hasUserField(d) ? d.user : '');
-                    line1Parts.push(lbl('user', u));
-                    if (domain)  line1Parts.push(lbl('domain',  domain));
-                    if (host)    line1Parts.push(lbl('host',    host));
-                    if (version) line1Parts.push(lbl('version', version));
-                    return line1Parts.map((p, i) => i ? `${sep}${p}` : p).join('');
-                }
-
-                if (d.smb_action === 'CONNECT' || d.smb_action === 'LIST_SHARES') {
-                    const shareLabel = d.smb_action === 'LIST_SHARES' ? 'shares' : 'share';
-                    if (share) line1Parts.push(lbl(shareLabel, share));
-                    return line1Parts.map((p, i) => i ? `${sep}${p}` : p).join('');
-                }
-
-                if (d.smb_action === 'CREATE_SERVICE' || d.smb_action === 'START_SERVICE') {
-                    if (svcname) line1Parts.push(lbl('svc',  svcname));
-                    if (file)    line1Parts.push(lbl('path', file));
-                    return line1Parts.map((p, i) => i ? `${sep}${p}` : p).join('');
-                }
-
-                // DIR, READ, WRITE, CREATE — action: share: file/dir: on line1
-                if (share) line1Parts.push(lbl('share', share));
-                const fileLabel   = d.smb_action === 'LIST_FILES' ? 'dir' : 'file';
-                const fileDisplay = file || '&lt;root&gt;';
-                line1Parts.push(lbl(fileLabel, fileDisplay));
-                return line1Parts.map((p, i) => i ? `${sep}${p}` : p).join('');
-            },
-        },
-        {
-            name: 'smtp_message',
-            match: (d, proto) => proto === 'SMTP' && SMTP_MESSAGE_STAGES.has(String(d.smtp_stage || '')),
-            render: d => renderFromToBlock(d, 'smtp_mail_from', 'smtp_rcpt_to', true),
-        },
-        {
-            name: 'default_credentials',
-            match: () => true,
-            render: d => renderDefaultCredBlock(d),
-        },
-    ];
+    function renderMetadataFeedFields(d, proto) {
+        const meta = SERVER_PROTOCOL_META?.[proto];
+        if (!meta || !TRACKED_PROTOCOLS.includes(proto)) return null;
+        const directLines = renderDisplayRows(d?.display_lines, d);
+        if (directLines) return directLines;
+        const formats = meta.display_formats && typeof meta.display_formats === 'object' ? meta.display_formats : {};
+        const formatName = typeof d?.display_format === 'string' && d.display_format
+            ? d.display_format
+            : (typeof meta.default_display_format === 'string' ? meta.default_display_format : null);
+        if (formatName && Object.prototype.hasOwnProperty.call(formats, formatName)) {
+            const rendered = renderDisplayRows(formats[formatName], d);
+            if (rendered) return rendered;
+        }
+        return renderDisplayFields(meta.display_fields, d);
+    }
 
     function protocolFeedFields(d) {
         const proto = (d?.proto || '').toUpperCase();
-        const schema = PROTOCOL_FEED_SCHEMAS.find(s => s.match(d, proto));
-        return schema ? schema.render(d, proto) : renderDefaultCredBlock(d);
+        return renderMetadataFeedFields(d, proto) || renderDefaultCredBlock(d);
     }
 
     function makeKnockEl(d) {
@@ -3198,7 +3101,7 @@
 
     function knockMatchesFilter(d) {
         const mode = PROTO_MODES[protoModeIdx];
-        return mode === 'ALL' || (d.proto || 'SSH').toUpperCase() === mode;
+        return mode === 'ALL' || (d.proto || '').toUpperCase() === mode;
     }
 
     function renderKnock(d, isNew = true) {
@@ -3420,7 +3323,7 @@
             const d = msg.data;
             if (msg.type === 'new_knock') {
                 knockCount++;
-                const knockProto = (d.proto || 'SSH').toUpperCase();
+                const knockProto = (d.proto || '').toUpperCase();
                 debugLog(`Knock #${knockCount} from ${d.iso || '??'}`);
                 if (activeProtocols.includes(knockProto)) playClick();
                 if (showProtoChip) {
@@ -3524,7 +3427,7 @@
                     const allHistory = d.history || [];
                     feedData.ALL = (activeProtocols.length === TRACKED_PROTOCOLS.length
                         ? allHistory
-                        : allHistory.filter(k => activeProtocols.includes((k.proto || 'SSH').toUpperCase()))
+                        : allHistory.filter(k => activeProtocols.includes((k.proto || '').toUpperCase()))
                     ).slice(0, MAX_PER_PANEL);
                     const ph = d.proto_histories || {};
                     activeProtocols.forEach(proto => {

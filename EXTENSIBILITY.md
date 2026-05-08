@@ -14,7 +14,7 @@ Introduce a protocol definition layer with these concepts:
 - `extensions.py`: optional local/customer file that exports `EXTENSIONS = [...]`.
 - `protocol_api.py`: dataclasses, validation, registry merge helpers, and safe handler loading.
 - Optional protocol hook modules such as `protocols/sip.py` or `protocols/mqtt.py`.
-- Existing built-in protocols move toward the same registry model as extensions.
+- Built-in protocols use the same registry model as extensions.
 
 A protocol definition should be able to declare:
 
@@ -24,7 +24,7 @@ A protocol definition should be able to declare:
 - SQLite knock table name, extra columns, and raw JSON field-to-column mapping.
 - Sanitized protocol field prefixes or explicit allowed passthrough fields.
 - Browser display fields for generic protocol detail rendering.
-- Optional processing hooks for special behavior.
+- Optional processing, DB-update, and after-save hooks for special behavior.
 
 Example shape:
 
@@ -52,11 +52,6 @@ ProtocolDefinition(
     field_map=[
         FieldMap("user", "username"),
         FieldMap("pass", "password"),
-        FieldMap("mqtt_port", "mqtt_port"),
-        FieldMap("mqtt_packet_type", "mqtt_packet_type"),
-        FieldMap("mqtt_client_id", "mqtt_client_id"),
-        FieldMap("mqtt_topic", "mqtt_topic"),
-        FieldMap("mqtt_tls", "mqtt_tls"),
     ],
     display_fields=[
         DisplayField("mqtt_port", "Port"),
@@ -91,7 +86,7 @@ The upstream default list is not frozen forever. It should represent the current
 SSH,TNET,FTP,RDP,SMB,SIP,SMTP:25,SMTP:587,HTTP:80,HTTP:443
 ```
 
-When new protocols such as MQTT or NRED become built-ins, the upstream default list may expand.
+Some built-ins, such as MQTT and NRED, may intentionally remain opt-in. The upstream default list can expand later, but only as a deliberate product decision.
 
 Entry syntax should be:
 
@@ -140,14 +135,14 @@ During knock handling, `monitor.py` should keep one stable flow:
 read JSON from honeypot
 sanitize raw knock
 lookup protocol definition
+apply optional process_knock hook
 derive user/pass visibility from protocol definition
 build common package
-apply optional process_knock hook
 copy allowed protocol fields into package
 attach optional structured display lines
 compute intel stats
 apply rate limit / ban policy
-queue generic knock/intel DB write
+queue generic knock/intel DB write; protocol `db_update` hooks run inside the DB writer
 run optional after_save hook after the knock is accepted for persistence
 publish to Redis/websocket
 ```
@@ -167,6 +162,15 @@ def process_knock(knock: dict, context: KnockContext) -> dict | None:
 
 It may normalize fields, add derived fields, classify protocol actions, attach `display_lines`, or return `None` to drop the knock. It may mutate and return the same dict or return a new dict. The monitor uses the returned dict. If it raises an exception, the monitor should log a warning and drop that knock without crashing.
 
+`db_update` runs inside the asynchronous DB writer after the generic knock/intel updates and before the writer commits:
+
+```python
+def db_update(data: dict, cursor, context: KnockContext) -> None:
+    ...
+```
+
+It is for protocol-owned side-table updates that should use the same SQLite writer connection as the main knock save. `data` is the DB snapshot package queued by monitor, `cursor` is the active writer cursor, and `context["now"]` contains the timestamp string used by the generic intel updates. Its return value is ignored. If it raises an exception, the monitor logs a warning and continues processing the batch.
+
 `after_save` runs after the knock has been accepted for persistence. The current monitor writes knock/intel rows asynchronously, so this hook is best-effort and may run before the queued DB write commits:
 
 ```python
@@ -174,9 +178,9 @@ def after_save(knock: dict, package: dict, context: KnockContext) -> None:
     ...
 ```
 
-It is for best-effort protocol-specific side effects such as SIP-style aggregate side tables. Its return value is ignored. If it raises an exception, the monitor should log a warning and continue to Redis/websocket publishing.
+It is for frontend/package enrichment and best-effort protocol-specific side effects that do not need the DB writer transaction. Its return value is ignored. If it raises an exception, the monitor should log a warning and continue to Redis/websocket publishing.
 
-Hooks should not be used for behavior that must be transactionally inseparable from the main knock save. If a protocol needs transactional persistence, prefer declarative table/field maps in v1 and consider a later explicit transaction-hook feature only if real protocols require it.
+Use declarative table/field maps for normal persistence. Use `db_update` only for protocol-owned side tables or aggregate rows that cannot be expressed as a field map. Use `after_save` for display-only package enrichment, such as adding `http_purpose_label` or `sip_caller` before Redis/websocket publish.
 
 ## Unknown Protocols and Aggregators
 
@@ -235,7 +239,7 @@ Avoid unlimited passthrough fields by default. Large values can bloat Redis payl
 
 ## Database Model
 
-The current hardcoded `_KNOCK_EXTRA_COLS` and `_PROTO_KEY_MAP` should move into protocol definitions over time.
+Built-in protocol table columns and field maps now live in protocol definitions. `monitor.py` owns only the common columns and shared intel tables.
 
 The generic DB initializer should create:
 
@@ -249,7 +253,7 @@ Do not create or alter tables during per-knock processing. If a known protocol's
 
 Do not turn `monitor.py` into a general migration framework. Non-additive schema changes should be handled out of band with explicit migration scripts, ideally under `extras/db_migration/`, while the monitor is stopped. This includes column renames, type changes, dropped columns, table reshaping, backfills, and protocol ID remaps. Extension authors are responsible for their own private migrations if they change a deployed extension's schema.
 
-SIP-style side tables should split declarative schema from imperative update logic. The side table shape belongs in `extra_tables` so startup can create or validate it. The row update behavior belongs in a narrow best-effort `after_save` hook. For example, SIP can declare `dial_intel` as an extra table and use `after_save` to increment dialed phone number intel.
+SIP-style side tables should split declarative schema from imperative update logic. The side table shape belongs in `extra_tables` so startup can create or validate it. The row update behavior belongs in a narrow `db_update` hook so it uses the DB writer cursor. For example, SIP declares `dial_intel` as an extra table and uses `db_update` to increment dialed phone number intel.
 
 The table declaration should be declarative:
 
@@ -316,7 +320,7 @@ display_formats={
             {"label": "client", "value_key": "mqtt_client_id"},
         ],
         [
-            {"label": "topic", "value_key": "mqtt_topic", "format": "code"},
+            {"label": "topic", "value_key": "mqtt_topic", "max_len": 80},
             {"label": "qos", "value_key": "mqtt_qos"},
         ],
     ],
@@ -338,7 +342,7 @@ Example knock selecting a reusable format:
 
 Prefer symbolic format names such as `"connect"` or `"subscribe"` over numeric IDs. They are easier to inspect in Redis, browser logs, test fixtures, and operator debugging. Compact numeric aliases can be added later only if payload size becomes a demonstrated problem.
 
-For protocols where the display format naturally follows an existing knock field, the definition may declare a format selector field such as `display_format_field="mqtt_stage"`. The monitor can then set or infer `display_format` from that field when the value matches a declared display format. Explicit per-knock `display_format` should take precedence over inferred values.
+For protocols where the display format naturally follows an existing knock field, the definition may declare a format selector field such as `display_format_field="mqtt_stage"`. Current built-in honeypots generally set explicit per-knock `display_format`, and the field is published as metadata for tooling/overrides. If automatic frontend or monitor-side inference is added later, explicit per-knock `display_format` should take precedence over inferred values.
 
 Protocols may also have only one reusable format. For example, SSH might declare a single `"ssh"` format for username/password-oriented feed display. In that case, the definition may declare a default such as `default_display_format="ssh"` so every knock does not need to repeat `"display_format": "ssh"`. Explicit per-knock `display_format` should still override the default.
 
@@ -370,7 +374,9 @@ The browser should render `display_lines` with a small fixed vocabulary:
 - `label`: short field label.
 - `value`: literal display value.
 - `value_key`: key to read from the knock package.
-- Optional `format`: known safe formatter such as `boolean`, `code`, `truncate`, or `list`.
+- Optional `format`: known safe formatter: `boolean`, `truncate`, `list`, `username`, or `password`.
+- Optional `max_len`: integer `1-500` overriding the formatter's default preview length.
+- Optional `flag_key`: key to read for rendering a country flag next to the value.
 
 The same row-and-field shape is used by per-protocol `display_formats` and per-knock `display_lines`. The browser should resolve display details in this order:
 
@@ -378,10 +384,9 @@ The same row-and-field shape is used by per-protocol `display_formats` and per-k
 2. Per-knock `display_format` resolved against the current protocol metadata.
 3. Protocol `default_display_format` resolved against the current protocol metadata.
 4. Protocol `display_fields`.
-5. Existing built-in protocol-specific renderers during the migration period.
-6. Generic credential fallback.
+5. Generic credential fallback.
 
-The browser must escape all labels and values. It should ignore malformed display entries instead of throwing. It should validate that `display_format` is a string, that the format exists for the knock's protocol, that rows are arrays, that field specs are objects, and that field specs use only the allowed keys `label`, `value`, `value_key`, and `format`.
+The browser must escape all labels and values. It should ignore malformed display entries instead of throwing. It should validate that `display_format` is a string, that the format exists for the knock's protocol, that rows are arrays, that field specs are objects, and that field specs use only the allowed keys `label`, `value`, `value_key`, `format`, `max_len`, and `flag_key`.
 
 The browser should render only protocols present in its current protocol metadata. If a knock arrives before protocol metadata has loaded, or if the knock's `proto` is absent from the current frontend protocol registry, the browser should ignore that knock client-side. Do not invent fallback colors, labels, panels, or filter entries for unknown protocols. Server-side unknown-protocol rejection remains the primary guardrail; this browser behavior is a second guardrail for startup ordering, stale cached pages, or mismatched services.
 
@@ -389,7 +394,7 @@ This keeps conditional protocol-specific decisions in Python, where the extensio
 
 No protocol extension should provide raw HTML for browser rendering. Extensions should provide structured fields, reusable display formats, or per-knock display lines only.
 
-Do not support loadable plugin JavaScript in v1. Existing built-in JavaScript formatters may remain for complex built-in protocols, but extension protocols should use metadata, `display_formats`, and/or `display_lines`.
+Do not support loadable plugin JavaScript in v1. Protocols should use metadata, `display_formats`, and/or `display_lines`.
 
 Adding a protocol or changing protocol metadata is a restart-time operation in v1. It is acceptable to require restarting both monitor and web services so the merged registry, Redis protocol config, and browser initial state agree.
 
@@ -429,7 +434,7 @@ Patchable fields:
 | `display_format_field` | replaces the format selector field |
 | `default_display_format` | validated against the merged format set |
 
-Structural fields (`proto_id`, `honeypot_script`, `columns`, `field_map`, `knock_table`, and everything that touches DB schema or subprocess spawning) cannot be overridden. Overrides only apply to protocols in the registry (`protocols/registry.py` or `EXTENSIONS`); legacy base protocols not yet migrated to the registry are not patchable.
+Structural fields (`proto_id`, `honeypot_script`, `columns`, `field_map`, `knock_table`, and everything that touches DB schema or subprocess spawning) cannot be overridden. Overrides only apply to protocols in the registry (`protocols/registry.py` or `EXTENSIONS`).
 
 Because `extensions.py` is gitignored, overrides survive `git pull` without conflicts.
 
@@ -464,6 +469,7 @@ Per knock overhead should be limited to:
 - optional cached function call
 - generic field copy based on the protocol definition
 - optional construction of a small `display_lines` array
+- optional protocol-owned DB side-table update on the existing DB writer cursor
 
 The expensive work remains GeoIP lookup, Redis writes, SQLite writes, JSON serialization, and browser rendering. The plugin model itself should not be a meaningful performance concern.
 
@@ -486,12 +492,13 @@ Add focused tests for:
 - Generic browser rendering of per-knock `display_lines`.
 - Browser escaping for `display_lines` labels and values.
 - Optional `process_knock` hook execution.
-- Optional `after_save` hook execution for SIP-style side tables.
+- Optional `db_update` hook execution for SIP-style side tables.
+- Optional `after_save` hook execution for display/package enrichment.
 - Ensuring hook imports are resolved once at startup.
 
 Manual acceptance scenarios:
 
-- Existing SSH/TNET/FTP/RDP/SMB/SIP/HTTP/SMTP behavior remains unchanged.
+- Existing SSH/TNET/FTP/RDP/SMB/SIP/HTTP/SMTP persisted DB fields remain unchanged after registry migration.
 - Disabled protocols do not appear in filter UI.
 - A new MQTT definition can be added in `extensions.py` without editing `monitor.py`.
 - MQTT knocks can be displayed with badge, color, detail fields, and optional DB columns.
@@ -505,4 +512,4 @@ Manual acceptance scenarios:
 - Built-in protocols remain supported without requiring users to understand the extension model.
 - Protocol IDs are stable once released because they are stored in SQLite intel tables.
 - Protocol `name` is the canonical short identifier; v1 does not support aliases or separate long display labels.
-- The first implementation should prioritize declarative metadata and DB/UI wiring over moving all special cases into hooks.
+- Built-in protocols are registered through `protocols/registry.py`; `_BASE_PROTOCOL_META` is no longer the source of built-in protocol metadata.

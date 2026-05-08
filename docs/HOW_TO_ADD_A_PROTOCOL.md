@@ -158,6 +158,54 @@ Schema creation is additive at monitor startup. Missing declared tables and
 columns are created. Renames, type changes, drops, and backfills should be done
 with an explicit migration while the monitor is stopped.
 
+## Hooks And Side Tables
+
+Most protocols should not need hooks. Use declarative columns, `field_map`,
+passthrough fields, and display formats first.
+
+When a protocol needs trusted Python behavior, declare a module function by
+path:
+
+```python
+ProtocolDefinition(
+    name="XTEST",
+    process_knock="protocols.xtest:process_knock",
+    db_update="protocols.xtest:db_update",
+    after_save="protocols.xtest:after_save",
+)
+```
+
+Available hooks:
+
+- `process_knock(knock, context)`: runs after sanitization and protocol lookup,
+  before package construction. Return the knock dict or `None` to drop it.
+- `db_update(data, cursor, context)`: runs inside the async DB writer after the
+  generic knock/intel updates and before commit. Use this for protocol-owned
+  side tables.
+- `after_save(knock, package, context)`: runs after the knock is accepted for
+  persistence and before Redis/websocket publish. Use this for display/package
+  enrichment or best-effort side effects.
+
+Declare side-table schemas with `extra_tables` so startup creates them:
+
+```python
+from protocol_api import Column, TableDefinition
+
+extra_tables=[
+    TableDefinition(
+        name="xtest_intel",
+        columns=[
+            Column("key", "TEXT PRIMARY KEY"),
+            Column("hits", "INTEGER"),
+            Column("last_seen", "DATETIME"),
+        ],
+    ),
+]
+```
+
+Then update that table from `db_update` using the provided cursor. Do not open a
+separate SQLite connection from a DB hook.
+
 ## Browser Display
 
 For simple protocols, use `display_fields`. For repeated structured layouts,
@@ -169,13 +217,28 @@ The browser supports field specs with:
 - `value`
 - `value_key`
 - `format`
+- `max_len`
+- `flag_key`
 
 Supported formats:
 
 - `boolean`
-- `code`
 - `truncate`
 - `list`
+- `username`
+- `password`
+
+Use `max_len` to cap long text fields without creating a new format:
+
+```python
+{"label": "detail", "value_key": "xtest_detail", "format": "truncate", "max_len": 60}
+```
+
+Use `flag_key` when the value should display with a country flag:
+
+```python
+{"label": "country", "value_key": "xtest_country_name", "flag_key": "xtest_country"}
+```
 
 Do not send HTML. Labels and values are escaped by the browser.
 
@@ -220,6 +283,8 @@ Protocol definitions are validated at startup. Common failures:
 - Unsafe table, column, field, or format names.
 - Missing honeypot script.
 - Unsupported display spec key.
+- Unsupported display format.
+- Invalid `max_len`.
 - `default_display_format` does not reference a declared format.
 - Unsupported passthrough sanitizer.
 

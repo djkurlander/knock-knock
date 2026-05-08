@@ -90,6 +90,21 @@ def _parse_protocol_entry(token):
     return ProtocolEntry(proto, port, options)
 
 
+def _parse_enabled_token(token):
+    parts = [part.strip().upper() for part in token.split(':')]
+    if len(parts) == 1 and parts[0]:
+        definition = (PROTOCOL_META.get(parts[0]) or {}).get('definition')
+        if definition and definition.default_enabled_entries:
+            return [
+                entry
+                for default_token in definition.default_enabled_entries
+                for entry in [_parse_protocol_entry(default_token)]
+                if entry
+            ]
+    entry = _parse_protocol_entry(token)
+    return [entry] if entry else []
+
+
 def _apply_port_arg(args, port):
     if port is None:
         return args
@@ -153,12 +168,10 @@ def parse_enabled_protocols():
         token = token.strip()
         if not token:
             continue
-        entry = _parse_protocol_entry(token)
-        if not entry:
-            continue
-        entries.append(entry)
-        if entry.proto not in names:
-            names.append(entry.proto)
+        for entry in _parse_enabled_token(token):
+            entries.append(entry)
+            if entry.proto not in names:
+                names.append(entry.proto)
     if not entries:
         print("⚠️ ENABLED_PROTOCOLS resolved to empty set; using defaults", flush=True)
         entries = []

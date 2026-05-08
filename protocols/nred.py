@@ -50,35 +50,39 @@ DEFINITION = ProtocolDefinition(
     display_formats={
         "request": [
             [
-                {"label": "method", "value_key": "nred_method"},
-                {"label": "path", "value_key": "nred_path", "format": "code"},
+                {"label": "purpose", "value_key": "nred_purpose"},
             ],
             [
-                {"label": "purpose", "value_key": "nred_purpose"},
                 {"label": "detail", "value_key": "nred_exploit", "format": "truncate"},
             ],
             [
-                {"label": "ua", "value_key": "nred_user_agent", "format": "truncate"},
+                {"label": "method", "value_key": "nred_method"},
+            ],
+            [
+                {"label": "path", "value_key": "nred_path", "format": "code"},
             ],
         ],
         "auth": [
             [
-                {"label": "method", "value_key": "nred_method"},
-                {"label": "path", "value_key": "nred_path", "format": "code"},
+                {"label": "purpose", "value_key": "nred_purpose"},
+                {"label": "mode", "value_key": "nred_auth_mode"},
             ],
             [
                 {"label": "user", "value_key": "nred_user"},
+            ],
+            [
                 {"label": "grant", "value_key": "nred_grant_type"},
                 {"label": "client", "value_key": "nred_client_id"},
+            ],
+            [
+                {"label": "path", "value_key": "nred_path", "format": "code"},
             ],
         ],
         "flow": [
             [
-                {"label": "method", "value_key": "nred_method"},
-                {"label": "path", "value_key": "nred_path", "format": "code"},
+                {"label": "purpose", "value_key": "nred_purpose"},
             ],
             [
-                {"label": "purpose", "value_key": "nred_purpose"},
                 {"label": "exploit", "value_key": "nred_exploit", "format": "truncate"},
             ],
             [
@@ -86,15 +90,22 @@ DEFINITION = ProtocolDefinition(
                 {"label": "exec", "value_key": "nred_flow_has_exec", "format": "boolean"},
                 {"label": "mqtt", "value_key": "nred_flow_has_mqtt", "format": "boolean"},
             ],
+            [
+                {"label": "path", "value_key": "nred_path", "format": "code"},
+            ],
         ],
         "exploit": [
             [
-                {"label": "method", "value_key": "nred_method"},
-                {"label": "path", "value_key": "nred_path", "format": "code"},
+                {"label": "purpose", "value_key": "nred_purpose"},
             ],
             [
-                {"label": "purpose", "value_key": "nred_purpose"},
                 {"label": "exploit", "value_key": "nred_exploit", "format": "truncate"},
+            ],
+            [
+                {"label": "method", "value_key": "nred_method"},
+            ],
+            [
+                {"label": "path", "value_key": "nred_path", "format": "code"},
             ],
         ],
     },

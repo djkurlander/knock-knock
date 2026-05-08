@@ -29,3 +29,6 @@ __pycache__/
 
 # Per-server deployment scripts (contain server IPs)
 allow-feeders.sh
+
+# Local protocol customizations (never tracked upstream)
+extensions.py

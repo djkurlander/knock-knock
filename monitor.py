@@ -36,6 +36,7 @@ MAIL_FORENSICS_MAX = int(os.environ.get("MAIL_FORENSICS_MAX", "100"))
 
 _DEFAULT_ENABLED_STR = 'SSH,TNET,FTP,RDP,SMB,SIP,SMTP:25,SMTP:587,HTTP:80,HTTP:443'
 _UNKNOWN_PROTO_WARNED = set()
+_read_conn = None
 
 
 @dataclass(frozen=True)
@@ -110,7 +111,7 @@ def _spawn_config(entry):
     if definition:
         script = definition.honeypot_script
         args = list(definition.honeypot_args)
-        env_updates = {}
+        env_updates = dict(definition.honeypot_env)
         for option in entry.options:
             args.extend(definition.option_args.get(option, []))
             env_updates.update(definition.option_env.get(option, {}))
@@ -785,114 +786,134 @@ def heartbeat_worker(redis_conn, enabled_protocols):
             print(f"❌ Heartbeat Error: {e}")
         time.sleep(60)
 
-def log_to_enriched_db(data, save_protos=None):
-    """save_protos: None=save all, False=save none, set=save only those protos"""
-    conn = sqlite3.connect(DB_PATH, timeout=10)
-    cur = conn.cursor()
-    try:
-        proto_name = data.get('proto', 'SSH')
-        should_save = (save_protos is None or
-                       (save_protos and proto_name in save_protos))
-        registered_mapping = _registered_knock_mapping(proto_name)
-        if should_save and (registered_mapping or proto_name in _PROTO_KEY_MAP):
-            if registered_mapping:
-                table, proto_key_map = registered_mapping
-            else:
-                table = f"knocks_{proto_name.lower()}"
-                proto_key_map = _PROTO_KEY_MAP[proto_name]
-            table = _sql_ident(table)
-            col_names = [col for _, col in _COMMON_KEY_MAP]
-            values = [data.get(key) for key, _ in _COMMON_KEY_MAP]
-            for key, col in proto_key_map:
-                col_names.append(col)
-                values.append(data.get(key))
-            placeholders = ', '.join(['?'] * len(col_names))
-            col_sql = ', '.join(_sql_ident(col) for col in col_names)
-            cur.execute(f"INSERT INTO {table} ({col_sql}) VALUES ({placeholders})", values)
-        now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        proto_int = PROTO.get(data.get('proto', 'SSH'), 0)
-        if data.get('user') is not None:
-            cur.execute("INSERT INTO user_intel VALUES (?, 1, ?) ON CONFLICT(username) DO UPDATE SET hits=hits+1, last_seen=?", (data['user'], now, now))
-            cur.execute("INSERT INTO user_intel_proto VALUES (?, ?, 1, ?) ON CONFLICT(username, proto) DO UPDATE SET hits=hits+1, last_seen=?", (data['user'], proto_int, now, now))
-        if data.get('pass') is not None:
-            cur.execute("INSERT INTO pass_intel VALUES (?, 1, ?) ON CONFLICT(password) DO UPDATE SET hits=hits+1, last_seen=?", (data['pass'], now, now))
-            cur.execute("INSERT INTO pass_intel_proto VALUES (?, ?, 1, ?) ON CONFLICT(password, proto) DO UPDATE SET hits=hits+1, last_seen=?", (data['pass'], proto_int, now, now))
-        cur.execute("INSERT INTO country_intel VALUES (?, ?, 1, ?) ON CONFLICT(iso_code) DO UPDATE SET hits=hits+1, last_seen=?, country=?", (data['iso'], data['country'], now, now, data['country']))
-        cur.execute("INSERT INTO isp_intel VALUES (?, 1, ?, ?) ON CONFLICT(isp) DO UPDATE SET hits=hits+1, last_seen=?, asn=?", (data['isp'], now, data.get('asn'), now, data.get('asn')))
-        cur.execute("""INSERT INTO ip_intel (ip, hits, last_seen, lat, lng, hits_since_cleared)
-                       VALUES (?, 1, ?, ?, ?, 1)
-                       ON CONFLICT(ip) DO UPDATE SET
-                           hits=hits+1, last_seen=?, lat=?, lng=?, hits_since_cleared=hits_since_cleared+1""",
-                    (data['ip'], now, data.get('lat'), data.get('lng'), now, data.get('lat'), data.get('lng')))
-        cur.execute("INSERT INTO country_intel_proto VALUES (?, ?, ?, 1, ?) ON CONFLICT(iso_code, proto) DO UPDATE SET hits=hits+1, last_seen=?, country=?", (data['iso'], proto_int, data['country'], now, now, data['country']))
-        cur.execute("INSERT INTO isp_intel_proto VALUES (?, ?, 1, ?, ?) ON CONFLICT(isp, proto) DO UPDATE SET hits=hits+1, last_seen=?, asn=?", (data['isp'], proto_int, now, data.get('asn'), now, data.get('asn')))
-        cur.execute("INSERT INTO ip_intel_proto VALUES (?, ?, 1, ?, ?, ?) ON CONFLICT(ip, proto) DO UPDATE SET hits=hits+1, last_seen=?, lat=?, lng=?",
-                    (data['ip'], proto_int, now, data.get('lat'), data.get('lng'), now, data.get('lat'), data.get('lng')))
-        dial_number = data.get('sip_dial_number')
-        if dial_number:
-            cur.execute("""INSERT INTO dial_intel VALUES (?, 1, ?, ?, ?, ?, ?, ?)
-                           ON CONFLICT(number) DO UPDATE SET hits=hits+1, last_seen=?, country_name=?""",
-                        (dial_number, now, now, data.get('sip_dial_country'), data.get('sip_dial_country_name'),
-                         data.get('sip_dial_lat'), data.get('sip_dial_lng'), now, data.get('sip_dial_country_name')))
-        src_id = data.get('source', SOURCE_ID)
-        cur.execute("""INSERT INTO sources (source_id, hits, first_seen, last_seen)
-                       VALUES (?, 1, ?, ?)
-                       ON CONFLICT(source_id) DO UPDATE SET
-                           hits=hits+1,
-                           first_seen=COALESCE(first_seen, excluded.first_seen),
-                           last_seen=excluded.last_seen""",
-                    (src_id, now, now))
-        conn.commit()
-    finally:
-        conn.close()
+def log_to_enriched_db(data, cur, save_protos=None):
+    """Write one knock to the DB using the provided cursor. Caller commits."""
+    proto_name = data.get('proto', 'SSH')
+    should_save = (save_protos is None or (save_protos and proto_name in save_protos))
+    registered_mapping = _registered_knock_mapping(proto_name)
+    if should_save and (registered_mapping or proto_name in _PROTO_KEY_MAP):
+        if registered_mapping:
+            table, proto_key_map = registered_mapping
+        else:
+            table = f"knocks_{proto_name.lower()}"
+            proto_key_map = _PROTO_KEY_MAP[proto_name]
+        table = _sql_ident(table)
+        col_names = [col for _, col in _COMMON_KEY_MAP]
+        values = [data.get(key) for key, _ in _COMMON_KEY_MAP]
+        for key, col in proto_key_map:
+            col_names.append(col)
+            values.append(data.get(key))
+        placeholders = ', '.join(['?'] * len(col_names))
+        col_sql = ', '.join(_sql_ident(col) for col in col_names)
+        cur.execute(f"INSERT INTO {table} ({col_sql}) VALUES ({placeholders})", values)
+    now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    proto_int = PROTO.get(data.get('proto', 'SSH'), 0)
+    if data.get('user') is not None:
+        cur.execute("INSERT INTO user_intel VALUES (?, 1, ?) ON CONFLICT(username) DO UPDATE SET hits=hits+1, last_seen=?", (data['user'], now, now))
+        cur.execute("INSERT INTO user_intel_proto VALUES (?, ?, 1, ?) ON CONFLICT(username, proto) DO UPDATE SET hits=hits+1, last_seen=?", (data['user'], proto_int, now, now))
+    if data.get('pass') is not None:
+        cur.execute("INSERT INTO pass_intel VALUES (?, 1, ?) ON CONFLICT(password) DO UPDATE SET hits=hits+1, last_seen=?", (data['pass'], now, now))
+        cur.execute("INSERT INTO pass_intel_proto VALUES (?, ?, 1, ?) ON CONFLICT(password, proto) DO UPDATE SET hits=hits+1, last_seen=?", (data['pass'], proto_int, now, now))
+    cur.execute("INSERT INTO country_intel VALUES (?, ?, 1, ?) ON CONFLICT(iso_code) DO UPDATE SET hits=hits+1, last_seen=?, country=?", (data['iso'], data['country'], now, now, data['country']))
+    cur.execute("INSERT INTO isp_intel VALUES (?, 1, ?, ?) ON CONFLICT(isp) DO UPDATE SET hits=hits+1, last_seen=?, asn=?", (data['isp'], now, data.get('asn'), now, data.get('asn')))
+    cur.execute("""INSERT INTO ip_intel (ip, hits, last_seen, lat, lng, hits_since_cleared)
+                   VALUES (?, 1, ?, ?, ?, 1)
+                   ON CONFLICT(ip) DO UPDATE SET
+                       hits=hits+1, last_seen=?, lat=?, lng=?, hits_since_cleared=hits_since_cleared+1""",
+                (data['ip'], now, data.get('lat'), data.get('lng'), now, data.get('lat'), data.get('lng')))
+    cur.execute("INSERT INTO country_intel_proto VALUES (?, ?, ?, 1, ?) ON CONFLICT(iso_code, proto) DO UPDATE SET hits=hits+1, last_seen=?, country=?", (data['iso'], proto_int, data['country'], now, now, data['country']))
+    cur.execute("INSERT INTO isp_intel_proto VALUES (?, ?, 1, ?, ?) ON CONFLICT(isp, proto) DO UPDATE SET hits=hits+1, last_seen=?, asn=?", (data['isp'], proto_int, now, data.get('asn'), now, data.get('asn')))
+    cur.execute("INSERT INTO ip_intel_proto VALUES (?, ?, 1, ?, ?, ?) ON CONFLICT(ip, proto) DO UPDATE SET hits=hits+1, last_seen=?, lat=?, lng=?",
+                (data['ip'], proto_int, now, data.get('lat'), data.get('lng'), now, data.get('lat'), data.get('lng')))
+    dial_number = data.get('sip_dial_number')
+    if dial_number:
+        cur.execute("""INSERT INTO dial_intel VALUES (?, 1, ?, ?, ?, ?, ?, ?)
+                       ON CONFLICT(number) DO UPDATE SET hits=hits+1, last_seen=?, country_name=?""",
+                    (dial_number, now, now, data.get('sip_dial_country'), data.get('sip_dial_country_name'),
+                     data.get('sip_dial_lat'), data.get('sip_dial_lng'), now, data.get('sip_dial_country_name')))
+    src_id = data.get('source', SOURCE_ID)
+    cur.execute("""INSERT INTO sources (source_id, hits, first_seen, last_seen)
+                   VALUES (?, 1, ?, ?)
+                   ON CONFLICT(source_id) DO UPDATE SET
+                       hits=hits+1,
+                       first_seen=COALESCE(first_seen, excluded.first_seen),
+                       last_seen=excluded.last_seen""",
+                (src_id, now, now))
 
 def get_intel_stats_before_update(data):
-    """Get hit counts and last_seen BEFORE updating - so we get the previous values."""
-    conn = sqlite3.connect(DB_PATH, timeout=10)
-    cur = conn.cursor()
+    """Get hit counts and last_seen BEFORE updating — uses persistent read connection."""
+    cur = _read_conn.cursor()
     stats = {}
     proto_int = PROTO.get(data.get('proto', 'SSH'), 0)
-    try:
-        cur.execute("SELECT hits, last_seen FROM country_intel WHERE iso_code=?", (data['iso'],))
-        row = cur.fetchone()
-        stats['country_hits'], stats['country_last'] = (row[0] + 1, row[1]) if row else (1, None)
-        cur.execute("SELECT hits, last_seen FROM country_intel_proto WHERE iso_code=? AND proto=?", (data['iso'], proto_int))
-        row = cur.fetchone()
-        stats['country_hits_proto'], stats['country_last_proto'] = (row[0] + 1, row[1]) if row else (1, None)
 
-        if data.get('user') is not None:
-            cur.execute("SELECT hits, last_seen FROM user_intel WHERE username=?", (data['user'],))
-            row = cur.fetchone()
-            stats['user_hits'], stats['user_last'] = (row[0] + 1, row[1]) if row else (1, None)
-            cur.execute("SELECT hits, last_seen FROM user_intel_proto WHERE username=? AND proto=?", (data['user'], proto_int))
-            row = cur.fetchone()
-            stats['user_hits_proto'], stats['user_last_proto'] = (row[0] + 1, row[1]) if row else (1, None)
+    cur.execute("SELECT hits, last_seen FROM country_intel WHERE iso_code=?", (data['iso'],))
+    row = cur.fetchone()
+    stats['country_hits'], stats['country_last'] = (row[0] + 1, row[1]) if row else (1, None)
+    cur.execute("SELECT hits, last_seen FROM country_intel_proto WHERE iso_code=? AND proto=?", (data['iso'], proto_int))
+    row = cur.fetchone()
+    stats['country_hits_proto'], stats['country_last_proto'] = (row[0] + 1, row[1]) if row else (1, None)
 
-        if data.get('pass') is not None:
-            cur.execute("SELECT hits, last_seen FROM pass_intel WHERE password=?", (data['pass'],))
-            row = cur.fetchone()
-            stats['pass_hits'], stats['pass_last'] = (row[0] + 1, row[1]) if row else (1, None)
-            cur.execute("SELECT hits, last_seen FROM pass_intel_proto WHERE password=? AND proto=?", (data['pass'], proto_int))
-            row = cur.fetchone()
-            stats['pass_hits_proto'], stats['pass_last_proto'] = (row[0] + 1, row[1]) if row else (1, None)
+    if data.get('user') is not None:
+        cur.execute("SELECT hits, last_seen FROM user_intel WHERE username=?", (data['user'],))
+        row = cur.fetchone()
+        stats['user_hits'], stats['user_last'] = (row[0] + 1, row[1]) if row else (1, None)
+        cur.execute("SELECT hits, last_seen FROM user_intel_proto WHERE username=? AND proto=?", (data['user'], proto_int))
+        row = cur.fetchone()
+        stats['user_hits_proto'], stats['user_last_proto'] = (row[0] + 1, row[1]) if row else (1, None)
 
-        cur.execute("SELECT hits, last_seen FROM isp_intel WHERE isp=?", (data['isp'],))
+    if data.get('pass') is not None:
+        cur.execute("SELECT hits, last_seen FROM pass_intel WHERE password=?", (data['pass'],))
         row = cur.fetchone()
-        stats['isp_hits'], stats['isp_last'] = (row[0] + 1, row[1]) if row else (1, None)
-        cur.execute("SELECT hits, last_seen FROM isp_intel_proto WHERE isp=? AND proto=?", (data['isp'], proto_int))
+        stats['pass_hits'], stats['pass_last'] = (row[0] + 1, row[1]) if row else (1, None)
+        cur.execute("SELECT hits, last_seen FROM pass_intel_proto WHERE password=? AND proto=?", (data['pass'], proto_int))
         row = cur.fetchone()
-        stats['isp_hits_proto'], stats['isp_last_proto'] = (row[0] + 1, row[1]) if row else (1, None)
+        stats['pass_hits_proto'], stats['pass_last_proto'] = (row[0] + 1, row[1]) if row else (1, None)
 
-        cur.execute("SELECT hits, last_seen, hits_since_cleared FROM ip_intel WHERE ip=?", (data['ip'],))
-        row = cur.fetchone()
-        stats['ip_hits'], stats['ip_last'] = (row[0] + 1, row[1]) if row else (1, None)
-        stats['ip_hits_since_cleared'] = (row[2] or 0) + 1 if row else 1
-        cur.execute("SELECT hits, last_seen FROM ip_intel_proto WHERE ip=? AND proto=?", (data['ip'], proto_int))
-        row = cur.fetchone()
-        stats['ip_hits_proto'], stats['ip_last_proto'] = (row[0] + 1, row[1]) if row else (1, None)
-    finally:
-        conn.close()
+    cur.execute("SELECT hits, last_seen FROM isp_intel WHERE isp=?", (data['isp'],))
+    row = cur.fetchone()
+    stats['isp_hits'], stats['isp_last'] = (row[0] + 1, row[1]) if row else (1, None)
+    cur.execute("SELECT hits, last_seen FROM isp_intel_proto WHERE isp=? AND proto=?", (data['isp'], proto_int))
+    row = cur.fetchone()
+    stats['isp_hits_proto'], stats['isp_last_proto'] = (row[0] + 1, row[1]) if row else (1, None)
+
+    cur.execute("SELECT hits, last_seen, hits_since_cleared FROM ip_intel WHERE ip=?", (data['ip'],))
+    row = cur.fetchone()
+    stats['ip_hits'], stats['ip_last'] = (row[0] + 1, row[1]) if row else (1, None)
+    stats['ip_hits_since_cleared'] = (row[2] or 0) + 1 if row else 1
+    cur.execute("SELECT hits, last_seen FROM ip_intel_proto WHERE ip=? AND proto=?", (data['ip'], proto_int))
+    row = cur.fetchone()
+    stats['ip_hits_proto'], stats['ip_last_proto'] = (row[0] + 1, row[1]) if row else (1, None)
+
     return stats
+
+_db_write_queue = queue.Queue()
+
+def _start_db_writer(save_protos):
+    def _writer():
+        conn = sqlite3.connect(DB_PATH, timeout=30)
+        while True:
+            items = [_db_write_queue.get()]
+            deadline = time.monotonic() + 0.1
+            while True:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    break
+                try:
+                    items.append(_db_write_queue.get(timeout=remaining))
+                except queue.Empty:
+                    break
+            cur = conn.cursor()
+            try:
+                for package in items:
+                    log_to_enriched_db(package, cur, save_protos=save_protos)
+                conn.commit()
+            except Exception as e:
+                print(f"⚠️ DB writer error ({len(items)} knock(s)): {e}", flush=True)
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
+    threading.Thread(target=_writer, daemon=True).start()
 
 def sanitize_credential(s):
     if not s:
@@ -950,43 +971,6 @@ def sanitize_knock(knock):
             knock[k] = sanitize_credential(v if isinstance(v, str) else str(v)) if v is not None else v
             passthrough_keys.append(k)
     return knock, passthrough_keys
-
-def build_smtp_diag(knock):
-    return {
-        "proto": knock.get("proto", "SMTP"),
-        "ip": knock.get("ip"),
-        "session_id": knock.get("session_id"),
-        "event": sanitize_credential(str(knock.get("event", ""))),
-        "duration_ms": int(knock.get("duration_ms", 0) or 0),
-        "commands_seen": int(knock.get("commands_seen", 0) or 0),
-        "stop_reason": sanitize_credential(str(knock.get("stop_reason", ""))),
-        "no_knock_reason": sanitize_credential(str(knock.get("no_knock_reason", ""))),
-        "no_knock_detail": sanitize_credential(str(knock.get("no_knock_detail", ""))),
-        "last_cmd": sanitize_credential(str(knock.get("last_cmd", ""))),
-        "tls_active": bool(knock.get("tls_active", False)),
-        "authed": bool(knock.get("authed", False)),
-        "saw_starttls": bool(knock.get("saw_starttls", False)),
-        "saw_auth": bool(knock.get("saw_auth", False)),
-        "saw_mail": bool(knock.get("saw_mail", False)),
-        "saw_rcpt": bool(knock.get("saw_rcpt", False)),
-        "saw_data": bool(knock.get("saw_data", False)),
-        "ts": int(time.time()),
-    }
-
-def store_smtp_diag(redis_conn, diag):
-    proto = diag.get("proto", "SMTP").lower()
-    redis_conn.lpush(f"knock:diag:{proto}:no_knock", json.dumps(diag))
-    redis_conn.ltrim(f"knock:diag:{proto}:no_knock", 0, 499)
-    redis_conn.set(f"knock:diag:{proto}:last", json.dumps(diag))
-    if diag["no_knock_reason"]:
-        redis_conn.hincrby(f"knock:diag:{proto}:reason_counts", diag["no_knock_reason"], 1)
-    if TRACE_KNOCK:
-        label = f"SMTP{diag.get('smtp_port', 25)}"
-        print(
-            f"🧪 {label} no-knock {diag['ip']} | reason={diag['no_knock_reason']} "
-            f"stop={diag['stop_reason']} cmds={diag['commands_seen']}",
-            flush=True,
-        )
 
 def build_mail_forensic(knock, proto, ip):
     mail_from = knock.get("mail_from", knock.get("smtp_mail_from"))
@@ -1094,6 +1078,9 @@ def monitor(save_knocks=None, max_knocks=None, ban_duration_days=30):
     elif save_protos:
         save_protos = save_protos & set(enabled_protocols)
     init_db(save_protos=save_protos, enabled_protocols=enabled_protocols)
+    global _read_conn
+    _read_conn = sqlite3.connect(DB_PATH, timeout=10)
+    _start_db_writer(save_protos)
     r = redis.Redis(host=os.environ.get('REDIS_HOST', 'localhost'), port=6379, db=REDIS_DB, decode_responses=True)
     publish_protocol_config(r, enabled_protocols)
     entry_strs = [entry.label() for entry in proto_entries]
@@ -1237,9 +1224,6 @@ def monitor(save_knocks=None, max_knocks=None, ban_duration_days=30):
         # Sanitize credential fields once, before any processing or forwarding
         if knock.get('type') == 'KNOCK':
             knock, passthrough_keys = sanitize_knock(knock)
-        if knock.get("type") == "SMTP_DIAG":
-            store_smtp_diag(r, build_smtp_diag(knock))
-            continue
         if knock.get("type") == "KNOCK":
             proto = str(knock.get("proto", "SSH")).upper()
             if proto not in PROTO:
@@ -1304,9 +1288,9 @@ def monitor(save_knocks=None, max_knocks=None, ban_duration_days=30):
                     except queue.Full:
                         pass
                 store_mail_forensic(r, forensic)
-                log_to_enriched_db(package, save_protos=save_protos)
+                _db_write_queue.put(package)
             except Exception as e:
-                print(f"⚠️ DB error (knock dropped): {e}", flush=True)
+                print(f"⚠️ Knock processing error (knock dropped): {e}", flush=True)
                 continue
             _after_save_hook(proto, knock, package)
             r.lpush("knock:recent", json.dumps(package))

@@ -137,16 +137,6 @@ def emit_smtp_knock(
         knock["body"] = body
     print(json.dumps(knock), flush=True)
 
-def emit_smtp_diag(client_ip, session_id, **fields):
-    payload = {
-        "type": "SMTP_DIAG",
-        "proto": _PROTO_LABEL,
-        "ip": client_ip,
-        "session_id": session_id,
-    }
-    payload.update(fields)
-    print(json.dumps(payload), flush=True)
-
 def classify_no_knock_reason(*, commands_seen, stop_reason, tls_active, authed, saw_starttls, saw_auth, saw_mail, saw_rcpt, saw_data, saw_unrecognized):
     if authed or saw_auth:
         return "auth_without_emit", "AUTH seen but no auth knock emitted"
@@ -453,25 +443,6 @@ def handle_connection(client_sock, client_ip):
             saw_rcpt=saw_rcpt,
             saw_data=saw_data,
         )
-        if no_knock_reason is not None:
-            emit_smtp_diag(
-                client_ip,
-                session_id,
-                event='no_knock',
-                duration_ms=duration_ms,
-                commands_seen=commands_seen,
-                stop_reason=stop_reason,
-                no_knock_reason=no_knock_reason,
-                no_knock_detail=no_knock_detail,
-                tls_active=tls_active,
-                authed=authed,
-                last_cmd=last_cmd,
-                saw_starttls=saw_starttls,
-                saw_auth=saw_auth,
-                saw_mail=saw_mail,
-                saw_rcpt=saw_rcpt,
-                saw_data=saw_data,
-            )
         try:
             client_sock.close()
         except:

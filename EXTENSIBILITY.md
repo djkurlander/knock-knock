@@ -147,8 +147,8 @@ copy allowed protocol fields into package
 attach optional structured display lines
 compute intel stats
 apply rate limit / ban policy
-save generic knock row
-run optional after_save hook after the main DB commit
+queue generic knock/intel DB write
+run optional after_save hook after the knock is accepted for persistence
 publish to Redis/websocket
 ```
 
@@ -167,14 +167,14 @@ def process_knock(knock: dict, context: KnockContext) -> dict | None:
 
 It may normalize fields, add derived fields, classify protocol actions, attach `display_lines`, or return `None` to drop the knock. It may mutate and return the same dict or return a new dict. The monitor uses the returned dict. If it raises an exception, the monitor should log a warning and drop that knock without crashing.
 
-`after_save` runs after the main knock/intel DB transaction commits:
+`after_save` runs after the knock has been accepted for persistence. The current monitor writes knock/intel rows asynchronously, so this hook is best-effort and may run before the queued DB write commits:
 
 ```python
 def after_save(knock: dict, package: dict, context: KnockContext) -> None:
     ...
 ```
 
-It is for best-effort protocol-specific side effects such as SIP-style aggregate side tables. Its return value is ignored. If it raises an exception, the monitor should log a warning, keep the main knock saved, and continue to Redis/websocket publishing.
+It is for best-effort protocol-specific side effects such as SIP-style aggregate side tables. Its return value is ignored. If it raises an exception, the monitor should log a warning and continue to Redis/websocket publishing.
 
 Hooks should not be used for behavior that must be transactionally inseparable from the main knock save. If a protocol needs transactional persistence, prefer declarative table/field maps in v1 and consider a later explicit transaction-hook feature only if real protocols require it.
 
@@ -249,7 +249,7 @@ Do not create or alter tables during per-knock processing. If a known protocol's
 
 Do not turn `monitor.py` into a general migration framework. Non-additive schema changes should be handled out of band with explicit migration scripts, ideally under `extras/db_migration/`, while the monitor is stopped. This includes column renames, type changes, dropped columns, table reshaping, backfills, and protocol ID remaps. Extension authors are responsible for their own private migrations if they change a deployed extension's schema.
 
-SIP-style side tables should split declarative schema from imperative update logic. The side table shape belongs in `extra_tables` so startup can create or validate it. The row update behavior belongs in a narrow `after_save` hook. For example, SIP can declare `dial_intel` as an extra table, save the main event to `knocks_sip`, and use `after_save` to increment dialed phone number intel.
+SIP-style side tables should split declarative schema from imperative update logic. The side table shape belongs in `extra_tables` so startup can create or validate it. The row update behavior belongs in a narrow best-effort `after_save` hook. For example, SIP can declare `dial_intel` as an extra table and use `after_save` to increment dialed phone number intel.
 
 The table declaration should be declarative:
 
@@ -392,6 +392,46 @@ No protocol extension should provide raw HTML for browser rendering. Extensions 
 Do not support loadable plugin JavaScript in v1. Existing built-in JavaScript formatters may remain for complex built-in protocols, but extension protocols should use metadata, `display_formats`, and/or `display_lines`.
 
 Adding a protocol or changing protocol metadata is a restart-time operation in v1. It is acceptable to require restarting both monitor and web services so the merged registry, Redis protocol config, and browser initial state agree.
+
+## Protocol Overrides
+
+`extensions.py` may also define `OVERRIDES = [...]` — a list of `ProtocolOverride` objects that patch the display presentation of existing registered protocols without redefining them. This is the right mechanism for local display customizations that would otherwise require editing tracked files.
+
+```python
+from protocol_api import ProtocolOverride
+
+EXTENSIONS = []
+
+OVERRIDES = [
+    ProtocolOverride(
+        name="HTTP",
+        display_formats={
+            "probe": [[
+                {"label": "purpose",  "value_key": "http_purpose"},
+                {"label": "UA",       "value_key": "http_user_agent", "format": "truncate"},
+            ]],
+        },
+    ),
+]
+```
+
+`display_formats` is **merged** into the existing definition — only the named formats you supply are added or replaced; undeclared formats are left intact.
+
+Patchable fields:
+
+| Field | Notes |
+|---|---|
+| `badge` | 1-8 character badge text |
+| `badge_color` | hex color or CSS name |
+| `ui_order` | integer position in the protocol list |
+| `display_fields` | replaces the full `display_fields` list |
+| `display_formats` | merged into existing formats |
+| `display_format_field` | replaces the format selector field |
+| `default_display_format` | validated against the merged format set |
+
+Structural fields (`proto_id`, `honeypot_script`, `columns`, `field_map`, `knock_table`, and everything that touches DB schema or subprocess spawning) cannot be overridden. Overrides only apply to protocols in the registry (`protocols/registry.py` or `EXTENSIONS`); legacy base protocols not yet migrated to the registry are not patchable.
+
+Because `extensions.py` is gitignored, overrides survive `git pull` without conflicts.
 
 ## Built-In Migration Strategy
 

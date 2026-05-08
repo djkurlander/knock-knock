@@ -45,7 +45,7 @@ KNOCK_PROTO=XTEST python honeypots/mqtt_honeypot.py --port 12345
 ```
 
 When launching through the monitor, pass that environment value from the
-protocol definition with `option_env` for now.
+protocol definition with `honeypot_env`.
 
 ## Add `extensions.py`
 
@@ -64,6 +64,9 @@ EXTENSIONS = [
         badge_color="#7cc7ff",
         ui_order=1000,
         honeypot_script="honeypots/xtest_honeypot.py",
+        honeypot_env={
+            "KNOCK_PROTO": "XTEST",
+        },
         default_enabled_entries=["XTEST:12345"],
         supports_user_panel=True,
         supports_pass_panel=True,
@@ -222,6 +225,47 @@ Protocol definitions are validated at startup. Common failures:
 - Unsupported passthrough sanitizer.
 
 Fix validation errors before starting monitor/web in production mode.
+
+## Customizing an Existing Protocol
+
+To change the display presentation of an existing registered protocol without
+editing tracked files, use `OVERRIDES` in `extensions.py`. Because
+`extensions.py` is gitignored, customizations survive `git pull` without
+conflicts.
+
+```python
+from protocol_api import ProtocolOverride
+
+EXTENSIONS = []
+
+OVERRIDES = [
+    ProtocolOverride(
+        name="HTTP",
+        display_formats={
+            "probe": [[
+                {"label": "purpose", "value_key": "http_purpose"},
+                {"label": "UA",      "value_key": "http_user_agent", "format": "truncate"},
+            ]],
+        },
+    ),
+]
+```
+
+`display_formats` is merged — only the format names you list are added or
+replaced; all other existing formats are kept. The patchable fields are:
+
+- `badge` and `badge_color` — rename or recolor the protocol badge
+- `ui_order` — reposition the protocol in the UI
+- `display_fields` — replace the full display field list
+- `display_formats` — merge additional or replacement named formats
+- `display_format_field` and `default_display_format` — change format selection
+
+Structural fields (`proto_id`, `honeypot_script`, `columns`, `knock_table`,
+etc.) cannot be overridden. Overrides only work on protocols in the registry
+(`protocols/registry.py` or your own `EXTENSIONS`). Legacy base protocols not
+yet migrated to the registry cannot be patched this way.
+
+Restart both monitor and web after changing `extensions.py`.
 
 ## Smoke Test Checklist
 

@@ -2,7 +2,7 @@
 import importlib.util
 import os
 
-from protocol_api import validate_protocol_definition
+from protocol_api import ProtocolOverride, validate_protocol_definition, validate_protocol_override, apply_protocol_override
 
 _BASE_PROTO = {'SSH': 0, 'TNET': 1, 'SMTP': 2, 'RDP': 3, 'FTP': 5, 'SIP': 6, 'SMB': 7, 'HTTP': 8}
 
@@ -84,10 +84,10 @@ def _load_builtin_protocols():
     return [(definition, True) for definition in DEFINITIONS]
 
 
-def _load_extension_protocols():
+def _load_extensions():
     path = os.path.join(_ROOT_DIR, "extensions.py")
     if not os.path.exists(path):
-        return []
+        return [], []
     spec = importlib.util.spec_from_file_location("knock_knock_extensions", path)
     if not spec or not spec.loader:
         raise ValueError(f"Could not load extension protocol file: {path}")
@@ -98,10 +98,14 @@ def _load_extension_protocols():
         raise ValueError("extensions.py must define EXTENSIONS = [...]")
     if isinstance(extensions, (str, bytes)) or not hasattr(extensions, "__iter__"):
         raise ValueError("extensions.py EXTENSIONS must be an iterable of ProtocolDefinition objects")
-    return [(definition, False) for definition in extensions]
+    overrides = getattr(module, "OVERRIDES", [])
+    if isinstance(overrides, (str, bytes)) or not hasattr(overrides, "__iter__"):
+        raise ValueError("extensions.py OVERRIDES must be an iterable of ProtocolOverride objects")
+    return [(definition, False) for definition in extensions], list(overrides)
 
 
-REGISTERED_PROTOCOLS = _load_builtin_protocols() + _load_extension_protocols()
+_extension_protocols, _extension_overrides = _load_extensions()
+REGISTERED_PROTOCOLS = _load_builtin_protocols() + _extension_protocols
 REGISTERED_PROTOCOL_MAP = {}
 
 PROTO = dict(_BASE_PROTO)
@@ -135,6 +139,25 @@ for definition, built_in in REGISTERED_PROTOCOLS:
         'honeypot_args': list(definition.honeypot_args),
         'definition': definition,
     }
+
+for _override in _extension_overrides:
+    if not isinstance(_override, ProtocolOverride):
+        raise ValueError("extensions.py OVERRIDES entries must be ProtocolOverride objects")
+    _name = str(getattr(_override, 'name', '')).upper()
+    if _name not in REGISTERED_PROTOCOL_MAP:
+        raise ValueError(f"Override targets unknown or non-registered protocol: {_name!r}")
+    _existing = REGISTERED_PROTOCOL_MAP[_name]
+    validate_protocol_override(_override, _existing)
+    _patched = apply_protocol_override(_existing, _override)
+    REGISTERED_PROTOCOL_MAP[_name] = _patched
+    if _override.ui_order is not None:
+        _ui_order[_name] = _override.ui_order
+    _meta = PROTOCOL_META[_name]
+    if _override.badge is not None:
+        _meta['badge'] = _patched.badge
+    if _override.badge_color is not None:
+        _meta['color'] = _patched.badge_color
+    _meta['definition'] = _patched
 
 PROTO_NAME = {v: k for k, v in PROTO.items()}  # reverse lookup: 0->'SSH' etc.
 PROTOCOL_UI_ORDER = sorted(PROTO, key=lambda name: (_ui_order.get(name, 10000), name))

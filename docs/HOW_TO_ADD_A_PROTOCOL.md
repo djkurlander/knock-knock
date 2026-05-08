@@ -185,8 +185,7 @@ Renderer precedence is:
 2. Per-knock `display_format`.
 3. Protocol `default_display_format`.
 4. Protocol `display_fields`.
-5. Built-in legacy renderer.
-6. Credential fallback.
+5. Credential fallback.
 
 Use `display_lines` only when a knock needs a one-off layout that cannot be
 represented by a reusable `display_format`.
@@ -262,8 +261,7 @@ replaced; all other existing formats are kept. The patchable fields are:
 
 Structural fields (`proto_id`, `honeypot_script`, `columns`, `knock_table`,
 etc.) cannot be overridden. Overrides only work on protocols in the registry
-(`protocols/registry.py` or your own `EXTENSIONS`). Legacy base protocols not
-yet migrated to the registry cannot be patched this way.
+(`protocols/registry.py` or your own `EXTENSIONS`).
 
 Restart both monitor and web after changing `extensions.py`.
 

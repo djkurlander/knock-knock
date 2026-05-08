@@ -433,29 +433,6 @@ Structural fields (`proto_id`, `honeypot_script`, `columns`, `field_map`, `knock
 
 Because `extensions.py` is gitignored, overrides survive `git pull` without conflicts.
 
-## Built-In Migration Strategy
-
-Do not refactor every existing protocol implementation at once.
-
-Start by moving declarative facts into the registry:
-
-- protocol IDs
-- UI order
-- colors and badges
-- honeypot scripts
-- user/pass panel support
-- knock table columns
-- field maps
-- display fields
-
-Leave existing honeypot scripts alone.
-
-Leave existing special-case browser formatters in place initially, especially SMB and richer SIP/HTTP rendering. Simple protocols such as SSH, TNET, FTP, RDP, and much of SMTP can move to metadata-driven rendering. New extension protocols should prefer declarative `display_fields` or reusable `display_formats`; use backend-prepared `display_lines` only for unusual per-knock layouts that cannot be expressed with a reusable format.
-
-Leave existing special-case monitor behavior in place initially, except where it naturally becomes a small hook. SIP phone-number aggregation is the clearest candidate for a future `after_save` hook.
-
-This keeps the first implementation low-risk while eliminating the current "add protocol in many places" problem.
-
 ## Safety Rules
 
 The extension system must not:

@@ -89,7 +89,7 @@ DEFINITION = ProtocolDefinition(
                 {"label": "scanner", "value_key": "mqtt_signature", "format": "truncate"},
             ],
             [
-                {"label": "topic", "value_key": "mqtt_topic", "format": "code"},
+                {"label": "topic", "value_key": "mqtt_topic", "max_len": 80},
             ],
             [
                 {"label": "client", "value_key": "mqtt_client_id"},
@@ -102,7 +102,7 @@ DEFINITION = ProtocolDefinition(
                 {"label": "scanner", "value_key": "mqtt_signature", "format": "truncate"},
             ],
             [
-                {"label": "topic", "value_key": "mqtt_topic", "format": "code"},
+                {"label": "topic", "value_key": "mqtt_topic", "max_len": 80},
             ],
             [
                 {"label": "client", "value_key": "mqtt_client_id"},

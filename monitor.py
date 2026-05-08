@@ -21,7 +21,7 @@ GEOIP_CITY_PATH = '/usr/share/GeoIP/GeoLite2-City.mmdb'
 GEOIP_ASN_PATH = '/usr/share/GeoIP/GeoLite2-ASN.mmdb'
 DB_PATH = os.environ.get('DB_DIR', 'data') + '/knock_knock.db'
 
-TRACE_KNOCK     = os.environ.get('TRACE_KNOCK', '').lower() == 'true'
+TRACE_KNOCK     = os.environ.get('TRACE_KNOCK', '').lower()  # 'true' or 'verbose'
 REDIS_DB        = int(os.environ.get('REDIS_DB', '0'))
 SOURCE_ID       = os.environ.get('SOURCE_ID', socket.gethostname().split('.')[0])
 AGGREGATOR_HOST = os.environ.get('AGGREGATOR_HOST', '').strip()
@@ -32,7 +32,7 @@ from constants import PROTO, PROTO_NAME, PROTOCOL_META, sort_protocols_for_ui
 
 USER_PANEL_PROTOCOLS = {name for name, meta in PROTOCOL_META.items() if meta.get('supports_user_panel')}
 PASS_PANEL_PROTOCOLS = {name for name, meta in PROTOCOL_META.items() if meta.get('supports_pass_panel')}
-MAIL_FORENSICS_MAX = int(os.environ.get("MAIL_FORENSICS_MAX", "100"))
+
 
 _DEFAULT_ENABLED_STR = 'SSH,TNET,FTP,RDP,SMB,SIP,SMTP:25,SMTP:587,HTTP:80,HTTP:443'
 _UNKNOWN_PROTO_WARNED = set()
@@ -329,31 +329,11 @@ def _build_self_redaction_patterns():
 
 SELF_REDACTION_PATTERNS = _build_self_redaction_patterns()
 
-# --- Per-protocol knock table definitions ---
 # Common columns for all knock tables (after id and timestamp)
 _COMMON_KNOCK_COLS = [
     'ip_address TEXT', 'iso_code TEXT', 'city TEXT', 'region TEXT',
     'country TEXT', 'isp TEXT', 'asn TEXT', 'source INTEGER DEFAULT 0',
 ]
-
-# Protocol-specific extra columns
-_KNOCK_EXTRA_COLS = {
-    'SSH':  ['username TEXT', 'password TEXT'],
-    'TNET': ['username TEXT', 'password TEXT'],
-    'FTP':  ['username TEXT', 'password TEXT'],
-    'SMTP': ['username TEXT', 'password TEXT', 'smtp_port INTEGER', 'smtp_stage TEXT',
-             'smtp_mail_from TEXT', 'smtp_rcpt_to TEXT',
-             'subject TEXT', 'body TEXT'],
-    'HTTP': ['http_port INTEGER', 'http_method TEXT', 'http_path TEXT', 'http_purpose TEXT',
-             'http_exploit TEXT', 'http_host TEXT', 'http_user_agent TEXT', 'http_body TEXT'],
-    'SIP':  ['sip_method TEXT', 'sip_dial_string TEXT', 'sip_dial_number TEXT',
-             'sip_call_id TEXT', 'sip_cseq TEXT', 'sip_extension TEXT',
-             'sip_dial_country TEXT', 'sip_dial_country_name TEXT',
-             'sip_dial_lat REAL', 'sip_dial_lng REAL'],
-    'SMB':  ['username TEXT', 'smb_action TEXT', 'smb_share TEXT', 'smb_file TEXT',
-             'smb_version TEXT', 'smb_domain TEXT', 'smb_host TEXT'],
-    'RDP':  ['username TEXT', 'rdp_source TEXT', 'domain TEXT', 'rdp_workstation TEXT'],
-}
 
 # Maps JSON knock data keys -> column names for common fields
 _COMMON_KEY_MAP = [
@@ -361,30 +341,6 @@ _COMMON_KEY_MAP = [
     ('region', 'region'), ('country', 'country'), ('isp', 'isp'), ('asn', 'asn'),
     ('source_int', 'source'),
 ]
-
-# Maps JSON knock data keys -> column names for protocol-specific fields
-_PROTO_KEY_MAP = {
-    'SSH':  [('user', 'username'), ('pass', 'password')],
-    'TNET': [('user', 'username'), ('pass', 'password')],
-    'FTP':  [('user', 'username'), ('pass', 'password')],
-    'SMTP': [('user', 'username'), ('pass', 'password'), ('smtp_port', 'smtp_port'),
-             ('smtp_stage', 'smtp_stage'),
-             ('smtp_mail_from', 'smtp_mail_from'), ('smtp_rcpt_to', 'smtp_rcpt_to'),
-             ('subject', 'subject'), ('body', 'body')],
-    'HTTP': [('http_port', 'http_port'), ('http_method', 'http_method'), ('http_path', 'http_path'),
-             ('http_purpose', 'http_purpose'), ('http_exploit', 'http_exploit'),
-             ('http_host', 'http_host'), ('http_user_agent', 'http_user_agent'),
-             ('http_body', 'http_body')],
-    'SIP':  [('sip_method', 'sip_method'), ('sip_dial_string', 'sip_dial_string'),
-             ('sip_dial_number', 'sip_dial_number'), ('sip_call_id', 'sip_call_id'),
-             ('sip_cseq', 'sip_cseq'), ('sip_extension', 'sip_extension'),
-             ('sip_dial_country', 'sip_dial_country'), ('sip_dial_country_name', 'sip_dial_country_name'),
-             ('sip_dial_lat', 'sip_dial_lat'), ('sip_dial_lng', 'sip_dial_lng')],
-    'SMB':  [('user', 'username'), ('smb_action', 'smb_action'), ('smb_share', 'smb_share'),
-             ('smb_file', 'smb_file'), ('smb_version', 'smb_version'),
-             ('smb_domain', 'smb_domain'), ('smb_host', 'smb_host')],
-    'RDP':  [('user', 'username'), ('rdp_source', 'rdp_source'), ('domain', 'domain'), ('rdp_workstation', 'rdp_workstation')],
-}
 
 _SQL_IDENT_RE = re.compile(r'^[A-Za-z_][A-Za-z0-9_]*$')
 
@@ -458,9 +414,10 @@ def _build_hooks():
         if not definition:
             continue
         process = _resolve_hook(definition.process_knock)
+        db_update = _resolve_hook(definition.db_update)
         after = _resolve_hook(definition.after_save)
-        if process or after:
-            hooks[proto] = {'process': process, 'after_save': after}
+        if process or db_update or after:
+            hooks[proto] = {'process': process, 'db_update': db_update, 'after_save': after}
     return hooks
 
 
@@ -490,6 +447,18 @@ def _after_save_hook(proto, knock, package):
         hook(knock, package, _hook_context(proto))
     except Exception as e:
         print(f"⚠️ after_save hook failed for {proto}: {e}", flush=True)
+
+
+def _db_update_hook(proto, data, cur, now):
+    hook = (_PROTOCOL_HOOKS.get(proto) or {}).get('db_update')
+    if not hook:
+        return
+    ctx = _hook_context(proto)
+    ctx['now'] = now
+    try:
+        hook(data, cur, ctx)
+    except Exception as e:
+        print(f"⚠️ db_update hook failed for {proto}: {e}", flush=True)
 
 
 def _registered_passthrough_items(knock):
@@ -554,7 +523,7 @@ def init_db(save_protos=None, enabled_protocols=None):
             if count == 0:
                 continue
             table = f"knocks_{pname.lower()}"
-            extra_cols = _KNOCK_EXTRA_COLS[pname]
+            extra_cols = ['username TEXT', 'password TEXT']
             cols_def = ['id INTEGER PRIMARY KEY AUTOINCREMENT',
                         "timestamp TEXT DEFAULT (strftime('%Y-%m-%d %H:%M:%S','now'))"]
             cols_def += _COMMON_KNOCK_COLS + extra_cols
@@ -567,20 +536,6 @@ def init_db(save_protos=None, enabled_protocols=None):
             print(f"✅ Migrated {migrated} rows from knocks → per-protocol tables", file=sys.stderr)
         cur.execute("DROP TABLE knocks")
         conn.commit()
-    # Create per-protocol knock tables (only for protocols being saved)
-    if save_protos is None:
-        protos_to_create = list(_KNOCK_EXTRA_COLS.keys())
-    elif save_protos:
-        protos_to_create = [p for p in save_protos if p in _KNOCK_EXTRA_COLS]
-    else:
-        protos_to_create = []
-    for proto_name in protos_to_create:
-        extra_cols = _KNOCK_EXTRA_COLS[proto_name]
-        table = f"knocks_{proto_name.lower()}"
-        cols = ['id INTEGER PRIMARY KEY AUTOINCREMENT',
-                "timestamp TEXT DEFAULT (strftime('%Y-%m-%d %H:%M:%S','now'))"]
-        cols += _COMMON_KNOCK_COLS + extra_cols
-        cur.execute(f"CREATE TABLE IF NOT EXISTS {table} ({', '.join(cols)})")
     for _, definition in _registered_saved_definitions(save_protos):
         table = _sql_ident(definition.knock_table)
         proto_cols = [_column_sql(column) for column in definition.columns]
@@ -589,6 +544,10 @@ def init_db(save_protos=None, enabled_protocols=None):
         cols += _COMMON_KNOCK_COLS + proto_cols
         cur.execute(f"CREATE TABLE IF NOT EXISTS {table} ({', '.join(cols)})")
         _ensure_columns(cur, table, definition.columns)
+    for proto in (enabled_protocols or []):
+        definition = (PROTOCOL_META.get(proto) or {}).get('definition')
+        if not definition:
+            continue
         for extra in definition.extra_tables:
             extra_table = _sql_ident(extra.name)
             extra_cols = [_column_sql(column) for column in extra.columns]
@@ -606,10 +565,6 @@ def init_db(save_protos=None, enabled_protocols=None):
         cur.execute("ALTER TABLE ip_intel ADD COLUMN ban_until INTEGER")
     if 'ban_count' not in _ip_intel_cols:
         cur.execute("ALTER TABLE ip_intel ADD COLUMN ban_count INTEGER NOT NULL DEFAULT 0")
-    if enabled_protocols and 'SIP' in enabled_protocols:
-        cur.execute("""CREATE TABLE IF NOT EXISTS dial_intel
-            (number TEXT PRIMARY KEY, hits INTEGER, first_seen DATETIME, last_seen DATETIME,
-             country TEXT, country_name TEXT, lat REAL, lng REAL)""")
     cur.execute("""CREATE TABLE IF NOT EXISTS sources (
         id           INTEGER PRIMARY KEY,
         source_id    TEXT UNIQUE NOT NULL,
@@ -633,7 +588,7 @@ def init_db(save_protos=None, enabled_protocols=None):
         cur.execute("ALTER TABLE sources ADD COLUMN active INTEGER NOT NULL DEFAULT 1")
     # Add source column to any existing knock tables that predate this feature
     _registered_tables = [d.knock_table for _, d in _registered_saved_definitions(save_protos)]
-    for _tname in [f"knocks_{p.lower()}" for p in _KNOCK_EXTRA_COLS] + _registered_tables:
+    for _tname in _registered_tables:
         try:
             _tname = _sql_ident(_tname)
             _tcols = [row[1] for row in cur.execute(f"PRAGMA table_info({_tname})").fetchall()]
@@ -801,15 +756,11 @@ def heartbeat_worker(redis_conn, enabled_protocols):
 
 def log_to_enriched_db(data, cur, save_protos=None):
     """Write one knock to the DB using the provided cursor. Caller commits."""
-    proto_name = data.get('proto', 'SSH')
+    proto_name = data.get('proto') or ''
     should_save = (save_protos is None or (save_protos and proto_name in save_protos))
     registered_mapping = _registered_knock_mapping(proto_name)
-    if should_save and (registered_mapping or proto_name in _PROTO_KEY_MAP):
-        if registered_mapping:
-            table, proto_key_map = registered_mapping
-        else:
-            table = f"knocks_{proto_name.lower()}"
-            proto_key_map = _PROTO_KEY_MAP[proto_name]
+    if should_save and registered_mapping:
+        table, proto_key_map = registered_mapping
         table = _sql_ident(table)
         col_names = [col for _, col in _COMMON_KEY_MAP]
         values = [data.get(key) for key, _ in _COMMON_KEY_MAP]
@@ -820,7 +771,7 @@ def log_to_enriched_db(data, cur, save_protos=None):
         col_sql = ', '.join(_sql_ident(col) for col in col_names)
         cur.execute(f"INSERT INTO {table} ({col_sql}) VALUES ({placeholders})", values)
     now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    proto_int = PROTO.get(data.get('proto', 'SSH'), 0)
+    proto_int = PROTO.get(data.get('proto') or '', 0)
     if data.get('user') is not None:
         cur.execute("INSERT INTO user_intel VALUES (?, 1, ?) ON CONFLICT(username) DO UPDATE SET hits=hits+1, last_seen=?", (data['user'], now, now))
         cur.execute("INSERT INTO user_intel_proto VALUES (?, ?, 1, ?) ON CONFLICT(username, proto) DO UPDATE SET hits=hits+1, last_seen=?", (data['user'], proto_int, now, now))
@@ -838,12 +789,7 @@ def log_to_enriched_db(data, cur, save_protos=None):
     cur.execute("INSERT INTO isp_intel_proto VALUES (?, ?, 1, ?, ?) ON CONFLICT(isp, proto) DO UPDATE SET hits=hits+1, last_seen=?, asn=?", (data['isp'], proto_int, now, data.get('asn'), now, data.get('asn')))
     cur.execute("INSERT INTO ip_intel_proto VALUES (?, ?, 1, ?, ?, ?) ON CONFLICT(ip, proto) DO UPDATE SET hits=hits+1, last_seen=?, lat=?, lng=?",
                 (data['ip'], proto_int, now, data.get('lat'), data.get('lng'), now, data.get('lat'), data.get('lng')))
-    dial_number = data.get('sip_dial_number')
-    if dial_number:
-        cur.execute("""INSERT INTO dial_intel VALUES (?, 1, ?, ?, ?, ?, ?, ?)
-                       ON CONFLICT(number) DO UPDATE SET hits=hits+1, last_seen=?, country_name=?""",
-                    (dial_number, now, now, data.get('sip_dial_country'), data.get('sip_dial_country_name'),
-                     data.get('sip_dial_lat'), data.get('sip_dial_lng'), now, data.get('sip_dial_country_name')))
+    _db_update_hook(proto_name, data, cur, now)
     src_id = data.get('source', SOURCE_ID)
     cur.execute("""INSERT INTO sources (source_id, hits, first_seen, last_seen)
                    VALUES (?, 1, ?, ?)
@@ -857,7 +803,7 @@ def get_intel_stats_before_update(data):
     """Get hit counts and last_seen BEFORE updating — uses persistent read connection."""
     cur = _read_conn.cursor()
     stats = {}
-    proto_int = PROTO.get(data.get('proto', 'SSH'), 0)
+    proto_int = PROTO.get(data.get('proto') or '', 0)
 
     cur.execute("SELECT hits, last_seen FROM country_intel WHERE iso_code=?", (data['iso'],))
     row = cur.fetchone()
@@ -950,8 +896,7 @@ def sanitize_body(s, max_len=2000):
         clean = pat.sub(replacement, clean)
     return clean[:max_len]
 
-_SANITIZE_SIMPLE_FIELDS = ('user', 'pass', 'subject', 'domain')
-_SANITIZE_PROTO_PREFIXES = ("sip_", "smtp_", "mail_", "smb_", "rdp_", "http_")
+_SANITIZE_SIMPLE_FIELDS = ('user', 'pass')
 
 
 def sanitize_passthrough_value(value, policy=None):
@@ -971,45 +916,10 @@ def sanitize_knock(knock):
     for field in _SANITIZE_SIMPLE_FIELDS:
         if field in knock:
             knock[field] = sanitize_credential(knock[field] if isinstance(knock[field], str) else str(knock[field]))
-    if 'body' in knock:
-        knock['body'] = sanitize_body(knock['body'])
-    registered_items = _registered_passthrough_items(knock)
-    if registered_items:
-        for k, v, policy in registered_items:
-            knock[k] = sanitize_passthrough_value(v, policy)
-            passthrough_keys.append(k)
-        return knock, passthrough_keys
-    for k, v in knock.items():
-        if isinstance(k, str) and k.startswith(_SANITIZE_PROTO_PREFIXES):
-            knock[k] = sanitize_credential(v if isinstance(v, str) else str(v)) if v is not None else v
-            passthrough_keys.append(k)
+    for k, v, policy in _registered_passthrough_items(knock):
+        knock[k] = sanitize_passthrough_value(v, policy)
+        passthrough_keys.append(k)
     return knock, passthrough_keys
-
-def build_mail_forensic(knock, proto, ip):
-    mail_from = knock.get("mail_from", knock.get("smtp_mail_from"))
-    mail_to = knock.get("mail_to", knock.get("smtp_rcpt_to"))
-    subject = knock.get("subject")
-    body = knock.get("body")
-    if proto not in ("SMTP", "MAIL"):
-        return None
-    if not any(v is not None for v in (mail_from, mail_to, subject, body)):
-        return None
-    return {
-        "ts": int(time.time()),
-        "proto": proto,
-        "ip": ip,
-        "session_id": knock.get("session_id"),
-        "mail_from": str(mail_from) if mail_from is not None else None,
-        "mail_to": str(mail_to) if mail_to is not None else None,
-        "subject": str(subject) if subject is not None else None,
-        "body": str(body) if body is not None else None,
-    }
-
-def store_mail_forensic(redis_conn, forensic):
-    if not forensic:
-        return
-    redis_conn.lpush("knock:forensics:mail_raw", json.dumps(forensic))
-    redis_conn.ltrim("knock:forensics:mail_raw", 0, max(0, MAIL_FORENSICS_MAX - 1))
 
 def is_over_limit_and_block(redis_conn, ip, hits_since_cleared, proto, max_knocks, ban_duration_days=30):
     if not max_knocks:
@@ -1024,14 +934,6 @@ def is_over_limit_and_block(redis_conn, ip, hits_since_cleared, proto, max_knock
     print(f"⛔ Dropped knock from over-limit IP {ip} ({hits_since_cleared}>={limit} {proto})", flush=True)
     return True
 
-def format_cred_summary(user, pw):
-    if user is not None and pw is not None:
-        return f"{user}:{pw}"
-    if user is not None:
-        return f"user={user}"
-    if pw is not None:
-        return f"pass={pw}"
-    return "no-credentials"
 
 def get_geo_enriched(ip, city_reader, asn_reader):
     geo = {"iso": "XX", "country": "Unknown", "city": "Unknown", "region": None, "isp": "Unknown", "asn": None, "lat": None, "lng": None}
@@ -1230,7 +1132,7 @@ def monitor(save_knocks=None, max_knocks=None, ban_duration_days=30):
         except (json.JSONDecodeError, ValueError):
             if re.match(r'^[A-Z]+TRACE\b', line):
                 print(line, end='', flush=True)
-            elif TRACE_KNOCK:
+            elif TRACE_KNOCK in ('true', 'verbose'):
                 print(line, end='', flush=True)  # pass through diagnostic output from honeypots
             continue
         passthrough_keys = []
@@ -1238,7 +1140,7 @@ def monitor(save_knocks=None, max_knocks=None, ban_duration_days=30):
         if knock.get('type') == 'KNOCK':
             knock, passthrough_keys = sanitize_knock(knock)
         if knock.get("type") == "KNOCK":
-            proto = str(knock.get("proto", "SSH")).upper()
+            proto = str(knock.get("proto") or "").upper()
             if proto not in PROTO:
                 _warn_unknown_proto(proto, ip=knock.get("ip"), source=knock.get("source"))
                 continue
@@ -1251,7 +1153,6 @@ def monitor(save_knocks=None, max_knocks=None, ban_duration_days=30):
                 _warn_unknown_proto(proto, ip=knock.get("ip"), source=knock.get("source"))
                 continue
             ip = knock["ip"]
-            forensic = build_mail_forensic(knock, proto, ip)
             has_user = "user" in knock
             raw_user = knock.get("user")
             raw_pass = knock.get("pass")
@@ -1269,18 +1170,10 @@ def monitor(save_knocks=None, max_knocks=None, ban_duration_days=30):
                 package.pop("user")
             if pw is None:
                 package.pop("pass")
-            if knock.get("subject"):
-                package["subject"] = knock["subject"]
-            if knock.get("body"):
-                package["body"] = knock["body"]
             if knock.get("display_format"):
                 package["display_format"] = knock["display_format"]
             if knock.get("display_lines"):
                 package["display_lines"] = knock["display_lines"]
-            if proto == "RDP":
-                raw_domain = knock.get("domain")
-                if raw_domain is not None and raw_domain:
-                    package["domain"] = raw_domain
             try:
                 # Source tagging — integer for SQLite, string+display for Redis/WebSocket
                 _src_id = knock.get('source', SOURCE_ID)
@@ -1300,8 +1193,7 @@ def monitor(save_knocks=None, max_knocks=None, ban_duration_days=30):
                         _forward_queue.put_nowait({**knock, 'source': SOURCE_ID})
                     except queue.Full:
                         pass
-                store_mail_forensic(r, forensic)
-                _db_write_queue.put(package)
+                _db_write_queue.put(package.copy())
             except Exception as e:
                 print(f"⚠️ Knock processing error (knock dropped): {e}", flush=True)
                 continue
@@ -1320,21 +1212,10 @@ def monitor(save_knocks=None, max_knocks=None, ban_duration_days=30):
                 r.set("knock:last_lat", geo['lat'])
                 r.set("knock:last_lng", geo['lng'])
             r.publish("knocks_stream", json.dumps(package))
-            if package.get("subject"):
-                left = user if user is not None else package.get("mail_from", package.get("smtp_mail_from", "<none>"))
-                right = pw if pw is not None else package.get("mail_to", package.get("smtp_rcpt_to", "<none>"))
-                if TRACE_KNOCK:
-                    print(f"📧 MAIL {geo['iso']} | {left} → {right} | {package['subject'][:60]} via {geo['isp']}")
-            elif proto == 'SIP' and package.get('sip_dial_number'):
-                dial_raw = package.get('sip_dial_string', '')
-                dial_e164 = package.get('sip_dial_number', '')
-                dial_dest = package.get('sip_dial_country_name', '')
-                if TRACE_KNOCK:
-                    print(f"📡 SIP {geo['iso']} | {dial_raw} → {dial_e164} → {dial_dest} via {geo['isp']}")
-            else:
-                if TRACE_KNOCK:
-                    cred = format_cred_summary(user, pw)
-                    print(f"📡 {proto} {geo['iso']} | {cred} via {geo['isp']}")
+            if TRACE_KNOCK:
+                print(f"📡 {proto} {geo['iso']} | {geo['country']}, {ip} via {geo['isp']}")
+            if TRACE_KNOCK == 'verbose':
+                print(json.dumps(package))
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Knock-Knock Monitor")

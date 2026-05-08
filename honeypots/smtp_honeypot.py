@@ -109,6 +109,11 @@ def b64decode(s):
 
 _PROTO_LABEL = "SMTP"  # overridden by --proto arg
 _SMTP_PORT = 25        # overridden by --port arg
+_DISPLAY_FORMAT_BY_STAGE = {
+    "auth": "auth",
+    "preauth_message": "message",
+    "postauth_envelope": "message",
+}
 
 def emit_smtp_knock(
     client_ip,
@@ -123,6 +128,9 @@ def emit_smtp_knock(
 ):
     knock = {"type": "KNOCK", "proto": _PROTO_LABEL, "ip": client_ip,
              "smtp_port": _SMTP_PORT, "smtp_stage": stage}
+    display_format = _DISPLAY_FORMAT_BY_STAGE.get(stage)
+    if display_format:
+        knock["display_format"] = display_format
     if username is not None:
         knock["user"] = username
     if password is not None:

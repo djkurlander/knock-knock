@@ -10,8 +10,8 @@ _PROTO_RE = re.compile(r"^[A-Z][A-Z0-9_]{0,15}$")
 _TOKEN_RE = re.compile(r"^[A-Z][A-Z0-9_]{0,31}$")
 _FORMAT_RE = re.compile(r"^[a-z][a-z0-9_]{0,31}$")
 _COLOR_RE = re.compile(r"^#[0-9A-Fa-f]{6}$|^[a-z][a-z0-9_-]{0,31}$")
-_DISPLAY_FORMATS = {None, "boolean", "code", "truncate", "list"}
-_DISPLAY_SPEC_KEYS = {"label", "value", "value_key", "format"}
+_DISPLAY_FORMATS = {None, "boolean", "truncate", "list", "username", "password"}
+_DISPLAY_SPEC_KEYS = {"label", "value", "value_key", "format", "max_len", "flag_key"}
 _COLUMN_TYPES = {"TEXT", "INTEGER", "REAL", "DATETIME", "BLOB"}
 _REPO_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -74,6 +74,7 @@ class ProtocolDefinition:
     default_display_format: str | None = None
     extra_tables: list[TableDefinition] = field(default_factory=list)
     process_knock: str | None = None
+    db_update: str | None = None
     after_save: str | None = None
 
 
@@ -121,6 +122,12 @@ def _check_display_rows(proto: str, rows, label: str) -> None:
                 _check_ident(proto, spec.get("value_key"), f"{label} value_key")
             if spec.get("format") not in _DISPLAY_FORMATS:
                 _fail(proto, f"{label} has unsupported display format: {spec.get('format')!r}")
+            if "max_len" in spec:
+                max_len = spec.get("max_len")
+                if not isinstance(max_len, int) or not (1 <= max_len <= 500):
+                    _fail(proto, f"{label} max_len must be an integer from 1 to 500")
+            if "flag_key" in spec:
+                _check_ident(proto, spec.get("flag_key"), f"{label} flag_key")
 
 
 def validate_protocol_definition(definition: ProtocolDefinition, *, built_in: bool = True) -> None:

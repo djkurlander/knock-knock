@@ -721,16 +721,28 @@ def _normalize_knock_username(value):
     return printable or ''
 
 
+_SMB_ACTION_FORMAT = {
+    'PROBE':          'probe',
+    'AUTH':           'auth',
+    'CONNECT':        'connect',
+    'LIST_SHARES':    'list_shares',
+    'CREATE_SERVICE': 'service_op',
+    'START_SERVICE':  'service_op',
+    'LIST_FILES':     'list_files',
+}
+
 def _emit_knock(ip, user=None, smb_share=None, smb_version=None,
                 smb_domain=None, smb_host=None,
                 smb_file=None, smb_action=None, smb_service_name=None,
                 trace_stage='knock'):
-    knock = {'type': 'KNOCK', 'proto': 'SMB', 'ip': ip}
-    if user is not None and (smb_action or 'UNKNOWN') == 'AUTH':
+    action = smb_action or 'UNKNOWN'
+    knock = {'type': 'KNOCK', 'proto': 'SMB', 'ip': ip,
+             'display_format': _SMB_ACTION_FORMAT.get(action, 'file_op')}
+    if user is not None and action == 'AUTH':
         knock['user'] = user.lower()
     if smb_share:          knock['smb_share']        = smb_share
     if smb_file:           knock['smb_file']         = smb_file
-    knock['smb_action'] = smb_action or 'UNKNOWN'
+    knock['smb_action'] = action
     if smb_version:        knock['smb_version']      = smb_version
     if smb_domain:         knock['smb_domain']       = smb_domain
     if smb_host:           knock['smb_host']         = smb_host

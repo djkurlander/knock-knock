@@ -59,7 +59,7 @@ DEFINITION = ProtocolDefinition(
                 {"label": "method", "value_key": "nred_method"},
             ],
             [
-                {"label": "path", "value_key": "nred_path", "format": "code"},
+                {"label": "path", "value_key": "nred_path", "max_len": 80},
             ],
         ],
         "auth": [
@@ -75,7 +75,7 @@ DEFINITION = ProtocolDefinition(
                 {"label": "client", "value_key": "nred_client_id"},
             ],
             [
-                {"label": "path", "value_key": "nred_path", "format": "code"},
+                {"label": "path", "value_key": "nred_path", "max_len": 80},
             ],
         ],
         "flow": [
@@ -91,7 +91,7 @@ DEFINITION = ProtocolDefinition(
                 {"label": "mqtt", "value_key": "nred_flow_has_mqtt", "format": "boolean"},
             ],
             [
-                {"label": "path", "value_key": "nred_path", "format": "code"},
+                {"label": "path", "value_key": "nred_path", "max_len": 80},
             ],
         ],
         "exploit": [
@@ -105,7 +105,7 @@ DEFINITION = ProtocolDefinition(
                 {"label": "method", "value_key": "nred_method"},
             ],
             [
-                {"label": "path", "value_key": "nred_path", "format": "code"},
+                {"label": "path", "value_key": "nred_path", "max_len": 80},
             ],
         ],
     },

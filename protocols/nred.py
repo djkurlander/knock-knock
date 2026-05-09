@@ -42,70 +42,59 @@ DEFINITION = ProtocolDefinition(
         PassthroughField("nred_body", sanitizer="body", max_len=2000),
     ],
     display_fields=[
+        DisplayField("nred_exploit", "Exploit"),
         DisplayField("nred_method", "Method"),
         DisplayField("nred_path", "Path"),
-        DisplayField("nred_purpose", "Purpose"),
-        DisplayField("nred_exploit", "Exploit"),
     ],
     display_formats={
         "request": [
             [
-                {"label": "purpose", "value_key": "nred_purpose"},
-            ],
-            [
-                {"label": "detail", "value_key": "nred_exploit", "format": "truncate"},
+                {"label": "exploit", "value_key": "nred_exploit"},
             ],
             [
                 {"label": "method", "value_key": "nred_method"},
-            ],
-            [
-                {"label": "path", "value_key": "nred_path", "max_len": 80},
+                {"label": "path",   "value_key": "nred_path", "format": "truncate"},
             ],
         ],
         "auth": [
             [
-                {"label": "purpose", "value_key": "nred_purpose"},
-                {"label": "mode", "value_key": "nred_auth_mode"},
+                {"label": "exploit", "value_key": "nred_exploit"},
+            ],
+            # No format — row suppressed when credentials absent (same pattern as MQTT connect)
+            [
+                {"label": "user", "value_key": "user"},
+                {"label": "pass", "value_key": "pass"},
             ],
             [
-                {"label": "user", "value_key": "nred_user"},
-            ],
-            [
-                {"label": "grant", "value_key": "nred_grant_type"},
+                {"label": "grant",  "value_key": "nred_grant_type"},
                 {"label": "client", "value_key": "nred_client_id"},
             ],
             [
-                {"label": "path", "value_key": "nred_path", "max_len": 80},
+                {"label": "method", "value_key": "nred_method"},
+                {"label": "path",   "value_key": "nred_path", "format": "truncate"},
             ],
         ],
         "flow": [
             [
-                {"label": "purpose", "value_key": "nred_purpose"},
-            ],
-            [
-                {"label": "exploit", "value_key": "nred_exploit", "format": "truncate"},
+                {"label": "exploit", "value_key": "nred_exploit"},
             ],
             [
                 {"label": "nodes", "value_key": "nred_flow_node_count"},
-                {"label": "exec", "value_key": "nred_flow_has_exec", "format": "boolean"},
-                {"label": "mqtt", "value_key": "nred_flow_has_mqtt", "format": "boolean"},
+                {"label": "exec",  "value_key": "nred_flow_has_exec", "format": "boolean"},
+                {"label": "mqtt",  "value_key": "nred_flow_has_mqtt", "format": "boolean"},
             ],
             [
-                {"label": "path", "value_key": "nred_path", "max_len": 80},
+                {"label": "method", "value_key": "nred_method"},
+                {"label": "path",   "value_key": "nred_path", "format": "truncate"},
             ],
         ],
         "exploit": [
             [
-                {"label": "purpose", "value_key": "nred_purpose"},
-            ],
-            [
-                {"label": "exploit", "value_key": "nred_exploit", "format": "truncate"},
+                {"label": "exploit", "value_key": "nred_exploit"},
             ],
             [
                 {"label": "method", "value_key": "nred_method"},
-            ],
-            [
-                {"label": "path", "value_key": "nred_path", "max_len": 80},
+                {"label": "path",   "value_key": "nred_path", "format": "truncate"},
             ],
         ],
     },

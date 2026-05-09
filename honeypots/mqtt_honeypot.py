@@ -76,8 +76,8 @@ def _load_signatures():
         compiled = []
         for idx, entry in enumerate(entries):
             compiled.append({
-                'name': entry['name'],
-                'purpose': entry.get('purpose'),
+                'scanner': entry.get('scanner'),
+                'exploit': entry.get('exploit'),
                 'priority': int(entry.get('priority', 1000)),
                 'order': idx,
                 'stage_re': _compile_signature_pattern(entry, 'stage_pattern'),
@@ -122,16 +122,16 @@ def _match_signature(knock):
         if sig['topic_re']:
             checks.append(any(sig['topic_re'].search(topic) for topic in _mqtt_topics(knock)))
         if checks and all(checks):
-            return sig['name'], sig.get('purpose')
+            return sig.get('scanner'), sig.get('exploit')
     return None, None
 
 
 def annotate_signature(knock):
-    name, purpose = _match_signature(knock)
-    if name:
-        knock['mqtt_signature'] = name
-    if purpose:
-        knock['mqtt_purpose'] = purpose
+    scanner, exploit = _match_signature(knock)
+    if scanner:
+        knock['mqtt_scanner'] = scanner
+    if exploit:
+        knock['mqtt_exploit'] = exploit
     return knock
 
 
@@ -145,7 +145,7 @@ def set_display_format(knock):
         'publish',
         'pingreq',
     }
-    knock['display_format'] = stage if stage in formats else 'packet'
+    knock['display_format'] = stage if stage in formats else 'other'
     return knock
 
 

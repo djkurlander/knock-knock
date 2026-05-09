@@ -989,7 +989,7 @@
         if (isFiltered) {
             lines.push(`<div style="${ROW}"><span style="${L};${LW}">Viewing:</span><span style="${G}">${activeProtocols.map(escapeHtml).join(', ')} only</span></div>`);
         }
-        lines.push(`<div style="${ROW}"><span style="${L};${LW}">Version:</span><span style="${G}">2.0.0</span></div>`);
+        lines.push(`<div style="${ROW}"><span style="${L};${LW}">Version:</span><span style="${G}">3.0.0 beta 1</span></div>`);
         if (isAggregator && sourceCountsCache.length > 0) {
             const nameMap = {};
             sourceCountsCache.forEach(r => {
@@ -1398,7 +1398,7 @@
         const maxLeft = Math.max(0, headerRect.width - switcherRect.width);
         left = Math.max(0, Math.min(left, maxLeft));
 
-        const top = Math.max(0, taglineRect.top - headerRect.top);
+        const top = Math.max(0, taglineRect.top - headerRect.top - 32);
         mid.style.left = `${Math.round(left)}px`;
         mid.style.top = `${Math.round(top)}px`;
     }

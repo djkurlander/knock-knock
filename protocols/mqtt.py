@@ -32,8 +32,8 @@ DEFINITION = ProtocolDefinition(
         Column("mqtt_protocol_name", "TEXT"),
         Column("mqtt_version", "TEXT"),
         Column("mqtt_keepalive", "INTEGER"),
-        Column("mqtt_signature", "TEXT"),
-        Column("mqtt_purpose", "TEXT"),
+        Column("mqtt_scanner", "TEXT"),
+        Column("mqtt_exploit", "TEXT"),
     ],
     field_map=[
         FieldMap("user", "username"),
@@ -45,26 +45,37 @@ DEFINITION = ProtocolDefinition(
         DisplayField("mqtt_client_id", "Client ID"),
         DisplayField("mqtt_version", "Version"),
         DisplayField("mqtt_packet_type", "Packet"),
-        DisplayField("mqtt_signature", "Signature"),
+        DisplayField("mqtt_scanner", "Scanner"),
     ],
     display_formats={
         "connect": [
             [
-                {"label": "purpose", "value_key": "mqtt_purpose"},
-                {"label": "scanner", "value_key": "mqtt_signature", "format": "truncate"},
+                {"label": "exploit", "value_key": "mqtt_exploit"},
             ],
             [
-                {"label": "client", "value_key": "mqtt_client_id"},
+                {"label": "type", "value_key": "mqtt_stage"},
+            ],
+            # No format — row is suppressed entirely when user/pass are absent (anonymous connects).
+            # format:"username"/"password" would show n/a even for missing fields, which we don't want here.
+            [
+                {"label": "user", "value_key": "user"},
+                {"label": "pass", "value_key": "pass"},
+            ],
+            [
+                {"label": "client",  "value_key": "mqtt_client_id"},
+                {"label": "scanner", "value_key": "mqtt_scanner", "format": "truncate"},
             ],
             [
                 {"label": "version", "value_key": "mqtt_version"},
-                {"label": "auth", "value_key": "mqtt_auth_result"},
             ],
         ],
         "malformed_connect": [
             [
-                {"label": "purpose", "value": "malformed connect"},
-                {"label": "packet", "value_key": "mqtt_packet_type"},
+                {"label": "exploit", "value_key": "mqtt_exploit"},
+            ],
+            [
+                {"label": "type",    "value_key": "mqtt_stage"},
+                {"label": "scanner", "value_key": "mqtt_scanner", "format": "truncate"},
             ],
             [
                 {"label": "error", "value_key": "mqtt_parse_error", "format": "truncate"},
@@ -72,62 +83,68 @@ DEFINITION = ProtocolDefinition(
         ],
         "non_connect": [
             [
-                {"label": "purpose", "value_key": "mqtt_purpose"},
-                {"label": "scanner", "value_key": "mqtt_signature", "format": "truncate"},
+                {"label": "exploit", "value_key": "mqtt_exploit"},
+            ],
+            [
+                {"label": "type",    "value_key": "mqtt_stage"},
+                {"label": "scanner", "value_key": "mqtt_scanner", "format": "truncate"},
             ],
             [
                 {"label": "packet", "value_key": "mqtt_packet_type"},
-            ],
-            [
-                {"label": "valid", "value_key": "mqtt_packet_valid", "format": "boolean"},
-                {"label": "bytes", "value_key": "mqtt_remaining_length"},
             ],
         ],
         "subscribe": [
             [
-                {"label": "purpose", "value_key": "mqtt_purpose"},
-                {"label": "scanner", "value_key": "mqtt_signature", "format": "truncate"},
+                {"label": "exploit", "value_key": "mqtt_exploit"},
             ],
             [
+                {"label": "type",  "value_key": "mqtt_stage"},
                 {"label": "topic", "value_key": "mqtt_topic", "max_len": 80},
             ],
             [
-                {"label": "client", "value_key": "mqtt_client_id"},
-                {"label": "qos", "value_key": "mqtt_qos"},
+                {"label": "client",  "value_key": "mqtt_client_id"},
+                {"label": "scanner", "value_key": "mqtt_scanner", "format": "truncate"},
             ],
         ],
         "publish": [
             [
-                {"label": "purpose", "value_key": "mqtt_purpose"},
-                {"label": "scanner", "value_key": "mqtt_signature", "format": "truncate"},
+                {"label": "exploit", "value_key": "mqtt_exploit"},
             ],
             [
+                {"label": "type",  "value_key": "mqtt_stage"},
                 {"label": "topic", "value_key": "mqtt_topic", "max_len": 80},
             ],
             [
-                {"label": "client", "value_key": "mqtt_client_id"},
-                {"label": "qos", "value_key": "mqtt_qos"},
-                {"label": "bytes", "value_key": "mqtt_payload_len"},
+                {"label": "client",  "value_key": "mqtt_client_id"},
+                {"label": "scanner", "value_key": "mqtt_scanner", "format": "truncate"},
             ],
         ],
         "pingreq": [
             [
-                {"label": "client", "value_key": "mqtt_client_id"},
-                {"label": "count", "value_key": "mqtt_pingreq_count"},
+                {"label": "exploit", "value_key": "mqtt_exploit"},
+            ],
+            [
+                {"label": "type", "value_key": "mqtt_stage"},
+            ],
+            [
+                {"label": "client",  "value_key": "mqtt_client_id"},
+                {"label": "scanner", "value_key": "mqtt_scanner", "format": "truncate"},
+                {"label": "count",   "value_key": "mqtt_pingreq_count"},
             ],
         ],
-        "packet": [
+        "other": [
             [
-                {"label": "purpose", "value_key": "mqtt_purpose"},
-                {"label": "scanner", "value_key": "mqtt_signature", "format": "truncate"},
+                {"label": "exploit", "value_key": "mqtt_exploit"},
+            ],
+            [
+                {"label": "type", "value_key": "mqtt_stage"},
             ],
             [
                 {"label": "packet", "value_key": "mqtt_packet_type"},
             ],
             [
-                {"label": "client", "value_key": "mqtt_client_id"},
-                {"label": "valid", "value_key": "mqtt_packet_valid", "format": "boolean"},
-                {"label": "bytes", "value_key": "mqtt_remaining_length"},
+                {"label": "client",  "value_key": "mqtt_client_id"},
+                {"label": "scanner", "value_key": "mqtt_scanner", "format": "truncate"},
             ],
         ],
     },

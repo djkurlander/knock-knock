@@ -10,6 +10,7 @@ RUN pip install --no-cache-dir \
     phonenumbers
 
 WORKDIR /app
-COPY monitor.py main.py constants.py index.html summary.html sitemap.xml robots.txt ./
+COPY monitor.py main.py constants.py protocol_api.py index.html summary.html sitemap.xml robots.txt ./
 COPY honeypots/ honeypots/
+COPY protocols/ protocols/
 COPY static/ static/

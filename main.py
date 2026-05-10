@@ -246,7 +246,6 @@ class GlobalStatsCache:
             await asyncio.sleep(60)
             try:
                 await self._refresh_cache()
-                print(f"📊 Stats Cache Updated: {self.last_updated}")
 
                 payload = await manager.get_initial_data(include_protocol_config=False, include_history=False)
                 await manager.broadcast(json.dumps({"type": "init_stats", "data": payload}))

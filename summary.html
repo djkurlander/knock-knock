@@ -744,7 +744,7 @@
                                 <span id="d-total-label" class="stat-label">Total Knocks:</span>&nbsp;<span id="d-total" class="stat-value">0</span>
                             </div>
                             <div class="d-stats">
-                                <span class="stat-label">Per Min:</span>&nbsp;<span id="d-kpm" class="stat-value">0.00</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="stat-label">LAST:</span>&nbsp;<span id="d-since" class="stat-value">-</span>
+                                <span class="stat-label">Per Min:</span>&nbsp;<span id="d-kpm" class="stat-value">0.0</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="stat-label">LAST:</span>&nbsp;<span id="d-since" class="stat-value">-</span>
                             </div>
                         </div>
                         <div id="d-latest-proto-chip" class="d-latest-proto-chip" aria-live="polite"></div>
@@ -764,7 +764,7 @@
         <div class="panel-intro" data-intro="feed2"></div>
         <div class="d-box" id="d-box-feed"><h2 style="display:flex;justify-content:space-between;align-items:center;"><span id="d-feed-label">LIVE FEED: LOGIN ATTEMPTS</span><span id="d-feed-proto-btn" class="proto-dropdown"><span class="proto-dropdown-trigger">ALL<span style="letter-spacing:0;margin-left:3px;font-size:1.2em">▾</span></span><span class="proto-dropdown-menu"></span></span></h2><div id="d-feed" class="d-content"></div></div>
         <div class="panel-intro" data-intro="feed3"></div>
-        <div class="panel-intro"><div class="proto-guide-panel"><div class="proto-guide-row"><span class="proto-badge" style="color:#00ff41"><span class="proto-badge-label">SSH</span></span><span>SSH allows humans and bots to log into remote servers. (port 22)</span></div><div class="proto-guide-row"><span class="proto-badge" style="color:#00fbff"><span class="proto-badge-label">TNET</span></span><span>TELNET is an older protocol for logging into remote machines. (port 23)</span></div><div class="proto-guide-row"><span class="proto-badge" style="color:#FFFF77"><span class="proto-badge-label">FTP</span></span><span>FTP is a legacy protocol, allowing files to be accessed remotely. (port 21)</span></div><div class="proto-guide-row"><span class="proto-badge" style="color:#ff1a1a"><span class="proto-badge-label">RDP</span></span><span>RDP supports logging in with a virtual desktop, usually on Windows. (port 3389)</span></div><div class="proto-guide-row"><span class="proto-badge" style="color:#d6d9df"><span class="proto-badge-label">SMB</span></span><span>SMB is a remote file access protocol, introduced by Windows. (port 445)</span></div><div class="proto-guide-row"><span class="proto-badge" style="color:#ff7a00"><span class="proto-badge-label">SIP</span></span><span>SIP allows humans and bots to make phone calls. (port 5060)</span></div><div class="proto-guide-row"><span class="proto-badge" style="color:#00ffaa"><span class="proto-badge-label">HTTP</span></span><span>HTTP is the web protocol, and bots probe it for exploitable apps and known vulnerabilities. (ports 80, 443)</span></div><div class="proto-guide-row"><span class="proto-badge" style="color:#ff00ff"><span class="proto-badge-label">SMTP</span></span><span>SMTP is the email protocol, which bots exploit to relay spam across the net. (ports 25, 587)</span></div></div></div>
+        <div class="panel-intro"><div id="d-proto-guide" class="proto-guide-panel"></div></div>
 
         <div class="panel-intro" data-intro="globe"></div>
         <div class="d-box" id="d-box-globe"><h2 style="display:flex;justify-content:space-between;align-items:center;">GLOBE VIEW<span class="proto-dropdown"><span class="proto-dropdown-trigger">ALL<span style="letter-spacing:0;margin-left:3px;font-size:1.2em">▾</span></span><span class="proto-dropdown-menu"></span></span></h2><div id="d-globe-location" style="text-align:center; margin-bottom:10px;"><div id="d-globe-loc-text" style="color:var(--neon-green);"></div><div id="d-globe-loc-isp" style="color:var(--data-blue); font-size:0.85em;"></div></div><div id="d-globe-pane" class="d-content globe-pane"></div></div>
@@ -823,7 +823,7 @@
                         <span id="m-total-label" class="stat-label">Total Knocks:</span>&nbsp;<span id="m-total" class="stat-value">0</span>
                     </div>
                     <div class="m-stat-row">
-                        <span class="stat-label">Per Min:</span>&nbsp;<span id="m-kpm" class="stat-value">0.00</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="stat-label">LAST:</span>&nbsp;<span id="m-since" class="stat-value">-</span>
+                        <span class="stat-label">Per Min:</span>&nbsp;<span id="m-kpm" class="stat-value">0.0</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="stat-label">LAST:</span>&nbsp;<span id="m-since" class="stat-value">-</span>
                     </div>
                 </div>
                 <div class="m-header-right">
@@ -835,7 +835,7 @@
         <div class="panel-intro" data-intro="feed2"></div>
         <div class="m-pane" id="m-pane-feed"><h2 style="display:flex;justify-content:space-between;align-items:center;"><span id="m-feed-label">LIVE FEED: LOGIN ATTEMPTS</span><span id="m-feed-proto-btn" class="proto-dropdown"><span class="proto-dropdown-trigger">ALL<span style="letter-spacing:0;margin-left:3px;font-size:1.2em">▾</span></span><span class="proto-dropdown-menu"></span></span></h2><div id="m-feed" class="m-content"></div></div>
         <div class="panel-intro" data-intro="feed3"></div>
-        <div class="panel-intro"><div class="proto-guide-panel"><div class="proto-guide-row"><span class="proto-badge" style="color:#00ff41"><span class="proto-badge-label">SSH</span></span><span>SSH allows humans and bots to log into remote servers. (port 22)</span></div><div class="proto-guide-row"><span class="proto-badge" style="color:#00fbff"><span class="proto-badge-label">TNET</span></span><span>TELNET is an older protocol for logging into remote machines. (port 23)</span></div><div class="proto-guide-row"><span class="proto-badge" style="color:#FFFF77"><span class="proto-badge-label">FTP</span></span><span>FTP is a legacy protocol, allowing files to be accessed remotely. (port 21)</span></div><div class="proto-guide-row"><span class="proto-badge" style="color:#ff1a1a"><span class="proto-badge-label">RDP</span></span><span>RDP supports logging in with a virtual desktop, usually on Windows. (port 3389)</span></div><div class="proto-guide-row"><span class="proto-badge" style="color:#d6d9df"><span class="proto-badge-label">SMB</span></span><span>SMB is a remote file access protocol, introduced by Windows. (port 445)</span></div><div class="proto-guide-row"><span class="proto-badge" style="color:#ff7a00"><span class="proto-badge-label">SIP</span></span><span>SIP allows humans and bots to make phone calls. (port 5060)</span></div><div class="proto-guide-row"><span class="proto-badge" style="color:#00ffaa"><span class="proto-badge-label">HTTP</span></span><span>HTTP is the web protocol, and bots probe it for exploitable apps and known vulnerabilities. (ports 80, 443)</span></div><div class="proto-guide-row"><span class="proto-badge" style="color:#ff00ff"><span class="proto-badge-label">SMTP</span></span><span>SMTP is the email protocol, which bots exploit to relay spam across the net. (ports 25, 587)</span></div></div></div>
+        <div class="panel-intro"><div id="m-proto-guide" class="proto-guide-panel"></div></div>
         <div class="panel-intro" data-intro="globe"></div>
         <div class="m-pane" id="m-pane-globe"><h2 style="display:flex;justify-content:space-between;align-items:center;">GLOBE VIEW<span class="proto-dropdown"><span class="proto-dropdown-trigger">ALL<span style="letter-spacing:0;margin-left:3px;font-size:1.2em">▾</span></span><span class="proto-dropdown-menu"></span></span></h2><div id="m-globe-location" style="text-align:center; margin-bottom:10px;"><div id="m-globe-loc-text" style="color:var(--neon-green);"></div><div id="m-globe-loc-isp" style="color:var(--data-blue); font-size:0.85em;"></div></div><div id="m-globe-pane" class="m-content globe-pane" style="display:flex; justify-content:center; align-items:center;"></div></div>
         <div class="panel-intro" data-intro="loc"></div>
@@ -894,8 +894,8 @@
     const PANEL_INTROS = {
         feed:       '<p>Set up an unprotected server on the net, and the bots start swarming. This site shows their break-in and exploitation attempts in real-time: where the bots come from, what credentials they try, and why. We have deployed a seemingly unprotected server on the internet, and on this page you will see all of the hostile infiltration attempts, live! You\'ll see brute force attacks, where bots rely on dictionary attacks or credential stuffing to try to break in. You\'ll see email spam bots trying to hijack this server as a relay for their malevolent goals. You\'ll see mercenary bots attempting to commandeer this server to place phone calls around the world for internet revenue sharing fraud. AND THAT\'S NOT ALL! Watch it here, as it happens.</p><p>Want the raw live view instead? <a href="/">Open the Live Control Panel</a>. Otherwise, continue below for the full guided explanation.</p>',
         feed_agg:   null, // built dynamically in updatePanelIntros()
-        feed2:      '<p>Each bot attempt to infiltrate this server is referred to as a \'knock\'. In the box above you can see the number of knocks, the knocks per minute, and how long ago the last knock occurred. To temporarily halt the incoming data, which can arrive fast and furious, press the pause button or hit the space bar. Enable the speaker icon to hear the knocks as they arrive, reminiscent of the clicks on a virtual geiger counter measuring what is sometimes referred to as the "background radiation of the internet". The globe spins to display the origin of the knock.</p><p>In the panel below, we see a scrollable history of the last 100 knocks received on this server. Remember, if the feed is updating quickly, feel free to pause and unpause using the pause button in the header, or by pressing the space bar.</p>',
-        feed2_agg:  '<p>Each bot attempt to infiltrate a server is referred to as a \'knock\'. In the box above you can see the total number of knocks across all servers, the knocks per minute, and how long ago the last knock occurred. To temporarily halt the incoming data, which can arrive fast and furious, press the pause button or hit the space bar. Enable the speaker icon to hear the knocks as they arrive, reminiscent of the clicks on a virtual geiger counter measuring what is sometimes referred to as the "background radiation of the internet". The globe spins to display the origin of the knock.</p><p>In the panel below, we see a scrollable history of the last 100 knocks received across all servers. Remember, if the feed is updating quickly, feel free to pause and unpause using the pause button in the header, or by pressing the space bar.</p>',
+        feed2:      '<p>Each bot attempt to infiltrate this server is referred to as a \'knock\'. In the box above you can see the number of knocks, the rolling knocks per minute over the last 10 minutes, and how long ago the last knock occurred. To temporarily halt the incoming data, which can arrive fast and furious, press the pause button or hit the space bar. Enable the speaker icon to hear the knocks as they arrive, reminiscent of the clicks on a virtual geiger counter measuring what is sometimes referred to as the "background radiation of the internet". The globe spins to display the origin of the knock.</p><p>In the panel below, we see a scrollable history of the last 100 knocks received on this server. Remember, if the feed is updating quickly, feel free to pause and unpause using the pause button in the header, or by pressing the space bar.</p>',
+        feed2_agg:  '<p>Each bot attempt to infiltrate a server is referred to as a \'knock\'. In the box above you can see the total number of knocks across all servers, the rolling knocks per minute over the last 10 minutes, and how long ago the last knock occurred. To temporarily halt the incoming data, which can arrive fast and furious, press the pause button or hit the space bar. Enable the speaker icon to hear the knocks as they arrive, reminiscent of the clicks on a virtual geiger counter measuring what is sometimes referred to as the "background radiation of the internet". The globe spins to display the origin of the knock.</p><p>In the panel below, we see a scrollable history of the last 100 knocks received across all servers. Remember, if the feed is updating quickly, feel free to pause and unpause using the pause button in the header, or by pressing the space bar.</p>',
         feed3:  '<p>You can use the protocol drop down menu, at the right of the header, to filter the knocks to a specific protocol. Each of the live knocks above has a protocol badge to the right. Protocols are used to gain access to services on a remote computer, and the protocols monitored here are listed below.</p>',
         globe:  '<p>Half the fun (at least for me) is seeing where all these knocks originate. This project started when I showed my kids raw login-attempt logs (initially SSH), and they asked: where are all these bots coming from? In the globe view, each knock is plotted as a dot on a 3D globe to show the bot\'s origin. Take it out for a spin (literally, you can spin it interactively). You can also cycle through multiple visual styles with the Style button at the bottom of the panel. One of the most interesting is HEAT, a 3D heatmap that highlights the worst-offending countries and territories.</p>',
         loc:    '<p>To see these origins in a textual leaderboard, check out the LOCATION panel below. Here you can see the worst-offending bot origin countries. Technically, just because a bot is hosted there does not mean it is controlled by bad actors in that country; the attackers may be elsewhere, using servers they rent or infect.</p>',
@@ -1160,6 +1160,21 @@
         }).join('<span style="color:var(--neon-green)">, </span>');
     }
 
+    function renderProtocolGuide() {
+        const rows = TRACKED_PROTOCOLS.map(proto => {
+            const meta = SERVER_PROTOCOL_META[proto] || {};
+            const badge = meta.badge || proto;
+            const color = meta.color || PROTO_COLORS[proto] || PROTO_COLORS.ALL;
+            const description = meta.description || `${proto} traffic is monitored by this installation.`;
+            const ports = meta.ports_label ? ` (${escapeHtml(meta.ports_label)})` : '';
+            return `<div class="proto-guide-row"><span class="proto-badge" style="color:${escapeHtml(color)}"><span class="proto-badge-label">${escapeHtml(badge)}</span></span><span>${escapeHtml(description)}${ports}</span></div>`;
+        }).join('');
+        ['d-proto-guide', 'm-proto-guide'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.innerHTML = rows;
+        });
+    }
+
     function updateAboutServerInfo() {
         const L = 'color:var(--ui-label)';
         const G = 'color:var(--neon-green)';
@@ -1199,20 +1214,6 @@
         return sum;
     }
 
-    function getFilteredKpm() {
-        if (activeProtocols.length === TRACKED_PROTOCOLS.length) {
-            const mins = Number(uptimeMinutesCache) || 0;
-            return mins > 0 ? (getFilteredTotal() / mins).toFixed(2) : '0.00';
-        }
-        let totalKpm = 0;
-        activeProtocols.forEach(p => {
-            const uptime = Number(protoBreakdownCache?.[p]?.uptime || 0);
-            const count = Number(protoBreakdownCache?.[p]?.count || 0);
-            if (uptime > 0) totalKpm += count / uptime;
-        });
-        return totalKpm.toFixed(2);
-    }
-
     function getFilteredLastKnockTime() {
         let latest = null;
         activeProtocols.forEach(p => {
@@ -1225,6 +1226,10 @@
     function updateHeaderStats(total, kpm) {
         ['d-total', 'm-total'].forEach(id => document.getElementById(id).innerText = total.toLocaleString());
         ['d-kpm', 'm-kpm'].forEach(id => document.getElementById(id).innerText = kpm);
+    }
+
+    function refreshHeaderStats() {
+        updateHeaderStats(isFiltered ? getFilteredTotal() : totalGlobalCache, getRollingKpm());
     }
 
     function hasUserField(d) {
@@ -1326,6 +1331,7 @@
         }
 
         ensureFeedBuckets();
+        renderProtocolGuide();
         renderDesktopProtocolSwitcher();
     }
 
@@ -1766,6 +1772,10 @@
     let protoBreakdownCache = {};
     let sourceCountsCache = [];   // [{source_id, display_name, hits}] sorted by hits desc
     let uptimeMinutesCache = 0;
+    let totalGlobalCache = 0;
+    const ROLLING_RATE_SECONDS = 600;
+    const ROLLING_RATE_MINUTES = ROLLING_RATE_SECONDS / 60;
+    let rollingKnockTimes = [];
     let hitsMap = {}, rankMap = {};
 
     // Per-protocol feed arrays (newest at index 0)
@@ -1790,6 +1800,33 @@
         return out;
     }
 
+    function pruneRollingKnockTimes() {
+        const cutoff = Math.floor(Date.now() / 1000) - ROLLING_RATE_SECONDS;
+        rollingKnockTimes = rollingKnockTimes.filter(t => t >= cutoff);
+    }
+
+    function knockEventTime(d) {
+        const t = Number(d?.t);
+        return Number.isFinite(t) ? Math.floor(t) : Math.floor(Date.now() / 1000);
+    }
+
+    function recordRollingKnock(d) {
+        const proto = (d?.proto || '').toUpperCase();
+        if (!TRACKED_PROTOCOLS.includes(proto)) return;
+        rollingKnockTimes.push(knockEventTime(d));
+        pruneRollingKnockTimes();
+    }
+
+    function seedRollingKnockRates(history) {
+        rollingKnockTimes = (history || []).map(knockEventTime);
+        pruneRollingKnockTimes();
+    }
+
+    function getRollingKpm() {
+        pruneRollingKnockTimes();
+        return (rollingKnockTimes.length / ROLLING_RATE_MINUTES).toFixed(1);
+    }
+
     function bumpProtoBreakdownWithKnock(d) {
         const proto = (d?.proto || '').toUpperCase();
         if (!TRACKED_PROTOCOLS.includes(proto)) return;
@@ -1797,11 +1834,7 @@
             protoBreakdownCache[proto] = { count: 0, pct: 0, uptime: 0 };
         }
         protoBreakdownCache[proto].count += 1;
-        const protoUptime = Number(d?.proto_uptime);
-        if (Number.isFinite(protoUptime) && protoUptime > 0) {
-            protoBreakdownCache[proto].uptime = protoUptime;
-        }
-        const total = Number(d?.total_global);
+        const total = Number(totalGlobalCache);
         if (Number.isFinite(total) && total > 0) {
             TRACKED_PROTOCOLS.forEach(name => {
                 const count = Number(protoBreakdownCache[name]?.count || 0);
@@ -3332,24 +3365,21 @@
                     pulseProtoChip(d.proto, MOBILE_LATEST_PROTO_CHIP);
                 }
                 if (knockMatchesFilter(d)) pulseGlobeAtmosphere();
-                const now = Math.floor(Date.now() / 1000);
-                lastKnockTime = now;
-                lastKnockTimeByProto[knockProto] = now;
+                const knockTime = knockEventTime(d);
+                lastKnockTime = knockTime;
+                lastKnockTimeByProto[knockProto] = knockTime;
                 if (!isFiltered || activeProtocols.includes(knockProto)) {
                     document.getElementById('m-since').innerText = '0s';
                     document.getElementById('d-since').innerText = '0s';
                 }
                 if (d.iso) hitsMap[d.iso] = (hitsMap[d.iso] || 0) + 1;
+                totalGlobalCache += 1;
+                recordRollingKnock(d);
                 addToFeed(d);
                 renderKnock(d, true);
-                if (Number.isFinite(Number(d.uptime_minutes))) uptimeMinutesCache = Number(d.uptime_minutes);
                 bumpProtoBreakdownWithKnock(d);
                 bumpSourceCountsWithKnock(d);
-                if (isFiltered) {
-                    updateHeaderStats(getFilteredTotal(), getFilteredKpm());
-                } else {
-                    updateHeaderStats(d.total_global, d.kpm);
-                }
+                refreshHeaderStats();
                 renderProtoStats();
                 pulseProtoStatsRow(d.proto);
                 pulseSourceStatsRow(d.source);
@@ -3374,6 +3404,7 @@
                     applyProtocolConfig(d.enabled_protocols, d.protocol_meta);
                 }
                 uptimeMinutesCache = Number(d.uptime_minutes || 0);
+                totalGlobalCache = Number(d.total || 0);
                 if (d.last_knock_time) lastKnockTime = d.last_knock_time;
                 // Store leaderboards globally for ranking lookups
                 leaderboards.loc = d.top_locations || [];
@@ -3394,7 +3425,7 @@
 
                 // Update header stats (filtered or global)
                 if (isFiltered) {
-                    updateHeaderStats(getFilteredTotal(), getFilteredKpm());
+                    refreshHeaderStats();
                     const filteredAgo = getFilteredLastKnockTime();
                     if (filteredAgo) {
                         const secs = Math.floor(Date.now() / 1000 - filteredAgo) + 's';
@@ -3402,7 +3433,7 @@
                         document.getElementById('d-since').innerText = secs;
                     }
                 } else {
-                    updateHeaderStats(d.total || 0, d.kpm || '0.00');
+                    refreshHeaderStats();
                     if (d.last_knock_time) {
                         const secs = Math.floor(Date.now() / 1000 - d.last_knock_time) + 's';
                         document.getElementById('m-since').innerText = secs;
@@ -3434,6 +3465,8 @@
                     activeProtocols.forEach(proto => {
                         feedData[proto] = (ph[proto.toLowerCase()] || []).slice(0, MAX_PER_PANEL);
                     });
+                    seedRollingKnockRates(feedData.ALL);
+                    refreshHeaderStats();
                     refreshFeed();
                     const activeMode = getCurrentMode();
                     const topKnock = feedData[activeMode]?.[0];
@@ -3616,6 +3649,7 @@
         setupTriviaObserver();
         updateSoundIcon();
         updatePauseIcon();
+        setInterval(refreshHeaderStats, 1000);
 
         // Add drag-aware click handler for desktop GLOBE pane
         const globeBox = document.getElementById('d-box-globe');

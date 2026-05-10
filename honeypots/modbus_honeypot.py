@@ -45,14 +45,45 @@ READ_FCS    = frozenset({0x01, 0x02, 0x03, 0x04})
 WRITE_FCS   = frozenset({0x05, 0x06, 0x0F, 0x10, 0x17})
 IDENTIFY_FCS = frozenset({0x11, 0x2B, 0x5A})
 
-# Fake Schneider Electric Modicon M340 PLC identity
-_VENDOR       = b'Schneider Electric'
-_PRODUCT_CODE = b'BMX P34 2020'
-_REVISION     = b'V2.60'
-_VENDOR_URL   = b'www.schneider-electric.com'
-_PRODUCT_NAME = b'Modicon M340'
-_MODEL_NAME   = b'BMX P34 2020'
-_SERVER_ID    = b'\x01\xFFModicon_M340'
+def _limit_bytes(name, value, max_len=255):
+    if len(value) <= max_len:
+        return value
+    print(f'[modb] {name} is longer than {max_len} bytes; truncating', flush=True)
+    return value[:max_len]
+
+
+def _env_bytes(name, default):
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    return _limit_bytes(name, value.encode('utf-8'))
+
+
+def _env_server_id():
+    value = os.environ.get('MODB_SERVERID')
+    if value is None:
+        return b'\x01\xFFModicon_M340'
+    if value.startswith('hex:'):
+        try:
+            return _limit_bytes('MODB_SERVERID', bytes.fromhex(value[4:].replace(' ', '')))
+        except ValueError:
+            print('[modb] Invalid MODB_SERVERID hex value; using default', flush=True)
+            return b'\x01\xFFModicon_M340'
+    if value.startswith('text:'):
+        value = value[5:]
+    return _limit_bytes('MODB_SERVERID', b'\x01\xFF' + value.encode('utf-8'))
+
+
+# Fake Schneider Electric Modicon M340 PLC identity. Override with MODB_VENDOR,
+# MODB_PRODUCT_CODE, MODB_REVISION, MODB_VENDOR_URL, MODB_PRODUCT_NAME,
+# MODB_MODEL_NAME, and MODB_SERVERID.
+_VENDOR       = _env_bytes('MODB_VENDOR', b'Schneider Electric')
+_PRODUCT_CODE = _env_bytes('MODB_PRODUCT_CODE', b'BMX P34 2020')
+_REVISION     = _env_bytes('MODB_REVISION', b'V2.60')
+_VENDOR_URL   = _env_bytes('MODB_VENDOR_URL', b'www.schneider-electric.com')
+_PRODUCT_NAME = _env_bytes('MODB_PRODUCT_NAME', b'Modicon M340')
+_MODEL_NAME   = _env_bytes('MODB_MODEL_NAME', b'BMX P34 2020')
+_SERVER_ID    = _env_server_id()
 
 # Stable fake process register values — generated once at startup
 _FAKE_REGS = [random.randint(0, 32767) for _ in range(256)]
@@ -158,7 +189,10 @@ def build_response(fc, data):
             return bytes([fc, 0x0E, read_code, 0x83, 0x00, 0x00, 6]) + objects
 
         else:
-            return make_exception(fc, 0x01)
+            # Return generic success for unknown/proprietary FCs rather than
+            # exception 0x01, to encourage further probing and reveal attacker tools.
+            sub_fn = data[0] if data else 0x00
+            return bytes([fc, sub_fn, 0x00])
 
     except Exception:
         return make_exception(fc, 0x04)

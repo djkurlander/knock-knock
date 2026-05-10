@@ -174,6 +174,8 @@ async def load_protocol_runtime_config():
             "supports_pass_panel": bool(PROTOCOL_META.get(name, {}).get("supports_pass_panel", False)),
             "color": PROTOCOL_META.get(name, {}).get("color", "#ffcc00"),
             "badge": PROTOCOL_META.get(name, {}).get("badge", name),
+            "description": PROTOCOL_META.get(name, {}).get("description", ""),
+            "ports_label": PROTOCOL_META.get(name, {}).get("ports_label", ""),
         }
         for name in PROTO.keys()
     }
@@ -191,7 +193,11 @@ async def load_protocol_runtime_config():
         if definition.default_display_format:
             meta["default_display_format"] = definition.default_display_format
     try:
-        protocol_meta = json.loads(protocol_meta_raw) if protocol_meta_raw else default_protocol_meta
+        parsed_meta = json.loads(protocol_meta_raw) if protocol_meta_raw else {}
+        protocol_meta = {
+            name: {**default_protocol_meta.get(name, {}), **(parsed_meta.get(name, {}) if isinstance(parsed_meta, dict) else {})}
+            for name in default_protocol_meta
+        } if parsed_meta else default_protocol_meta
     except Exception:
         protocol_meta = default_protocol_meta
     return enabled_protocols, protocol_meta
@@ -428,15 +434,6 @@ async def redis_listener():
     async for message in pubsub.listen():
         if message["type"] == "message":
             data = json.loads(message["data"])
-            data["kpm"] = await manager.get_kpm()
-            total_val = await r.get("knock:total_global")
-            uptime_val = await r.get("knock:uptime_minutes")
-            data["total_global"] = int(total_val) if total_val else 0
-            data["uptime_minutes"] = int(uptime_val) if uptime_val else 0
-            proto_name = data.get("proto", "").upper()
-            if proto_name:
-                pu = await r.get(f"knock:uptime:{proto_name.lower()}")
-                data["proto_uptime"] = int(pu) if pu else 0
             payload = json.dumps({"type": "new_knock", "data": data})
             await manager.broadcast(payload)
 

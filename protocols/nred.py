@@ -8,6 +8,8 @@ DEFINITION = ProtocolDefinition(
     badge_color="#d95f5f",
     ui_order=95,
     honeypot_script="honeypots/node_red_honeypot.py",
+    description="Node-RED is a web-based automation tool, which bots try to commandeer.",
+    ports_label="port 1880",
     default_enabled_entries=["NRED:1880"],
     option_args={
         "TLS": ["--ssl"],

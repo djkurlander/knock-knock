@@ -80,6 +80,8 @@ for definition, built_in in REGISTERED_PROTOCOLS:
         'badge': definition.badge,
         'supports_user_panel': bool(definition.supports_user_panel),
         'supports_pass_panel': bool(definition.supports_pass_panel),
+        'description': definition.description,
+        'ports_label': definition.ports_label,
         'honeypot_script': definition.honeypot_script,
         'honeypot_args': list(definition.honeypot_args),
         'definition': definition,

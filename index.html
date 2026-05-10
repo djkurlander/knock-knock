@@ -72,8 +72,9 @@
             line-height: 1.5;
             position: relative;
             overflow: visible;
-            -webkit-user-select: text;
-            user-select: text;
+            -webkit-user-select: none;
+            user-select: none;
+            -webkit-touch-callout: none;
         }
         .knock::before {
             content: '';
@@ -90,6 +91,57 @@
         }
         .knock-meta { font-size: 0.9em; }
         .knock-pass { color: var(--neon-green); }
+        .knock-detail-backdrop {
+            position: fixed;
+            inset: 0;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            background: rgba(0,0,0,0.55);
+            z-index: 10001;
+        }
+        .knock-detail-dialog {
+            width: min(760px, calc(100vw - 28px));
+            max-height: min(720px, calc(100dvh - 28px));
+            background: #050505;
+            border: 1px solid #333;
+            box-shadow: 0 0 18px rgba(0,255,65,0.25);
+            padding: 14px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .knock-detail-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            color: var(--neon-green);
+            font-weight: bold;
+        }
+        .knock-detail-actions { display: flex; gap: 8px; }
+        .knock-detail-actions button {
+            border: 1px solid #333;
+            background: #111;
+            color: var(--neon-green);
+            padding: 4px 8px;
+            font: 0.9em/1.2 inherit;
+            cursor: pointer;
+        }
+        .knock-detail-actions button:hover { background: #1a1a1a; }
+        .knock-detail-actions button:active {
+            background: rgba(0,255,65,0.16);
+            transform: translateY(1px);
+            box-shadow: inset 0 0 8px rgba(0,255,65,0.25);
+        }
+        .knock-detail-json {
+            min-height: 0;
+            margin: 0;
+            overflow: auto;
+            white-space: pre-wrap;
+            user-select: text;
+            color: var(--data-blue);
+            font: 12px/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        }
 
         .bar-row {
             margin-bottom: 12px;
@@ -778,6 +830,18 @@
         </div>
     </div>
 </div>
+<div id="knock-detail-backdrop" class="knock-detail-backdrop">
+    <div class="knock-detail-dialog" role="dialog" aria-modal="true" aria-labelledby="knock-detail-title">
+        <div class="knock-detail-header">
+            <span id="knock-detail-title">KNOCK DETAILS</span>
+            <div class="knock-detail-actions">
+                <button type="button" id="knock-detail-copy">Copy</button>
+                <button type="button" id="knock-detail-close">Close</button>
+            </div>
+        </div>
+        <pre id="knock-detail-json" class="knock-detail-json"></pre>
+    </div>
+</div>
 
 <script>
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -1015,20 +1079,6 @@
         return sum;
     }
 
-    function getFilteredKpm() {
-        if (activeProtocols.length === TRACKED_PROTOCOLS.length) {
-            const mins = Number(uptimeMinutesCache) || 0;
-            return mins > 0 ? (getFilteredTotal() / mins).toFixed(2) : '0.00';
-        }
-        let totalKpm = 0;
-        activeProtocols.forEach(p => {
-            const uptime = Number(protoBreakdownCache?.[p]?.uptime || 0);
-            const count = Number(protoBreakdownCache?.[p]?.count || 0);
-            if (uptime > 0) totalKpm += count / uptime;
-        });
-        return totalKpm.toFixed(2);
-    }
-
     function getFilteredLastKnockTime() {
         let latest = null;
         activeProtocols.forEach(p => {
@@ -1041,6 +1091,10 @@
     function updateHeaderStats(total, kpm) {
         ['d-total', 'm-total'].forEach(id => document.getElementById(id).innerText = total.toLocaleString());
         ['d-kpm', 'm-kpm'].forEach(id => document.getElementById(id).innerText = kpm);
+    }
+
+    function refreshHeaderStats() {
+        updateHeaderStats(isFiltered ? getFilteredTotal() : totalGlobalCache, getRollingKpm());
     }
 
     function hasUserField(d) {
@@ -1452,6 +1506,7 @@
         renderLeaderboards(active);
         refreshHeatGlobe(active.loc);
         refreshFeed();
+        refreshHeaderStats();
         document.querySelectorAll('.d-content, .m-content').forEach(el => el.scrollTop = 0);
         const topKnock = feedData[newMode]?.[0];
         if (topKnock) {
@@ -1636,6 +1691,10 @@
     let protoBreakdownCache = {};
     let sourceCountsCache = [];   // [{source_id, display_name, hits}] sorted by hits desc
     let uptimeMinutesCache = 0;
+    let totalGlobalCache = 0;
+    const ROLLING_RATE_SECONDS = 600;
+    const ROLLING_RATE_MINUTES = ROLLING_RATE_SECONDS / 60;
+    let rollingKnockTimes = [];
     let hitsMap = {}, rankMap = {};
     let currentLayout = window.innerWidth > 800 ? 'd-' : 'm-';
 
@@ -1661,6 +1720,33 @@
         return out;
     }
 
+    function pruneRollingKnockTimes() {
+        const cutoff = Math.floor(Date.now() / 1000) - ROLLING_RATE_SECONDS;
+        rollingKnockTimes = rollingKnockTimes.filter(t => t >= cutoff);
+    }
+
+    function knockEventTime(d) {
+        const t = Number(d?.t);
+        return Number.isFinite(t) ? Math.floor(t) : Math.floor(Date.now() / 1000);
+    }
+
+    function recordRollingKnock(d) {
+        const proto = (d?.proto || '').toUpperCase();
+        if (!TRACKED_PROTOCOLS.includes(proto)) return;
+        rollingKnockTimes.push(knockEventTime(d));
+        pruneRollingKnockTimes();
+    }
+
+    function seedRollingKnockRates(history) {
+        rollingKnockTimes = (history || []).map(knockEventTime);
+        pruneRollingKnockTimes();
+    }
+
+    function getRollingKpm() {
+        pruneRollingKnockTimes();
+        return (rollingKnockTimes.length / ROLLING_RATE_MINUTES).toFixed(1);
+    }
+
     function bumpProtoBreakdownWithKnock(d) {
         const proto = (d?.proto || '').toUpperCase();
         if (!TRACKED_PROTOCOLS.includes(proto)) return;
@@ -1668,11 +1754,7 @@
             protoBreakdownCache[proto] = { count: 0, pct: 0, uptime: 0 };
         }
         protoBreakdownCache[proto].count += 1;
-        const protoUptime = Number(d?.proto_uptime);
-        if (Number.isFinite(protoUptime) && protoUptime > 0) {
-            protoBreakdownCache[proto].uptime = protoUptime;
-        }
-        const total = Number(d?.total_global);
+        const total = Number(totalGlobalCache);
         if (Number.isFinite(total) && total > 0) {
             TRACKED_PROTOCOLS.forEach(name => {
                 const count = Number(protoBreakdownCache[name]?.count || 0);
@@ -2916,6 +2998,149 @@
         return renderMetadataFeedFields(d, proto) || renderDefaultCredBlock(d);
     }
 
+    let contextKnockData = null;
+    const KNOCK_DETAIL_HIDDEN_KEYS = new Set([
+        'kpm', 'total_global', 'uptime_minutes', 'proto_uptime', 'display_format',
+        'country_hits', 'country_last', 'country_hits_proto', 'country_last_proto',
+        'user_hits', 'user_last', 'user_hits_proto', 'user_last_proto',
+        'pass_hits', 'pass_last', 'pass_hits_proto', 'pass_last_proto',
+        'isp_hits', 'isp_last', 'isp_hits_proto', 'isp_last_proto',
+        'ip_hits', 'ip_last', 'ip_hits_since_cleared', 'ip_hits_proto', 'ip_last_proto',
+        'source_int', 'source_display',
+    ]);
+
+    function formatKnockDetailValue(value) {
+        if (value === null) return 'null';
+        if (value === undefined) return 'undefined';
+        if (typeof value === 'string') return value;
+        if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+        return JSON.stringify(value, null, 2);
+    }
+
+    function knockDetailText(d) {
+        return Object.entries(d || {})
+            .filter(([key]) => !KNOCK_DETAIL_HIDDEN_KEYS.has(key))
+            .map(([key, value]) => {
+                if (key === 't' && Number.isFinite(Number(value))) {
+                    return `${key}: ${value} (${new Date(Number(value) * 1000).toISOString().replace('T', ' ').replace('.000Z', ' UTC')})`;
+                }
+                return `${key}: ${formatKnockDetailValue(value)}`;
+            })
+            .join('\n');
+    }
+
+    function snapshotKnockData(d) {
+        try {
+            if (typeof structuredClone === 'function') return structuredClone(d);
+        } catch {}
+        return d && typeof d === 'object' ? { ...d } : d;
+    }
+
+    function handleKnockContextMenu(ev, d) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        showKnockDetails(d);
+    }
+
+    function wireKnockLongPress(el, getData) {
+        const delayMs = 700;
+        const moveLimitPx = 12;
+        let timer = null;
+        let startX = 0;
+        let startY = 0;
+        let fired = false;
+
+        const clear = () => {
+            if (timer) clearTimeout(timer);
+            timer = null;
+        };
+
+        el.addEventListener('pointerdown', ev => {
+            if (ev.pointerType !== 'touch') return;
+            clear();
+            fired = false;
+            startX = ev.clientX;
+            startY = ev.clientY;
+            timer = setTimeout(() => {
+                timer = null;
+                fired = true;
+                showKnockDetails(getData());
+            }, delayMs);
+        }, { passive: true });
+
+        el.addEventListener('pointermove', ev => {
+            if (!timer || ev.pointerType !== 'touch') return;
+            const dx = Math.abs(ev.clientX - startX);
+            const dy = Math.abs(ev.clientY - startY);
+            if (dx > moveLimitPx || dy > moveLimitPx) clear();
+        }, { passive: true });
+
+        ['pointerup', 'pointercancel', 'pointerleave'].forEach(type => {
+            el.addEventListener(type, clear, { passive: true });
+        });
+
+        el.addEventListener('click', ev => {
+            if (!fired) return;
+            ev.preventDefault();
+            ev.stopPropagation();
+            fired = false;
+        });
+    }
+
+    async function copyKnockDetails(d) {
+        const text = knockDetailText(d);
+        try {
+            if (navigator.clipboard && window.isSecureContext) {
+                await navigator.clipboard.writeText(text);
+                return;
+            }
+        } catch {}
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.position = 'fixed';
+        ta.style.left = '-9999px';
+        document.body.appendChild(ta);
+        ta.focus();
+        ta.select();
+        try { document.execCommand('copy'); } finally { ta.remove(); }
+    }
+
+    function showKnockDetails(d) {
+        const backdrop = document.getElementById('knock-detail-backdrop');
+        const json = document.getElementById('knock-detail-json');
+        if (!backdrop || !json) return;
+        contextKnockData = snapshotKnockData(d);
+        json.textContent = knockDetailText(contextKnockData);
+        backdrop.style.display = 'flex';
+    }
+
+    function hideKnockDetails() {
+        const backdrop = document.getElementById('knock-detail-backdrop');
+        if (backdrop) backdrop.style.display = 'none';
+    }
+
+    function wireKnockDetailControls() {
+        const backdrop = document.getElementById('knock-detail-backdrop');
+        if (backdrop) {
+            backdrop.addEventListener('click', ev => {
+                if (ev.target === backdrop) hideKnockDetails();
+            });
+        }
+        const copyButton = document.getElementById('knock-detail-copy');
+        if (copyButton) {
+            copyButton.addEventListener('click', async () => {
+                if (contextKnockData) await copyKnockDetails(contextKnockData);
+            });
+        }
+        const closeButton = document.getElementById('knock-detail-close');
+        if (closeButton) closeButton.addEventListener('click', hideKnockDetails);
+        document.addEventListener('keydown', ev => {
+            if (ev.key === 'Escape') {
+                hideKnockDetails();
+            }
+        });
+    }
+
     function makeKnockEl(d) {
         const loc = formatLocation(d);
         const safeLoc = escapeHtml(loc);
@@ -2923,6 +3148,9 @@
         const protoLine = protocolFeedFields(d);
         const div = document.createElement('div');
         div.className = 'knock';
+        div._knockData = d;
+        div.addEventListener('contextmenu', ev => handleKnockContextMenu(ev, div._knockData));
+        wireKnockLongPress(div, () => div._knockData);
         div.innerHTML = `
             <div class="knock-location"><span style="display:flex;align-items:center;gap:0.3em"><strong>${getFlag(d.iso)}</strong> <strong>${safeLoc}</strong></span>${getProtoBadge(d.proto)}</div>
             ${protoLine}<br>
@@ -3156,24 +3384,21 @@
                     pulseProtoChip(d.proto, MOBILE_LATEST_PROTO_CHIP);
                 }
                 if (knockMatchesFilter(d)) pulseGlobeAtmosphere();
-                const now = Math.floor(Date.now() / 1000);
-                lastKnockTime = now;
-                lastKnockTimeByProto[knockProto] = now;
+                const knockTime = knockEventTime(d);
+                lastKnockTime = knockTime;
+                lastKnockTimeByProto[knockProto] = knockTime;
                 if (!isFiltered || activeProtocols.includes(knockProto)) {
                     document.getElementById('m-since').innerText = '0s';
                     document.getElementById('d-since').innerText = '0s';
                 }
                 if (d.iso) hitsMap[d.iso] = (hitsMap[d.iso] || 0) + 1;
+                totalGlobalCache += 1;
+                recordRollingKnock(d);
                 addToFeed(d);
                 renderKnock(d, true);
-                if (Number.isFinite(Number(d.uptime_minutes))) uptimeMinutesCache = Number(d.uptime_minutes);
                 bumpProtoBreakdownWithKnock(d);
                 bumpSourceCountsWithKnock(d);
-                if (isFiltered) {
-                    updateHeaderStats(getFilteredTotal(), getFilteredKpm());
-                } else {
-                    updateHeaderStats(d.total_global, d.kpm);
-                }
+                refreshHeaderStats();
                 renderProtoStats();
                 pulseProtoStatsRow(d.proto);
                 pulseSourceStatsRow(d.source);
@@ -3206,6 +3431,7 @@
                     panelVisibilityMayHaveChanged = true;
                 }
                 uptimeMinutesCache = Number(d.uptime_minutes || 0);
+                totalGlobalCache = Number(d.total || 0);
                 if (d.last_knock_time) lastKnockTime = d.last_knock_time;
                 // Store leaderboards globally for ranking lookups
                 leaderboards.loc = d.top_locations || [];
@@ -3226,7 +3452,7 @@
 
                 // Update header stats (filtered or global)
                 if (isFiltered) {
-                    updateHeaderStats(getFilteredTotal(), getFilteredKpm());
+                    refreshHeaderStats();
                     const filteredAgo = getFilteredLastKnockTime();
                     if (filteredAgo) {
                         const secs = Math.floor(Date.now() / 1000 - filteredAgo) + 's';
@@ -3234,7 +3460,7 @@
                         document.getElementById('d-since').innerText = secs;
                     }
                 } else {
-                    updateHeaderStats(d.total || 0, d.kpm || '0.00');
+                    refreshHeaderStats();
                     if (d.last_knock_time) {
                         const secs = Math.floor(Date.now() / 1000 - d.last_knock_time) + 's';
                         document.getElementById('m-since').innerText = secs;
@@ -3265,6 +3491,8 @@
                     activeProtocols.forEach(proto => {
                         feedData[proto] = (ph[proto.toLowerCase()] || []).slice(0, MAX_PER_PANEL);
                     });
+                    seedRollingKnockRates(feedData.ALL);
+                    refreshHeaderStats();
                     refreshFeed();
                     const activeMode = getCurrentMode();
                     const topKnock = feedData[activeMode]?.[0];
@@ -3561,8 +3789,10 @@
         initPaneGlobes();
         setupJokesObserver();
         setupTriviaObserver();
+        wireKnockDetailControls();
         updateSoundIcon();
         updatePauseIcon();
+        setInterval(refreshHeaderStats, 1000);
 
         // Add drag-aware click handler for desktop GLOBE pane
         const globeBox = document.getElementById('d-box-globe');

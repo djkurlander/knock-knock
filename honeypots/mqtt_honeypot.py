@@ -443,10 +443,6 @@ def handle_connection(client_sock, client_ip, port, tls_active=False):
                 'mqtt_packet_valid': packet_valid,
                 'mqtt_packet_invalid_reason': invalid_reason,
                 'mqtt_first_bytes_hex': None if packet_valid else trace_hex,
-                'mqtt_fixed_header': first,
-                'mqtt_flags': flags,
-                'mqtt_remaining_length': remaining,
-                'mqtt_remaining_length_bytes': encoded_rl,
             }))
             return
 
@@ -465,10 +461,6 @@ def handle_connection(client_sock, client_ip, port, tls_active=False):
             'mqtt_tls': tls_active,
             'mqtt_stage': stage,
             'mqtt_auth_mode': MQTT_AUTH_MODE,
-            'mqtt_fixed_header': first,
-            'mqtt_flags': flags,
-            'mqtt_remaining_length': remaining,
-            'mqtt_remaining_length_bytes': encoded_rl,
             **fields,
         }
         accepted = stage == 'connect' and should_accept_connect(fields, MQTT_AUTH_MODE)
@@ -520,10 +512,6 @@ def handle_connection(client_sock, client_ip, port, tls_active=False):
                 'mqtt_client_id': fields.get('mqtt_client_id'),
                 'mqtt_protocol_name': fields.get('mqtt_protocol_name'),
                 'mqtt_version': fields.get('mqtt_version'),
-                'mqtt_fixed_header': first,
-                'mqtt_flags': flags,
-                'mqtt_remaining_length': remaining,
-                'mqtt_remaining_length_bytes': encoded_rl,
             }
             level = fields.get('mqtt_protocol_level')
             try:

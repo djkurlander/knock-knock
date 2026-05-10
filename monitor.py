@@ -13,7 +13,7 @@ import argparse
 import re
 import socket
 import importlib
-from datetime import datetime
+from datetime import datetime, timezone
 from dataclasses import dataclass
 
 # --- Configuration ---
@@ -198,6 +198,8 @@ def publish_protocol_config(redis_conn, enabled_protocols):
             "supports_pass_panel": bool(base.get("supports_pass_panel", False)),
             "color": base.get("color", "#ffcc00"),
             "badge": base.get("badge", name),
+            "description": base.get("description", ""),
+            "ports_label": base.get("ports_label", ""),
         }
         if definition:
             meta[name]["display_fields"] = [
@@ -656,11 +658,13 @@ def log_to_enriched_db(data, cur, save_protos=None):
     proto_name = data.get('proto') or ''
     should_save = (save_protos is None or (save_protos and proto_name in save_protos))
     registered_mapping = _registered_knock_mapping(proto_name)
+    event_t = int(data.get('t') or time.time())
+    event_ts = datetime.fromtimestamp(event_t, timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
     if should_save and registered_mapping:
         table, proto_key_map = registered_mapping
         table = _sql_ident(table)
-        col_names = [col for _, col in _COMMON_KEY_MAP]
-        values = [data.get(key) for key, _ in _COMMON_KEY_MAP]
+        col_names = ['timestamp'] + [col for _, col in _COMMON_KEY_MAP]
+        values = [event_ts] + [data.get(key) for key, _ in _COMMON_KEY_MAP]
         for key, col in proto_key_map:
             col_names.append(col)
             values.append(data.get(key))
@@ -1037,6 +1041,7 @@ def monitor(save_knocks=None, max_knocks=None, ban_duration_days=30):
         if knock.get('type') == 'KNOCK':
             knock, passthrough_keys = sanitize_knock(knock)
         if knock.get("type") == "KNOCK":
+            knock["t"] = int(time.time())
             proto = str(knock.get("proto") or "").upper()
             if proto not in PROTO:
                 _warn_unknown_proto(proto, ip=knock.get("ip"), source=knock.get("source"))
@@ -1057,6 +1062,7 @@ def monitor(save_knocks=None, max_knocks=None, ban_duration_days=30):
             pw = raw_pass if proto in PASS_PANEL_PROTOCOLS and raw_pass is not None else None
             geo = get_geo_enriched(ip, c_reader, a_reader)
             package = {
+                "t": knock["t"],
                 "ip": ip, "user": user, "pass": pw,
                 "proto": proto,
                 "city": geo['city'], "region": geo['region'], "country": geo['country'],
@@ -1103,8 +1109,8 @@ def monitor(save_knocks=None, max_knocks=None, ban_duration_days=30):
             r.incr("knock:total_global")
             r.hincrby("knock:proto_counts", package['proto'], 1)
             r.hincrby("knock:source_counts", package['source'], 1)
-            r.set("knock:last_time", int(time.time()))
-            r.set(f"knock:last_time:{package['proto'].lower()}", int(time.time()))
+            r.set("knock:last_time", package["t"])
+            r.set(f"knock:last_time:{package['proto'].lower()}", package["t"])
             if geo['lat'] is not None:
                 r.set("knock:last_lat", geo['lat'])
                 r.set("knock:last_lng", geo['lng'])

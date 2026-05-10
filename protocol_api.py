@@ -11,7 +11,7 @@ _TOKEN_RE = re.compile(r"^[A-Z][A-Z0-9_]{0,31}$")
 _FORMAT_RE = re.compile(r"^[a-z][a-z0-9_]{0,31}$")
 _COLOR_RE = re.compile(r"^#[0-9A-Fa-f]{6}$|^[a-z][a-z0-9_-]{0,31}$")
 _DISPLAY_FORMATS = {None, "boolean", "truncate", "list", "username", "password"}
-_DISPLAY_SPEC_KEYS = {"label", "value", "value_key", "format", "max_len", "flag_key"}
+_DISPLAY_SPEC_KEYS = {"label", "label_key", "value", "value_key", "format", "max_len", "flag_key"}
 _COLUMN_TYPES = {"TEXT", "INTEGER", "REAL", "DATETIME", "BLOB"}
 _REPO_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -114,8 +114,15 @@ def _check_display_rows(proto: str, rows, label: str) -> None:
             if extra:
                 _fail(proto, f"{label} field spec has unsupported keys: {sorted(extra)}")
             label_value = spec.get("label")
-            if not isinstance(label_value, str) or not label_value.strip():
-                _fail(proto, f"{label} field spec requires a non-empty label")
+            label_key_value = spec.get("label_key")
+            has_label = isinstance(label_value, str) and label_value.strip()
+            has_label_key = isinstance(label_key_value, str) and label_key_value.strip()
+            if not has_label and not has_label_key:
+                _fail(proto, f"{label} field spec requires a non-empty label or label_key")
+            if "label" not in spec and "label_key" not in spec:
+                _fail(proto, f"{label} field spec requires label or label_key")
+            if "label_key" in spec:
+                _check_ident(proto, spec.get("label_key"), f"{label} label_key")
             if "value" not in spec and "value_key" not in spec:
                 _fail(proto, f"{label} field spec requires value or value_key")
             if "value_key" in spec:

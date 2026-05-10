@@ -362,14 +362,6 @@ def _column_sql(column):
     return f"{_sql_ident(column.name)} {column.type}"
 
 
-def _ensure_columns(cur, table, columns):
-    table = _sql_ident(table)
-    existing = {row[1] for row in cur.execute(f"PRAGMA table_info({table})").fetchall()}
-    for column in columns:
-        if column.name not in existing:
-            cur.execute(f"ALTER TABLE {table} ADD COLUMN {_column_sql(column)}")
-
-
 def _registered_knock_mapping(proto_name):
     definition = (PROTOCOL_META.get(proto_name) or {}).get('definition')
     if not definition or not definition.knock_table:
@@ -501,41 +493,6 @@ def init_db(save_protos=None, enabled_protocols=None):
     cur = conn.cursor()
     cur.execute("PRAGMA journal_mode=WAL")
     cur.fetchone()
-    # Migrate old generic knocks table -> per-protocol tables (before creating new tables)
-    # Old schema only had username+password (no protocol-specific fields), so only
-    # SSH/TNET/FTP rows (user+pass protocols) get meaningful data. Non-user/pass
-    # protocols (SIP, etc.) had their specific fields discarded by the old schema.
-    cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='knocks'")
-    if cur.fetchone():
-        # Check if proto column exists (v2) or not (v1 = all SSH)
-        knock_cols = [row[1] for row in cur.execute("PRAGMA table_info(knocks)").fetchall()]
-        has_proto = 'proto' in knock_cols
-        # Migrate each protocol's rows to its per-protocol table
-        _user_pass_protos = {'SSH': 0, 'TNET': 1, 'FTP': 5}
-        migrated = 0
-        for pname, pidx in _user_pass_protos.items():
-            if has_proto:
-                where = f"WHERE proto = {pidx}"
-            else:
-                where = "" if pname == 'SSH' else "WHERE 0"  # v1 = all SSH
-            cur.execute(f"SELECT COUNT(*) FROM knocks {where}")
-            count = cur.fetchone()[0]
-            if count == 0:
-                continue
-            table = f"knocks_{pname.lower()}"
-            extra_cols = ['username TEXT', 'password TEXT']
-            cols_def = ['id INTEGER PRIMARY KEY AUTOINCREMENT',
-                        "timestamp TEXT DEFAULT (strftime('%Y-%m-%d %H:%M:%S','now'))"]
-            cols_def += _COMMON_KNOCK_COLS + extra_cols
-            cur.execute(f"CREATE TABLE IF NOT EXISTS {table} ({', '.join(cols_def)})")
-            cur.execute(f"""INSERT INTO {table} (timestamp, ip_address, iso_code, city, region, country, isp, asn, username, password)
-                            SELECT timestamp, ip_address, iso_code, city, region, country, isp, asn, username, password FROM knocks {where}""")
-            migrated += cur.rowcount
-        conn.commit()
-        if migrated > 0:
-            print(f"✅ Migrated {migrated} rows from knocks → per-protocol tables", file=sys.stderr)
-        cur.execute("DROP TABLE knocks")
-        conn.commit()
     for _, definition in _registered_saved_definitions(save_protos):
         table = _sql_ident(definition.knock_table)
         proto_cols = [_column_sql(column) for column in definition.columns]
@@ -543,7 +500,6 @@ def init_db(save_protos=None, enabled_protocols=None):
                 "timestamp TEXT DEFAULT (strftime('%Y-%m-%d %H:%M:%S','now'))"]
         cols += _COMMON_KNOCK_COLS + proto_cols
         cur.execute(f"CREATE TABLE IF NOT EXISTS {table} ({', '.join(cols)})")
-        _ensure_columns(cur, table, definition.columns)
     for proto in (enabled_protocols or []):
         definition = (PROTOCOL_META.get(proto) or {}).get('definition')
         if not definition:
@@ -552,19 +508,20 @@ def init_db(save_protos=None, enabled_protocols=None):
             extra_table = _sql_ident(extra.name)
             extra_cols = [_column_sql(column) for column in extra.columns]
             cur.execute(f"CREATE TABLE IF NOT EXISTS {extra_table} ({', '.join(extra_cols)})")
-            _ensure_columns(cur, extra_table, extra.columns)
     cur.execute("CREATE TABLE IF NOT EXISTS user_intel (username TEXT PRIMARY KEY, hits INTEGER, last_seen DATETIME)")
     cur.execute("CREATE TABLE IF NOT EXISTS pass_intel (password TEXT PRIMARY KEY, hits INTEGER, last_seen DATETIME)")
     cur.execute("CREATE TABLE IF NOT EXISTS country_intel (iso_code TEXT PRIMARY KEY, country TEXT, hits INTEGER, last_seen DATETIME)")
     cur.execute("CREATE TABLE IF NOT EXISTS isp_intel (isp TEXT PRIMARY KEY, hits INTEGER, last_seen DATETIME, asn INTEGER)")
-    cur.execute("CREATE TABLE IF NOT EXISTS ip_intel (ip TEXT PRIMARY KEY, hits INTEGER, last_seen DATETIME, lat REAL, lng REAL)")
-    _ip_intel_cols = [row[1] for row in cur.execute("PRAGMA table_info(ip_intel)").fetchall()]
-    if 'hits_since_cleared' not in _ip_intel_cols:
-        cur.execute("ALTER TABLE ip_intel ADD COLUMN hits_since_cleared INTEGER NOT NULL DEFAULT 0")
-    if 'ban_until' not in _ip_intel_cols:
-        cur.execute("ALTER TABLE ip_intel ADD COLUMN ban_until INTEGER")
-    if 'ban_count' not in _ip_intel_cols:
-        cur.execute("ALTER TABLE ip_intel ADD COLUMN ban_count INTEGER NOT NULL DEFAULT 0")
+    cur.execute("""CREATE TABLE IF NOT EXISTS ip_intel (
+        ip TEXT PRIMARY KEY,
+        hits INTEGER,
+        last_seen DATETIME,
+        lat REAL,
+        lng REAL,
+        hits_since_cleared INTEGER NOT NULL DEFAULT 0,
+        ban_until INTEGER,
+        ban_count INTEGER NOT NULL DEFAULT 0
+    )""")
     cur.execute("""CREATE TABLE IF NOT EXISTS sources (
         id           INTEGER PRIMARY KEY,
         source_id    TEXT UNIQUE NOT NULL,
@@ -576,47 +533,9 @@ def init_db(save_protos=None, enabled_protocols=None):
     )""")
     # Local machine is always id=0
     cur.execute("INSERT OR IGNORE INTO sources (id, source_id) VALUES (0, ?)", (SOURCE_ID,))
-    # Migrate existing sources rows that predate hits/last_seen columns
-    _src_cols = [row[1] for row in cur.execute("PRAGMA table_info(sources)").fetchall()]
-    if 'hits' not in _src_cols:
-        cur.execute("ALTER TABLE sources ADD COLUMN hits INTEGER NOT NULL DEFAULT 0")
-    if 'first_seen' not in _src_cols:
-        cur.execute("ALTER TABLE sources ADD COLUMN first_seen DATETIME")
-    if 'last_seen' not in _src_cols:
-        cur.execute("ALTER TABLE sources ADD COLUMN last_seen DATETIME")
-    if 'active' not in _src_cols:
-        cur.execute("ALTER TABLE sources ADD COLUMN active INTEGER NOT NULL DEFAULT 1")
-    # Add source column to any existing knock tables that predate this feature
-    _registered_tables = [d.knock_table for _, d in _registered_saved_definitions(save_protos)]
-    for _tname in _registered_tables:
-        try:
-            _tname = _sql_ident(_tname)
-            _tcols = [row[1] for row in cur.execute(f"PRAGMA table_info({_tname})").fetchall()]
-            if _tcols and 'source' not in _tcols:
-                cur.execute(f"ALTER TABLE {_tname} ADD COLUMN source INTEGER DEFAULT 0")
-        except Exception:
-            pass
-    cur.execute("CREATE TABLE IF NOT EXISTS monitor_heartbeats (id INTEGER PRIMARY KEY, uptime_minutes INTEGER NOT NULL DEFAULT 0)")
-    # Migrate old schema (many timestamp rows) to single uptime_minutes row
-    cols = [row[1] for row in cur.execute("PRAGMA table_info(monitor_heartbeats)").fetchall()]
-    if 'timestamp' in cols:
-        old_count = cur.execute("SELECT COUNT(*) FROM monitor_heartbeats").fetchone()[0]
-        cur.execute("DROP TABLE monitor_heartbeats")
-        cur.execute("CREATE TABLE monitor_heartbeats (id INTEGER PRIMARY KEY, uptime_minutes INTEGER NOT NULL DEFAULT 0)")
-        cur.execute("INSERT INTO monitor_heartbeats (id, uptime_minutes) VALUES (1, ?)", (old_count,))
-        conn.commit()
-        print(f"✅ Migrated monitor_heartbeats: {old_count} rows → uptime_minutes={old_count}")
-    # Add per-protocol uptime columns (one per known protocol)
-    hb_cols = [row[1] for row in cur.execute("PRAGMA table_info(monitor_heartbeats)").fetchall()]
-    added_uptime_cols = False
-    _seed_uptime_cols = False
-    for proto_name in PROTO:
-        col = f"uptime_{proto_name.lower()}"
-        if col not in hb_cols:
-            cur.execute(f"ALTER TABLE monitor_heartbeats ADD COLUMN {col} INTEGER NOT NULL DEFAULT 0")
-            added_uptime_cols = True
-    if added_uptime_cols:
-        _seed_uptime_cols = True  # deferred until after proto tables are created
+    hb_cols = ['id INTEGER PRIMARY KEY', 'uptime_minutes INTEGER NOT NULL DEFAULT 0']
+    hb_cols += [f"uptime_{proto_name.lower()} INTEGER NOT NULL DEFAULT 0" for proto_name in PROTO]
+    cur.execute(f"CREATE TABLE IF NOT EXISTS monitor_heartbeats ({', '.join(hb_cols)})")
     # Indexes for fast top-N queries
     cur.execute("CREATE INDEX IF NOT EXISTS idx_user_intel_hits ON user_intel(hits DESC)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_pass_intel_hits ON pass_intel(hits DESC)")
@@ -634,28 +553,6 @@ def init_db(save_protos=None, enabled_protocols=None):
     cur.execute("CREATE INDEX IF NOT EXISTS idx_country_intel_proto_hits ON country_intel_proto(proto, hits DESC)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_isp_intel_proto_hits ON isp_intel_proto(proto, hits DESC)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_ip_intel_proto_hits ON ip_intel_proto(proto, hits DESC)")
-    # Seed _proto tables from ALL tables (v1 single-protocol data → proto=0)
-    has_all = cur.execute("SELECT 1 FROM ip_intel LIMIT 1").fetchone()
-    has_proto = cur.execute("SELECT 1 FROM ip_intel_proto LIMIT 1").fetchone()
-    if has_all and not has_proto:
-        cur.execute("INSERT OR REPLACE INTO user_intel_proto (username, proto, hits, last_seen) SELECT username, 0, hits, last_seen FROM user_intel")
-        cur.execute("INSERT OR REPLACE INTO pass_intel_proto (password, proto, hits, last_seen) SELECT password, 0, hits, last_seen FROM pass_intel")
-        cur.execute("INSERT OR REPLACE INTO country_intel_proto (iso_code, proto, country, hits, last_seen) SELECT iso_code, 0, country, hits, last_seen FROM country_intel")
-        cur.execute("INSERT OR REPLACE INTO isp_intel_proto (isp, proto, hits, last_seen, asn) SELECT isp, 0, hits, last_seen, asn FROM isp_intel")
-        cur.execute("INSERT OR REPLACE INTO ip_intel_proto (ip, proto, hits, last_seen, lat, lng) SELECT ip, 0, hits, last_seen, lat, lng FROM ip_intel")
-        print("✅ Seeded _proto tables from ALL tables (existing data tagged as SSH)")
-    # Seed per-protocol uptime columns (deferred from above — must run after proto tables are populated)
-    if _seed_uptime_cols:
-        active_protos = [row[0] for row in cur.execute(
-            "SELECT DISTINCT proto FROM ip_intel_proto").fetchall()]
-        seeded = []
-        for proto_int in active_protos:
-            name = PROTO_NAME.get(proto_int)
-            if name:
-                col = f"uptime_{name.lower()}"
-                cur.execute(f"UPDATE monitor_heartbeats SET {col} = uptime_minutes WHERE id = 1")
-                seeded.append(name)
-        print(f"✅ Added per-protocol uptime tracking (seeded from total uptime: {', '.join(seeded) or 'none'})")
     conn.commit()
     conn.close()
 

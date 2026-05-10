@@ -36,7 +36,8 @@ Open the ports for whichever honeypots you plan to run, plus the web dashboard. 
 # Web dashboard (default port 8080)
 ufw allow 8080/tcp
 
-# Honeypot ports (enable as needed — these should be open to everyone)
+# Honeypot ports — open only the ones you plan to run (these should be open to everyone)
+# Default protocols (enabled out of the box):
 ufw allow 21/tcp     # FTP
 ufw allow 22/tcp     # SSH honeypot
 ufw allow 23/tcp     # Telnet
@@ -46,6 +47,12 @@ ufw allow 445/tcp    # SMB
 ufw allow 587/tcp    # SMTP (submission)
 ufw allow 3389/tcp   # RDP
 ufw allow 5060       # SIP (TCP + UDP)
+
+# Optional protocols (not enabled by default — add to ENABLED_PROTOCOLS in .env to activate):
+ufw allow 1880/tcp   # Node-RED (NRED)
+ufw allow 1883/tcp   # MQTT
+ufw allow 8883/tcp   # MQTT over TLS
+ufw allow 502/tcp    # Modbus TCP (MODB)
 
 # Your real SSH port
 ufw allow 2222/tcp   # or whatever you chose
@@ -352,10 +359,16 @@ systemctl restart knock-monitor
 
 ### Selecting Protocols (`ENABLED_PROTOCOLS`)
 
-By default, all eight honeypots run (SSH, TNET, FTP, RDP, SMB, SIP, HTTP, SMTP). To run a subset, set `ENABLED_PROTOCOLS` in `.env`:
+By default, the eight core honeypots run: SSH, TNET, FTP, RDP, SMB, SIP, HTTP, SMTP. Additional protocols — MQTT, NRED (Node-RED), and MODB (Modbus TCP) — are available but not enabled by default. You do not need to run all protocols; enable only the ones that make sense for your deployment.
+
+To customise which protocols run, set `ENABLED_PROTOCOLS` in `.env`:
 
 ```bash
+# Run a subset of the defaults:
 ENABLED_PROTOCOLS=SSH,TNET,FTP,SMB,SIP,HTTP,SMTP
+
+# Add optional protocols:
+ENABLED_PROTOCOLS=SSH,TNET,FTP,RDP,SMB,SIP,HTTP,SMTP,MQTT,NRED,MODB
 ```
 
 **Docker:** also remove the corresponding port from `docker-compose.override.yml` — Docker binds ports regardless of which honeypots are running.
@@ -439,7 +452,18 @@ systemctl status redis-server   # or: systemctl status redis
 ### View database contents
 ```bash
 sqlite3 /root/knock-knock/data/knock_knock.db "SELECT * FROM knocks_ssh ORDER BY id DESC LIMIT 5;"
-# Per-protocol tables: knocks_ssh, knocks_tnet, knocks_ftp, knocks_rdp, knocks_smb, knocks_sip, knocks_http, knocks_smtp
+# Default per-protocol tables: knocks_ssh, knocks_tnet, knocks_ftp, knocks_rdp, knocks_smb, knocks_sip, knocks_http, knocks_smtp
+# Optional protocol tables (if enabled): knocks_mqtt, knocks_nred, knocks_modb
+```
+
+### Database errors after upgrading
+
+If the monitor logs errors about missing columns after a `git pull`, run the migration script before restarting:
+
+```bash
+source .venv/bin/activate
+python extras/db-migrations/updatedb.py
+./restart.sh
 ```
 
 ## Maintenance
@@ -460,6 +484,30 @@ cp /etc/letsencrypt/live/your-domain.com/privkey.pem /root/knock-knock/certs/key
 cp /etc/letsencrypt/live/your-domain.com/fullchain.pem /root/knock-knock/certs/cert.pem
 systemctl restart knock-web   # or: docker compose restart web
 ```
+
+### Upgrading
+
+After pulling new code with `git pull`, apply any database schema changes before restarting:
+
+```bash
+# Systemd
+source .venv/bin/activate
+python extras/db-migrations/updatedb.py
+./restart.sh
+
+# Docker
+docker compose exec honeypot-monitor python extras/db-migrations/updatedb.py
+docker compose restart
+```
+
+`updatedb.py` automatically backs up the database before making changes (timestamped file in `data/`). Options:
+
+```bash
+python extras/db-migrations/updatedb.py --no-backup          # skip backup
+python extras/db-migrations/updatedb.py --backup mybackup.db # custom backup name
+```
+
+It is safe to run multiple times — all operations are idempotent.
 
 ## Security Notes
 

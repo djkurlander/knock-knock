@@ -93,38 +93,13 @@ DEFINITION = ProtocolDefinition(
                 {"label": "packet", "value_key": "mqtt_packet_type"},
             ],
         ],
-        "subscribe": [
+        "session": [
             [
                 {"label": "exploit", "value_key": "mqtt_exploit"},
             ],
             [
                 {"label": "type",  "value_key": "mqtt_stage"},
                 {"label": "topic", "value_key": "mqtt_topic", "max_len": 80},
-            ],
-            [
-                {"label": "client",  "value_key": "mqtt_client_id"},
-                {"label": "scanner", "value_key": "mqtt_scanner", "format": "truncate"},
-            ],
-        ],
-        "publish": [
-            [
-                {"label": "exploit", "value_key": "mqtt_exploit"},
-            ],
-            [
-                {"label": "type",  "value_key": "mqtt_stage"},
-                {"label": "topic", "value_key": "mqtt_topic", "max_len": 80},
-            ],
-            [
-                {"label": "client",  "value_key": "mqtt_client_id"},
-                {"label": "scanner", "value_key": "mqtt_scanner", "format": "truncate"},
-            ],
-        ],
-        "pingreq": [
-            [
-                {"label": "exploit", "value_key": "mqtt_exploit"},
-            ],
-            [
-                {"label": "type", "value_key": "mqtt_stage"},
             ],
             [
                 {"label": "client",  "value_key": "mqtt_client_id"},

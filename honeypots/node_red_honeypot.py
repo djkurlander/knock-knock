@@ -495,7 +495,6 @@ def handle_connection(sock, client_ip):
             'nred_port': _NRED_PORT,
             'nred_method': method,
             'nred_path': path,
-            'nred_purpose': purpose,
             'nred_auth_mode': NRED_AUTH_MODE,
             'display_format': _display_format(method, path_only, purpose, exploit_name),
         }

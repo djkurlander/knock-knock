@@ -38,11 +38,12 @@ FC_NAMES = {
     0x11: 'Report Server ID',
     0x17: 'Read/Write Multiple Registers',
     0x2B: 'Read Device Identification',
+    0x5A: 'Schneider UMAS',
 }
 
 READ_FCS    = frozenset({0x01, 0x02, 0x03, 0x04})
 WRITE_FCS   = frozenset({0x05, 0x06, 0x0F, 0x10, 0x17})
-IDENTIFY_FCS = frozenset({0x11, 0x2B})
+IDENTIFY_FCS = frozenset({0x11, 0x2B, 0x5A})
 
 # Fake Schneider Electric Modicon M340 PLC identity
 _VENDOR       = b'Schneider Electric'

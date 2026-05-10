@@ -26,7 +26,6 @@ DEFINITION = ProtocolDefinition(
         Column("nred_port", "INTEGER"),
         Column("nred_method", "TEXT"),
         Column("nred_path", "TEXT"),
-        Column("nred_purpose", "TEXT"),
         Column("nred_exploit", "TEXT"),
         Column("nred_host", "TEXT"),
         Column("nred_user_agent", "TEXT"),

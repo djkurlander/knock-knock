@@ -2814,7 +2814,7 @@
             <span style="color:var(--ui-label); margin-left:10px;">password:</span> <span class="knock-pass">${safePass}</span>`;
     }
 
-    const DISPLAY_FIELD_KEYS = new Set(['label', 'value', 'value_key', 'format', 'max_len', 'flag_key']);
+    const DISPLAY_FIELD_KEYS = new Set(['label', 'label_key', 'value', 'value_key', 'format', 'max_len', 'flag_key']);
     const DISPLAY_FORMATS = new Set(['boolean', 'truncate', 'list', 'username', 'password']);
 
     function isBlankDisplayValue(v) {
@@ -2850,7 +2850,14 @@
     function renderDisplaySpec(spec, d) {
         if (!spec || typeof spec !== 'object' || Array.isArray(spec)) return null;
         if (Object.keys(spec).some(k => !DISPLAY_FIELD_KEYS.has(k))) return null;
-        const label = typeof spec.label === 'string' ? spec.label.trim() : '';
+        let label;
+        if (typeof spec.label === 'string') {
+            label = spec.label.trim();
+        } else if (typeof spec.label_key === 'string' && spec.label_key) {
+            label = String(d?.[spec.label_key] ?? '').trim();
+        } else {
+            label = '';
+        }
         if (!label) return null;
         let rawValue;
         if (Object.prototype.hasOwnProperty.call(spec, 'value')) {

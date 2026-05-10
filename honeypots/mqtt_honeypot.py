@@ -137,15 +137,12 @@ def annotate_signature(knock):
 
 def set_display_format(knock):
     stage = str(knock.get('mqtt_stage') or '').lower()
-    formats = {
-        'connect',
-        'malformed_connect',
-        'non_connect',
-        'subscribe',
-        'publish',
-        'pingreq',
-    }
-    knock['display_format'] = stage if stage in formats else 'other'
+    if stage in ('subscribe', 'publish', 'pingreq'):
+        knock['display_format'] = 'session'
+    elif stage in ('connect', 'malformed_connect', 'non_connect'):
+        knock['display_format'] = stage
+    else:
+        knock['display_format'] = 'other'
     return knock
 
 

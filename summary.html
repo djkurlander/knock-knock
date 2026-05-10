@@ -71,6 +71,9 @@
             line-height: 1.5;
             position: relative;
             overflow: visible;
+            -webkit-user-select: none;
+            user-select: none;
+            -webkit-touch-callout: none;
         }
         .knock::before {
             content: '';
@@ -87,6 +90,57 @@
         }
         .knock-meta { font-size: 0.9em; }
         .knock-pass { color: var(--neon-green); }
+        .knock-detail-backdrop {
+            position: fixed;
+            inset: 0;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            background: rgba(0,0,0,0.55);
+            z-index: 10001;
+        }
+        .knock-detail-dialog {
+            width: min(400px, calc(100vw - 28px));
+            max-height: min(720px, calc(100dvh - 28px));
+            background: #050505;
+            border: 1px solid #333;
+            box-shadow: 0 0 18px rgba(0,255,65,0.25);
+            padding: 14px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .knock-detail-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            color: var(--neon-green);
+            font-weight: bold;
+        }
+        .knock-detail-actions { display: flex; gap: 8px; }
+        .knock-detail-actions button {
+            border: 1px solid #333;
+            background: #111;
+            color: var(--neon-green);
+            padding: 4px 8px;
+            font: 0.9em/1.2 inherit;
+            cursor: pointer;
+        }
+        .knock-detail-actions button:hover { background: #1a1a1a; }
+        .knock-detail-actions button:active {
+            background: rgba(0,255,65,0.16);
+            transform: translateY(1px);
+            box-shadow: inset 0 0 8px rgba(0,255,65,0.25);
+        }
+        .knock-detail-json {
+            min-height: 0;
+            margin: 0;
+            overflow: auto;
+            white-space: pre-wrap;
+            user-select: text;
+            color: var(--data-blue);
+            font: 12px/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        }
 
         .bar-row {
             margin-bottom: 12px;
@@ -887,6 +941,18 @@
         </div>
     </div>
 </div>
+<div id="knock-detail-backdrop" class="knock-detail-backdrop">
+    <div class="knock-detail-dialog" role="dialog" aria-modal="true" aria-labelledby="knock-detail-title">
+        <div class="knock-detail-header">
+            <span id="knock-detail-title">KNOCK DETAILS</span>
+            <div class="knock-detail-actions">
+                <button type="button" id="knock-detail-copy">Copy</button>
+                <button type="button" id="knock-detail-close">Close</button>
+            </div>
+        </div>
+        <pre id="knock-detail-json" class="knock-detail-json"></pre>
+    </div>
+</div>
 
 <script>
     // --- PANEL INTRO TEXT (single source of truth for both layouts) ---
@@ -894,8 +960,8 @@
     const PANEL_INTROS = {
         feed:       '<p>Set up an unprotected server on the net, and the bots start swarming. This site shows their break-in and exploitation attempts in real-time: where the bots come from, what credentials they try, and why. We have deployed a seemingly unprotected server on the internet, and on this page you will see all of the hostile infiltration attempts, live! You\'ll see brute force attacks, where bots rely on dictionary attacks or credential stuffing to try to break in. You\'ll see email spam bots trying to hijack this server as a relay for their malevolent goals. You\'ll see mercenary bots attempting to commandeer this server to place phone calls around the world for internet revenue sharing fraud. AND THAT\'S NOT ALL! Watch it here, as it happens.</p><p>Want the raw live view instead? <a href="/">Open the Live Control Panel</a>. Otherwise, continue below for the full guided explanation.</p>',
         feed_agg:   null, // built dynamically in updatePanelIntros()
-        feed2:      '<p>Each bot attempt to infiltrate this server is referred to as a \'knock\'. In the box above you can see the number of knocks, the rolling knocks per minute over the last 10 minutes, and how long ago the last knock occurred. To temporarily halt the incoming data, which can arrive fast and furious, press the pause button or hit the space bar. Enable the speaker icon to hear the knocks as they arrive, reminiscent of the clicks on a virtual geiger counter measuring what is sometimes referred to as the "background radiation of the internet". The globe spins to display the origin of the knock.</p><p>In the panel below, we see a scrollable history of the last 100 knocks received on this server. Remember, if the feed is updating quickly, feel free to pause and unpause using the pause button in the header, or by pressing the space bar.</p>',
-        feed2_agg:  '<p>Each bot attempt to infiltrate a server is referred to as a \'knock\'. In the box above you can see the total number of knocks across all servers, the rolling knocks per minute over the last 10 minutes, and how long ago the last knock occurred. To temporarily halt the incoming data, which can arrive fast and furious, press the pause button or hit the space bar. Enable the speaker icon to hear the knocks as they arrive, reminiscent of the clicks on a virtual geiger counter measuring what is sometimes referred to as the "background radiation of the internet". The globe spins to display the origin of the knock.</p><p>In the panel below, we see a scrollable history of the last 100 knocks received across all servers. Remember, if the feed is updating quickly, feel free to pause and unpause using the pause button in the header, or by pressing the space bar.</p>',
+        feed2:      '<p>Each bot attempt to infiltrate this server is referred to as a \'knock\'. In the box above you can see the number of knocks, the rolling knocks per minute over the last 10 minutes, and how long ago the last knock occurred. To temporarily halt the incoming data, which can arrive fast and furious, press the pause button or hit the space bar. Enable the speaker icon to hear the knocks as they arrive, reminiscent of the clicks on a virtual geiger counter measuring what is sometimes referred to as the "background radiation of the internet". The globe spins to display the origin of the knock.</p><p>In the panel below, we see a scrollable history of the last 100 knocks received on this server. Right-click a knock on desktop, or press and hold on mobile, to view and copy its details. Remember, if the feed is updating quickly, feel free to pause and unpause using the pause button in the header, or by pressing the space bar.</p>',
+        feed2_agg:  '<p>Each bot attempt to infiltrate a server is referred to as a \'knock\'. In the box above you can see the total number of knocks across all servers, the rolling knocks per minute over the last 10 minutes, and how long ago the last knock occurred. To temporarily halt the incoming data, which can arrive fast and furious, press the pause button or hit the space bar. Enable the speaker icon to hear the knocks as they arrive, reminiscent of the clicks on a virtual geiger counter measuring what is sometimes referred to as the "background radiation of the internet". The globe spins to display the origin of the knock.</p><p>In the panel below, we see a scrollable history of the last 100 knocks received across all servers. Right-click a knock on desktop, or press and hold on mobile, to view and copy its details. Remember, if the feed is updating quickly, feel free to pause and unpause using the pause button in the header, or by pressing the space bar.</p>',
         feed3:  '<p>You can use the protocol drop down menu, at the right of the header, to filter the knocks to a specific protocol. Each of the live knocks above has a protocol badge to the right. Protocols are used to gain access to services on a remote computer, and the protocols monitored here are listed below.</p>',
         globe:  '<p>Half the fun (at least for me) is seeing where all these knocks originate. This project started when I showed my kids raw login-attempt logs (initially SSH), and they asked: where are all these bots coming from? In the globe view, each knock is plotted as a dot on a 3D globe to show the bot\'s origin. Take it out for a spin (literally, you can spin it interactively). You can also cycle through multiple visual styles with the Style button at the bottom of the panel. One of the most interesting is HEAT, a 3D heatmap that highlights the worst-offending countries and territories.</p>',
         loc:    '<p>To see these origins in a textual leaderboard, check out the LOCATION panel below. Here you can see the worst-offending bot origin countries. Technically, just because a bot is hosted there does not mean it is controlled by bad actors in that country; the attackers may be elsewhere, using servers they rent or infect.</p>',
@@ -3117,6 +3183,147 @@
         return renderMetadataFeedFields(d, proto) || renderDefaultCredBlock(d);
     }
 
+    let contextKnockData = null;
+    const KNOCK_DETAIL_HIDDEN_KEYS = new Set([
+        'kpm', 'total_global', 'uptime_minutes', 'proto_uptime', 'display_format',
+        'country_hits', 'country_last', 'country_hits_proto', 'country_last_proto',
+        'user_hits', 'user_last', 'user_hits_proto', 'user_last_proto',
+        'pass_hits', 'pass_last', 'pass_hits_proto', 'pass_last_proto',
+        'isp_hits', 'isp_last', 'isp_hits_proto', 'isp_last_proto',
+        'ip_hits', 'ip_last', 'ip_hits_since_cleared', 'ip_hits_proto', 'ip_last_proto',
+        'source_int', 'source_display',
+    ]);
+
+    function formatKnockDetailValue(value) {
+        if (value === null) return 'null';
+        if (value === undefined) return 'undefined';
+        if (typeof value === 'string') return value;
+        if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+        return JSON.stringify(value, null, 2);
+    }
+
+    function knockDetailText(d) {
+        return Object.entries(d || {})
+            .filter(([key]) => !KNOCK_DETAIL_HIDDEN_KEYS.has(key))
+            .map(([key, value]) => {
+                if (key === 't' && Number.isFinite(Number(value))) {
+                    return `${key}: ${value} (${new Date(Number(value) * 1000).toISOString().replace('T', ' ').replace('.000Z', ' UTC')})`;
+                }
+                return `${key}: ${formatKnockDetailValue(value)}`;
+            })
+            .join('\n');
+    }
+
+    function snapshotKnockData(d) {
+        try {
+            if (typeof structuredClone === 'function') return structuredClone(d);
+        } catch {}
+        return d && typeof d === 'object' ? { ...d } : d;
+    }
+
+    function handleKnockContextMenu(ev, d) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        showKnockDetails(d);
+    }
+
+    function wireKnockLongPress(el, getData) {
+        const delayMs = 700;
+        const moveLimitPx = 12;
+        let timer = null;
+        let startX = 0;
+        let startY = 0;
+        let fired = false;
+
+        const clear = () => {
+            if (timer) clearTimeout(timer);
+            timer = null;
+        };
+
+        el.addEventListener('pointerdown', ev => {
+            if (ev.pointerType !== 'touch') return;
+            clear();
+            fired = false;
+            startX = ev.clientX;
+            startY = ev.clientY;
+            timer = setTimeout(() => {
+                timer = null;
+                fired = true;
+                showKnockDetails(getData());
+            }, delayMs);
+        }, { passive: true });
+
+        el.addEventListener('pointermove', ev => {
+            if (!timer || ev.pointerType !== 'touch') return;
+            const dx = Math.abs(ev.clientX - startX);
+            const dy = Math.abs(ev.clientY - startY);
+            if (dx > moveLimitPx || dy > moveLimitPx) clear();
+        }, { passive: true });
+
+        ['pointerup', 'pointercancel', 'pointerleave'].forEach(type => {
+            el.addEventListener(type, clear, { passive: true });
+        });
+
+        el.addEventListener('click', ev => {
+            if (!fired) return;
+            ev.preventDefault();
+            ev.stopPropagation();
+            fired = false;
+        });
+    }
+
+    async function copyKnockDetails(d) {
+        const text = knockDetailText(d);
+        try {
+            if (navigator.clipboard && window.isSecureContext) {
+                await navigator.clipboard.writeText(text);
+                return;
+            }
+        } catch {}
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.position = 'fixed';
+        ta.style.left = '-9999px';
+        document.body.appendChild(ta);
+        ta.focus();
+        ta.select();
+        try { document.execCommand('copy'); } finally { ta.remove(); }
+    }
+
+    function showKnockDetails(d) {
+        const backdrop = document.getElementById('knock-detail-backdrop');
+        const json = document.getElementById('knock-detail-json');
+        if (!backdrop || !json) return;
+        contextKnockData = snapshotKnockData(d);
+        json.textContent = knockDetailText(contextKnockData);
+        backdrop.style.display = 'flex';
+    }
+
+    function hideKnockDetails() {
+        const backdrop = document.getElementById('knock-detail-backdrop');
+        if (backdrop) backdrop.style.display = 'none';
+    }
+
+    function wireKnockDetailControls() {
+        const backdrop = document.getElementById('knock-detail-backdrop');
+        if (backdrop) {
+            backdrop.addEventListener('click', ev => {
+                if (ev.target === backdrop) hideKnockDetails();
+            });
+        }
+        const copyButton = document.getElementById('knock-detail-copy');
+        if (copyButton) {
+            copyButton.addEventListener('click', async () => {
+                if (contextKnockData) await copyKnockDetails(contextKnockData);
+            });
+        }
+        const closeButton = document.getElementById('knock-detail-close');
+        if (closeButton) closeButton.addEventListener('click', hideKnockDetails);
+        document.addEventListener('keydown', ev => {
+            if (ev.key === 'Escape') hideKnockDetails();
+        });
+    }
+
     function makeKnockEl(d) {
         const loc = formatLocation(d);
         const safeLoc = escapeHtml(loc);
@@ -3124,6 +3331,9 @@
         const protoLine = protocolFeedFields(d);
         const div = document.createElement('div');
         div.className = 'knock';
+        div._knockData = d;
+        div.addEventListener('contextmenu', ev => handleKnockContextMenu(ev, div._knockData));
+        wireKnockLongPress(div, () => div._knockData);
         div.innerHTML = `
             <div class="knock-location"><span style="display:flex;align-items:center;gap:0.3em"><strong>${getFlag(d.iso)}</strong> <strong>${safeLoc}</strong></span>${getProtoBadge(d.proto)}</div>
             ${protoLine}<br>
@@ -3647,6 +3857,7 @@
         initGlobes();
         initPaneGlobes();
         setupTriviaObserver();
+        wireKnockDetailControls();
         updateSoundIcon();
         updatePauseIcon();
         setInterval(refreshHeaderStats, 1000);

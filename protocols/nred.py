@@ -78,9 +78,9 @@ DEFINITION = ProtocolDefinition(
                 {"label": "exploit", "value_key": "nred_exploit"},
             ],
             [
-                {"label": "nodes", "value_key": "nred_flow_node_count"},
                 {"label": "exec",  "value_key": "nred_flow_has_exec", "format": "boolean"},
                 {"label": "mqtt",  "value_key": "nred_flow_has_mqtt", "format": "boolean"},
+                {"label": "nodes", "value_key": "nred_flow_node_count"},
             ],
             [
                 {"label": "method", "value_key": "nred_method"},

@@ -53,7 +53,8 @@ DEFINITION = ProtocolDefinition(
                 {"label": "exploit", "value_key": "mqtt_exploit"},
             ],
             [
-                {"label": "type", "value_key": "mqtt_stage"},
+                {"label": "type",    "value_key": "mqtt_stage"},
+                {"label": "version", "value_key": "mqtt_version"},
             ],
             # No format — row is suppressed entirely when user/pass are absent (anonymous connects).
             # format:"username"/"password" would show n/a even for missing fields, which we don't want here.
@@ -64,9 +65,6 @@ DEFINITION = ProtocolDefinition(
             [
                 {"label": "client",  "value_key": "mqtt_client_id"},
                 {"label": "scanner", "value_key": "mqtt_scanner", "format": "truncate"},
-            ],
-            [
-                {"label": "version", "value_key": "mqtt_version"},
             ],
         ],
         "malformed_connect": [
@@ -87,10 +85,8 @@ DEFINITION = ProtocolDefinition(
             ],
             [
                 {"label": "type",    "value_key": "mqtt_stage"},
+                {"label": "packet",  "value_key": "mqtt_packet_type"},
                 {"label": "scanner", "value_key": "mqtt_scanner", "format": "truncate"},
-            ],
-            [
-                {"label": "packet", "value_key": "mqtt_packet_type"},
             ],
         ],
         "session": [

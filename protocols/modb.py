@@ -31,7 +31,7 @@ DEFINITION = ProtocolDefinition(
     display_formats={
         "read": [
             [
-                {"label": "fc",   "value_key": "modb_fc_name"},
+                {"label": "code",   "value_key": "modb_fc_name"},
                 {"label": "unit", "value_key": "modb_unit_id"},
                 {"label": "addr", "value_key": "modb_address"},
                 {"label": "qty",  "value_key": "modb_quantity"},
@@ -39,7 +39,7 @@ DEFINITION = ProtocolDefinition(
         ],
         "write": [
             [
-                {"label": "fc",    "value_key": "modb_fc_name"},
+                {"label": "code",    "value_key": "modb_fc_name"},
                 {"label": "unit",  "value_key": "modb_unit_id"},
                 {"label": "addr",  "value_key": "modb_address"},
                 {"label": "value", "value_key": "modb_write_value"},
@@ -51,13 +51,13 @@ DEFINITION = ProtocolDefinition(
         ],
         "identify": [
             [
-                {"label": "fc",   "value_key": "modb_fc_name"},
+                {"label": "code",   "value_key": "modb_fc_name"},
                 {"label": "unit", "value_key": "modb_unit_id"},
             ],
         ],
         "other": [
             [
-                {"label": "fc",   "value_key": "modb_fc_name"},
+                {"label": "code",   "value_key": "modb_fc_name"},
                 {"label": "unit", "value_key": "modb_unit_id"},
             ],
         ],

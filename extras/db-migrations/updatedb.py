@@ -12,7 +12,7 @@ ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 if ROOT_DIR not in sys.path:
     sys.path.insert(0, ROOT_DIR)
 
-from constants import PROTO, PROTO_NAME, PROTOCOL_META
+from constants import PROTO, PROTOCOL_META
 
 
 DB_PATH = os.environ.get("DB_DIR", "data") + "/knock_knock.db"
@@ -91,9 +91,7 @@ def create_current_schema(cur):
     )""")
     cur.execute("INSERT OR IGNORE INTO sources (id, source_id) VALUES (0, ?)", (SOURCE_ID,))
 
-    uptime_cols = ["id INTEGER PRIMARY KEY", "uptime_minutes INTEGER NOT NULL DEFAULT 0"]
-    uptime_cols += [f"uptime_{proto.lower()} INTEGER NOT NULL DEFAULT 0" for proto in PROTO]
-    cur.execute(f"CREATE TABLE IF NOT EXISTS monitor_heartbeats ({', '.join(uptime_cols)})")
+    cur.execute("CREATE TABLE IF NOT EXISTS monitor_heartbeats (id INTEGER PRIMARY KEY, uptime_minutes INTEGER NOT NULL DEFAULT 0)")
 
     cur.execute("CREATE TABLE IF NOT EXISTS user_intel_proto (username TEXT, proto INTEGER, hits INTEGER, last_seen DATETIME, PRIMARY KEY (username, proto))")
     cur.execute("CREATE TABLE IF NOT EXISTS pass_intel_proto (password TEXT, proto INTEGER, hits INTEGER, last_seen DATETIME, PRIMARY KEY (password, proto))")
@@ -220,30 +218,8 @@ def migrate_heartbeats(cur):
         cur.execute("INSERT INTO monitor_heartbeats (id, uptime_minutes) VALUES (1, ?)", (old_count,))
         print(f"  monitor_heartbeats: converted {old_count} timestamp rows to uptime_minutes")
 
-    # Change addressed: uptime is now tracked per protocol for protocol-specific
-    # availability stats. Seed new protocol counters from total uptime for any
-    # protocol that already has per-protocol intel rows.
-    hb_cols = set(table_columns(cur, "monitor_heartbeats"))
-    added = []
-    for proto_name in PROTO:
-        col = f"uptime_{proto_name.lower()}"
-        if col not in hb_cols:
-            cur.execute(f"ALTER TABLE monitor_heartbeats ADD COLUMN {col} INTEGER NOT NULL DEFAULT 0")
-            added.append(proto_name)
-    if not added:
-        return
-
-    active_proto_ints = {row[0] for row in cur.execute("SELECT DISTINCT proto FROM ip_intel_proto").fetchall()}
-    seeded = []
-    for proto_name in added:
-        proto_int = PROTO.get(proto_name)
-        if proto_int is not None and proto_int in active_proto_ints:
-            col = f"uptime_{proto_name.lower()}"
-            cur.execute(f"UPDATE monitor_heartbeats SET {col} = uptime_minutes WHERE id = 1")
-            seeded.append(proto_name)
-    print(f"  monitor_heartbeats: added uptime columns for {', '.join(added)}")
-    if seeded:
-        print(f"  monitor_heartbeats: seeded uptime from total for {', '.join(seeded)}")
+    # Per-protocol uptime columns are now runtime schema: monitor.py adds only
+    # the columns needed by the enabled protocols on startup.
 
 
 def backup_db(db_path, backup_name):

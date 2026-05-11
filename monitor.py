@@ -535,9 +535,15 @@ def init_db(save_protos=None, enabled_protocols=None):
     )""")
     # Local machine is always id=0
     cur.execute("INSERT OR IGNORE INTO sources (id, source_id) VALUES (0, ?)", (SOURCE_ID,))
+    enabled_protocols = enabled_protocols or []
     hb_cols = ['id INTEGER PRIMARY KEY', 'uptime_minutes INTEGER NOT NULL DEFAULT 0']
-    hb_cols += [f"uptime_{proto_name.lower()} INTEGER NOT NULL DEFAULT 0" for proto_name in PROTO]
+    hb_cols += [f"uptime_{proto_name.lower()} INTEGER NOT NULL DEFAULT 0" for proto_name in enabled_protocols]
     cur.execute(f"CREATE TABLE IF NOT EXISTS monitor_heartbeats ({', '.join(hb_cols)})")
+    hb_existing = {row[1] for row in cur.execute("PRAGMA table_info(monitor_heartbeats)").fetchall()}
+    for proto_name in enabled_protocols:
+        col = f"uptime_{proto_name.lower()}"
+        if col not in hb_existing:
+            cur.execute(f"ALTER TABLE monitor_heartbeats ADD COLUMN {_sql_ident(col)} INTEGER NOT NULL DEFAULT 0")
     # Indexes for fast top-N queries
     cur.execute("CREATE INDEX IF NOT EXISTS idx_user_intel_hits ON user_intel(hits DESC)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_pass_intel_hits ON pass_intel(hits DESC)")

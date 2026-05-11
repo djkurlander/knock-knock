@@ -71,8 +71,8 @@ DEFINITION = ProtocolDefinition(
             [{"label": "body",    "value_key": "http_body",   "format": "truncate", "max_len": 40}],
         ],
         "exploit": [
-            [{"label": "purpose",  "value_key": "http_purpose_label"}],
             [{"label": "exploit",  "value_key": "http_exploit"}],
+            [{"label": "purpose",  "value_key": "http_purpose_label"}],
             [{"label": "method",   "value_key": "http_method"},
              {"label": "path",     "value_key": "http_path",  "format": "truncate"}],
             [{"label": "body",     "value_key": "http_body",  "format": "truncate", "max_len": 40}],

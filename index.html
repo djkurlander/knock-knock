@@ -3101,6 +3101,10 @@
             backdrop.addEventListener('click', ev => {
                 if (ev.target === backdrop) hideKnockDetails();
             });
+            backdrop.addEventListener('contextmenu', ev => {
+                ev.preventDefault();
+                if (ev.target === backdrop) hideKnockDetails();
+            });
         }
         const copyButton = document.getElementById('knock-detail-copy');
         if (copyButton) {

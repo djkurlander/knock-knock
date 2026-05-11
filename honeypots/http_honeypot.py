@@ -211,9 +211,14 @@ def _should_emit(client_ip: str) -> bool:
 #   rce               Remote/arbitrary code execution exploit attempt
 #   credential_theft  Brute-force or credential-harvesting login probe
 #   device_infiltration  Router/IoT/embedded-device takeover
+#   malware_comm      Malware (RAT) command-and-control check-in
+#   crypto_mining     Cryptocurrency mining activity (XMRig, etc.)
 #   config_exposure   Fishing for credentials/config files left on disk
 #   path_traversal    Directory traversal to read arbitrary files
 #   proxy_abuse       Using the server as a proxy or SSRF pivot
+#   open_redirect     Probing for open redirect vulnerabilities
+#   api_probe         Targeted probing of private or specific APIs
+#   app_discovery     Scanning for specific software packages (e.g. FreePBX)
 #   recon_scanner     Identified benign research scanner (Shodan, Censys …)
 #   protocol_probe    Non-HTTP protocol data sent to HTTP port (TLS, RDP …)
 #   mass_scanner      Generic/unidentified automated scan
@@ -256,7 +261,9 @@ _RE_CRED_PATH = re.compile(
     r'|(/admin(?:istration)?/(?:login|index|auth|signin))'
     r'|(/(?:login|signin|auth|account/login|user/login|session/new)'
        r'(?:[?/]|$))'
-    r'|(/+api/v1/users/login)',
+    r'|(/+api/v1/users/login)'
+    r'|(/+(?:phpMyAdmin|pma|myadmin|mysql|dbadmin|sqlmanager|PMA)[^/]*|$)' # phpMyAdmin and aliases
+    r'|(/RDWeb/)',                              # Microsoft Remote Desktop Web Access
     re.IGNORECASE,
 )
 
@@ -285,16 +292,17 @@ _RE_DEVICE_PATH = re.compile(
 )
 
 _RE_CONFIG_PATH = re.compile(
-    r'(/\.env(?:\b|$))'
-    r'|(/\.git/(?:HEAD|config|FETCH_HEAD|index))'
+    r'((?:^|/)\.env(?:[-_a-zA-Z0-9.]*|$))'      # .env and variants at any depth
+    r'|((?:^|/)\.git/(?:HEAD|config|FETCH_HEAD|index|credentials))' # git metadata at any depth
     r'|(/wp-config\.php)'
-    r'|(/(?:config|configuration)\.(?:php|inc|bak|old|yml|yaml|json)'
+    r'|(/(?:config|configuration|settings|web|local|appsettings|secrets|credentials|application|database)\.(?:php|inc|bak|old|yml|yaml|json|toml|env|xml)'
        r'(?:\b|$))'
     r'|(/\.htaccess|/\.htpasswd)'
-    r'|(/phpinfo(?:\.php)?)'
+    r'|(/\.gitlab-ci\.yml)'                     # GitLab CI config
+    r'|(/phpinfo(?:\.php\d?)?(?:\.txt|\.bak|\.old|$))' # phpinfo leakage
     r'|(/web\.config)'
-    r'|(/(?:dump|backup|db)\.(?:sql|gz|zip|tar))'
-    r'|(/(?:credentials|secrets|keys|token)(?:\.json|\.yml|\.env|$))'
+    r'|(/(?:dump|backup|db|database)\.(?:sql|gz|zip|tar))'
+    r'|(/(?:credentials|secrets|keys|token|auth|access)(?:\.json|\.yml|\.env|[-_]keys|$))'
     r'|(/aws(?:credentials|config))'
     r'|(/server-status)'                        # Apache mod_status
     r'|(/metrics(?:/|$))'                       # Prometheus metrics endpoint
@@ -311,7 +319,7 @@ _RE_TRAVERSAL = re.compile(
     r'\.\.[/\\]'                                # classic ../
     r'|\.\.(?:%2f|%5c)'                         # literal dot-dot + encoded slash
     r'|(?:\.%2e|%2e\.|%2e%2e)(?:/|\\|%2f|%5c)' # encoded dot-dot + slash
-    r'|(?:%252e%252e|%252e\.|\.%252e)(?:/|\\|%252f|%255c)'  # double-encoded
+    r'|(?:\.%(?:25)?2e|%(?:25)?2e\.|\.%(?:25)?2e)(?:/|\\|%(?:25)?2f|%(?:25)?5c)'  # single/double-encoded dot-dot
     r'|/etc/(?:passwd|shadow|hosts)'
     r'|/proc/self/',
     re.IGNORECASE,
@@ -319,6 +327,11 @@ _RE_TRAVERSAL = re.compile(
 
 _RE_PROXY_PATH = re.compile(
     r'^https?://',                              # absolute-form URI (proxy req)
+    re.IGNORECASE,
+)
+
+_RE_OPEN_REDIRECT = re.compile(
+    r'[?&](?:url|redir|goto|u|next|r|go)=https?://',
     re.IGNORECASE,
 )
 
@@ -344,6 +357,17 @@ _RECON_PATHS = frozenset({
     '/sitemap.xml', '/humans.txt',
 })
 
+_RE_MALWARE_COMM = re.compile(
+    r"(\|'\|'\|)",
+    re.IGNORECASE,
+)
+
+_RE_CRYPTO_MINING = re.compile(
+    r'("method"\s*:\s*"login")'
+    r'|("params"\s*:\s*\{.*"login"\s*:\s*")',
+    re.IGNORECASE,
+)
+
 # Generic mass-scanner user-agents (not specifically research orgs)
 _RE_MASS_UA = re.compile(
     r'(zgrab)'
@@ -365,7 +389,10 @@ _RE_MASS_UA = re.compile(
 )
 
 _RE_APP_DISCOVERY_PATH = re.compile(
-    r'\.(?:php|asp|aspx|jsp|jspx|cgi|do|action)(?:[?#]|$)',
+    r'\.(?:php|asp|aspx|jsp|jspx|cgi|do|action)(?:[?#]|$)'
+    r'|(/_profiler/)'
+    r'|(^/(?:env|info|version|test|app|v1|sdk|admin|config|debug|api|wsman|CFIDE|webfig|WebInterface|geoip|download)(?:/|$))'
+    r'|(/[^/]+/info(?:/|$))',                   # catch any /prefix/info/
     re.IGNORECASE,
 )
 
@@ -388,7 +415,7 @@ def _classify_purpose(method: str, path: str, ua: str, body: str):
     #    means binary protocol data (TLS ClientHello 0x16, RDP TPKT 0x03, etc.)
     if method and not method[0].isprintable():
         return 'protocol_probe', None, None
-    if method == 'T3':
+    if method in ('T3', 'SSTP_DUPLEX_POST'):
         return 'protocol_probe', None, None
 
     # 1. Exploit database — specific match overrides general classifiers
@@ -396,13 +423,19 @@ def _classify_purpose(method: str, path: str, ua: str, body: str):
     if exp_name:
         return exp_purpose or 'unknown', exp_name, exp_cve
 
-    # 2. RCE — highest priority
+    # 2. Malware C2 / Crypto mining — very high confidence signals
+    if _RE_MALWARE_COMM.search(method) or _RE_MALWARE_COMM.search(body):
+        return 'malware_comm', None, None
+    if _RE_CRYPTO_MINING.search(body) or (ua and 'XMRIG' in ua.upper()):
+        return 'crypto_mining', None, None
+
+    # 3. RCE — highest priority exploit
     if (_RE_RCE_PATH.search(path)
             or _RE_RCE_BODY.search(body)
             or _RE_RCE_UA.search(ua)):
         return 'rce', None, None
 
-    # 3. Credential theft
+    # 4. Credential theft
     if _RE_CRED_PATH.search(path):
         return 'credential_theft', None, None
     if method in ('POST', 'PUT') and _RE_CRED_BODY.search(body):
@@ -411,42 +444,44 @@ def _classify_purpose(method: str, path: str, ua: str, body: str):
                      path, re.IGNORECASE):
             return 'credential_theft', None, None
 
-    # 4. Device / IoT infiltration
+    # 5. Device / IoT infiltration
     if _RE_DEVICE_PATH.search(path):
         return 'device_infiltration', None, None
 
-    # 5. Config / secret file exposure
+    # 6. Config / secret file exposure
     if _RE_CONFIG_PATH.search(path) or _RE_HIDDEN_TOOL_STATE.search(path):
         return 'config_exposure', None, None
 
-    # 6. Path traversal
+    # 7. Path traversal
     if _RE_TRAVERSAL.search(combined):
         return 'path_traversal', None, None
 
-    # 7. Proxy abuse / SSRF
+    # 8. Proxy abuse / SSRF / Open Redirect
     if method == 'CONNECT':
         return 'proxy_abuse', None, None
     if _RE_PROXY_PATH.match(path):
         return 'proxy_abuse', None, None
     if _RE_SSRF.search(combined):
         return 'proxy_abuse', None, None
+    if _RE_OPEN_REDIRECT.search(path):
+        return 'open_redirect', None, None
 
-    # 8. Known benign research scanner
+    # 9. Known benign research scanner
     if _RE_RECON_UA.search(ua) or path in _RECON_PATHS:
         return 'research_scanner', None, None
 
-    # 9. Basic first-touch probe of the site root
+    # 10. Basic first-touch probe of the site root
     if method in ('GET', 'HEAD') and path in ('/', ''):
         return 'basic_probe', None, None
 
-    # 10. Fallback discovery buckets for unknown non-root requests
+    # 11. Fallback discovery buckets for unknown non-root requests
     if method in ('GET', 'HEAD') and path not in ('/', ''):
         if _RE_APP_DISCOVERY_PATH.search(path):
             return 'app_discovery', None, None
         if _RE_FILE_DISCOVERY_PATH.search(path):
             return 'resource_discovery', None, None
 
-    # 11. Generic mass scanner fallback
+    # 12. Generic mass scanner fallback
     if _RE_MASS_UA.search(ua):
         return 'mass_scanner', None, None
     if not ua:

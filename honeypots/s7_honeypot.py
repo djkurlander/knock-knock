@@ -275,6 +275,39 @@ def _szl_module_id(szl_id):
     return header + entry
 
 
+def _szl_component_id():
+    """SZL 0x001C: Component identification — order number, serial, versions."""
+    # Each entry: MLFB(20) + BGTyp(2) + AusbgNr(2) + AusbgV(2) + reserved(2) = 28 bytes = 14 words
+    mlfb = b'6ES7 315-2EH14-0AB0 '  # 20 bytes, space-padded (standard Siemens format)
+    entry = mlfb + struct.pack('>HHHH',
+        0x0003,   # BGTyp: CPU module
+        0x0001,   # AusbgNr: assembly 1
+        0x0302,   # AusbgV: version 3.2
+        0x0000,   # reserved
+    )
+    header = struct.pack('>HHHH', 0x001C, 0x0000, 14, 1)
+    return header + entry
+
+
+def _szl_cpu_characteristics():
+    """SZL 0x0011: CPU characteristics — capability flags per index."""
+    # Each entry: index(2) + value1(2) + value2(2) + reserved(18) = 24 bytes = 12 words
+    # A real S7-315-2 returns ~20 entries; we return a minimal convincing set.
+    def entry(idx, v1, v2=0):
+        return struct.pack('>HHH', idx, v1, v2) + b'\x00' * 18
+
+    entries = b''.join([
+        entry(0x0001, 0x0003),   # execution modes: RUN + STOP
+        entry(0x0002, 0x7FFF),   # work memory size (32KB)
+        entry(0x0003, 0x0001),   # number of OBs: 1
+        entry(0x0004, 0x0010),   # number of DBs: 16
+        entry(0x0005, 0x0010),   # number of FBs: 16
+        entry(0x0006, 0x0010),   # number of FCs: 16
+    ])
+    header = struct.pack('>HHHH', 0x0011, 0x0000, 12, 6)
+    return header + entries
+
+
 def _szl_generic(szl_id):
     """Generic SZL response for unrecognised IDs."""
     entry = _MODULE_ORDER[:8].ljust(8, b'\x00') + _FIRMWARE_VER[:4].ljust(4, b'\x00') + b'\x00\x00'
@@ -287,6 +320,10 @@ def _respond_szl(pdu_ref, params, payload):
     seq = params[6] if len(params) > 6 else 0x00
     if szl_id == 0x0100:
         return _make_szl_ack(pdu_ref, seq, _szl_list_of_lists())
+    elif szl_id == 0x001C:
+        return _make_szl_ack(pdu_ref, seq, _szl_component_id())
+    elif szl_id == 0x0011:
+        return _make_szl_ack(pdu_ref, seq, _szl_cpu_characteristics())
     elif szl_id in (0x0111, 0x0112, 0x0113, 0x0114, 0x0132):
         return _make_szl_ack(pdu_ref, seq, _szl_module_id(szl_id))
     else:

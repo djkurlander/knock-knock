@@ -75,10 +75,8 @@ DEFINITION = ProtocolDefinition(
             ],
             [
                 {"label": "type",    "value_key": "mqtt_stage"},
+                {"label": "error",   "value_key": "mqtt_parse_error", "format": "truncate"},
                 {"label": "scanner", "value_key": "mqtt_scanner", "format": "truncate"},
-            ],
-            [
-                {"label": "error", "value_key": "mqtt_parse_error", "format": "truncate"},
             ],
         ],
         "non_connect": [

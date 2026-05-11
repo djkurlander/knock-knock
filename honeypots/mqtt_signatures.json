@@ -27,7 +27,7 @@
   {
     "scanner": "Nmap probe",
     "priority": 250,
-    "client_id_pattern": "^nmap$"
+    "client_id_pattern": "^nmap"
   },
   {
     "scanner": "anonymous",

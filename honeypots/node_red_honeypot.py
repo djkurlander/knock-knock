@@ -58,7 +58,8 @@ def _load_exploits():
         compiled = []
         for idx, e in enumerate(entries):
             compiled.append({
-                'name': e['name'],
+                'name': e.get('name'),
+                'scanner': e.get('scanner'),
                 'purpose': e.get('purpose'),
                 'priority': int(e.get('priority', 1000)),
                 'order': idx,
@@ -90,8 +91,8 @@ def _match_exploit(method, path, ua, body):
         if e['ua_re']:
             checks.append(bool(e['ua_re'].search(ua)))
         if checks and all(checks):
-            return e['name'], e.get('purpose')
-    return None, None
+            return e.get('name'), e.get('purpose'), e.get('scanner')
+    return None, None, None
 
 
 def _trace(client_ip, stage, **kwargs):
@@ -218,27 +219,27 @@ def _parse_body_fields(body, content_type):
 
 def _classify(method, path, ua, body):
     if method and not method[0].isprintable():
-        return 'protocol_probe', None
-    name, purpose = _match_exploit(method, path, ua, body)
-    if name:
-        return purpose or 'unknown', name
+        return 'protocol_probe', None, None
+    name, purpose, scanner = _match_exploit(method, path, ua, body)
+    if name or scanner:
+        return purpose or 'unknown', name, scanner
     if method in ('GET', 'HEAD') and path in ('/', '/red', '/red/'):
-        return 'editor_probe', None
+        return 'editor_probe', None, None
     if path.startswith('/red/'):
-        return 'editor_asset_probe', None
+        return 'editor_asset_probe', None, None
     if path == '/credentials':
-        return 'credentials_probe', None
+        return 'credentials_probe', None, None
     if path.startswith('/context/'):
-        return 'context_probe', None
+        return 'context_probe', None, None
     if path == '/projects':
-        return 'projects_probe', None
+        return 'projects_probe', None, None
     if path.startswith('/library/'):
-        return 'library_probe', None
+        return 'library_probe', None, None
     if path == '/comms':
-        return 'editor_comms_probe', None
+        return 'editor_comms_probe', None, None
     if re.search(r'(Go-http-client|curl/|wget/|python-requests|zgrab|masscan)', ua or '', re.I):
-        return 'mass_scanner', None
-    return 'unknown', None
+        return 'mass_scanner', None, None
+    return 'unknown', None, None
 
 
 def _json_response(status, payload, extra_headers=''):
@@ -481,7 +482,7 @@ def handle_connection(sock, client_ip):
         if not _should_emit(client_ip):
             return
 
-        purpose, exploit_name = _classify(method, path, ua, body)
+        purpose, exploit_name, scanner_name = _classify(method, path, ua, body)
         fields = _parse_body_fields(body, parsed.get('content_type', ''))
         username = fields.get('username') or fields.get('user')
         password = fields.get('password') or fields.get('pass')
@@ -500,6 +501,8 @@ def handle_connection(sock, client_ip):
         }
         if exploit_name:
             knock['nred_exploit'] = exploit_name
+        if scanner_name:
+            knock['nred_scanner'] = scanner_name
         if host:
             knock['nred_host'] = host
         if ua:

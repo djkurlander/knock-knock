@@ -29,6 +29,7 @@ DEFINITION = ProtocolDefinition(
         Column("nred_method", "TEXT"),
         Column("nred_path", "TEXT"),
         Column("nred_exploit", "TEXT"),
+        Column("nred_scanner", "TEXT"),
         Column("nred_host", "TEXT"),
         Column("nred_user_agent", "TEXT"),
         Column("nred_auth_mode", "TEXT"),
@@ -56,6 +57,9 @@ DEFINITION = ProtocolDefinition(
                 {"label": "method", "value_key": "nred_method"},
                 {"label": "path",   "value_key": "nred_path", "format": "truncate"},
             ],
+            [
+                {"label": "scanner", "value_key": "nred_scanner"},
+            ],
         ],
         "auth": [
             [
@@ -73,6 +77,9 @@ DEFINITION = ProtocolDefinition(
             [
                 {"label": "method", "value_key": "nred_method"},
                 {"label": "path",   "value_key": "nred_path", "format": "truncate"},
+            ],
+            [
+                {"label": "scanner", "value_key": "nred_scanner"},
             ],
         ],
         "flow": [

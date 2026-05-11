@@ -9,6 +9,7 @@ from protocols.sip import DEFINITION as SIP
 from protocols.mqtt import DEFINITION as MQTT
 from protocols.nred import DEFINITION as NRED
 from protocols.modb import DEFINITION as MODB
+from protocols.s7 import DEFINITION as S7
 
 
 DEFINITIONS = [
@@ -23,4 +24,5 @@ DEFINITIONS = [
     MQTT,
     NRED,
     MODB,
+    S7,
 ]

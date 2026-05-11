@@ -88,7 +88,7 @@ else
     systemctl daemon-reload
 
     systemctl start knock-monitor
-    echo "  [+] Honeypot + Monitor online (log parsing active)"
+    echo "  [+] Honeypots + monitor online"
 
     systemctl start knock-web
     echo "  [+] Web server online (WebSockets active)"

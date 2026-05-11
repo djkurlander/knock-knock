@@ -131,7 +131,9 @@ if LOG_VISITORS:
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 r = redis.from_url(f"redis://{os.environ.get('REDIS_HOST', 'localhost')}/{os.environ.get('REDIS_DB', '0')}", decode_responses=True)
-DB_PATH = os.environ.get('DB_DIR', 'data') + '/knock_knock.db'
+DB_PATH    = os.environ.get('DB_DIR', 'data') + '/knock_knock.db'
+FEED_SIZE  = int(os.environ.get('FEED_SIZE',  '100'))
+INTEL_SIZE = int(os.environ.get('INTEL_SIZE', '100'))
 ROLLING_KPM_SECONDS = 600
 
 class RollingKpmTracker:
@@ -282,22 +284,23 @@ class GlobalStatsCache:
         conn = sqlite3.connect(DB_PATH, timeout=10)
         conn.row_factory = sqlite3.Row
         cur = conn.cursor()
+        lim = INTEL_SIZE
         if proto is None:
             queries = {
                 "location": "SELECT iso_code as iso, country, hits as count FROM country_intel ORDER BY hits DESC",
-                "password": "SELECT password as label, hits as count FROM pass_intel ORDER BY hits DESC LIMIT 100",
-                "username": "SELECT username as label, hits as count FROM user_intel ORDER BY hits DESC LIMIT 100",
-                "isp":      "SELECT isp as label, hits as count FROM isp_intel ORDER BY hits DESC LIMIT 100",
-                "ip":       "SELECT ip as label, hits as count, ban_until FROM ip_intel ORDER BY hits DESC LIMIT 100",
+                "password": f"SELECT password as label, hits as count FROM pass_intel ORDER BY hits DESC LIMIT {lim}",
+                "username": f"SELECT username as label, hits as count FROM user_intel ORDER BY hits DESC LIMIT {lim}",
+                "isp":      f"SELECT isp as label, hits as count FROM isp_intel ORDER BY hits DESC LIMIT {lim}",
+                "ip":       f"SELECT ip as label, hits as count, ban_until FROM ip_intel ORDER BY hits DESC LIMIT {lim}",
             }
             cur.execute(queries[stat_type])
         else:
             queries = {
                 "location": "SELECT iso_code as iso, country, hits as count FROM country_intel_proto WHERE proto=? ORDER BY hits DESC",
-                "password": "SELECT password as label, hits as count FROM pass_intel_proto WHERE proto=? ORDER BY hits DESC LIMIT 100",
-                "username": "SELECT username as label, hits as count FROM user_intel_proto WHERE proto=? ORDER BY hits DESC LIMIT 100",
-                "isp":      "SELECT isp as label, hits as count FROM isp_intel_proto WHERE proto=? ORDER BY hits DESC LIMIT 100",
-                "ip":       "SELECT p.ip as label, p.hits as count, i.ban_until FROM ip_intel_proto p LEFT JOIN ip_intel i ON p.ip=i.ip WHERE p.proto=? ORDER BY p.hits DESC LIMIT 100",
+                "password": f"SELECT password as label, hits as count FROM pass_intel_proto WHERE proto=? ORDER BY hits DESC LIMIT {lim}",
+                "username": f"SELECT username as label, hits as count FROM user_intel_proto WHERE proto=? ORDER BY hits DESC LIMIT {lim}",
+                "isp":      f"SELECT isp as label, hits as count FROM isp_intel_proto WHERE proto=? ORDER BY hits DESC LIMIT {lim}",
+                "ip":       f"SELECT p.ip as label, p.hits as count, i.ban_until FROM ip_intel_proto p LEFT JOIN ip_intel i ON p.ip=i.ip WHERE p.proto=? ORDER BY p.hits DESC LIMIT {lim}",
             }
             cur.execute(queries[stat_type], (proto,))
         rows = cur.fetchall()
@@ -395,6 +398,8 @@ class ConnectionManager:
         if include_protocol_config:
             payload["enabled_protocols"] = enabled_protocols
             payload["protocol_meta"] = protocol_meta
+            payload["feed_size"] = FEED_SIZE
+            payload["intel_size"] = INTEL_SIZE
         return payload
 
     async def connect(self, websocket: WebSocket):

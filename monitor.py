@@ -23,6 +23,7 @@ DB_PATH = os.environ.get('DB_DIR', 'data') + '/knock_knock.db'
 
 TRACE_KNOCK     = os.environ.get('TRACE_KNOCK', '').lower()  # 'true' or 'verbose'
 REDIS_DB        = int(os.environ.get('REDIS_DB', '0'))
+FEED_SIZE       = int(os.environ.get('FEED_SIZE', '100'))
 SOURCE_ID       = os.environ.get('SOURCE_ID', socket.gethostname().split('.')[0])
 AGGREGATOR_HOST = os.environ.get('AGGREGATOR_HOST', '').strip()
 AGGREGATOR_PORT = int(os.environ.get('AGGREGATOR_PORT', '9999'))
@@ -1119,10 +1120,10 @@ def monitor(save_knocks=None, max_knocks=None, ban_duration_days=30):
                 continue
             _after_save_hook(proto, knock, package)
             r.lpush("knock:recent", json.dumps(package))
-            r.ltrim("knock:recent", 0, 99)
+            r.ltrim("knock:recent", 0, FEED_SIZE - 1)
             proto_key = "knock:recent:" + package['proto'].lower()
             r.lpush(proto_key, json.dumps(package))
-            r.ltrim(proto_key, 0, 99)
+            r.ltrim(proto_key, 0, FEED_SIZE - 1)
             r.incr("knock:total_global")
             r.hincrby("knock:proto_counts", package['proto'], 1)
             r.hincrby("knock:source_counts", package['source'], 1)

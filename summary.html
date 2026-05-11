@@ -1018,7 +1018,8 @@
     let debugDiv = null;
     let knockCount = 0;
     const DEBUG_STORAGE_KEY = 'knock_debug_log';
-    const MAX_PER_PANEL = 100;
+    let MAX_FEED  = 100;
+    let MAX_INTEL = 100;
     const BANNED_SVG = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 36 36" style="width:1em;height:1em;vertical-align:-0.15em"><path fill="#DD2E44" d="M18 0C8.059 0 0 8.059 0 18s8.059 18 18 18 18-8.059 18-18S27.941 0 18 0zm13 18c0 2.565-.753 4.95-2.035 6.965L11.036 7.036C13.05 5.753 15.435 5 18 5c7.18 0 13 5.821 13 13zM5 18c0-2.565.753-4.95 2.036-6.964l17.929 17.929C22.95 30.247 20.565 31 18 31c-7.179 0-13-5.82-13-13z"/></svg>';
     const PULSE_TIMEOUT_BUFFER_MS = 80;
 
@@ -2023,8 +2024,8 @@
         if (!activeProtocols.includes(proto)) return;
         feedData.ALL.unshift(d);
         if (feedData[proto]) feedData[proto].unshift(d);
-        if (feedData.ALL.length > MAX_PER_PANEL) feedData.ALL.length = MAX_PER_PANEL;
-        if (feedData[proto] && feedData[proto].length > MAX_PER_PANEL) feedData[proto].length = MAX_PER_PANEL;
+        if (feedData.ALL.length > MAX_FEED) feedData.ALL.length = MAX_FEED;
+        if (feedData[proto] && feedData[proto].length > MAX_FEED) feedData[proto].length = MAX_FEED;
     }
 
     function clearGlobeLocation() {
@@ -2973,7 +2974,7 @@
                 }
                 el.querySelector('.bar-fill').style.width = ((parseInt(el.getAttribute('data-count')) || 0) / max * 100) + '%';
             });
-            if (prefix !== 'loc') while (container.children.length > MAX_PER_PANEL) container.lastChild.remove();
+            if (prefix !== 'loc') while (container.children.length > MAX_INTEL) container.lastChild.remove();
             // Pin <not provided> to bottom of password panel regardless of count
             if (prefix === 'pass') {
                 const notProvidedRow = container.querySelector('.bar-row[data-id="pass-<not provided>"]');
@@ -3335,7 +3336,7 @@
             const div = makeKnockEl(d);
             if (isNew) el.prepend(div); else el.appendChild(div);
             if (isNew) triggerPulseClass(div);
-            if (el.children.length > MAX_PER_PANEL) el.lastChild.remove();
+            if (el.children.length > MAX_FEED) el.lastChild.remove();
         });
     }
 
@@ -3592,6 +3593,8 @@
                 if (Array.isArray(d.enabled_protocols) || (d.protocol_meta && typeof d.protocol_meta === 'object')) {
                     applyProtocolConfig(d.enabled_protocols, d.protocol_meta);
                 }
+                if (Number.isInteger(d.feed_size)  && d.feed_size  > 0) MAX_FEED  = d.feed_size;
+                if (Number.isInteger(d.intel_size) && d.intel_size > 0) MAX_INTEL = d.intel_size;
                 uptimeMinutesCache = Number(d.uptime_minutes || 0);
                 totalGlobalCache = Number(d.total || 0);
                 const rollingKpm = Number(d.rolling_kpm);
@@ -3651,10 +3654,10 @@
                     feedData.ALL = (activeProtocols.length === TRACKED_PROTOCOLS.length
                         ? allHistory
                         : allHistory.filter(k => activeProtocols.includes((k.proto || '').toUpperCase()))
-                    ).slice(0, MAX_PER_PANEL);
+                    ).slice(0, MAX_FEED);
                     const ph = d.proto_histories || {};
                     activeProtocols.forEach(proto => {
-                        feedData[proto] = (ph[proto.toLowerCase()] || []).slice(0, MAX_PER_PANEL);
+                        feedData[proto] = (ph[proto.toLowerCase()] || []).slice(0, MAX_FEED);
                     });
                     refreshFeed();
                     const activeMode = getCurrentMode();

@@ -585,8 +585,9 @@ def handle_connection(sock: socket.socket, client_ip: str):
 
         knock = {'type': 'KNOCK', 'proto': 'HTTP', 'ip': client_ip,
                  'http_port': _HTTP_PORT,
-                 'http_method': method, 'http_path': path,
-                 'http_purpose': purpose}
+                 'http_method': method, 'http_path': path}
+        if purpose != 'unknown':
+            knock['http_purpose'] = purpose
         if exploit_name:
             knock['http_exploit'] = exploit_name + (f' ({exploit_cve})' if exploit_cve else '')
         if host:

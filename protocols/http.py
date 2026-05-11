@@ -15,8 +15,9 @@ _PURPOSE_LABELS = {
 }
 
 def after_save(knock, package, _ctx):
-    raw_purpose = knock.get('http_purpose') or 'unknown'
-    package['http_purpose_label'] = _PURPOSE_LABELS.get(raw_purpose, raw_purpose.replace('_', ' '))
+    raw_purpose = knock.get('http_purpose')
+    if raw_purpose:
+        package['http_purpose_label'] = _PURPOSE_LABELS.get(raw_purpose, raw_purpose.replace('_', ' '))
 
     has_exploit = bool(knock.get('http_exploit'))
     is_scanner  = raw_purpose == 'research_scanner'

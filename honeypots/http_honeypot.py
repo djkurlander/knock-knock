@@ -262,7 +262,7 @@ _RE_CRED_PATH = re.compile(
     r'|(/(?:login|signin|auth|account/login|user/login|session/new)'
        r'(?:[?/]|$))'
     r'|(/+api/v1/users/login)'
-    r'|(/+(?:phpMyAdmin|pma|myadmin|mysql|dbadmin|sqlmanager|PMA)[^/]*|$)' # phpMyAdmin and aliases
+    r'|(/+(?:phpMyAdmin|pma|myadmin|mysql|dbadmin|sqlmanager|PMA)(?:/|$))' # phpMyAdmin and aliases
     r'|(/RDWeb/)',                              # Microsoft Remote Desktop Web Access
     re.IGNORECASE,
 )

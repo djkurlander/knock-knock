@@ -293,13 +293,15 @@ _RE_DEVICE_PATH = re.compile(
 
 _RE_CONFIG_PATH = re.compile(
     r'((?:^|/)\.env(?:[-_a-zA-Z0-9.]*|$))'      # .env and variants at any depth
+    r'|((?:^|/)%2[eE]env(?:%2[eE][-_a-zA-Z0-9]*|$))' # URL-encoded .env (%2eenv...)
+    r'|((?:^|/)[a-z][a-z0-9_-]*\.env(?:\b|$))' # named .env files: old.env, sample.env, etc.
     r'|((?:^|/)\.git/(?:HEAD|config|FETCH_HEAD|index|credentials))' # git metadata at any depth
     r'|(/wp-config\.php)'
     r'|(/(?:config|configuration|settings|web|local|appsettings|secrets|credentials|application|database)\.(?:php|inc|bak|old|yml|yaml|json|toml|env|xml)'
        r'(?:\b|$))'
     r'|(/\.htaccess|/\.htpasswd)'
     r'|(/\.gitlab-ci\.yml)'                     # GitLab CI config
-    r'|(/phpinfo(?:\.php\d?)?(?:\.txt|\.bak|\.old|$))' # phpinfo leakage
+    r'|(/phpinfo[s]?(?:\.php\d?)?(?:\.txt|\.bak|\.old|/|$)|[?&]phpinfo=)' # phpinfo/phpinfos leakage
     r'|(/web\.config)'
     r'|(/(?:dump|backup|db|database)\.(?:sql|gz|zip|tar))'
     r'|(/(?:credentials|secrets|keys|token|auth|access)(?:\.json|\.yml|\.env|[-_]keys|$))'
@@ -415,13 +417,17 @@ def _classify_purpose(method: str, path: str, ua: str, body: str):
     #    means binary protocol data (TLS ClientHello 0x16, RDP TPKT 0x03, etc.)
     if method and not method[0].isprintable():
         return 'protocol_probe', None, None
-    if method in ('T3', 'SSTP_DUPLEX_POST'):
-        return 'protocol_probe', None, None
 
-    # 1. Exploit database — specific match overrides general classifiers
+    # 1. Exploit database — specific match overrides general classifiers.
+    #    Check before the non-HTTP method guard so T3/SSTP/FOX/CONNECT are
+    #    named correctly when they appear in the exploit list.
     exp_name, exp_cve, exp_purpose = _match_exploit(method, path, ua, body)
     if exp_name:
         return exp_purpose or 'unknown', exp_name, exp_cve
+
+    # 1b. Non-HTTP protocol keywords with no specific exploit entry → protocol_probe
+    if method in ('T3', 'SSTP_DUPLEX_POST', 'FOX'):
+        return 'protocol_probe', None, None
 
     # 2. Malware C2 / Crypto mining — very high confidence signals
     if _RE_MALWARE_COMM.search(method) or _RE_MALWARE_COMM.search(body):

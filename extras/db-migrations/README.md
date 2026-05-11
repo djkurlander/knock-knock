@@ -21,6 +21,12 @@ Current scripts:
     - `isp_intel_proto.asn` from `isp_intel`
     - `ip_intel_proto.lat` / `lng` from `ip_intel`
 
+- `migrate_visitors_v2.py`
+  - Migrates `visitors.db` from one row per visit to one row per IP per day
+
+- `rename_source_id.py`
+  - Renames or merges a `SOURCE_ID` across SQLite and Redis
+
 Examples:
 
 ```bash
@@ -29,6 +35,8 @@ python extras/db-migrations/updatedb.py data/knock_knock.db --backup before-upgr
 python extras/db-migrations/updatedb.py data/knock_knock.db --no-backup
 python extras/db-migrations/migrate_mail_to_smtp.py data/knock_knock.db
 python extras/db-migrations/fix_mail_migration.py data/knock_knock.db
+python extras/db-migrations/migrate_visitors_v2.py
+python extras/db-migrations/rename_source_id.py --from ams2 --to AMS2 --dry-run
 ```
 
 These scripts are intended to be safe to run multiple times.

@@ -6,8 +6,8 @@ v1: one row per visit (id, timestamp, ip, city, region, country, iso_code, isp, 
 v2: one row per IP per day (ip, date, city, ..., visit_count, first_seen, last_seen)
 
 Run once:
-    python extras/db_migrations/migrate_visitors_v2.py
-    python extras/db_migrations/migrate_visitors_v2.py --db /path/to/visitors.db
+    python extras/db-migrations/migrate_visitors_v2.py
+    python extras/db-migrations/migrate_visitors_v2.py --db /path/to/visitors.db
 """
 import argparse
 import sqlite3

@@ -111,8 +111,6 @@ DEFINITION = ProtocolDefinition(
             ],
             [
                 {"label": "type", "value_key": "mqtt_stage"},
-            ],
-            [
                 {"label": "packet", "value_key": "mqtt_packet_type"},
             ],
             [

@@ -6,9 +6,9 @@ If the target ID already exists, hits are merged and the old entry is deleted.
 Knock rows reference sources by integer ID, so the script remaps those too.
 
 Usage:
-    python extras/db_migrations/rename_source_id.py --from ams2 --to AMS2
-    python extras/db_migrations/rename_source_id.py --from ams2 --to AMS2 --db /path/to/knock_knock.db
-    python extras/db_migrations/rename_source_id.py --from ams2 --to AMS2 --dry-run
+    python extras/db-migrations/rename_source_id.py --from ams2 --to AMS2
+    python extras/db-migrations/rename_source_id.py --from ams2 --to AMS2 --db /path/to/knock_knock.db
+    python extras/db-migrations/rename_source_id.py --from ams2 --to AMS2 --dry-run
 """
 import argparse
 import os

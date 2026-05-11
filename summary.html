@@ -1295,7 +1295,7 @@
     }
 
     function refreshHeaderStats() {
-        updateHeaderStats(isFiltered ? getFilteredTotal() : totalGlobalCache, getRollingKpm());
+        updateHeaderStats(isFiltered ? getFilteredTotal() : totalGlobalCache, rollingKpmCache);
     }
 
     function hasUserField(d) {
@@ -1839,9 +1839,7 @@
     let sourceCountsCache = [];   // [{source_id, display_name, hits}] sorted by hits desc
     let uptimeMinutesCache = 0;
     let totalGlobalCache = 0;
-    const ROLLING_RATE_SECONDS = 600;
-    const ROLLING_RATE_MINUTES = ROLLING_RATE_SECONDS / 60;
-    let rollingKnockTimes = [];
+    let rollingKpmCache = '0.0';
     let hitsMap = {}, rankMap = {};
 
     // Per-protocol feed arrays (newest at index 0)
@@ -1866,31 +1864,9 @@
         return out;
     }
 
-    function pruneRollingKnockTimes() {
-        const cutoff = Math.floor(Date.now() / 1000) - ROLLING_RATE_SECONDS;
-        rollingKnockTimes = rollingKnockTimes.filter(t => t >= cutoff);
-    }
-
     function knockEventTime(d) {
         const t = Number(d?.t);
         return Number.isFinite(t) ? Math.floor(t) : Math.floor(Date.now() / 1000);
-    }
-
-    function recordRollingKnock(d) {
-        const proto = (d?.proto || '').toUpperCase();
-        if (!TRACKED_PROTOCOLS.includes(proto)) return;
-        rollingKnockTimes.push(knockEventTime(d));
-        pruneRollingKnockTimes();
-    }
-
-    function seedRollingKnockRates(history) {
-        rollingKnockTimes = (history || []).map(knockEventTime);
-        pruneRollingKnockTimes();
-    }
-
-    function getRollingKpm() {
-        pruneRollingKnockTimes();
-        return (rollingKnockTimes.length / ROLLING_RATE_MINUTES).toFixed(1);
     }
 
     function bumpProtoBreakdownWithKnock(d) {
@@ -3584,7 +3560,6 @@
                 }
                 if (d.iso) hitsMap[d.iso] = (hitsMap[d.iso] || 0) + 1;
                 totalGlobalCache += 1;
-                recordRollingKnock(d);
                 addToFeed(d);
                 renderKnock(d, true);
                 bumpProtoBreakdownWithKnock(d);
@@ -3615,6 +3590,8 @@
                 }
                 uptimeMinutesCache = Number(d.uptime_minutes || 0);
                 totalGlobalCache = Number(d.total || 0);
+                const rollingKpm = Number(d.rolling_kpm);
+                rollingKpmCache = Number.isFinite(rollingKpm) ? rollingKpm.toFixed(1) : '0.0';
                 if (d.last_knock_time) lastKnockTime = d.last_knock_time;
                 // Store leaderboards globally for ranking lookups
                 leaderboards.loc = d.top_locations || [];
@@ -3675,8 +3652,6 @@
                     activeProtocols.forEach(proto => {
                         feedData[proto] = (ph[proto.toLowerCase()] || []).slice(0, MAX_PER_PANEL);
                     });
-                    seedRollingKnockRates(feedData.ALL);
-                    refreshHeaderStats();
                     refreshFeed();
                     const activeMode = getCurrentMode();
                     const topKnock = feedData[activeMode]?.[0];
@@ -3860,7 +3835,6 @@
         wireKnockDetailControls();
         updateSoundIcon();
         updatePauseIcon();
-        setInterval(refreshHeaderStats, 1000);
 
         // Add drag-aware click handler for desktop GLOBE pane
         const globeBox = document.getElementById('d-box-globe');

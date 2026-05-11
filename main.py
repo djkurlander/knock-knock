@@ -1,4 +1,5 @@
 import asyncio, json, logging, sqlite3, os, time, uvicorn
+from collections import deque
 from contextlib import asynccontextmanager
 import redis.asyncio as redis
 import geoip2.database
@@ -131,6 +132,30 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 
 r = redis.from_url(f"redis://{os.environ.get('REDIS_HOST', 'localhost')}/{os.environ.get('REDIS_DB', '0')}", decode_responses=True)
 DB_PATH = os.environ.get('DB_DIR', 'data') + '/knock_knock.db'
+ROLLING_KPM_SECONDS = 600
+
+class RollingKpmTracker:
+    def __init__(self):
+        self.started_at = time.time()
+        self.knock_times = deque()
+
+    def _prune(self, now):
+        cutoff = now - ROLLING_KPM_SECONDS
+        while self.knock_times and self.knock_times[0] < cutoff:
+            self.knock_times.popleft()
+
+    def record(self):
+        now = time.time()
+        self.knock_times.append(now)
+        self._prune(now)
+
+    def kpm(self):
+        now = time.time()
+        self._prune(now)
+        window_seconds = min(ROLLING_KPM_SECONDS, max(1.0, now - self.started_at))
+        return round(len(self.knock_times) / (window_seconds / 60.0), 1)
+
+rolling_kpm_tracker = RollingKpmTracker()
 
 def _build_source_counts(raw):
     """Merge Redis source_counts hash with display names from sources table.
@@ -339,6 +364,7 @@ class ConnectionManager:
             "total": int(total_val) if total_val else 0,
             "uptime_minutes": int(uptime_val) if uptime_val else 0,
             "kpm": current_kpm,
+            "rolling_kpm": rolling_kpm_tracker.kpm(),
             "last_knock_time": int(last_knock_val) if last_knock_val else None,
             "last_lat": float(last_lat_val) if last_lat_val else None,
             "last_lng": float(last_lng_val) if last_lng_val else None,
@@ -387,6 +413,7 @@ class ConnectionManager:
                     "total": stats.get("total", 0),
                     "uptime_minutes": stats.get("uptime_minutes", 0),
                     "kpm": stats.get("kpm", 0.0),
+                    "rolling_kpm": stats.get("rolling_kpm", 0.0),
                     "last_knock_time": stats.get("last_knock_time"),
                     "last_lat": stats.get("last_lat"),
                     "last_lng": stats.get("last_lng"),
@@ -433,6 +460,7 @@ async def redis_listener():
     async for message in pubsub.listen():
         if message["type"] == "message":
             data = json.loads(message["data"])
+            rolling_kpm_tracker.record()
             payload = json.dumps({"type": "new_knock", "data": data})
             await manager.broadcast(payload)
 

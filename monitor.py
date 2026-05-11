@@ -489,6 +489,14 @@ def reset_all():
     except Exception as e:
         print(f"   [!] Error clearing Redis: {e}")
 
+def _ensure_columns(cur, table, columns):
+    """Add any missing columns to an existing table (idempotent)."""
+    existing = {row[1] for row in cur.execute(f"PRAGMA table_info({_sql_ident(table)})").fetchall()}
+    for col in columns:
+        if col.name not in existing:
+            cur.execute(f"ALTER TABLE {_sql_ident(table)} ADD COLUMN {_column_sql(col)}")
+
+
 def init_db(save_protos=None, enabled_protocols=None):
     """save_protos: None=all, False/empty=none, set=specific protocols"""
     conn = sqlite3.connect(DB_PATH, timeout=10)
@@ -502,6 +510,9 @@ def init_db(save_protos=None, enabled_protocols=None):
                 "timestamp TEXT DEFAULT (strftime('%Y-%m-%d %H:%M:%S','now'))"]
         cols += _COMMON_KNOCK_COLS + proto_cols
         cur.execute(f"CREATE TABLE IF NOT EXISTS {table} ({', '.join(cols)})")
+        # Add any columns declared by the protocol definition but missing from
+        # the existing table — handles protocol schema additions without migration.
+        _ensure_columns(cur, definition.knock_table, definition.columns)
     for proto in (enabled_protocols or []):
         definition = (PROTOCOL_META.get(proto) or {}).get('definition')
         if not definition:

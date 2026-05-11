@@ -78,6 +78,16 @@ TRANSFER_FUNCS = frozenset({
 _MODULE_ORDER = b'6ES7 315-2EH14-0AB0\x00'
 _FIRMWARE_VER = b'V3.2'
 
+# SZL IDs advertised as supported by our fake S7-315-2
+_SZL_SUPPORTED = [
+    0x0011, 0x0012, 0x0013, 0x0014, 0x0015,
+    0x0111, 0x0112, 0x0113, 0x0114, 0x0118, 0x0119,
+    0x0131, 0x0132,
+    0x0174, 0x0175,
+    0x0232, 0x0524,
+    0x0100,
+]
+
 
 class S7ParseError(Exception):
     pass
@@ -212,15 +222,75 @@ def respond(parsed):
             return make_ack(pdu_ref, err_class=0x81, err_code=0x01)
 
     elif msg_type == S7_USERDATA:
-        # Return minimal fake SZL module identification
-        szl_data = (
-            b'\x00\x22\x00\x00'  # SZL header: length=34, index=0
-            + _MODULE_ORDER[:20].ljust(20, b'\x00')
-            + _FIRMWARE_VER.ljust(4, b'\x00')
-        )
-        return make_ack(pdu_ref, data=szl_data)
+        return _respond_szl(pdu_ref, parsed['params'], parsed['payload'])
 
     return make_ack(pdu_ref, err_class=0x81, err_code=0x01)
+
+
+def _szl_id_from(params, payload):
+    """Extract SZL-ID: prefer data section payload, fall back to params."""
+    if len(payload) >= 6:
+        try:
+            szl_id = struct.unpack('>H', payload[4:6])[0]
+            if szl_id:
+                return szl_id
+        except Exception:
+            pass
+    if len(params) >= 8:
+        try:
+            return struct.unpack('>H', params[6:8])[0]
+        except Exception:
+            pass
+    return 0
+
+
+def _make_szl_ack(pdu_ref, seq, szl_data):
+    """Build a proper S7 Userdata response with correct parameter block."""
+    resp_params = bytes([
+        0x00, 0x01, 0x12, 0x08,   # param head
+        0x12, 0x84, 0x01, seq,    # type=response+CPU, 0x84, subfunction, echo seq
+        0x00, 0x00, 0x00, 0x00,   # error bytes
+    ])
+    resp_data = struct.pack('>BBH', 0xFF, 0x09, len(szl_data)) + szl_data
+    return make_ack(pdu_ref, params=resp_params, data=resp_data)
+
+
+def _szl_list_of_lists():
+    """SZL 0x0100: list of all SZL IDs supported by this device."""
+    entries = b''.join(struct.pack('>H', s) for s in _SZL_SUPPORTED)
+    # Header: szl_id, index, lenthd (1 word per entry), n_dr
+    header = struct.pack('>HHHH', 0x0100, 0x0000, 1, len(_SZL_SUPPORTED))
+    return header + entries
+
+
+def _szl_module_id(szl_id):
+    """SZL 0x0132/0x0111/etc: component/CPU identification."""
+    entry = (
+        b'\x00\x1C'                              # entry length (28 bytes)
+        b'\x03\x00'                              # module type (CPU)
+        + _MODULE_ORDER[:20].ljust(20, b'\x00')
+        + _FIRMWARE_VER[:4].ljust(4, b'\x00')
+    )
+    header = struct.pack('>HHHH', szl_id, 0x0000, 14, 1)  # 14 words/entry, 1 entry
+    return header + entry
+
+
+def _szl_generic(szl_id):
+    """Generic SZL response for unrecognised IDs."""
+    entry = _MODULE_ORDER[:8].ljust(8, b'\x00') + _FIRMWARE_VER[:4].ljust(4, b'\x00') + b'\x00\x00'
+    header = struct.pack('>HHHH', szl_id, 0x0000, 7, 1)
+    return header + entry
+
+
+def _respond_szl(pdu_ref, params, payload):
+    szl_id = _szl_id_from(params, payload)
+    seq = params[6] if len(params) > 6 else 0x00
+    if szl_id == 0x0100:
+        return _make_szl_ack(pdu_ref, seq, _szl_list_of_lists())
+    elif szl_id in (0x0111, 0x0112, 0x0113, 0x0114, 0x0132):
+        return _make_szl_ack(pdu_ref, seq, _szl_module_id(szl_id))
+    else:
+        return _make_szl_ack(pdu_ref, seq, _szl_generic(szl_id or 0x0011))
 
 
 def extract_fields(parsed):
@@ -232,14 +302,9 @@ def extract_fields(parsed):
 
     if msg_type == S7_USERDATA:
         fields['s7_function_name'] = 'SZL Read'
-        # Userdata params: param header (4 bytes) then SZL ID at offset 4 or 6
-        if len(params) >= 8:
-            try:
-                szl_id = struct.unpack('>H', params[6:8])[0]
-                if szl_id:
-                    fields['s7_szl_id'] = f'0x{szl_id:04X}'
-            except Exception:
-                pass
+        szl_id = _szl_id_from(params, parsed.get('payload', b''))
+        if szl_id:
+            fields['s7_szl_id'] = f'0x{szl_id:04X}'
         return fields
 
     if func is not None:
@@ -294,6 +359,7 @@ def emit_knock(client_ip, port, parsed):
 def handle_connection(sock, client_ip, port):
     try:
         sock.settimeout(S7_TIMEOUT)
+        print(f'🔌 S7 connect {client_ip}', flush=True)
         _trace(client_ip, 'connect')
         connected = False
 
@@ -302,12 +368,16 @@ def handle_connection(sock, client_ip, port):
                 return
             try:
                 payload = read_tpkt(sock)
-            except (S7ParseError, struct.error, socket.timeout, OSError):
+            except S7ParseError as e:
+                _trace(client_ip, 'tpkt_error', reason=str(e))
+                return
+            except (struct.error, socket.timeout, OSError):
                 return
 
             try:
                 pdu_type, cotp_body, s7_data = parse_cotp(payload)
-            except S7ParseError:
+            except S7ParseError as e:
+                _trace(client_ip, 'cotp_error', reason=str(e))
                 return
 
             if pdu_type == COTP_CR:
@@ -321,12 +391,26 @@ def handle_connection(sock, client_ip, port):
                 continue
 
             if not connected or pdu_type != COTP_DT or not s7_data:
+                _trace(client_ip, 'unexpected_pdu', pdu_type=f'0x{pdu_type:02X}', connected=connected)
                 return
 
             try:
                 parsed = parse_s7(s7_data)
-            except S7ParseError:
+            except S7ParseError as e:
+                _trace(client_ip, 's7_parse_error', reason=str(e), raw_hex=s7_data[:16].hex())
                 return
+
+            # Trace the request
+            params = parsed['params']
+            func = params[0] if params else None
+            if parsed['msg_type'] == S7_USERDATA:
+                szl_id = _szl_id_from(params, parsed.get('payload', b''))
+                _trace(client_ip, 'request', msg_type='USERDATA',
+                       function='SZL Read', szl_id=f'0x{szl_id:04X}' if szl_id else None)
+            else:
+                _trace(client_ip, 'request',
+                       msg_type=f'0x{parsed["msg_type"]:02X}',
+                       function=FUNC_NAMES.get(func, f'0x{func:02X}') if func is not None else None)
 
             try:
                 sock.sendall(make_tpkt(make_cotp_dt(respond(parsed))))
@@ -334,8 +418,6 @@ def handle_connection(sock, client_ip, port):
                 return
 
             # Skip emitting for Setup Communication — it's just handshake
-            params = parsed['params']
-            func = params[0] if params else None
             if func == S7_FUNC_SETUP and parsed['msg_type'] == S7_JOB:
                 continue
 

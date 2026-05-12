@@ -1,0 +1,63 @@
+"""
+Knock-Knock local protocol customizations.
+
+Copy this file to the project root as extensions.py to activate overrides.
+extensions.py is gitignored — your customizations stay local and are never
+pushed upstream.
+
+EXTENSIONS: list of ProtocolDefinition objects for entirely new protocols.
+OVERRIDES:  list of ProtocolOverride objects that patch built-in protocols.
+Both lists must be present (they may be empty).
+
+Overrideable fields: badge, badge_color, ui_order, display_fields,
+display_formats, display_format_field, default_display_format.
+
+Override display_formats are merged at the format-key level — only the
+format keys you specify are replaced; unspecified formats inherit from
+the base definition unchanged.
+
+Display spec fields:
+  label       Hardcoded label string
+  label_key   Field name whose value is used as the label (dynamic)
+  value       Hardcoded value (always shown)
+  value_key   Field name whose value is shown (suppressed when null/empty)
+  format      One of: truncate, boolean, list, username, password
+  max_len     Truncation limit in characters (1-500, default 140)
+  flag_key    Field name whose value is used as a country flag ISO code
+"""
+from protocol_api import ProtocolOverride
+
+EXTENSIONS = []
+
+OVERRIDES = [
+    # Example: add User-Agent as the last line of each HTTP display format.
+    # ua: is suppressed automatically when http_user_agent is absent.
+    ProtocolOverride(
+        name="HTTP",
+        display_formats={
+            "probe": [
+                [{"label": "purpose", "value_key": "http_purpose_label"}],
+                [{"label": "method",  "value_key": "http_method"},
+                 {"label": "path",    "value_key": "http_path",   "format": "truncate"}],
+                [{"label": "body",    "value_key": "http_body",   "format": "truncate", "max_len": 40}],
+                [{"label": "ua",      "value_key": "http_user_agent", "max_len": 140}],
+            ],
+            "exploit": [
+                [{"label": "exploit",  "value_key": "http_exploit"}],
+                [{"label": "purpose",  "value_key": "http_purpose_label"}],
+                [{"label": "method",   "value_key": "http_method"},
+                 {"label": "path",     "value_key": "http_path",  "format": "truncate"}],
+                [{"label": "body",     "value_key": "http_body",  "format": "truncate", "max_len": 40}],
+                [{"label": "ua",       "value_key": "http_user_agent", "max_len": 140}],
+            ],
+            "scanner": [
+                [{"label": "purpose",  "value_key": "http_purpose_label"}],
+                [{"label": "scanner",  "value_key": "http_exploit"}],
+                [{"label": "method",   "value_key": "http_method"},
+                 {"label": "path",     "value_key": "http_path",  "format": "truncate"}],
+                [{"label": "body",     "value_key": "http_body",  "format": "truncate", "max_len": 40}],
+                [{"label": "ua",       "value_key": "http_user_agent", "max_len": 140}],
+            ],
+        }
+    ),
+]

@@ -1049,7 +1049,7 @@ def monitor(save_knocks=None, max_knocks=None, ban_duration_days=30):
         try:
             knock = json.loads(line)
         except (json.JSONDecodeError, ValueError):
-            if re.match(r'^[A-Z]+TRACE\b', line):
+            if re.match(r'^[A-Z][A-Z0-9]*TRACE\b', line):
                 print(line, end='', flush=True)
             elif TRACE_KNOCK in ('true', 'verbose'):
                 print(line, end='', flush=True)  # pass through diagnostic output from honeypots

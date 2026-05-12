@@ -29,7 +29,6 @@ DEFINITION = ProtocolDefinition(
     ui_order=60,
     honeypot_script="honeypots/sip_honeypot.py",
     description="SIP allows humans and bots to make phone calls.",
-    ports_label="port 5060",
     default_enabled_entries=["SIP"],
     supports_user_panel=False,
     supports_pass_panel=False,

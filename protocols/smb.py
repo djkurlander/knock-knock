@@ -1,4 +1,4 @@
-from protocol_api import Column, FieldMap, ProtocolDefinition
+from protocol_api import Column, ProtocolDefinition
 
 
 DEFINITION = ProtocolDefinition(
@@ -9,7 +9,6 @@ DEFINITION = ProtocolDefinition(
     ui_order=50,
     honeypot_script="honeypots/smb_honeypot.py",
     description="SMB is a remote file access protocol, introduced by Windows.",
-    ports_label="port 445",
     default_enabled_entries=["SMB"],
     supports_user_panel=True,
     supports_pass_panel=False,
@@ -22,9 +21,6 @@ DEFINITION = ProtocolDefinition(
         Column("smb_version", "TEXT"),
         Column("smb_domain",  "TEXT"),
         Column("smb_host",    "TEXT"),
-    ],
-    field_map=[
-        FieldMap("user", "username"),
     ],
     passthrough_prefixes=["smb_"],
     display_formats={

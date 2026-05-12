@@ -1,4 +1,4 @@
-from protocol_api import Column, DisplayField, FieldMap, PassthroughField, ProtocolDefinition
+from protocol_api import Column, DisplayField, PassthroughField, ProtocolDefinition
 
 
 DEFINITION = ProtocolDefinition(
@@ -9,7 +9,6 @@ DEFINITION = ProtocolDefinition(
     ui_order=95,
     honeypot_script="honeypots/node_red_honeypot.py",
     description="Node-RED is a web-based automation tool, which bots try to commandeer.",
-    ports_label="port 1880",
     default_enabled_entries=["NRED:1880"],
     option_args={
         "TLS": ["--ssl"],
@@ -34,10 +33,6 @@ DEFINITION = ProtocolDefinition(
         Column("nred_user_agent", "TEXT"),
         Column("nred_auth_mode", "TEXT"),
         Column("nred_body", "TEXT"),
-    ],
-    field_map=[
-        FieldMap("user", "username"),
-        FieldMap("pass", "password"),
     ],
     passthrough_prefixes=["nred_"],
     passthrough_fields=[

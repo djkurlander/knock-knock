@@ -434,8 +434,27 @@ def handle_connection(sock, client_ip, port):
             try:
                 parsed = parse_s7(s7_data)
             except S7ParseError as e:
-                _trace(client_ip, 's7_parse_error', reason=str(e), raw_hex=s7_data[:16].hex())
-                return
+                raw_hex = s7_data[:64].hex()
+                _trace(client_ip, 's7_parse_error', reason=str(e), raw_hex=raw_hex)
+                # Emit a knock so unknown protocol probes appear in the feed
+                knock = {
+                    'type': 'KNOCK',
+                    'proto': KNOCK_PROTO,
+                    'ip': client_ip,
+                    's7_port': port,
+                    's7_function_name': 'Unknown Protocol',
+                    's7_raw_prefix': raw_hex,
+                    'display_format': 'other',
+                }
+                print(json.dumps(knock), flush=True)
+                # Send a generic error response rather than dropping — keeps scanner engaged
+                try:
+                    sock.sendall(make_tpkt(make_cotp_dt(
+                        make_ack(0x0000, err_class=0x81, err_code=0x01)
+                    )))
+                except OSError:
+                    pass
+                continue
 
             # Trace the request
             params = parsed['params']

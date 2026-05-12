@@ -1,4 +1,4 @@
-from protocol_api import Column, DisplayField, FieldMap, ProtocolDefinition
+from protocol_api import Column, DisplayField, ProtocolDefinition
 
 
 DEFINITION = ProtocolDefinition(
@@ -9,7 +9,6 @@ DEFINITION = ProtocolDefinition(
     ui_order=90,
     honeypot_script="honeypots/mqtt_honeypot.py",
     description="MQTT is a protocol used by IoT and other devices to send updates and receive commands.",
-    ports_label="ports 1883, 8883",
     default_enabled_entries=["MQTT:1883", "MQTT:8883:TLS"],
     option_args={
         "TLS": ["--ssl"],
@@ -36,10 +35,6 @@ DEFINITION = ProtocolDefinition(
         Column("mqtt_keepalive", "INTEGER"),
         Column("mqtt_scanner", "TEXT"),
         Column("mqtt_exploit", "TEXT"),
-    ],
-    field_map=[
-        FieldMap("user", "username"),
-        FieldMap("pass", "password"),
     ],
     passthrough_prefixes=["mqtt_"],
     display_fields=[

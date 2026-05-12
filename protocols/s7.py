@@ -9,7 +9,6 @@ DEFINITION = ProtocolDefinition(
     ui_order=105,
     honeypot_script="honeypots/s7_honeypot.py",
     description="Siemens S7 is a protocol used by Siemens PLCs in industrial control systems.",
-    ports_label="port 102",
     default_enabled_entries=["S7:102"],
     supports_user_panel=False,
     supports_pass_panel=False,
@@ -56,6 +55,9 @@ DEFINITION = ProtocolDefinition(
         "other": [
             [
                 {"label": "code", "value_key": "s7_function_name"},
+            ],
+            [
+                {"label": "hex", "value_key": "s7_raw_prefix", "format": "truncate"},
             ],
         ],
     },

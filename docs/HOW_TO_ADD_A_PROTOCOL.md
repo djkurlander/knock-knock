@@ -53,7 +53,7 @@ Create a repo-root `extensions.py`. This file is intentionally not present in
 the base install.
 
 ```python
-from protocol_api import Column, DisplayField, FieldMap, ProtocolDefinition
+from protocol_api import Column, DisplayField, ProtocolDefinition
 
 
 EXTENSIONS = [
@@ -77,10 +77,6 @@ EXTENSIONS = [
             Column("xtest_port", "INTEGER"),
             Column("xtest_action", "TEXT"),
             Column("xtest_detail", "TEXT"),
-        ],
-        field_map=[
-            FieldMap("user", "username"),
-            FieldMap("pass", "password"),
         ],
         passthrough_prefixes=["xtest_"],
         display_fields=[
@@ -152,7 +148,10 @@ maps from:
 {"xtest_action": "probe"}
 ```
 
-Use `field_map` for aliases such as `user -> username` and `pass -> password`.
+Credential fields have one conventional alias: `Column("username", "TEXT")`
+stores the knock's `user` field, and `Column("password", "TEXT")` stores the
+knock's `pass` field. Other protocol columns should normally use the same name
+as the emitted knock field.
 
 Schema creation is additive at monitor startup. Missing declared tables and
 columns are created. Renames, type changes, drops, and backfills should be done
@@ -160,8 +159,8 @@ with an explicit migration while the monitor is stopped.
 
 ## Hooks And Side Tables
 
-Most protocols should not need hooks. Use declarative columns, `field_map`,
-passthrough fields, and display formats first.
+Most protocols should not need hooks. Use declarative columns, passthrough
+fields, and display formats first.
 
 When a protocol needs trusted Python behavior, declare a module function by
 path:

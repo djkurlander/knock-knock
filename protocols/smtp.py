@@ -1,4 +1,4 @@
-from protocol_api import Column, FieldMap, PassthroughField, ProtocolDefinition
+from protocol_api import Column, PassthroughField, ProtocolDefinition
 
 
 DEFINITION = ProtocolDefinition(
@@ -9,7 +9,6 @@ DEFINITION = ProtocolDefinition(
     ui_order=80,
     honeypot_script="honeypots/smtp_honeypot.py",
     description="SMTP is the email protocol, which bots exploit to relay spam across the net.",
-    ports_label="ports 25, 587",
     default_enabled_entries=["SMTP:25", "SMTP:587"],
     supports_user_panel=True,
     supports_pass_panel=True,
@@ -23,10 +22,6 @@ DEFINITION = ProtocolDefinition(
         Column("smtp_rcpt_to",   "TEXT"),
         Column("subject",        "TEXT"),
         Column("body",           "TEXT"),
-    ],
-    field_map=[
-        FieldMap("user", "username"),
-        FieldMap("pass", "password"),
     ],
     passthrough_prefixes=["smtp_"],
     passthrough_fields=[

@@ -200,7 +200,6 @@ def publish_protocol_config(redis_conn, enabled_protocols):
             "color": base.get("color", "#ffcc00"),
             "badge": base.get("badge", name),
             "description": base.get("description", ""),
-            "ports_label": base.get("ports_label", ""),
         }
         if definition:
             meta[name]["display_fields"] = [
@@ -365,13 +364,26 @@ def _column_sql(column):
     return f"{_sql_ident(column.name)} {column.type}"
 
 
+# Conventional DB column names that differ from their knock field names.
+# Extension authors define Column("username") and get knock["user"] automatically.
+_COLUMN_SOURCE_ALIASES = {
+    "username": "user",
+    "password": "pass",
+}
+
+
 def _registered_knock_mapping(proto_name):
     definition = (PROTOCOL_META.get(proto_name) or {}).get('definition')
     if not definition or not definition.knock_table:
         return None
-    field_map = [(column.name, column.name) for column in definition.columns]
+    # Default: source field name matches column name, with conventional aliases applied.
+    # Explicit FieldMap entries override both for any remaining custom needs.
     overrides = {mapped.column: mapped.source for mapped in definition.field_map}
-    return definition.knock_table, [(overrides.get(col, key), col) for key, col in field_map]
+    mapping = [
+        (overrides.get(col.name, _COLUMN_SOURCE_ALIASES.get(col.name, col.name)), col.name)
+        for col in definition.columns
+    ]
+    return definition.knock_table, mapping
 
 
 def _build_passthrough_policies():

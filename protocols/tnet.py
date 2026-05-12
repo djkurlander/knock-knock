@@ -1,4 +1,4 @@
-from protocol_api import Column, FieldMap, ProtocolDefinition
+from protocol_api import Column, ProtocolDefinition
 
 
 DEFINITION = ProtocolDefinition(
@@ -9,7 +9,6 @@ DEFINITION = ProtocolDefinition(
     ui_order=20,
     honeypot_script="honeypots/telnet_honeypot.py",
     description="TELNET is an older protocol for logging into remote machines.",
-    ports_label="port 23",
     default_enabled_entries=["TNET"],
     supports_user_panel=True,
     supports_pass_panel=True,
@@ -17,10 +16,6 @@ DEFINITION = ProtocolDefinition(
     columns=[
         Column("username", "TEXT"),
         Column("password", "TEXT"),
-    ],
-    field_map=[
-        FieldMap("user", "username"),
-        FieldMap("pass", "password"),
     ],
     display_formats={
         "tnet": [

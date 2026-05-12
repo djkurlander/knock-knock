@@ -77,7 +77,6 @@ class ProtocolDefinition:
     db_update: str | None = None
     after_save: str | None = None
     description: str = ""
-    ports_label: str = ""
 
 
 @dataclass(frozen=True)
@@ -155,8 +154,6 @@ def validate_protocol_definition(definition: ProtocolDefinition, *, built_in: bo
         _fail(proto, f"ui_order must be an integer, got {definition.ui_order!r}")
     if not isinstance(definition.description, str):
         _fail(proto, "description must be a string")
-    if not isinstance(definition.ports_label, str):
-        _fail(proto, "ports_label must be a string")
     if not isinstance(definition.honeypot_script, str) or os.path.isabs(definition.honeypot_script) or ".." in definition.honeypot_script.split(os.sep):
         _fail(proto, f"unsafe honeypot_script: {definition.honeypot_script!r}")
     if not os.path.exists(os.path.join(_REPO_DIR, definition.honeypot_script)):

@@ -46,7 +46,6 @@ DEFINITION = ProtocolDefinition(
     honeypot_script="honeypots/http_honeypot.py",
     honeypot_args=[],
     description="HTTP is the web protocol, and bots probe it for exploitable apps and known vulnerabilities.",
-    ports_label="ports 80, 443",
     default_enabled_entries=["HTTP:80", "HTTP:443"],
     supports_user_panel=False,
     supports_pass_panel=False,

@@ -202,7 +202,6 @@ async def load_protocol_runtime_config():
             "color": PROTOCOL_META.get(name, {}).get("color", "#ffcc00"),
             "badge": PROTOCOL_META.get(name, {}).get("badge", name),
             "description": PROTOCOL_META.get(name, {}).get("description", ""),
-            "ports_label": PROTOCOL_META.get(name, {}).get("ports_label", ""),
         }
         for name in PROTO.keys()
     }

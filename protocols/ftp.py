@@ -1,4 +1,4 @@
-from protocol_api import Column, FieldMap, ProtocolDefinition
+from protocol_api import Column, ProtocolDefinition
 
 
 DEFINITION = ProtocolDefinition(
@@ -9,7 +9,6 @@ DEFINITION = ProtocolDefinition(
     ui_order=30,
     honeypot_script="honeypots/ftp_honeypot.py",
     description="FTP is a legacy protocol, allowing files to be accessed remotely.",
-    ports_label="port 21",
     default_enabled_entries=["FTP"],
     supports_user_panel=True,
     supports_pass_panel=True,
@@ -17,10 +16,6 @@ DEFINITION = ProtocolDefinition(
     columns=[
         Column("username", "TEXT"),
         Column("password", "TEXT"),
-    ],
-    field_map=[
-        FieldMap("user", "username"),
-        FieldMap("pass", "password"),
     ],
     display_formats={
         "ftp": [

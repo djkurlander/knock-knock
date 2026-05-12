@@ -49,10 +49,6 @@ ProtocolDefinition(
         Column("mqtt_topic", "TEXT"),
         Column("mqtt_tls", "INTEGER"),
     ],
-    field_map=[
-        FieldMap("user", "username"),
-        FieldMap("pass", "password"),
-    ],
     display_fields=[
         DisplayField("mqtt_port", "Port"),
         DisplayField("mqtt_tls", "TLS", format="boolean"),
@@ -434,7 +430,7 @@ Patchable fields:
 | `display_format_field` | replaces the format selector field |
 | `default_display_format` | validated against the merged format set |
 
-Structural fields (`proto_id`, `honeypot_script`, `columns`, `field_map`, `knock_table`, and everything that touches DB schema or subprocess spawning) cannot be overridden. Overrides only apply to protocols in the registry (`protocols/registry.py` or `EXTENSIONS`).
+Structural fields (`proto_id`, `honeypot_script`, `columns`, `knock_table`, and everything that touches DB schema or subprocess spawning) cannot be overridden. Overrides only apply to protocols in the registry (`protocols/registry.py` or `EXTENSIONS`).
 
 Because `extensions.py` is gitignored, overrides survive `git pull` without conflicts.
 

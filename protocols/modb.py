@@ -9,7 +9,6 @@ DEFINITION = ProtocolDefinition(
     ui_order=100,
     honeypot_script="honeypots/modbus_honeypot.py",
     description="Modbus/TCP is used by sensors, actuators, and industrial control systems.",
-    ports_label="port 502",
     default_enabled_entries=["MODB:502"],
     supports_user_panel=False,
     supports_pass_panel=False,

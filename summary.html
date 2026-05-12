@@ -1233,8 +1233,7 @@
             const badge = meta.badge || proto;
             const color = meta.color || PROTO_COLORS[proto] || PROTO_COLORS.ALL;
             const description = meta.description || `${proto} traffic is monitored by this installation.`;
-            const ports = meta.ports_label ? ` (${escapeHtml(meta.ports_label)})` : '';
-            return `<div class="proto-guide-row"><span class="proto-badge" style="color:${escapeHtml(color)}"><span class="proto-badge-label">${escapeHtml(badge)}</span></span><span>${escapeHtml(description)}${ports}</span></div>`;
+            return `<div class="proto-guide-row"><span class="proto-badge" style="color:${escapeHtml(color)}"><span class="proto-badge-label">${escapeHtml(badge)}</span></span><span>${escapeHtml(description)}</span></div>`;
         }).join('');
         ['d-proto-guide', 'm-proto-guide'].forEach(id => {
             const el = document.getElementById(id);

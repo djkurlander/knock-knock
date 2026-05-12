@@ -402,12 +402,10 @@ class ConnectionManager:
         return payload
 
     async def connect(self, websocket: WebSocket):
-        await websocket.accept()
-        # The 100ms breather we discussed for Cloudflare stability
-        await asyncio.sleep(0.1)
-        self.active_connections.append(websocket)
-
         try:
+            await websocket.accept()
+            # The 100ms breather we discussed for Cloudflare stability
+            await asyncio.sleep(0.1)
             stats = await self.get_initial_data()
             history = stats.get("history", [])
 
@@ -441,9 +439,12 @@ class ConnectionManager:
                 }
             }
             await websocket.send_json(payload)
+            self.active_connections.append(websocket)
+            return True
         except Exception as e:
             print(f"❌ ERROR in connect: {e}")
             self.disconnect(websocket)
+            return False
 
     def disconnect(self, websocket: WebSocket):
         if websocket in self.active_connections:
@@ -481,7 +482,8 @@ async def websocket_endpoint(websocket: WebSocket):
             user_agent = websocket.headers.get('user-agent')
             asyncio.get_event_loop().run_in_executor(None, log_visitor, client_ip, referrer, user_agent)
 
-    await manager.connect(websocket)
+    if not await manager.connect(websocket):
+        return
     try:
         while True:
             # This handles incoming pings from the browser to keep CF alive

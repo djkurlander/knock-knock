@@ -380,6 +380,16 @@ def _display_format(parsed):
     return 'other'
 
 
+def classify_non_s7_payload(data):
+    # TCP/102 also carries MMS/IEC 61850 over ISO-on-TCP. These lightweight
+    # checks identify common ACSE association fragments without parsing MMS.
+    if len(data) >= 4 and data[0] == 0x0D and 0xC1 in data:
+        return 'MMS / IEC 61850 association request'
+    if b'\x61' in data[:8]:
+        return 'MMS / IEC 61850 association response'
+    return None
+
+
 def emit_knock(client_ip, port, parsed):
     fields = extract_fields(parsed)
     knock = {
@@ -434,18 +444,22 @@ def handle_connection(sock, client_ip, port):
             try:
                 parsed = parse_s7(s7_data)
             except S7ParseError as e:
-                raw_hex = s7_data[:64].hex()
+                raw_hex = s7_data.hex()
+                display_hex = s7_data[:30].hex()
+                protocol_guess = classify_non_s7_payload(s7_data)
                 _trace(client_ip, 's7_parse_error', reason=str(e), raw_hex=raw_hex)
-                # Emit a knock so unknown protocol probes appear in the feed
+                # Emit a knock so unsupported TCP/102 probes appear in the feed.
                 knock = {
                     'type': 'KNOCK',
                     'proto': KNOCK_PROTO,
                     'ip': client_ip,
                     's7_port': port,
-                    's7_function_name': 'Unknown Protocol',
-                    's7_raw_prefix': raw_hex,
+                    's7_function_name': 'Unsupported Protocol',
+                    's7_raw_prefix': display_hex,
                     'display_format': 'other',
                 }
+                if protocol_guess:
+                    knock['s7_protocol_guess'] = protocol_guess
                 print(json.dumps(knock), flush=True)
                 # Send a generic error response rather than dropping — keeps scanner engaged
                 try:

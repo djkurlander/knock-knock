@@ -254,8 +254,10 @@ represented by a reusable `display_format`.
 
 ## Passthrough
 
-Only declared protocol fields are copied to Redis/websocket payloads. Use
-prefixes for normal protocol telemetry:
+Only declared protocol fields are copied to Redis/websocket payloads; common
+monitor fields such as `ip`, `proto`, location/ISP data, source data, supported
+`user`/`pass`, and display hints are added automatically. Use prefixes for
+normal protocol telemetry:
 
 ```python
 passthrough_prefixes=["xtest_"]

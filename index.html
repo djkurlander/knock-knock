@@ -679,6 +679,14 @@
             z-index: 100; min-width: 100%; white-space: nowrap;
             max-height: 60vh; overflow-y: auto;
         }
+        .proto-dropdown-menu.floating {
+            display: block; position: fixed; right: auto; top: var(--float-top); left: var(--float-left);
+            z-index: 10002; min-width: var(--float-min-width);
+        }
+        .proto-dropdown-menu.floating.mobile-menu .proto-dropdown-option {
+            font-size: 0.98em;
+            padding: 8px 12px;
+        }
         .proto-dropdown.open .proto-dropdown-menu { display: block; }
         .proto-dropdown-option {
             display: flex; justify-content: space-between; padding: 6px 10px; cursor: pointer;
@@ -1527,6 +1535,24 @@
 
     function closeAllProtoDropdowns() {
         document.querySelectorAll('.proto-dropdown.open').forEach(el => el.classList.remove('open'));
+        document.querySelectorAll('.proto-dropdown-menu.floating').forEach(menu => {
+            menu.classList.remove('floating', 'mobile-menu');
+            if (menu._home) menu._home.appendChild(menu);
+        });
+    }
+
+    function floatProtoMenu(dropdown) {
+        const trigger = dropdown.querySelector('.proto-dropdown-trigger');
+        const menu = dropdown.querySelector('.proto-dropdown-menu');
+        if (!trigger || !menu) return;
+        const r = trigger.getBoundingClientRect();
+        menu._home = dropdown;
+        document.body.appendChild(menu);
+        menu.classList.add('floating');
+        menu.classList.toggle('mobile-menu', Boolean(dropdown.closest('.m-pane')));
+        menu.style.setProperty('--float-min-width', `${Math.ceil(r.width)}px`);
+        menu.style.setProperty('--float-top', `${Math.ceil(r.bottom + 2)}px`);
+        menu.style.setProperty('--float-left', `${Math.max(6, Math.ceil(r.right - menu.offsetWidth))}px`);
     }
 
     function openProtoDropdown(e) {
@@ -1544,9 +1570,10 @@
             return `<span class="proto-dropdown-option${active}" data-mode="${m}" style="color:${color};">${m}<span class="proto-dropdown-check">✓</span></span>`;
         }).join('');
         dropdown.classList.add('open');
+        floatProtoMenu(dropdown);
         setTimeout(() => {
             document.addEventListener('click', function closeDropdown(ev) {
-                if (!dropdown.contains(ev.target)) closeAllProtoDropdowns();
+                if (!dropdown.contains(ev.target) && !menu.contains(ev.target)) closeAllProtoDropdowns();
                 document.removeEventListener('click', closeDropdown);
             }, { once: true });
         }, 0);
@@ -1557,7 +1584,8 @@
         const option = e.target.closest('.proto-dropdown-option');
         if (!option) return;
         const mode = option.dataset.mode;
-        const preferredIdx = getPanelIndexFromTarget(e.target);
+        const menu = option.closest('.proto-dropdown-menu');
+        const preferredIdx = getPanelIndexFromTarget(menu?._home || e.target);
         closeAllProtoDropdowns();
         setProtocolMode(mode, { preferredIdx, playSound: true });
     }
@@ -1571,6 +1599,10 @@
     });
     const mViewport = document.getElementById('m-viewport');
     if (mViewport) mViewport.addEventListener('scroll', closeAllProtoDropdowns);
+    document.querySelectorAll('.d-content, .m-content').forEach(el => {
+        el.addEventListener('scroll', closeAllProtoDropdowns, { passive: true });
+    });
+    window.addEventListener('scroll', closeAllProtoDropdowns, { passive: true });
     window.addEventListener('resize', closeAllProtoDropdowns);
 
     // Ensure initial protocol cycle buttons use the same optical-centering wrapper (desktop only).

@@ -397,8 +397,8 @@
 
             #d-box-trivia { width: 300px; height: 400px; overflow-y: auto; }
             #d-box-proto { width: 288px; }
-            /* Feed + intel panels: ~5 items tall, scrollable */
-            #d-feed, #d-loc, #d-user, #d-pass, #d-prov, #d-ip { max-height: 410px; }
+            /* Feed + intel panels: fixed content height, scrollable */
+            #d-feed, #d-loc, #d-user, #d-pass, #d-prov, #d-ip { flex: 0 0 410px; height: 410px; max-height: 410px; }
             #d-globe-pane {
                 display: flex;
                 justify-content: center;
@@ -540,8 +540,8 @@
             .m-content::-webkit-scrollbar { display: none !important; width: 0; height: 0; }
 
             #m-viewport::-webkit-scrollbar { display: none !important; }
-            /* Feed + intel panels: ~5 items tall, scrollable */
-            #m-feed, #m-loc, #m-user, #m-pass, #m-prov, #m-ip, #m-details { max-height: 340px; }
+            /* Feed + intel panels: fixed content height, scrollable */
+            #m-feed, #m-loc, #m-user, #m-pass, #m-prov, #m-ip, #m-details { flex: 0 0 340px; height: 340px; max-height: 340px; }
             #m-trivia {
                 flex: 0 0 300px;
                 height: 300px;
@@ -751,6 +751,14 @@
             background: #0f0f0f; border: 1px solid #2a2a2a;
             z-index: 100; min-width: 100%; white-space: nowrap;
             max-height: 60vh; overflow-y: auto;
+        }
+        .proto-dropdown-menu.floating {
+            display: block; position: fixed; right: auto; top: var(--float-top); left: var(--float-left);
+            z-index: 10002; min-width: var(--float-min-width);
+        }
+        .proto-dropdown-menu.floating.mobile-menu .proto-dropdown-option {
+            font-size: 0.98em;
+            padding: 8px 12px;
         }
         .proto-dropdown.open .proto-dropdown-menu { display: block; }
         .proto-dropdown-option {
@@ -1183,7 +1191,9 @@
     let PASSWORD_PROTOCOLS = new Set();
     let PROTO_COLORS = { ALL: '#ffcc00' };
     let PROTO_INT = {};
-    let protoModeIdx = 0;
+    const PANEL_KEYS = ['feed', 'globe', 'loc', 'user', 'pass', 'prov', 'ip', 'details', 'trivia'];
+    const PANEL_MODES = Object.fromEntries(PANEL_KEYS.map(k => [k, 'ALL']));
+    const PREFIX_PANEL = { loc: 'loc', user: 'user', pass: 'pass', prov: 'prov', ip: 'ip' };
     const PROTO_CHIP_TIMEOUTS = Object.create(null);
     const DESKTOP_LATEST_PROTO_CHIP = {
         chipId: 'd-latest-proto-chip',
@@ -1382,11 +1392,12 @@
 
         if (classicView) {
             PROTO_MODES = [activeProtocols[0]];
-            protoModeIdx = 0;
         } else {
             PROTO_MODES = ['ALL', ...activeProtocols];
         }
-        if (protoModeIdx >= PROTO_MODES.length) protoModeIdx = 0;
+        PANEL_KEYS.forEach(panel => {
+            if (!PROTO_MODES.includes(PANEL_MODES[panel])) PANEL_MODES[panel] = PROTO_MODES[0] || 'ALL';
+        });
 
         // Hide proto chip elements in classic mode
         if (!showProtoChip) {
@@ -1401,11 +1412,38 @@
         renderDesktopProtocolSwitcher();
     }
 
-    function getCurrentMode() {
-        return PROTO_MODES[protoModeIdx] || 'ALL';
+    function getFeedMode() {
+        return getPanelMode('feed');
     }
 
-    function applyProtoButtons(mode = getCurrentMode()) {
+    function getPanelMode(panel) {
+        return PANEL_MODES[panel] || PROTO_MODES[0] || 'ALL';
+    }
+
+    function getDropdownPanel(dropdown) {
+        const host = dropdown?.closest?.('.d-box, .m-pane');
+        const content = host?.querySelector?.('.d-content, .m-content');
+        if (!content?.id) return 'feed';
+        return content.id
+            .replace(/^d-/, '')
+            .replace(/^m-/, '')
+            .replace(/-pane$/, '')
+            .replace('globe', 'globe')
+            .replace('details', 'details');
+    }
+
+    function updateDropdownButton(dropdown, mode) {
+        const modeColor = PROTO_COLORS[mode] || PROTO_COLORS.ALL;
+        const glowColor = hexToRgba(modeColor, 0.7);
+        const trigger = dropdown.querySelector('.proto-dropdown-trigger');
+        if (!trigger) return;
+        trigger.innerHTML = mode + '<span style="letter-spacing:0;margin-left:3px;font-size:1.2em">▾</span>';
+        trigger.style.color = modeColor;
+        trigger.style.borderColor = modeColor;
+        trigger.style.setProperty('--btn-glow', glowColor);
+    }
+
+    function applyProtoButtons(mode = getFeedMode()) {
         if (!showProtoCycleButtons) {
             document.querySelectorAll('.proto-cycle-btn').forEach(el => el.style.display = 'none');
             document.querySelectorAll('.proto-dropdown').forEach(el => el.style.display = 'none');
@@ -1424,15 +1462,9 @@
         // Mobile dropdowns
         document.querySelectorAll('.proto-dropdown').forEach(el => {
             el.style.display = '';
-            const trigger = el.querySelector('.proto-dropdown-trigger');
-            if (trigger) {
-                trigger.innerHTML = mode + '<span style="letter-spacing:0;margin-left:3px;font-size:1.2em">▾</span>';
-                trigger.style.color = modeColor;
-                trigger.style.borderColor = modeColor;
-                trigger.style.setProperty('--btn-glow', glowColor);
-            }
+            updateDropdownButton(el, getPanelMode(getDropdownPanel(el)));
         });
-        updateDesktopProtocolSwitcher(mode);
+        updateDesktopProtocolSwitcher(getFeedMode());
     }
 
     function pulseProtoChip(proto, cfg) {
@@ -1602,16 +1634,15 @@
         }
     }
 
-    function renderLeaderboards(stats) {
-        renderBars('loc',  stats.loc,       'loc-fill', true);
-        renderBars('pass', stats.passwords, 'password-fill');
-        renderBars('prov', stats.providers, 'provider-fill');
-        renderBars('user', stats.users,     'user-fill');
-        renderBars('ip',   stats.ips,       'ip-fill');
+    function renderLeaderboards() {
+        renderBars('loc',  getActiveLeaderboards('loc').loc,       'loc-fill', true);
+        renderBars('pass', getActiveLeaderboards('pass').passwords, 'password-fill');
+        renderBars('prov', getActiveLeaderboards('prov').providers, 'provider-fill');
+        renderBars('user', getActiveLeaderboards('user').users,     'user-fill');
+        renderBars('ip',   getActiveLeaderboards('ip').ips,         'ip-fill');
     }
 
-    function getActiveLeaderboards() {
-        const mode = PROTO_MODES[protoModeIdx];
+    function getLeaderboardsForMode(mode) {
         if (mode === 'ALL') return leaderboards;
         const pi = String(PROTO_INT[mode]);
         const ps = protoStatsCache[pi];
@@ -1623,6 +1654,10 @@
             users:     ps.top_users      || [],
             ips:       ps.top_ips        || [],
         };
+    }
+
+    function getActiveLeaderboards(panel = 'feed') {
+        return getLeaderboardsForMode(getPanelMode(panel));
     }
 
     function hexToRgba(hex, alpha) {
@@ -1678,11 +1713,11 @@
             btn.addEventListener('click', (e) => onDesktopProtoSwitchClick(mode, e));
             container.appendChild(btn);
         });
-        updateDesktopProtocolSwitcher(getCurrentMode());
+        updateDesktopProtocolSwitcher(getFeedMode());
         requestAnimationFrame(positionDesktopProtocolSwitcher);
     }
 
-    function updateDesktopProtocolSwitcher(mode = getCurrentMode()) {
+    function updateDesktopProtocolSwitcher(mode = getFeedMode()) {
         const buttons = document.querySelectorAll('#d-header-proto-buttons .d-proto-switch-btn');
         buttons.forEach(btn => {
             const btnMode = String(btn.dataset.mode || 'ALL').toUpperCase();
@@ -1695,38 +1730,49 @@
         });
     }
 
-    function setProtocolMode(mode, { preferredIdx = null, playSound = false } = {}) {
+    function setPanelProtocolMode(panel, mode, { preferredIdx = null, playSound = false } = {}) {
         const normalized = String(mode || '').toUpperCase();
         const targetIdx = PROTO_MODES.indexOf(normalized);
         if (targetIdx < 0) return;
         if (playSound) playUIClick();
-        protoModeIdx = targetIdx;
-        const newMode = getCurrentMode();
-        applyProtoButtons(newMode);
-        const active = getActiveLeaderboards();
-        renderLeaderboards(active);
-        refreshHeatGlobe(active.loc);
-        refreshFeed();
-        document.querySelectorAll('.d-content, .m-content').forEach(el => el.scrollTop = 0);
+        PANEL_MODES[panel] = normalized;
+        document.querySelectorAll('.proto-dropdown').forEach(el => {
+            if (getDropdownPanel(el) === panel) updateDropdownButton(el, normalized);
+        });
+        updateDesktopProtocolSwitcher(getFeedMode());
+        refreshPanel(panel);
+        document.querySelectorAll(`#d-${panel}, #m-${panel}, #d-${panel}-pane, #m-${panel}-pane`).forEach(el => el.scrollTop = 0);
         applyProtocolPanelVisibility(preferredIdx);
-        const topKnock = feedData[newMode]?.[0];
-        if (topKnock) {
-            updateGlobeLocation(topKnock);
-            if (topKnock.lat != null) rotateGlobeToLocation(topKnock);
-        } else {
-            hideGlobeDot();
-            clearGlobeLocation();
-        }
-        refreshStatsAndTrivia();
     }
 
     function onDesktopProtoSwitchClick(mode, e) {
         if (e) e.stopPropagation();
-        setProtocolMode(mode, { preferredIdx: getDesktopActiveIndex(), playSound: true });
+        setPanelProtocolMode('feed', mode, { preferredIdx: getDesktopActiveIndex(), playSound: true });
     }
 
     function closeAllProtoDropdowns() {
-        document.querySelectorAll('.proto-dropdown.open').forEach(el => el.classList.remove('open'));
+        document.querySelectorAll('.proto-dropdown.open').forEach(el => {
+            el.classList.remove('open');
+        });
+        document.querySelectorAll('.proto-dropdown-menu.floating').forEach(menu => {
+            menu.classList.remove('floating', 'mobile-menu');
+            if (menu._home) menu._home.appendChild(menu);
+        });
+    }
+
+    function floatProtoMenu(dropdown) {
+        const trigger = dropdown.querySelector('.proto-dropdown-trigger');
+        const menu = dropdown.querySelector('.proto-dropdown-menu');
+        if (!trigger || !menu) return;
+        const r = trigger.getBoundingClientRect();
+        menu._home = dropdown;
+        menu._panel = getDropdownPanel(dropdown);
+        document.body.appendChild(menu);
+        menu.classList.add('floating');
+        menu.classList.toggle('mobile-menu', Boolean(dropdown.closest('.m-pane')));
+        menu.style.setProperty('--float-min-width', `${Math.ceil(r.width)}px`);
+        menu.style.setProperty('--float-top', `${Math.ceil(r.bottom + 2)}px`);
+        menu.style.setProperty('--float-left', `${Math.max(6, Math.ceil(r.right - menu.offsetWidth))}px`);
     }
 
     function openProtoDropdown(e) {
@@ -1737,16 +1783,18 @@
         closeAllProtoDropdowns();
         if (wasOpen) return;
         const menu = dropdown.querySelector('.proto-dropdown-menu');
-        const currentMode = getCurrentMode();
+        const panel = getDropdownPanel(dropdown);
+        const currentMode = getPanelMode(panel);
         menu.innerHTML = PROTO_MODES.map(m => {
             const color = PROTO_COLORS[m] || PROTO_COLORS.ALL;
             const active = m === currentMode ? ' active' : '';
             return `<span class="proto-dropdown-option${active}" data-mode="${m}" style="color:${color};">${m}<span class="proto-dropdown-check">✓</span></span>`;
         }).join('');
         dropdown.classList.add('open');
+        floatProtoMenu(dropdown);
         setTimeout(() => {
             document.addEventListener('click', function closeDropdown(ev) {
-                if (!dropdown.contains(ev.target)) closeAllProtoDropdowns();
+                if (!dropdown.contains(ev.target) && !menu.contains(ev.target)) closeAllProtoDropdowns();
                 document.removeEventListener('click', closeDropdown);
             }, { once: true });
         }, 0);
@@ -1757,9 +1805,11 @@
         const option = e.target.closest('.proto-dropdown-option');
         if (!option) return;
         const mode = option.dataset.mode;
-        const preferredIdx = getPanelIndexFromTarget(e.target);
+        const menu = option.closest('.proto-dropdown-menu');
+        const preferredIdx = getPanelIndexFromTarget(menu?._home || e.target);
+        const panel = menu?._panel || getDropdownPanel(option.closest('.proto-dropdown'));
         closeAllProtoDropdowns();
-        setProtocolMode(mode, { preferredIdx, playSound: true });
+        setPanelProtocolMode(panel, mode, { preferredIdx, playSound: true });
     }
 
     // Wire up mobile dropdown triggers and menus
@@ -1771,6 +1821,10 @@
     });
     const mViewport = document.getElementById('m-viewport');
     if (mViewport) mViewport.addEventListener('scroll', closeAllProtoDropdowns);
+    document.querySelectorAll('.d-content, .m-content').forEach(el => {
+        el.addEventListener('scroll', closeAllProtoDropdowns, { passive: true });
+    });
+    window.addEventListener('scroll', closeAllProtoDropdowns, { passive: true });
     window.addEventListener('resize', closeAllProtoDropdowns);
 
     // Ensure initial protocol cycle buttons use the same optical-centering wrapper (desktop only).
@@ -2101,13 +2155,35 @@
     }
 
     function refreshFeed() {
-        const mode = PROTO_MODES[protoModeIdx];
+        const mode = getPanelMode('feed');
         const data = feedData[mode] || feedData.ALL;
         ['d-feed', 'm-feed'].forEach(id => {
             const el = document.getElementById(id);
             el.innerHTML = '';
             data.forEach(d => el.appendChild(makeKnockEl(d)));
         });
+    }
+
+    function refreshGlobePanel() {
+        const mode = getPanelMode('globe');
+        const active = getLeaderboardsForMode(mode);
+        refreshHeatGlobe(active.loc);
+        const topKnock = feedData[mode]?.[0];
+        if (topKnock) {
+            updateGlobeLocation(topKnock);
+            if (topKnock.lat != null) rotateGlobeToLocation(topKnock);
+        } else {
+            hideGlobeDot();
+            clearGlobeLocation();
+        }
+    }
+
+    function refreshPanel(panel) {
+        if (panel === 'feed') refreshFeed();
+        else if (panel === 'globe') refreshGlobePanel();
+        else if (panel === 'details') refreshDetails();
+        else if (panel === 'trivia') refreshTriviaPanel();
+        else if (PANEL_KEYS.includes(panel)) renderLeaderboards();
     }
 
     function getRank(list, value, key = 'label') {
@@ -2297,7 +2373,7 @@
             globe.polygonAltitude(0.006);
             globe.labelsData([]);
         } else if (style.extruded && countriesData) {
-            const maxHits = rebuildMaps(getActiveLeaderboards().loc);
+            const maxHits = rebuildMaps(getActiveLeaderboards('globe').loc);
             const logMax = Math.log(1 + maxHits);
             globe.hexPolygonsData([]);
             globe.polygonsData(countriesData);
@@ -2434,7 +2510,7 @@
         globe.controls().autoRotate = false;
         if (which === 'desktop') paneGlobeDesktop = globe; else paneGlobeMobile = globe;
         globe.onGlobeReady(() => {
-            const activeMode = PROTO_MODES[protoModeIdx];
+            const activeMode = getPanelMode('globe');
             const topKnock = feedData[activeMode]?.[0];
             if (topKnock?.lat != null) {
                 globe._pointData[0].lat = topKnock.lat;
@@ -2880,7 +2956,7 @@
             const container = document.getElementById(layout + prefix);
             if (!container) return;
             container.innerHTML = '';
-            const mode = getCurrentMode();
+            const mode = getPanelMode(PREFIX_PANEL[prefix] || prefix);
             const passNotRelevant = prefix === 'pass' && !isPassPanelRelevant(mode);
             const userNotRelevant = prefix === 'user' && !isUserPanelRelevant(mode);
             if (passNotRelevant || userNotRelevant) {
@@ -2927,7 +3003,7 @@
     const fillClasses = { loc: 'loc-fill', pass: 'password-fill', prov: 'provider-fill', user: 'user-fill', ip: 'ip-fill' };
 
     function incrementAndSort(prefix, id, displayName, serverCount) {
-        const mode = getCurrentMode();
+        const mode = getPanelMode(PREFIX_PANEL[prefix] || prefix);
         if ((prefix === 'pass' && !isPassPanelRelevant(mode)) || (prefix === 'user' && !isUserPanelRelevant(mode))) {
             return;
         }
@@ -3323,13 +3399,13 @@
         return div;
     }
 
-    function knockMatchesFilter(d) {
-        const mode = PROTO_MODES[protoModeIdx];
+    function knockMatchesFilter(d, panel = 'feed') {
+        const mode = getPanelMode(panel);
         return mode === 'ALL' || (d.proto || '').toUpperCase() === mode;
     }
 
     function renderKnock(d, isNew = true) {
-        if (!knockMatchesFilter(d)) return;
+        if (!knockMatchesFilter(d, 'feed')) return;
         ['d-feed', 'm-feed'].forEach(id => {
             const el = document.getElementById(id);
             const div = makeKnockEl(d);
@@ -3358,7 +3434,7 @@
         return `${days}d ${remHours}h ago`;
     }
 
-    function renderInfo(d) {
+    function renderInfo(d, mode = getPanelMode('details')) {
         const loc = formatLocation(d);
         const safeLoc = escapeHtml(loc);
         const safeCountry = escapeHtml(d.country);
@@ -3371,7 +3447,7 @@
         const showPassStats = hasPassField(d) && isPassPanelRelevant(modeProto);
 
         // Get rankings from leaderboards
-        const activeLB = getActiveLeaderboards();
+        const activeLB = getLeaderboardsForMode(mode);
         const countryRank = formatRank(getRank(activeLB.loc, d.iso, 'iso'));
         const userRank = formatRank(getRank(activeLB.users, d.user));
         const passRank = formatRank(getRank(activeLB.passwords, d.pass));
@@ -3379,7 +3455,7 @@
         const ipRank = formatRank(getRank(activeLB.ips, d.ip));
 
         // Use per-protocol stats when a protocol filter is active
-        const filtered = PROTO_MODES[protoModeIdx] !== 'ALL';
+        const filtered = mode !== 'ALL';
         const countryHits = filtered ? (d.country_hits_proto ?? d.country_hits) : d.country_hits;
         const countryLast = filtered ? (d.country_last_proto ?? d.country_last) : d.country_last;
         const userHits    = filtered ? (d.user_hits_proto    ?? d.user_hits)    : d.user_hits;
@@ -3438,8 +3514,7 @@
         });
     }
 
-    function renderInfoEmpty() {
-        const mode = getCurrentMode();
+    function renderInfoEmpty(mode = getPanelMode('details')) {
         const msg = mode === 'ALL'
             ? 'No knocks yet.'
             : `No ${mode} knocks yet.`;
@@ -3456,7 +3531,21 @@
     }
 
     function renderTrivia(d) {
-        if (!d) return;
+        if (!d) {
+            const mode = getPanelMode('trivia');
+            const msg = mode === 'ALL' ? 'No knocks yet.' : `No ${mode} knocks yet.`;
+            const html = `
+                <div class="knock" style="border-bottom:none;">
+                    <span style="color:var(--ui-label)">Note:</span>
+                    <span style="color:var(--neon-green)">${escapeHtml(msg)}</span>
+                </div>
+            `;
+            ['d-trivia', 'm-trivia'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.innerHTML = html;
+            });
+            return;
+        }
         const loc = formatLocation(d);
         const safeLoc = escapeHtml(loc);
         const modeProto = (d.proto || '').toUpperCase();
@@ -3554,7 +3643,7 @@
                     pulseProtoChip(d.proto, DESKTOP_LATEST_PROTO_CHIP);
                     pulseProtoChip(d.proto, MOBILE_LATEST_PROTO_CHIP);
                 }
-                if (knockMatchesFilter(d)) pulseGlobeAtmosphere();
+                if (knockMatchesFilter(d, 'globe')) pulseGlobeAtmosphere();
                 const knockTime = knockEventTime(d);
                 lastKnockTime = knockTime;
                 lastKnockTimeByProto[knockProto] = knockTime;
@@ -3572,16 +3661,24 @@
                 renderProtoStats();
                 pulseProtoStatsRow(d.proto);
                 pulseSourceStatsRow(d.source);
-                if (knockMatchesFilter(d)) {
-                    const lbFiltered = PROTO_MODES[protoModeIdx] !== 'ALL';
-                    incrementAndSort('loc',  d.iso,  d.country, lbFiltered ? (d.country_hits_proto ?? d.country_hits) : d.country_hits);
-                    if (hasPassField(d)) incrementAndSort('pass', d.pass, undefined, lbFiltered ? (d.pass_hits_proto ?? d.pass_hits) : d.pass_hits);
-                    incrementAndSort('prov', d.isp,  undefined,  lbFiltered ? (d.isp_hits_proto    ?? d.isp_hits)    : d.isp_hits);
-                    if (hasUserField(d)) incrementAndSort('user', d.user, undefined, lbFiltered ? (d.user_hits_proto ?? d.user_hits) : d.user_hits);
-                    incrementAndSort('ip',   d.ip,   undefined,  lbFiltered ? (d.ip_hits_proto     ?? d.ip_hits)     : d.ip_hits);
-                }
-                if (knockMatchesFilter(d)) {
-                    refreshStatsAndTrivia();
+                const panelCount = (panel, globalKey, protoKey) => {
+                    const mode = getPanelMode(panel);
+                    if (mode !== 'ALL' && knockProto !== mode) return null;
+                    return mode === 'ALL' ? d[globalKey] : (d[protoKey] ?? d[globalKey]);
+                };
+                const locCount = panelCount('loc', 'country_hits', 'country_hits_proto');
+                if (locCount !== null) incrementAndSort('loc', d.iso, d.country, locCount);
+                const passCount = panelCount('pass', 'pass_hits', 'pass_hits_proto');
+                if (passCount !== null && hasPassField(d)) incrementAndSort('pass', d.pass, undefined, passCount);
+                const provCount = panelCount('prov', 'isp_hits', 'isp_hits_proto');
+                if (provCount !== null) incrementAndSort('prov', d.isp, undefined, provCount);
+                const userCount = panelCount('user', 'user_hits', 'user_hits_proto');
+                if (userCount !== null && hasUserField(d)) incrementAndSort('user', d.user, undefined, userCount);
+                const ipCount = panelCount('ip', 'ip_hits', 'ip_hits_proto');
+                if (ipCount !== null) incrementAndSort('ip', d.ip, undefined, ipCount);
+                if (knockMatchesFilter(d, 'details')) refreshDetails();
+                if (knockMatchesFilter(d, 'trivia')) refreshTriviaPanel();
+                if (knockMatchesFilter(d, 'globe')) {
                     updateGlobeLocation(d);
                     rotateGlobeToLocation(d);
                 }
@@ -3633,7 +3730,7 @@
                         document.getElementById('d-since').innerText = secs;
                     }
                 }
-                applyProtoButtons(getCurrentMode());
+                applyProtoButtons(getFeedMode());
                 applyProtocolPanelVisibility();
                 document.querySelector('.d-nav').style.visibility = 'visible';
                 document.querySelector('.m-nav').style.visibility = 'visible';
@@ -3642,10 +3739,10 @@
                 updateAboutServerInfo();
                 updatePanelIntros();
                 // Refresh Heat extrusion colors/heights without re-setting image or polygon data
-                refreshHeatGlobe(getActiveLeaderboards().loc);
+                refreshGlobePanel();
 
                 const preScroll = vp.scrollLeft;
-                renderLeaderboards(getActiveLeaderboards());
+                renderLeaderboards();
                 if (vp.scrollLeft !== preScroll) debugLog(`⚠️ SCROLL SHIFTED during init_stats: ${preScroll} → ${vp.scrollLeft}`);
                 if (d.history) {
                     // Populate feed arrays from dedicated per-protocol Redis lists
@@ -3659,14 +3756,7 @@
                         feedData[proto] = (ph[proto.toLowerCase()] || []).slice(0, MAX_FEED);
                     });
                     refreshFeed();
-                    const activeMode = getCurrentMode();
-                    const topKnock = feedData[activeMode]?.[0];
-                    if (topKnock) {
-                        updateGlobeLocation(topKnock);
-                        if (topKnock.lat != null) rotateGlobeToLocation(topKnock);
-                    } else {
-                        hideGlobeDot();
-                    }
+                    refreshGlobePanel();
                     refreshStatsAndTrivia();
                 }
             }
@@ -3710,16 +3800,24 @@
     let triviaCountryMap = {};   // country -> {facts: [...], index: n}
     let triviaLoaded = false;
 
-    function refreshStatsAndTrivia() {
-        const mode = PROTO_MODES[protoModeIdx];
+    function refreshDetails() {
+        const mode = getPanelMode('details');
         const topKnock = feedData[mode]?.[0] || null;
         currentKnock = topKnock;
-        if (topKnock) {
-            renderInfo(topKnock);
-            renderTrivia(topKnock);
-        } else {
-            renderInfoEmpty();
-        }
+        if (topKnock) renderInfo(topKnock, mode);
+        else renderInfoEmpty(mode);
+    }
+
+    function refreshTriviaPanel() {
+        const mode = getPanelMode('trivia');
+        const topKnock = feedData[mode]?.[0] || null;
+        if (topKnock) renderTrivia(topKnock);
+        else renderTrivia(null);
+    }
+
+    function refreshStatsAndTrivia() {
+        refreshDetails();
+        refreshTriviaPanel();
     }
 
     function colorizeKey(fact, key) {

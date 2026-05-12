@@ -125,7 +125,6 @@ if LOG_VISITORS:
             print(f"Visitor log error: {e}")
 
     init_visitors_db()
-    print("👥 Visitor tracking enabled")
 
 # This ensures /static/robot1.png is available immediately
 app.mount("/static", StaticFiles(directory="static"), name="static")

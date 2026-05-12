@@ -856,7 +856,8 @@ def is_over_limit_and_block(redis_conn, ip, hits_since_cleared, proto, max_knock
     if not max_knocks:
         return False
     if redis_conn.exists(f"knock:blocked:{ip}"):
-        print(f"⛔ Dropped knock from blocked IP {ip} ({proto})", flush=True)
+        if TRACE_KNOCK:
+            print(f"⛔ Dropped knock from blocked IP {ip} ({proto})", flush=True)
         return True
     limit = max_knocks.get(proto) or max_knocks.get(None)
     if not limit or hits_since_cleared <= limit:

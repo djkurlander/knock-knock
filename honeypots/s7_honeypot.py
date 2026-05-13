@@ -24,6 +24,7 @@ S7_TIMEOUT = float(os.environ.get('S7_TIMEOUT', '20'))
 S7_MAX_REQUESTS = int(os.environ.get('S7_MAX_REQUESTS', '20'))
 S7_TRACE = os.environ.get('S7_TRACE', '0').lower() not in ('0', 'false', 'no')
 S7_TRACE_IP = os.environ.get('S7_TRACE_IP', '').strip()
+S7_MMS_RESPOND = os.environ.get('S7_MMS_RESPOND', 'true').lower() not in ('0', 'false', 'no')
 
 # COTP PDU types
 COTP_CR = 0xE0  # Connection Request
@@ -156,6 +157,14 @@ def make_cotp_cc(src_ref):
 def make_cotp_dt(s7_payload):
     """Wrap S7 payload in COTP DT frame."""
     return bytes([0x02, COTP_DT, 0x80]) + s7_payload
+
+
+def make_mms_association_response():
+    """Build a minimal ACSE AARE response for MMS association probes."""
+    # Presentation data + ACSE AARE accepted. This mirrors the compact response
+    # seen from MMS/IEC-61850 scanners closely enough to test whether they
+    # continue into MMS service requests.
+    return bytes.fromhex('01000100610e300c020103a007a0050201018200')
 
 
 def cotp_src_ref(cotp_body):
@@ -380,14 +389,105 @@ def _display_format(parsed):
     return 'other'
 
 
+def _ber_len(data, pos):
+    if pos >= len(data):
+        return None, pos
+    first = data[pos]
+    pos += 1
+    if first < 0x80:
+        return first, pos
+    n = first & 0x7F
+    if n == 0 or n > 4 or pos + n > len(data):
+        return None, pos
+    length = int.from_bytes(data[pos:pos + n], 'big')
+    return length, pos + n
+
+
+def _decode_oid_value(value):
+    if not value:
+        return None
+    first = value[0]
+    parts = [first // 40, first % 40]
+    current = 0
+    for b in value[1:]:
+        current = (current << 7) | (b & 0x7F)
+        if not (b & 0x80):
+            parts.append(current)
+            current = 0
+    if current:
+        return None
+    return '.'.join(str(p) for p in parts)
+
+
+def _find_ber_oids(data):
+    oids = []
+    for pos, tag in enumerate(data):
+        if tag != 0x06:
+            continue
+        length, value_pos = _ber_len(data, pos + 1)
+        if length is None or length <= 0 or value_pos + length > len(data):
+            continue
+        oid = _decode_oid_value(data[value_pos:value_pos + length])
+        if oid:
+            oids.append(oid)
+    return oids
+
+
+def _has_ber_tlv_tag(data, tag, stop=None):
+    limit = min(len(data), stop if stop is not None else len(data))
+    for pos in range(limit):
+        if data[pos] != tag:
+            continue
+        length, value_pos = _ber_len(data, pos + 1)
+        if length is not None and value_pos + length <= len(data):
+            return True
+    return False
+
+
+def decode_mms_payload(data):
+    """Best-effort MMS/ACSE identification inside ISO-on-TCP user data."""
+    oids = _find_ber_oids(data)
+    mms_oids = [oid for oid in oids if oid.startswith('1.0.9506.')]
+    message = None
+    if data and data[0] == 0x0D and _has_ber_tlv_tag(data, 0x60):
+        message = 'Association Request'
+    elif _has_ber_tlv_tag(data, 0x61, stop=8):
+        message = 'Association Response'
+    if not (mms_oids or message):
+        return None
+    return {
+        'tcp102_protocol': 'MMS',
+        'mms_message': message or 'MMS / ACSE',
+        'mms_oid': mms_oids[0] if mms_oids else (oids[0] if oids else None),
+    }
+
+
 def classify_non_s7_payload(data):
-    # TCP/102 also carries MMS/IEC 61850 over ISO-on-TCP. These lightweight
-    # checks identify common ACSE association fragments without parsing MMS.
-    if len(data) >= 4 and data[0] == 0x0D and 0xC1 in data:
-        return 'MMS / IEC 61850 association request'
-    if b'\x61' in data[:8]:
-        return 'MMS / IEC 61850 association response'
+    decoded = decode_mms_payload(data)
+    if decoded:
+        message = decoded.get('mms_message', 'MMS / ACSE')
+        return f'MMS / IEC 61850 {message.lower()}'
     return None
+
+
+def send_mms_response(sock, client_ip, decoded_mms):
+    if not S7_MMS_RESPOND:
+        _trace(client_ip, 'mms_response_skipped', reason='disabled')
+        return False
+    if not decoded_mms or decoded_mms.get('mms_message') != 'Association Request':
+        _trace(client_ip, 'mms_response_skipped', reason='not_association_request')
+        return False
+    response = make_mms_association_response()
+    try:
+        sock.sendall(make_tpkt(make_cotp_dt(response)))
+        _trace(client_ip, 'mms_response',
+               message='Association Response',
+               response_len=len(response),
+               response_hex=response.hex())
+        return True
+    except OSError as e:
+        _trace(client_ip, 'mms_response_error', reason=str(e))
+        return False
 
 
 def emit_knock(client_ip, port, parsed):
@@ -396,6 +496,7 @@ def emit_knock(client_ip, port, parsed):
         'type': 'KNOCK',
         'proto': KNOCK_PROTO,
         'ip': client_ip,
+        'tcp102_protocol': 'S7',
         's7_port': port,
         'display_format': _display_format(parsed),
         **fields,
@@ -446,28 +547,42 @@ def handle_connection(sock, client_ip, port):
             except S7ParseError as e:
                 raw_hex = s7_data.hex()
                 display_hex = s7_data[:30].hex()
+                decoded_mms = decode_mms_payload(s7_data)
                 protocol_guess = classify_non_s7_payload(s7_data)
                 _trace(client_ip, 's7_parse_error', reason=str(e), raw_hex=raw_hex)
+                if decoded_mms:
+                    _trace(client_ip, 'mms_detected',
+                           message=decoded_mms.get('mms_message'),
+                           oid=decoded_mms.get('mms_oid'),
+                           request_len=len(s7_data),
+                           raw_prefix=display_hex)
                 # Emit a knock so unsupported TCP/102 probes appear in the feed.
                 knock = {
                     'type': 'KNOCK',
                     'proto': KNOCK_PROTO,
                     'ip': client_ip,
+                    'tcp102_protocol': 'MMS' if decoded_mms else 'UNKNOWN',
+                    'tcp102_raw_prefix': display_hex,
                     's7_port': port,
                     's7_function_name': 'Unsupported Protocol',
                     's7_raw_prefix': display_hex,
-                    'display_format': 'other',
+                    'display_format': 'mms' if decoded_mms else 'other',
                 }
+                if decoded_mms:
+                    knock.update({k: v for k, v in decoded_mms.items() if v is not None})
                 if protocol_guess:
                     knock['s7_protocol_guess'] = protocol_guess
                 print(json.dumps(knock), flush=True)
-                # Send a generic error response rather than dropping — keeps scanner engaged
-                try:
-                    sock.sendall(make_tpkt(make_cotp_dt(
-                        make_ack(0x0000, err_class=0x81, err_code=0x01)
-                    )))
-                except OSError:
-                    pass
+                if decoded_mms and send_mms_response(sock, client_ip, decoded_mms):
+                    continue
+                # Send a generic S7 error response for unknown non-MMS probes.
+                if not decoded_mms:
+                    try:
+                        sock.sendall(make_tpkt(make_cotp_dt(
+                            make_ack(0x0000, err_class=0x81, err_code=0x01)
+                        )))
+                    except OSError:
+                        pass
                 continue
 
             # Trace the request

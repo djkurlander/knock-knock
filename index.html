@@ -1599,9 +1599,6 @@
     });
     const mViewport = document.getElementById('m-viewport');
     if (mViewport) mViewport.addEventListener('scroll', closeAllProtoDropdowns);
-    document.querySelectorAll('.d-content, .m-content').forEach(el => {
-        el.addEventListener('scroll', closeAllProtoDropdowns, { passive: true });
-    });
     window.addEventListener('scroll', closeAllProtoDropdowns, { passive: true });
     window.addEventListener('resize', closeAllProtoDropdowns);
 

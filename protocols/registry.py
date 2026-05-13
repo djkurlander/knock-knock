@@ -10,6 +10,7 @@ from protocols.mqtt import DEFINITION as MQTT
 from protocols.nred import DEFINITION as NRED
 from protocols.modb import DEFINITION as MODB
 from protocols.s7 import DEFINITION as S7
+from protocols.snmp import DEFINITION as SNMP
 
 
 DEFINITIONS = [
@@ -25,4 +26,5 @@ DEFINITIONS = [
     NRED,
     MODB,
     S7,
+    SNMP,
 ]

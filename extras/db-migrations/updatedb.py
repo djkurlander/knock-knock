@@ -247,7 +247,7 @@ def visitor_schema_needs_update(cur):
     info = cur.execute("PRAGMA table_info(visitors)").fetchall()
     cols = [row[1] for row in info]
     pk_cols = [row[1] for row in sorted((row for row in info if row[5]), key=lambda row: row[5])]
-    return "page" not in cols or pk_cols != ["ip", "date", "page"]
+    return "page" not in cols or "query_string" not in cols or pk_cols != ["ip", "date", "page"]
 
 
 def update_visitors_db(db_path):
@@ -262,9 +262,10 @@ def update_visitors_db(db_path):
 
         # Change addressed: visitor logging now stores one row per IP per day
         # per page, so referrers and hit counts for / and /summary.html do not
-        # overwrite each other. Existing v1/v2 visitors.db files either lack
-        # page or still use PRIMARY KEY(ip, date), which breaks the current
-        # ON CONFLICT(ip, date, page) write path.
+        # overwrite each other. It also stores query_string separately so
+        # campaign/source params can be inspected without changing the page key.
+        # Existing v1/v2 visitors.db files either lack page or still use
+        # PRIMARY KEY(ip, date), which breaks the current ON CONFLICT write path.
         cols = table_columns(cur, "visitors")
         cur.execute("DROP TABLE IF EXISTS visitors_new")
         cur.execute("""CREATE TABLE visitors_new (
@@ -278,6 +279,7 @@ def update_visitors_db(db_path):
             isp TEXT,
             asn INTEGER,
             referrer TEXT,
+            query_string TEXT,
             user_agent TEXT,
             visit_count INTEGER NOT NULL DEFAULT 1,
             first_seen DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -289,22 +291,23 @@ def update_visitors_db(db_path):
             cur.execute("""
                 INSERT INTO visitors_new (
                     ip, date, page, city, region, country, iso_code, isp, asn,
-                    referrer, user_agent, visit_count, first_seen, last_seen
+                    referrer, query_string, user_agent, visit_count, first_seen, last_seen
                 )
                 SELECT ip, DATE(timestamp), '/', city, region, country, iso_code, isp, asn,
-                       MIN(referrer), MIN(user_agent), COUNT(*), MIN(timestamp), MAX(timestamp)
+                       MIN(referrer), NULL, MIN(user_agent), COUNT(*), MIN(timestamp), MAX(timestamp)
                 FROM visitors
                 GROUP BY ip, DATE(timestamp)
             """)
         else:
             page_expr = "COALESCE(page, '/')" if "page" in cols else "'/'"
+            query_expr = "MIN(query_string)" if "query_string" in cols else "NULL"
             cur.execute(f"""
                 INSERT INTO visitors_new (
                     ip, date, page, city, region, country, iso_code, isp, asn,
-                    referrer, user_agent, visit_count, first_seen, last_seen
+                    referrer, query_string, user_agent, visit_count, first_seen, last_seen
                 )
                 SELECT ip, date, {page_expr}, city, region, country, iso_code, isp, asn,
-                       MIN(referrer), MIN(user_agent), SUM(COALESCE(visit_count, 1)),
+                       MIN(referrer), {query_expr}, MIN(user_agent), SUM(COALESCE(visit_count, 1)),
                        MIN(COALESCE(first_seen, last_seen, date)),
                        MAX(COALESCE(last_seen, first_seen, date))
                 FROM visitors
@@ -314,7 +317,7 @@ def update_visitors_db(db_path):
         cur.execute("DROP TABLE visitors")
         cur.execute("ALTER TABLE visitors_new RENAME TO visitors")
         conn.commit()
-        print("  visitors: migrated to one row per IP/day/page")
+        print("  visitors: migrated to current visitor schema")
         return True
     finally:
         conn.close()

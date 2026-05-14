@@ -64,6 +64,7 @@ async def http_middleware(request: Request, call_next):
                 request.headers.get('user-agent'),
                 referrer,
                 request.url.path,
+                request.url.query or None,
             )
     return response
 
@@ -92,6 +93,7 @@ if LOG_VISITORS:
             isp TEXT,
             asn INTEGER,
             referrer TEXT,
+            query_string TEXT,
             user_agent TEXT,
             visit_count INTEGER NOT NULL DEFAULT 1,
             first_seen DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -119,19 +121,22 @@ if LOG_VISITORS:
             pass
         return geo
 
-    def log_visitor(ip, user_agent=None, referrer=None, page='/'):
+    def log_visitor(ip, user_agent=None, referrer=None, page='/', query_string=None):
         """Log a visitor — one row per IP per day per page."""
         try:
             geo = get_visitor_geo(ip)
             today = datetime.now().strftime('%Y-%m-%d')
             conn = sqlite3.connect(VISITORS_DB_PATH, timeout=10)
             conn.execute("""
-                INSERT INTO visitors (ip, date, page, city, region, country, iso_code, isp, asn, referrer, user_agent)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO visitors (ip, date, page, city, region, country, iso_code, isp, asn, referrer, query_string, user_agent)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(ip, date, page) DO UPDATE SET
                     visit_count = visit_count + 1,
-                    last_seen = CURRENT_TIMESTAMP
-            """, (ip, today, page, geo['city'], geo['region'], geo['country'], geo['iso'], geo['isp'], geo['asn'], referrer, user_agent))
+                    last_seen = CURRENT_TIMESTAMP,
+                    referrer = COALESCE(NULLIF(visitors.referrer, ''), excluded.referrer),
+                    query_string = COALESCE(NULLIF(visitors.query_string, ''), excluded.query_string),
+                    user_agent = COALESCE(NULLIF(visitors.user_agent, ''), excluded.user_agent)
+            """, (ip, today, page, geo['city'], geo['region'], geo['country'], geo['iso'], geo['isp'], geo['asn'], referrer, query_string, user_agent))
             conn.commit()
             conn.close()
         except Exception as e:

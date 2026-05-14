@@ -148,6 +148,8 @@ SMTP Attacker   → honeypots/smtp_honeypot.py           (ports 25,587)┘      
 | `docker-compose.yml` | Docker deployment (Redis, honeypot+monitor, web) |
 | `stats.py` | CLI utility for printing database statistics |
 | `dbtool.py` | DB management: `--list-tables`, `--backup`, `--remove-knocks` |
+| `docs/PROTOCOL_ARCHITECTURE.md` | Current protocol registry, extension, persistence, and display architecture |
+| `docs/HOW_TO_ADD_A_PROTOCOL.md` | Practical guide for adding a local/private protocol |
 | `extras/` | Optional utilities (Cloudflare UFW rules, texture generation, visitor reports) |
 
 ## Data Directory

@@ -503,6 +503,11 @@ async def websocket_endpoint(websocket: WebSocket):
 async def get():
     return HTMLResponse(content=open("index.html").read(), headers={"Cache-Control": "no-cache"})
 
+@app.head("/internet-background-radiation")
+@app.get("/internet-background-radiation")
+async def get_ibr():
+    return HTMLResponse(content=open("internet-background-radiation.html").read(), headers={"Cache-Control": "no-cache"})
+
 @app.head("/summary")
 @app.get("/summary")
 async def get_summary():

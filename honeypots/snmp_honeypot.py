@@ -24,14 +24,52 @@ PDU_NAMES = {
     0xA5: 'GetBulkRequest',
 }
 
-SYS_DESCR = (1, 3, 6, 1, 2, 1, 1, 1, 0)
+# System group
+SYS_DESCR     = (1, 3, 6, 1, 2, 1, 1, 1, 0)
 SYS_OBJECT_ID = (1, 3, 6, 1, 2, 1, 1, 2, 0)
-SYS_UPTIME = (1, 3, 6, 1, 2, 1, 1, 3, 0)
-SYS_CONTACT = (1, 3, 6, 1, 2, 1, 1, 4, 0)
-SYS_NAME = (1, 3, 6, 1, 2, 1, 1, 5, 0)
-SYS_LOCATION = (1, 3, 6, 1, 2, 1, 1, 6, 0)
+SYS_UPTIME    = (1, 3, 6, 1, 2, 1, 1, 3, 0)
+SYS_CONTACT   = (1, 3, 6, 1, 2, 1, 1, 4, 0)
+SYS_NAME      = (1, 3, 6, 1, 2, 1, 1, 5, 0)
+SYS_LOCATION  = (1, 3, 6, 1, 2, 1, 1, 6, 0)
+SYS_SERVICES  = (1, 3, 6, 1, 2, 1, 1, 7, 0)
 
-NEXT_OIDS = [SYS_DESCR, SYS_OBJECT_ID, SYS_UPTIME, SYS_CONTACT, SYS_NAME, SYS_LOCATION]
+# Interfaces group
+IF_NUMBER     = (1, 3, 6, 1, 2, 1, 2, 1, 0)
+IF_INDEX_1    = (1, 3, 6, 1, 2, 1, 2, 2, 1, 1, 1)
+IF_INDEX_2    = (1, 3, 6, 1, 2, 1, 2, 2, 1, 1, 2)
+IF_DESCR_1    = (1, 3, 6, 1, 2, 1, 2, 2, 1, 2, 1)
+IF_DESCR_2    = (1, 3, 6, 1, 2, 1, 2, 2, 1, 2, 2)
+IF_TYPE_1     = (1, 3, 6, 1, 2, 1, 2, 2, 1, 3, 1)
+IF_TYPE_2     = (1, 3, 6, 1, 2, 1, 2, 2, 1, 3, 2)
+IF_MTU_1      = (1, 3, 6, 1, 2, 1, 2, 2, 1, 4, 1)
+IF_MTU_2      = (1, 3, 6, 1, 2, 1, 2, 2, 1, 4, 2)
+IF_SPEED_1    = (1, 3, 6, 1, 2, 1, 2, 2, 1, 5, 1)
+IF_SPEED_2    = (1, 3, 6, 1, 2, 1, 2, 2, 1, 5, 2)
+IF_PHYS_1     = (1, 3, 6, 1, 2, 1, 2, 2, 1, 6, 1)
+IF_PHYS_2     = (1, 3, 6, 1, 2, 1, 2, 2, 1, 6, 2)
+IF_ADMIN_1    = (1, 3, 6, 1, 2, 1, 2, 2, 1, 7, 1)
+IF_ADMIN_2    = (1, 3, 6, 1, 2, 1, 2, 2, 1, 7, 2)
+IF_OPER_1     = (1, 3, 6, 1, 2, 1, 2, 2, 1, 8, 1)
+IF_OPER_2     = (1, 3, 6, 1, 2, 1, 2, 2, 1, 8, 2)
+IF_IN_OCTS_1  = (1, 3, 6, 1, 2, 1, 2, 2, 1, 10, 1)
+IF_IN_OCTS_2  = (1, 3, 6, 1, 2, 1, 2, 2, 1, 10, 2)
+IF_OUT_OCTS_1 = (1, 3, 6, 1, 2, 1, 2, 2, 1, 16, 1)
+IF_OUT_OCTS_2 = (1, 3, 6, 1, 2, 1, 2, 2, 1, 16, 2)
+
+# IP group
+IP_FORWARDING = (1, 3, 6, 1, 2, 1, 4, 1, 0)
+IP_DEFAULT_TTL = (1, 3, 6, 1, 2, 1, 4, 2, 0)
+
+NEXT_OIDS = [
+    SYS_DESCR, SYS_OBJECT_ID, SYS_UPTIME, SYS_CONTACT, SYS_NAME, SYS_LOCATION, SYS_SERVICES,
+    IF_NUMBER,
+    IF_INDEX_1, IF_INDEX_2, IF_DESCR_1, IF_DESCR_2,
+    IF_TYPE_1, IF_TYPE_2, IF_MTU_1, IF_MTU_2,
+    IF_SPEED_1, IF_SPEED_2, IF_PHYS_1, IF_PHYS_2,
+    IF_ADMIN_1, IF_ADMIN_2, IF_OPER_1, IF_OPER_2,
+    IF_IN_OCTS_1, IF_IN_OCTS_2, IF_OUT_OCTS_1, IF_OUT_OCTS_2,
+    IP_FORWARDING, IP_DEFAULT_TTL,
+]
 
 
 class SNMPParseError(Exception):
@@ -221,14 +259,56 @@ def enc_oid(oid):
     return tlv(0x06, bytes(out))
 
 
+def _int(n):
+    return tlv(0x02, enc_int(n))
+
+def _str(s):
+    return tlv(0x04, s if isinstance(s, bytes) else s.encode())
+
+def _counter(n):
+    return tlv(0x41, n.to_bytes(4, 'big'))
+
+def _gauge(n):
+    return tlv(0x42, n.to_bytes(4, 'big'))
+
+
 def snmp_value_for(oid, version_int):
     values = {
-        SYS_DESCR: tlv(0x04, b'Linux gateway snmpd 5.9; embedded network appliance'),
+        # System group
+        SYS_DESCR:     _str(b'Linux gateway snmpd 5.9; embedded network appliance'),
         SYS_OBJECT_ID: enc_oid((1, 3, 6, 1, 4, 1, 8072, 3, 2, 10)),
-        SYS_UPTIME: tlv(0x43, (287654321).to_bytes(5, 'big').lstrip(b'\x00')),
-        SYS_CONTACT: tlv(0x04, b'admin@example.local'),
-        SYS_NAME: tlv(0x04, b'edge-gw-01'),
-        SYS_LOCATION: tlv(0x04, b'utility closet'),
+        SYS_UPTIME:    tlv(0x43, (287654321).to_bytes(5, 'big').lstrip(b'\x00')),
+        SYS_CONTACT:   _str(b'admin@example.local'),
+        SYS_NAME:      _str(b'edge-gw-01'),
+        SYS_LOCATION:  _str(b'utility closet'),
+        SYS_SERVICES:  _int(78),   # physical(8)+datalink(2)+internet(4)+end-to-end(64) = gateway
+
+        # Interfaces
+        IF_NUMBER:     _int(2),
+        IF_INDEX_1:    _int(1),
+        IF_INDEX_2:    _int(2),
+        IF_DESCR_1:    _str(b'eth0'),
+        IF_DESCR_2:    _str(b'eth1'),
+        IF_TYPE_1:     _int(6),    # ethernetCsmacd
+        IF_TYPE_2:     _int(6),
+        IF_MTU_1:      _int(1500),
+        IF_MTU_2:      _int(1500),
+        IF_SPEED_1:    _gauge(100_000_000),   # 100 Mbps WAN
+        IF_SPEED_2:    _gauge(1_000_000_000), # 1 Gbps LAN
+        IF_PHYS_1:     _str(b'\x00\x1a\x2b\x3c\x4d\x5e'),  # fake MAC
+        IF_PHYS_2:     _str(b'\x00\x1a\x2b\x3c\x4d\x5f'),
+        IF_ADMIN_1:    _int(1),   # up
+        IF_ADMIN_2:    _int(1),
+        IF_OPER_1:     _int(1),   # up
+        IF_OPER_2:     _int(1),
+        IF_IN_OCTS_1:  _counter(3_847_291_033),
+        IF_IN_OCTS_2:  _counter(1_293_847_562),
+        IF_OUT_OCTS_1: _counter(2_938_471_920),
+        IF_OUT_OCTS_2: _counter(984_726_341),
+
+        # IP group
+        IP_FORWARDING:  _int(1),  # forwarding — it's a gateway
+        IP_DEFAULT_TTL: _int(64),
     }
     if oid in values:
         return values[oid]

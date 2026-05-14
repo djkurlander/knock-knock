@@ -42,7 +42,7 @@ def get_client_ip(websocket: WebSocket) -> str:
     return websocket.client.host if websocket.client else None
 
 @app.middleware("http")
-async def log_unhandled_http_requests(request: Request, call_next):
+async def http_middleware(request: Request, call_next):
     response = await call_next(request)
     if LOG_UNHANDLED_HTTP and response.status_code == 404:
         logger.warning(
@@ -53,6 +53,18 @@ async def log_unhandled_http_requests(request: Request, call_next):
             request.headers.get('host', ''),
             request.headers.get('user-agent', ''),
         )
+    if LOG_VISITORS and response.headers.get('content-type', '').startswith('text/html'):
+        ip = get_request_client_ip(request)
+        if ip:
+            referrer = request.headers.get('referer') or request.headers.get('referrer')
+            if referrer and 'knock-knock' in referrer.lower():
+                referrer = None
+            asyncio.get_event_loop().run_in_executor(
+                None, log_visitor, ip,
+                request.headers.get('user-agent'),
+                referrer,
+                request.url.path,
+            )
     return response
 
 # --- Visitor Logging (opt-in via LOG_VISITORS=true) ---
@@ -72,6 +84,7 @@ if LOG_VISITORS:
         cur.execute("""CREATE TABLE IF NOT EXISTS visitors (
             ip TEXT NOT NULL,
             date TEXT NOT NULL,
+            page TEXT NOT NULL DEFAULT '/',
             city TEXT,
             region TEXT,
             country TEXT,
@@ -83,7 +96,7 @@ if LOG_VISITORS:
             visit_count INTEGER NOT NULL DEFAULT 1,
             first_seen DATETIME DEFAULT CURRENT_TIMESTAMP,
             last_seen DATETIME DEFAULT CURRENT_TIMESTAMP,
-            PRIMARY KEY (ip, date)
+            PRIMARY KEY (ip, date, page)
         )""")
         conn.commit()
         conn.close()
@@ -106,19 +119,19 @@ if LOG_VISITORS:
             pass
         return geo
 
-    def log_visitor(ip, referrer=None, user_agent=None):
-        """Log a visitor to the separate visitors database — one row per IP per day."""
+    def log_visitor(ip, user_agent=None, referrer=None, page='/'):
+        """Log a visitor — one row per IP per day per page."""
         try:
             geo = get_visitor_geo(ip)
             today = datetime.now().strftime('%Y-%m-%d')
             conn = sqlite3.connect(VISITORS_DB_PATH, timeout=10)
             conn.execute("""
-                INSERT INTO visitors (ip, date, city, region, country, iso_code, isp, asn, referrer, user_agent)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT(ip, date) DO UPDATE SET
+                INSERT INTO visitors (ip, date, page, city, region, country, iso_code, isp, asn, referrer, user_agent)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(ip, date, page) DO UPDATE SET
                     visit_count = visit_count + 1,
                     last_seen = CURRENT_TIMESTAMP
-            """, (ip, today, geo['city'], geo['region'], geo['country'], geo['iso'], geo['isp'], geo['asn'], referrer, user_agent))
+            """, (ip, today, page, geo['city'], geo['region'], geo['country'], geo['iso'], geo['isp'], geo['asn'], referrer, user_agent))
             conn.commit()
             conn.close()
         except Exception as e:
@@ -471,16 +484,6 @@ async def redis_listener():
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
-    # Log visitor in background (non-blocking)
-    if LOG_VISITORS:
-        client_ip = get_client_ip(websocket)
-        if client_ip:
-            referrer = websocket.headers.get('referer') or websocket.headers.get('referrer')
-            if referrer and 'knock-knock' in referrer.lower():
-                referrer = None
-            user_agent = websocket.headers.get('user-agent')
-            asyncio.get_event_loop().run_in_executor(None, log_visitor, client_ip, referrer, user_agent)
-
     if not await manager.connect(websocket):
         return
     try:

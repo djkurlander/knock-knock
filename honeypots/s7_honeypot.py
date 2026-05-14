@@ -462,13 +462,6 @@ def decode_mms_payload(data):
     }
 
 
-def classify_non_s7_payload(data):
-    decoded = decode_mms_payload(data)
-    if decoded:
-        message = decoded.get('mms_message', 'MMS / ACSE')
-        return f'MMS / IEC 61850 {message.lower()}'
-    return None
-
 
 def send_mms_response(sock, client_ip, decoded_mms):
     if not S7_MMS_RESPOND:
@@ -548,7 +541,6 @@ def handle_connection(sock, client_ip, port):
                 raw_hex = s7_data.hex()
                 display_hex = s7_data[:30].hex()
                 decoded_mms = decode_mms_payload(s7_data)
-                protocol_guess = classify_non_s7_payload(s7_data)
                 _trace(client_ip, 's7_parse_error', reason=str(e), raw_hex=raw_hex)
                 if decoded_mms:
                     _trace(client_ip, 'mms_detected',
@@ -570,8 +562,6 @@ def handle_connection(sock, client_ip, port):
                 }
                 if decoded_mms:
                     knock.update({k: v for k, v in decoded_mms.items() if v is not None})
-                if protocol_guess:
-                    knock['s7_protocol_guess'] = protocol_guess
                 print(json.dumps(knock), flush=True)
                 if decoded_mms and send_mms_response(sock, client_ip, decoded_mms):
                     continue

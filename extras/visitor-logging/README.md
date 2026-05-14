@@ -4,7 +4,7 @@ Optional add-on that logs dashboard visitors to a separate SQLite database and s
 
 ## How It Works
 
-1. **main.py** (core project) has built-in visitor logging gated behind the `LOG_VISITORS=true` environment variable. When enabled, each WebSocket connection logs the visitor's IP, GeoIP location, ISP, referrer, and user agent to `data/visitors.db`.
+1. **main.py** (core project) has built-in visitor logging gated behind the `LOG_VISITORS=true` environment variable. When enabled, each HTML page request logs the visitor's IP, GeoIP location, ISP, referrer, user agent, and page path to `data/visitors.db` — one row per IP per day per page.
 
 2. **visitor_report.py** (this directory) queries that database and emails you a summary — daily, weekly, or monthly.
 
@@ -82,7 +82,8 @@ Without email configured, reports print to stdout.
 Visitor data is stored in `data/visitors.db`:
 
 ```sql
-visitors(id, timestamp, ip, city, region, country, iso_code, isp, asn, referrer, user_agent)
+visitors(ip, date, page, city, region, country, iso_code, isp, asn, referrer, user_agent, visit_count, first_seen, last_seen)
+-- PRIMARY KEY (ip, date, page)
 ```
 
 This is separate from the main `knock_knock.db` attack database.

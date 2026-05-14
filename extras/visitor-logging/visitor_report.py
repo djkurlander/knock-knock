@@ -136,6 +136,22 @@ def get_visitor_summary(days):
         'top_isps': top_isps
     }
 
+def get_top_referrers(days, limit=10):
+    """Get top referrers by total visit count for the last N days."""
+    cutoff = (date.today() - timedelta(days=days)).isoformat()
+    conn = sqlite3.connect(VISITORS_DB)
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT referrer, SUM(visit_count) as total
+        FROM visitors
+        WHERE date >= ? AND referrer IS NOT NULL AND referrer != ''
+        GROUP BY referrer ORDER BY total DESC LIMIT ?
+    """, [cutoff, limit])
+    rows = cur.fetchall()
+    conn.close()
+    return rows
+
+
 def format_report(period_name, days):
     """Format the visitor report."""
     visitors = get_visitors(days)
@@ -160,6 +176,13 @@ def format_report(period_name, days):
         report.append(f"  {isp}: {cnt}")
     report.append("")
 
+    top_referrers = get_top_referrers(days)
+    if top_referrers:
+        report.append("TOP REFERRERS:")
+        for ref, cnt in top_referrers:
+            report.append(f"  {ref}: {cnt}")
+        report.append("")
+
     report.append("=" * 50)
     report.append("VISITOR DETAILS:")
     report.append("")
@@ -168,7 +191,7 @@ def format_report(period_name, days):
     limit = 500
     for v in visitors[:limit]:
         loc = ", ".join(filter(None, [v['city'], v['region'], v['country']]))
-        count_str = f"({v['visit_count']} connections)" if v['visit_count'] > 1 else "(1 connection)"
+        count_str = f"({v['visit_count']} visits)" if v['visit_count'] > 1 else "(1 visit)"
         report.append(f"{v['ip']} {count_str}")
         report.append(f"  Location: {loc or 'Unknown'}")
         report.append(f"  ISP: {v['isp'] or 'Unknown'}")

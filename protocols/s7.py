@@ -65,12 +65,6 @@ DEFINITION = ProtocolDefinition(
                 {"label": "proto", "value_key": "tcp102_protocol"},
                 {"label": "code", "value_key": "s7_function_name"},
             ],
-            [
-                {"label": "likely", "value_key": "s7_protocol_guess"},
-            ],
-            [
-                {"label": "hex", "value_key": "s7_raw_prefix", "format": "truncate", "max_len": 20},
-            ],
         ],
         "mms": [
             [
@@ -79,9 +73,6 @@ DEFINITION = ProtocolDefinition(
             ],
             [
                 {"label": "oid", "value_key": "mms_oid"},
-            ],
-            [
-                {"label": "hex", "value_key": "tcp102_raw_prefix", "format": "truncate", "max_len": 20},
             ],
         ],
     },

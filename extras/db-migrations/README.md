@@ -7,6 +7,7 @@ Current scripts:
 - `updatedb.py`
   - Updates an existing `knock_knock.db` to the current schema
   - Creates a timestamped backup in the database directory by default
+  - Also updates `visitors.db` if it exists and needs the current visitor schema
   - Moves the historical schema transformations out of `monitor.py`
 
 - `migrate_mail_to_smtp.py`
@@ -23,6 +24,7 @@ Current scripts:
 
 - `migrate_visitors_v2.py`
   - Migrates `visitors.db` from one row per visit to one row per IP per day
+  - Legacy helper; `updatedb.py` now handles the current visitor schema
 
 - `rename_source_id.py`
   - Renames or merges a `SOURCE_ID` across SQLite and Redis

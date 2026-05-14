@@ -241,6 +241,85 @@ def backup_db(db_path, backup_name):
     print(f"Backed up {db_path} to {dest}")
 
 
+def visitor_schema_needs_update(cur):
+    if not table_exists(cur, "visitors"):
+        return False
+    info = cur.execute("PRAGMA table_info(visitors)").fetchall()
+    cols = [row[1] for row in info]
+    pk_cols = [row[1] for row in sorted((row for row in info if row[5]), key=lambda row: row[5])]
+    return "page" not in cols or pk_cols != ["ip", "date", "page"]
+
+
+def update_visitors_db(db_path):
+    if not os.path.exists(db_path):
+        return False
+
+    conn = sqlite3.connect(db_path, timeout=30)
+    try:
+        cur = conn.cursor()
+        if not visitor_schema_needs_update(cur):
+            return False
+
+        # Change addressed: visitor logging now stores one row per IP per day
+        # per page, so referrers and hit counts for / and /summary.html do not
+        # overwrite each other. Existing v1/v2 visitors.db files either lack
+        # page or still use PRIMARY KEY(ip, date), which breaks the current
+        # ON CONFLICT(ip, date, page) write path.
+        cols = table_columns(cur, "visitors")
+        cur.execute("DROP TABLE IF EXISTS visitors_new")
+        cur.execute("""CREATE TABLE visitors_new (
+            ip TEXT NOT NULL,
+            date TEXT NOT NULL,
+            page TEXT NOT NULL DEFAULT '/',
+            city TEXT,
+            region TEXT,
+            country TEXT,
+            iso_code TEXT,
+            isp TEXT,
+            asn INTEGER,
+            referrer TEXT,
+            user_agent TEXT,
+            visit_count INTEGER NOT NULL DEFAULT 1,
+            first_seen DATETIME DEFAULT CURRENT_TIMESTAMP,
+            last_seen DATETIME DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (ip, date, page)
+        )""")
+
+        if "timestamp" in cols and "date" not in cols:
+            cur.execute("""
+                INSERT INTO visitors_new (
+                    ip, date, page, city, region, country, iso_code, isp, asn,
+                    referrer, user_agent, visit_count, first_seen, last_seen
+                )
+                SELECT ip, DATE(timestamp), '/', city, region, country, iso_code, isp, asn,
+                       MIN(referrer), MIN(user_agent), COUNT(*), MIN(timestamp), MAX(timestamp)
+                FROM visitors
+                GROUP BY ip, DATE(timestamp)
+            """)
+        else:
+            page_expr = "COALESCE(page, '/')" if "page" in cols else "'/'"
+            cur.execute(f"""
+                INSERT INTO visitors_new (
+                    ip, date, page, city, region, country, iso_code, isp, asn,
+                    referrer, user_agent, visit_count, first_seen, last_seen
+                )
+                SELECT ip, date, {page_expr}, city, region, country, iso_code, isp, asn,
+                       MIN(referrer), MIN(user_agent), SUM(COALESCE(visit_count, 1)),
+                       MIN(COALESCE(first_seen, last_seen, date)),
+                       MAX(COALESCE(last_seen, first_seen, date))
+                FROM visitors
+                GROUP BY ip, date, {page_expr}
+            """)
+
+        cur.execute("DROP TABLE visitors")
+        cur.execute("ALTER TABLE visitors_new RENAME TO visitors")
+        conn.commit()
+        print("  visitors: migrated to one row per IP/day/page")
+        return True
+    finally:
+        conn.close()
+
+
 def update_db(db_path):
     conn = sqlite3.connect(db_path, timeout=30)
     try:
@@ -283,6 +362,18 @@ def main():
         backup_db(args.db_path, backup_name)
 
     update_db(args.db_path)
+    visitors_db_path = os.path.join(os.path.dirname(args.db_path), "visitors.db")
+    if os.path.exists(visitors_db_path):
+        conn = sqlite3.connect(visitors_db_path, timeout=30)
+        try:
+            needs_visitor_update = visitor_schema_needs_update(conn.cursor())
+        finally:
+            conn.close()
+        if needs_visitor_update:
+            if not args.no_backup:
+                stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+                backup_db(visitors_db_path, f"visitors.pre-updatedb.{stamp}.db")
+            update_visitors_db(visitors_db_path)
     print("Database update complete")
     return 0
 

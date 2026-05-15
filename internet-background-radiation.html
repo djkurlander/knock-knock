@@ -66,7 +66,7 @@
             color: var(--warning-yellow);
         }
         .ibr-live-stat-text {
-            font-family: 'Inter', sans-serif;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
             font-weight: 500;
         }
 
@@ -399,11 +399,11 @@
             }
 
             #d-box-feed { width: 425px; }
-            #d-box-info { width: 340px; height: 440px; overflow-y: auto; }
+            #d-box-info { width: 340px; height: 485px; overflow-y: auto; }
             #d-box-globe { width: 473px; height: 563px; }
 
             #d-box-trivia { width: 300px; height: 400px; overflow-y: auto; }
-            #d-box-proto { width: 288px; }
+            #d-box-proto { width: 340px; }
             /* Feed + intel panels: fixed content height, scrollable */
             #d-feed, #d-loc, #d-user, #d-pass, #d-prov, #d-ip { flex: 0 0 410px; height: 410px; max-height: 410px; }
             #d-globe-pane {
@@ -844,7 +844,7 @@
                     <div class="d-stats-wrap">
                         <div class="d-stats-block">
                             <div class="d-stats">
-                                <span id="d-total-label" class="stat-label">Total Knocks:</span>&nbsp;<span id="d-total" class="stat-value">0</span>
+                                <span id="d-total-label" class="stat-label">Total Clicks:</span>&nbsp;<span id="d-total" class="stat-value">0</span>
                             </div>
                             <div class="d-stats">
                                 <span class="stat-label">Per Min:</span>&nbsp;<span id="d-kpm" class="stat-value">0.0</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="stat-label">LAST:</span>&nbsp;<span id="d-since" class="stat-value">-</span>
@@ -870,7 +870,7 @@
         <div class="panel-intro"><div id="d-proto-guide" class="proto-guide-panel"></div></div>
 
         <div class="panel-intro" data-intro="globe"></div>
-        <div class="d-box" id="d-box-globe"><h2 style="display:flex;justify-content:space-between;align-items:center;">GLOBAL RADIATION ORIGIN<span class="proto-dropdown"><span class="proto-dropdown-trigger">ALL<span style="letter-spacing:0;margin-left:3px;font-size:1.2em">▾</span></span><span class="proto-dropdown-menu"></span></span></h2><div id="d-globe-location" style="text-align:center; margin-bottom:10px;"><div id="d-globe-loc-text" style="color:var(--neon-green);"></div><div id="d-globe-loc-isp" style="color:var(--data-blue); font-size:0.85em;"></div></div><div id="d-globe-pane" class="d-content globe-pane"></div></div>
+        <div class="d-box" id="d-box-globe"><h2 style="display:flex;justify-content:space-between;align-items:center;">GLOBAL ORIGIN<span class="proto-dropdown"><span class="proto-dropdown-trigger">ALL<span style="letter-spacing:0;margin-left:3px;font-size:1.2em">▾</span></span><span class="proto-dropdown-menu"></span></span></h2><div id="d-globe-location" style="text-align:center; margin-bottom:10px;"><div id="d-globe-loc-text" style="color:var(--neon-green);"></div><div id="d-globe-loc-isp" style="color:var(--data-blue); font-size:0.85em;"></div></div><div id="d-globe-pane" class="d-content globe-pane"></div></div>
 
         <div class="panel-intro" data-intro="loc"></div>
         <div class="d-box"><h2 style="display:flex;justify-content:space-between;align-items:center;">LOCATION<span class="proto-dropdown"><span class="proto-dropdown-trigger">ALL<span style="letter-spacing:0;margin-left:3px;font-size:1.2em">▾</span></span><span class="proto-dropdown-menu"></span></span></h2><div id="d-loc" class="d-content"></div></div>
@@ -888,7 +888,7 @@
         <div class="d-box"><h2 style="display:flex;justify-content:space-between;align-items:center;">IP ADDRESS<span class="proto-dropdown"><span class="proto-dropdown-trigger">ALL<span style="letter-spacing:0;margin-left:3px;font-size:1.2em">▾</span></span><span class="proto-dropdown-menu"></span></span></h2><div id="d-ip" class="d-content"></div></div>
 
         <div class="panel-intro" data-intro="info"></div>
-        <div class="d-box" id="d-box-info"><h2 style="display:flex;justify-content:space-between;align-items:center;">LAST CLICK<span class="proto-dropdown"><span class="proto-dropdown-trigger">ALL<span style="letter-spacing:0;margin-left:3px;font-size:1.2em">▾</span></span><span class="proto-dropdown-menu"></span></span></h2><div id="d-details" class="d-content"></div></div>
+        <div class="d-box" id="d-box-info"><h2 style="display:flex;justify-content:space-between;align-items:center;">LAST EVENT<span class="proto-dropdown"><span class="proto-dropdown-trigger">ALL<span style="letter-spacing:0;margin-left:3px;font-size:1.2em">▾</span></span><span class="proto-dropdown-menu"></span></span></h2><div id="d-details" class="d-content"></div></div>
 
         <div class="panel-intro" data-intro="proto"></div>
         <div class="d-box" id="d-box-proto"><h2>STATS</h2><div id="d-proto-stats" class="d-content"></div></div>
@@ -923,7 +923,7 @@
                     <h1 id="m-header-title">NET GEIGER COUNTER <span class="status-dot"></span></h1>
                     <div style="font-size: 0.85em; color: var(--neon-green); margin-top: -2px; margin-bottom: 8px; font-style: italic;">INTERNET RADIATION, LIVE &nbsp;<span id="m-header-pause" style="font-style:normal; color:#888; font-size:1em; line-height:0.85; position:relative; top:-1px;">⏸</span> <span id="m-header-sound" style="font-style:normal; cursor:pointer; padding:10px 10px 10px 3px; margin:-10px -10px -10px 0; position:relative; top:1px;" onclick="toggleSound(); event.stopPropagation();">🔇</span></div>
                     <div class="m-stat-row">
-                        <span id="m-total-label" class="stat-label">Total Knocks:</span>&nbsp;<span id="m-total" class="stat-value">0</span>
+                        <span id="m-total-label" class="stat-label">Total Clicks:</span>&nbsp;<span id="m-total" class="stat-value">0</span>
                     </div>
                     <div class="m-stat-row">
                         <span class="stat-label">Per Min:</span>&nbsp;<span id="m-kpm" class="stat-value">0.0</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="stat-label">LAST:</span>&nbsp;<span id="m-since" class="stat-value">-</span>
@@ -940,7 +940,7 @@
         <div class="panel-intro" data-intro="feed3"></div>
         <div class="panel-intro"><div id="m-proto-guide" class="proto-guide-panel"></div></div>
         <div class="panel-intro" data-intro="globe"></div>
-        <div class="m-pane" id="m-pane-globe"><h2 style="display:flex;justify-content:space-between;align-items:center;">GLOBAL RADIATION ORIGIN<span class="proto-dropdown"><span class="proto-dropdown-trigger">ALL<span style="letter-spacing:0;margin-left:3px;font-size:1.2em">▾</span></span><span class="proto-dropdown-menu"></span></span></h2><div id="m-globe-location" style="text-align:center; margin-bottom:10px;"><div id="m-globe-loc-text" style="color:var(--neon-green);"></div><div id="m-globe-loc-isp" style="color:var(--data-blue); font-size:0.85em;"></div></div><div id="m-globe-pane" class="m-content globe-pane" style="display:flex; justify-content:center; align-items:center;"></div></div>
+        <div class="m-pane" id="m-pane-globe"><h2 style="display:flex;justify-content:space-between;align-items:center;">GLOBAL ORIGIN<span class="proto-dropdown"><span class="proto-dropdown-trigger">ALL<span style="letter-spacing:0;margin-left:3px;font-size:1.2em">▾</span></span><span class="proto-dropdown-menu"></span></span></h2><div id="m-globe-location" style="text-align:center; margin-bottom:10px;"><div id="m-globe-loc-text" style="color:var(--neon-green);"></div><div id="m-globe-loc-isp" style="color:var(--data-blue); font-size:0.85em;"></div></div><div id="m-globe-pane" class="m-content globe-pane" style="display:flex; justify-content:center; align-items:center;"></div></div>
         <div class="panel-intro" data-intro="loc"></div>
         <div class="m-pane" id="m-pane-loc"><h2 style="display:flex;justify-content:space-between;align-items:center;">LOCATION<span class="proto-dropdown"><span class="proto-dropdown-trigger">ALL<span style="letter-spacing:0;margin-left:3px;font-size:1.2em">▾</span></span><span class="proto-dropdown-menu"></span></span></h2><div id="m-loc" class="m-content"></div></div>
         <div class="panel-intro" data-intro="user"></div>
@@ -952,7 +952,7 @@
         <div class="panel-intro" data-intro="ip"></div>
         <div class="m-pane" id="m-pane-ip"><h2 style="display:flex;justify-content:space-between;align-items:center;">IP ADDRESS<span class="proto-dropdown"><span class="proto-dropdown-trigger">ALL<span style="letter-spacing:0;margin-left:3px;font-size:1.2em">▾</span></span><span class="proto-dropdown-menu"></span></span></h2><div id="m-ip" class="m-content"></div></div>
         <div class="panel-intro" data-intro="info"></div>
-        <div class="m-pane" id="m-pane-details"><h2 style="display:flex;justify-content:space-between;align-items:center;">LAST CLICK<span class="proto-dropdown"><span class="proto-dropdown-trigger">ALL<span style="letter-spacing:0;margin-left:3px;font-size:1.2em">▾</span></span><span class="proto-dropdown-menu"></span></span></h2><div id="m-details" class="m-content"></div></div>
+        <div class="m-pane" id="m-pane-details"><h2 style="display:flex;justify-content:space-between;align-items:center;">LAST EVENT<span class="proto-dropdown"><span class="proto-dropdown-trigger">ALL<span style="letter-spacing:0;margin-left:3px;font-size:1.2em">▾</span></span><span class="proto-dropdown-menu"></span></span></h2><div id="m-details" class="m-content"></div></div>
         <div class="panel-intro" data-intro="proto"></div>
         <div class="m-pane" id="m-pane-proto"><h2>STATS</h2><div id="m-proto-stats" class="m-content"></div></div>
         <div class="panel-intro" data-intro="trivia"></div>
@@ -993,7 +993,7 @@
 <div id="knock-detail-backdrop" class="knock-detail-backdrop">
     <div class="knock-detail-dialog" role="dialog" aria-modal="true" aria-labelledby="knock-detail-title">
         <div class="knock-detail-header">
-            <span id="knock-detail-title">KNOCK DETAILS</span>
+            <span id="knock-detail-title">CLICK DETAILS</span>
             <div class="knock-detail-actions">
                 <button type="button" id="knock-detail-copy">Copy</button>
                 <button type="button" id="knock-detail-close">Close</button>
@@ -1007,17 +1007,17 @@
     // --- PANEL INTRO TEXT (single source of truth for both layouts) ---
     const PANEL_INTROS = {
         feed:       '<p>In 2004, researchers coined the term “Internet Background Radiation” to describe the constant, unsolicited traffic traversing the internet at all times (<a href="https://www.icir.org/vern/papers/radiation-imc04.pdf" target="_blank" rel="noopener">Pang, Paxson et al.</a>). This includes automated bots and scanners relentlessly probing every connected machine, attempting to break in, compromising web servers and IoT devices, relaying email spam, placing fraudulent VoIP calls, and more. This page lets you see and hear that radiation in real time.</p>',
-        feed2:      '<p>We have set up listeners for 8 common network protocols (SSH, Telnet, FTP, RDP, SMB, SIP, HTTP, and SMTP) across servers distributed throughout the world. Each uninvited network request is referred to as a “knock”. So far, in the <span class="ibr-uptime ibr-live-stat ibr-live-stat-text">...</span> that our servers have been running, there have been <span class="ibr-total-knocks ibr-live-stat ibr-live-stat-text">...</span> knocks, as documented in the header above. <em>Per Min</em> shows the rolling 10-minute knocks per minute, and <em>Last</em> indicates how long ago the last knock was received. The globe shows the location of the most recent bot or scanner hitting our servers. To hear the Internet Background Radiation on a virtual Geiger counter, click the speaker icon. You\'ll hear a click each time a knock is received.</p><p>In the scrollable live feed below, each entry is a unit of internet background radiation, an uninvited bit of net chatter captured in real time. You can filter by protocol (or type of the “radiation”), and each entry has a small colorful box on the right indicating its protocol. You can scroll through this panel to see the last 100 units of radiation received.</p>',
+        feed2:      '<p>We have set up listeners for 8 common network protocols (SSH, Telnet, FTP, RDP, SMB, SIP, HTTP, and SMTP) across servers distributed throughout the world. Each uninvited network request is referred to as a “click”. So far, in the <span class="ibr-uptime ibr-live-stat ibr-live-stat-text">...</span> that our servers have been running, there have been <span class="ibr-total-knocks ibr-live-stat ibr-live-stat-text">...</span> clicks, as documented in the header above. The header also shows the average number of events detected per minute over the last 10 minutes, and when the last event occurred. The globe shows the location of the most recent bot or scanner hitting our servers. To hear the Internet Background Radiation on a virtual Geiger counter, click the speaker icon. You\'ll hear a click each time an event is detected.</p><p>In the scrollable live feed below, each entry documents an uninvited bit of net chatter captured in real time. You can filter by protocol (or type of the “radiation”), and each entry has a small colorful box on the right indicating its protocol. You can scroll through this panel to see the last 100 units of radiation received.</p>',
         feed3:  '<p>The following are the protocols currently monitored by our listeners:</p>',
-        globe:  '<p>Half the fun (at least for me) is seeing where all this radiation originates. This project started when I showed my kids raw login-attempt logs (initially SSH), and they asked: where are all these bots coming from? In the globe view, each knock is plotted as a dot on a 3D globe to show the bot\'s origin. Take it out for a spin (literally, you can spin it interactively). You can also cycle through multiple visual styles with the Style button at the bottom of the panel. One of the most interesting is HEAT, a 3D heatmap that highlights the worst-offending countries and territories.</p>',
-        loc:    '<p>To see these origins in a textual leaderboard, check out the LOCATION panel below. Here you can see the worst-offending bot origin countries. Technically, just because a bot is hosted there does not mean it is controlled by bad actors in that country; the attackers may be elsewhere, using servers they rent or infect. You can scroll through this panel to see a complete leaderboard of the radiation origin by country. As of this posting, we\'re still waiting for bot activity from several African countries. They tend to have fewer internet servers than the rest of the world. However, we did detect activity from Jersey (the island, not the state or cow), Nauru (~10K people), and Monaco (~2 km^2).</p>',
+        globe:  '<p>Half the fun (at least for me) is seeing where all this radiation originates. This project started when I showed my kids raw login-attempt logs (initially SSH), and they asked: where are all these bots coming from? In the globe view, each click is plotted as a dot on a 3D globe to show the bot\'s origin. Take it out for a spin (literally, you can spin it interactively). You can also cycle through multiple visual styles with the Style button at the bottom of the panel. One of the most interesting is HEAT, a 3D heatmap that highlights the worst-offending countries and territories.</p>',
+        loc:    '<p>To see these origins in a textual leaderboard, check out the LOCATION panel below. Here you can see the worst-offending bot origin countries. Technically, just because a bot is hosted there does not mean it is controlled by bad actors in that country; the attackers may be elsewhere, using servers they rent or infect. You can scroll through this panel to see a complete leaderboard of the radiation origin by country. As of this posting, we\'re still waiting for bot activity from several African countries. They tend to have fewer internet servers than the rest of the world. However, we did detect activity from Jersey (the island, not the state or cow), Nauru (~10K people), and Monaco (~2 km<sup>2</sup>).</p>',
         user:   '<p>Many bots try to log in with username/password credentials. These are often pulled from dictionaries of common credentials, which is why this is called dictionary-based attack traffic and credential stuffing. Scroll through the live leaderboard below to see the top 100 most commonly attempted usernames. Filter by protocol, to see some very significant differences. Usually, root leads by a wide margin: on Unix/Linux systems, it\'s the superuser account with full control of the server.</p>',
-        pass:   '<p>The next panel shows the most frequent passwords attempted by bots. Life Pro Tip: do not use one of these passwords. Almost always, the Space Balls \'12345\' password is in the top 10. It may be hard to imagine that people actually use these passwords, but they do, and many of the bots attempting these passwords are running on servers they broke into using these same passwords. Note that common passwords differ somewhat by protocol. Scroll through this panel to see the infamous top 100.</p>',
+        pass:   '<p>The next panel shows the most frequent passwords attempted by bots. Life Pro Tip: do not use any of these passwords! Almost always, the Space Balls \'12345\' password is in the top 10. It may be hard to imagine that people actually use these passwords, but they do, and many of the bots attempting these passwords are running on servers they broke into using these same passwords. Note that common passwords differ somewhat by protocol. Scroll through this panel to see the infamous top 100.</p>',
         isp:    '<p>Internet Service Providers (ISPs) provide network access that enables bots to attack other machines. ISPs can suspend or revoke access for abusive servers, but enforcement varies widely. Below is the ISP Wall of Shame.</p>',
         ip:         '<p>Each bot reveals its IP address, a unique network identifier, when attacking our server. Because we\'re interested in attack patterns, we often let bots continue for a while. Occasionally, we cap a bot at a fixed number of attacks before banning it; when that happens, you\'ll see some IPs max out at that fixed count, marked with a red ban symbol.</p>',
-        info:   '<p>The LAST CLICK panel shows details from the most recent bot attack: country, user, password, ISP, and IP address. For each value, it shows how long ago it was last seen, total sightings, and a rank badge: gold for top 10, silver for 11-50, and red for 51-100.</p>',
-        proto:  '<p>As described earlier, this site monitors multiple protocols, and bots target some protocols much more than others. The panel below shows each monitored protocol, along with its percentage of total knocks, raw knock count, and knocks per minute.</p>',
-        trivia: '<p>It\'s fascinating why some usernames or passwords are chosen, sometimes rooted in system administration history, other times drawn from credential leaks. The Trivia panel explains why the latest username or password may have been used in a credential-stuffing attack. It also includes a bit of trivia about the country of origin of the latest knock.</p>',
+        info:   '<p>The LAST EVENT panel shows details from the most recent bot activity: country, user, password, ISP, and IP address. For each value, it shows how long ago it was last seen, total sightings, and a rank badge: gold for top 10, silver for 11-50, and red for 51-100.</p>',
+        proto:  '<p>As described earlier, this site monitors multiple protocols, and bots target some protocols much more than others. The panel below shows each monitored protocol, along with its percentage of total clicks, raw click count, and clicks per minute.</p>',
+        trivia: '<p>It\'s fascinating why some usernames or passwords are chosen, sometimes rooted in system administration history, other times drawn from credential leaks. The Trivia panel explains why the latest username or password may have been used in a credential-stuffing attack. It also includes a bit of trivia about the country of origin of the latest click.</p>',
         about:  null, // built dynamically in updatePanelIntros()
     };
     function updatePanelIntros() {
@@ -1414,8 +1414,8 @@
         showProtoBadges       = !classicView;
         showProtoStatsPane    = !classicView;
 
-        // Update header knock label
-        const knockLabel = classicView ? `${activeProtocols[0]} Knocks:` : 'Total Knocks:';
+        // Update header click label
+        const knockLabel = classicView ? `${activeProtocols[0]} Clicks:` : 'Total Clicks:';
         ['d-total-label', 'm-total-label'].forEach(id => {
             const el = document.getElementById(id);
             if (el) el.textContent = knockLabel;
@@ -2019,12 +2019,12 @@
             .sort((a, b) => (b.count - a.count) || (b.kpm - a.kpm) || a.proto.localeCompare(b.proto));
 
         const header = `
-            <div style="display:grid;grid-template-columns:1fr 0.82fr 1.45fr 0.73fr;gap:8px;margin-bottom:8px;color:var(--ui-label);font-weight:bold;">
+            <div style="display:grid;grid-template-columns:1.35fr 0.7fr 1.2fr 0.65fr;gap:8px;margin-bottom:8px;color:var(--ui-label);font-weight:bold;">
                 <span class="proto-col-header" style="text-align:center;">PROTO</span><span style="text-align:center;">%</span><span style="text-align:center;">CLICKS</span><span style="text-align:center;">/MIN</span>
             </div>
         `;
         const body = rows.map(r => `
-            <div class="proto-stats-row" data-proto="${escapeHtml(r.proto)}" style="display:grid;grid-template-columns:1fr 0.82fr 1.45fr 0.73fr;gap:8px;padding:4px 0;border-bottom:1px solid #222;">
+            <div class="proto-stats-row" data-proto="${escapeHtml(r.proto)}" style="display:grid;grid-template-columns:1.35fr 0.7fr 1.2fr 0.65fr;gap:8px;padding:4px 0;border-bottom:1px solid #222;">
                 <span style="font-weight:bold;color:${escapeHtml(PROTO_COLORS[r.proto] || PROTO_COLORS.ALL)};padding-left:6px;">${escapeHtml(r.proto)}</span>
                 <span style="color:var(--neon-green);text-align:center;">${r.pct >= 99.95 ? '100' : r.pct.toFixed(1)}%</span>
                 <span style="color:var(--data-blue);text-align:center;">${r.count.toLocaleString()}</span>
@@ -2037,7 +2037,7 @@
             const total = sourceCountsCache.reduce((s, r) => s + r.hits, 0) || 1;
             const uptime = Number(uptimeMinutesCache) || 1;
             const srcHeader = `
-                <div style="display:grid;grid-template-columns:1fr 0.82fr 1.45fr 0.73fr;gap:8px;margin-top:16px;margin-bottom:8px;padding-top:10px;border-top:1px solid #333;color:var(--ui-label);font-weight:bold;">
+                <div style="display:grid;grid-template-columns:1.35fr 0.7fr 1.2fr 0.65fr;gap:8px;margin-top:16px;margin-bottom:8px;padding-top:10px;border-top:1px solid #333;color:var(--ui-label);font-weight:bold;">
                     <span class="proto-col-header" style="text-align:center;">DETECTOR</span><span style="text-align:center;">%</span><span style="text-align:center;">CLICKS</span><span style="text-align:center;">/MIN</span>
                 </div>
             `;
@@ -2048,7 +2048,7 @@
                     : uptime;
                 const kpm = r.hits / elapsedMinutes;
                 return `
-                <div class="proto-stats-row" data-source="${escapeHtml(r.source_id)}" style="display:grid;grid-template-columns:1fr 0.82fr 1.45fr 0.73fr;gap:8px;padding:4px 0;border-bottom:1px solid #222;">
+                <div class="proto-stats-row" data-source="${escapeHtml(r.source_id)}" style="display:grid;grid-template-columns:1.35fr 0.7fr 1.2fr 0.65fr;gap:8px;padding:4px 0;border-bottom:1px solid #222;">
                     <span style="font-weight:bold;color:var(--ui-label);padding-left:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escapeHtml(r.display_name)}">${escapeHtml(r.source_id)}</span>
                     <span style="color:var(--neon-green);text-align:center;">${pct >= 99.95 ? '100' : pct.toFixed(1)}%</span>
                     <span style="color:var(--data-blue);text-align:center;">${r.hits.toLocaleString()}</span>
@@ -2462,7 +2462,7 @@
             const h = hitsMap[d.properties?.ISO_A2] || 0;
             const rank = rankMap[d.properties?.ISO_A2];
             const rankStr = rank ? `#${rank} · ` : '';
-            return `<span style="color:#00ff41">${rankStr}${name}</span><br/><span style="color:#00fbff">${h.toLocaleString()} knock${h !== 1 ? 's' : ''}</span>`;
+            return `<span style="color:#00ff41">${rankStr}${name}</span><br/><span style="color:#00fbff">${h.toLocaleString()} click${h !== 1 ? 's' : ''}</span>`;
         });
         if (globe._paneMousemoveHandler) {
             globe.renderer().domElement.removeEventListener('mousemove', globe._paneMousemoveHandler);
@@ -3561,8 +3561,8 @@
 
     function renderInfoEmpty(mode = getPanelMode('details')) {
         const msg = mode === 'ALL'
-            ? 'No knocks yet.'
-            : `No ${mode} knocks yet.`;
+            ? 'No clicks yet.'
+            : `No ${mode} clicks yet.`;
         const html = `
             <div class="knock" style="border-bottom:none;">
                 <span style="color:var(--ui-label)">Note:</span>
@@ -3578,7 +3578,7 @@
     function renderTrivia(d) {
         if (!d) {
             const mode = getPanelMode('trivia');
-            const msg = mode === 'ALL' ? 'No knocks yet.' : `No ${mode} knocks yet.`;
+            const msg = mode === 'ALL' ? 'No clicks yet.' : `No ${mode} clicks yet.`;
             const html = `
                 <div class="knock" style="border-bottom:none;">
                     <span style="color:var(--ui-label)">Note:</span>
@@ -3682,7 +3682,7 @@
             if (msg.type === 'new_knock') {
                 knockCount++;
                 const knockProto = (d.proto || '').toUpperCase();
-                debugLog(`Knock #${knockCount} from ${d.iso || '??'}`);
+                debugLog(`Click #${knockCount} from ${d.iso || '??'}`);
                 if (activeProtocols.includes(knockProto)) playClick();
                 if (showProtoChip) {
                     pulseProtoChip(d.proto, DESKTOP_LATEST_PROTO_CHIP);

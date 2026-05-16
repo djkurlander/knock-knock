@@ -2955,7 +2955,7 @@
     })();
 
     Array.from(document.getElementById('d-slider-container').children)
-        .forEach((box, i) => box.addEventListener('click', () => dJump(i)));
+        .forEach((box, i) => box.addEventListener('mouseenter', () => dJump(i)));
 
     function dJump(idx) {
         const container = document.getElementById('d-slider-container');

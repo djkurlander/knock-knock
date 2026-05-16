@@ -66,9 +66,24 @@ def resolve_exclusions(exclusion_str):
 
 _exact_ips, _prefix_ips = resolve_exclusions(os.environ.get('EXCLUDE_IPS', ''))
 
+# UA substrings to exclude (case-insensitive). Defaults cover common bots.
+_DEFAULT_EXCLUDE_UA = 'UptimeRobot,Googlebot,bingbot,Baiduspider,YandexBot,AhrefsBot,SemrushBot,DotBot,facebookexternalhit,Twitterbot'
+_exclude_ua_patterns = [
+    p.strip().lower()
+    for p in os.environ.get('EXCLUDE_UA_PATTERNS', _DEFAULT_EXCLUDE_UA).split(',')
+    if p.strip()
+]
+
 def is_excluded(ip):
     """Check if an IP matches any exclusion (exact or prefix)."""
     return ip in _exact_ips or any(ip.startswith(p) for p in _prefix_ips)
+
+def is_bot_ua(user_agent):
+    """Check if a user agent matches any excluded bot pattern."""
+    if not user_agent:
+        return False
+    ua_lower = user_agent.lower()
+    return any(p in ua_lower for p in _exclude_ua_patterns)
 
 def get_visitors(days):
     """Get visitors from the last N days, excluding specified IPs."""
@@ -87,7 +102,8 @@ def get_visitors(days):
         ORDER BY MAX(last_seen) DESC
     """, (since,))
 
-    visitors = [dict(row) for row in cur.fetchall() if not is_excluded(row['ip'])]
+    visitors = [dict(row) for row in cur.fetchall()
+                if not is_excluded(row['ip']) and not is_bot_ua(row['user_agent'])]
     conn.close()
     return visitors
 
@@ -253,6 +269,7 @@ def main():
     group.add_argument('--week', action='store_true', help='Report for last 7 days')
     group.add_argument('--month', action='store_true', help='Report for previous calendar month')
     group.add_argument('--days', type=int, metavar='N', help='Report for last N days')
+    parser.add_argument('--dry-run', action='store_true', help='Print report to stdout instead of sending email')
     args = parser.parse_args()
 
     if args.day:
@@ -268,7 +285,10 @@ def main():
 
     summary = get_visitor_summary(days)
     report = format_report(period_name, days)
-    send_email(report, period_name, summary['total'])
+    if args.dry_run:
+        print(report)
+    else:
+        send_email(report, period_name, summary['total'])
 
 if __name__ == "__main__":
     main()

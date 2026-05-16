@@ -94,7 +94,8 @@ def get_visitors(days):
     since = (datetime.now() - timedelta(days=days)).strftime('%Y-%m-%d')
 
     cur.execute("""
-        SELECT ip, city, region, country, iso_code, isp, referrer, user_agent,
+        SELECT ip, city, region, country, iso_code, isp,
+               MAX(referrer) as referrer, MAX(user_agent) as user_agent,
                SUM(visit_count) as visit_count
         FROM visitors
         WHERE date >= ?

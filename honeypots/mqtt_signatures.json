@@ -15,6 +15,11 @@
     "client_id_pattern": "^paho/"
   },
   {
+    "scanner": "Teserakt mqttinfo",
+    "priority": 100,
+    "client_id_pattern": "^mqttinfo$"
+  },
+  {
     "scanner": "Go MQTT client",
     "priority": 250,
     "client_id_pattern": "^go$"

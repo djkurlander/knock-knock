@@ -368,7 +368,8 @@ def parse_publish_topic(body, flags):
     qos = (flags >> 1) & 0x03
     if qos:
         _, pos = read_u16(body, pos)
-    return safe_text(topic, 200), max(0, len(body) - pos), qos
+    payload_bytes = body[pos:pos + 64]
+    return safe_text(topic, 200), max(0, len(body) - pos), qos, payload_bytes
 
 
 def emit_knock(payload):
@@ -523,10 +524,15 @@ def handle_connection(client_sock, client_ip, port, tls_active=False):
                         followup['mqtt_topic'] = subscriptions[0].get('topic')
                         followup['mqtt_qos'] = subscriptions[0].get('qos')
                 elif packet_valid and packet_type == 3:
-                    topic, payload_len, qos = parse_publish_topic(body, flags)
+                    topic, payload_len, qos, payload_bytes = parse_publish_topic(body, flags)
                     followup['mqtt_topic'] = topic
                     followup['mqtt_payload_len'] = payload_len
                     followup['mqtt_qos'] = qos
+                    if payload_bytes:
+                        try:
+                            followup['mqtt_payload'] = payload_bytes.decode('utf-8', errors='strict')
+                        except UnicodeDecodeError:
+                            followup['mqtt_payload'] = payload_bytes.hex()
             except MQTTParseError as e:
                 followup['mqtt_parse_error'] = safe_text(str(e), 120)
             if packet_valid and packet_type == 12:

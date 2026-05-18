@@ -432,18 +432,34 @@ def handle_connection(client_sock, client_ip, port, tls_active=False):
                     invalid_reason=invalid_reason,
                     first_bytes_hex=trace_hex,
                 )
+            # Detect HTTP probes by checking if the raw bytes start with an HTTP method
+            raw_bytes = bytes([first]) + bytes(encoded_rl or []) + (body or b'')
+            http_methods = (b'GET ', b'POST ', b'HEAD ', b'PUT ', b'DELETE ', b'OPTIONS ', b'PATCH ')
+            is_http = any(raw_bytes.startswith(m) for m in http_methods)
+
+            if not packet_valid or is_http:
+                stage_label = 'protocol probe'
+                knock_fields = {
+                    'mqtt_stage': stage_label,
+                    'display_format': 'non_connect',
+                }
+            else:
+                knock_fields = {
+                    'mqtt_stage': 'non_connect',
+                    'mqtt_packet_type': packet_name,
+                    'mqtt_claimed_packet_type': PACKET_TYPES.get(packet_type, str(packet_type)),
+                    'mqtt_packet_valid': packet_valid,
+                    'mqtt_packet_invalid_reason': invalid_reason,
+                }
+
             emit_knock(annotate_signature({
                 'type': 'KNOCK',
                 'proto': KNOCK_PROTO,
                 'ip': client_ip,
                 'mqtt_port': port,
                 'mqtt_tls': tls_active,
-                'mqtt_stage': 'non_connect',
-                'mqtt_packet_type': packet_name,
-                'mqtt_claimed_packet_type': PACKET_TYPES.get(packet_type, str(packet_type)),
-                'mqtt_packet_valid': packet_valid,
-                'mqtt_packet_invalid_reason': invalid_reason,
                 'mqtt_first_bytes_hex': None if packet_valid else trace_hex,
+                **knock_fields,
             }))
             return
 

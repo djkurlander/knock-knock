@@ -153,7 +153,7 @@ def get_visitor_summary(days):
         'top_isps': top_isps
     }
 
-def get_top_referrers(days, limit=10):
+def get_top_referrers(days, limit=30):
     """Get top referrers by total visit count for the last N days."""
     cutoff = (date.today() - timedelta(days=days)).isoformat()
     conn = sqlite3.connect(VISITORS_DB)

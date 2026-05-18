@@ -58,7 +58,7 @@ def resolve_exclusions(exclusion_str):
             try:
                 ips = socket.gethostbyname_ex(entry)[2]
                 exact.update(ips)
-            except socket.gaierror:
+            except (socket.gaierror, socket.herror):
                 print(f"Warning: Could not resolve {entry}")
         else:
             exact.add(entry)

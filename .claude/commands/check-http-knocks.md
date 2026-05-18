@@ -32,13 +32,47 @@ sqlite3 data/knock_knock.db \
 
 Note the maximum id seen — you'll write this back at the end.
 
-## Step 3 — Run the classifier
+## Step 3 — Run the classifier against the batch
 
-Load and compile `honeypots/http_exploits.json` (sorted by priority ascending —
-lower number = checked first). For each distinct (method, path, body, ua) tuple,
-check whether it matches any compiled entry. Also apply the inline heuristics from
-`honeypots/http_honeypot.py` (`_RE_CONFIG_PATH`, `_RE_TRAVERSAL`, `_RE_RCE_PATH`,
-`_RE_CRED_PATH`, `_RE_DEVICE_PATH`) to avoid flagging things already handled there.
+Use this script to classify every distinct (method, path, ua, body) tuple in the
+batch. It imports the actual honeypot classifier so results exactly match production:
+
+```python
+import sys, json, re, sqlite3
+sys.path.insert(0, 'honeypots')
+from http_honeypot import _classify_purpose, _EXPLOITS
+
+LAST_ID = int(open('data/http_knocks_last_checked_id.txt').read().strip())
+
+con = sqlite3.connect('data/knock_knock.db')
+rows = con.execute(
+    "SELECT id, http_method, http_path, http_user_agent, http_body "
+    "FROM knocks_http WHERE id > ? ORDER BY id ASC", (LAST_ID,)
+).fetchall()
+con.close()
+
+max_id = LAST_ID
+seen = {}
+for id_, method, path, ua, body in rows:
+    max_id = max(max_id, id_)
+    method = method or ''
+    path   = path   or ''
+    ua     = ua     or ''
+    body   = body   or ''
+    key = (method, path, ua, body)
+    if key in seen:
+        seen[key]['count'] += 1
+        continue
+    purpose, name, cve = _classify_purpose(method, path, ua, body)
+    seen[key] = {'method': method, 'path': path, 'ua': ua, 'body': body,
+                 'purpose': purpose, 'name': name, 'cve': cve, 'count': 1}
+
+print(f"Max ID in batch: {max_id}  |  Distinct tuples: {len(seen)}")
+unmatched = [v for v in seen.values() if v['name'] is None]
+print(f"Unmatched (no classifier hit): {len(unmatched)}\n")
+for v in sorted(unmatched, key=lambda x: -x['count']):
+    print(f"  [{v['count']:4d}x] {v['method']} {v['path']!r}  ua={v['ua']!r}  body={v['body'][:80]!r}  → purpose={v['purpose']}")
+```
 
 Paths/methods to silently skip (noise with no exploit value):
 - Method `<cryptic binary>` or path `<cryptic binary>`
@@ -46,9 +80,23 @@ Paths/methods to silently skip (noise with no exploit value):
 - Random-looking alphanumeric beacon paths (8–20 chars, no slashes after root)
 - Short generic PHP probes (e.g. `/a.php`, `/1.php`) — already handled heuristically
 
-## Step 4 — Triage unmatched entries
+## Step 4 — Group path variants before triaging
 
-For each genuinely unmatched distinct path/method:
+Before researching individual unmatched paths, look for clusters where the same
+attack probes multiple paths that differ only in variable segments (IDs, hashes,
+version numbers, usernames). Collapse these into a single regex with `[^/]+` or
+`\d+` placeholders rather than adding one entry per variant. For example:
+
+- `/api/v1/abc123/config`, `/api/v1/def456/config` → `path_pattern: /api/v[0-9]+/[^/]+/config`
+- `/cgi-bin/luci/;stok=abc/api/...` → capture the `stok=` pattern, not each token value
+
+Also check whether a new group of paths is already covered by an existing entry
+whose regex is slightly too narrow — widen the existing entry rather than adding
+a new one when they represent the same attack.
+
+## Step 5 — Triage unmatched entries
+
+For each genuinely unmatched distinct path/method (after grouping):
 
 **Ask: is this a named exploit, CVE, or known attack tool?**
 - If yes → add a JSON entry with `name`, `cve` (if known), `priority`, `purpose`,
@@ -57,6 +105,11 @@ For each genuinely unmatched distinct path/method:
   entry at priority 185–260.
 - If it's pure noise (generic test paths, favicon variants, scanner bots already
   covered by a broad UA pattern) → skip.
+
+**Before adding any entry, verify it isn't already covered** by running the
+candidate path/method/ua/body through `_classify_purpose()`. An unmatched result
+from the batch script can become matched after earlier entries in the same session
+are added — recheck before committing each new entry.
 
 **Priority ranges to follow:**
 - 100–110 : specific named RCE/exploit CVEs
@@ -71,7 +124,7 @@ For each genuinely unmatched distinct path/method:
 `proxy_abuse`, `api_probe`, `malware_comm`, `crypto_mining`, `open_redirect`,
 `mass_scanner`, `research_scanner`, `protocol_probe`
 
-## Step 5 — Consider honeypot code changes
+## Step 6 — Consider honeypot code changes
 
 If a pattern is better expressed as a heuristic regex in `http_honeypot.py` than
 as a JSON entry (e.g. a broad structural rule, a URL-encoding variant of an existing
@@ -80,13 +133,15 @@ heuristic, or a new HTTP method that needs a code-path change), edit the relevan
 
 Key locations in `http_honeypot.py`:
 - `_RE_CONFIG_PATH` (~line 294) — credential/config file heuristics
-- `_RE_RCE_PATH` — path-based RCE signals
-- `_RE_CRED_PATH` — credential theft path signals
+- `_RE_RCE_PATH`, `_RE_RCE_BODY`, `_RE_RCE_UA` — path/body/UA-based RCE signals
+- `_RE_CRED_PATH`, `_RE_CRED_BODY` — credential theft path and body signals
 - `_RE_DEVICE_PATH` — IoT/device infiltration signals
-- `_classify_purpose` (~line 405) — overall classification flow; exploit DB is
+- `_RE_SSRF` — server-side request forgery signals
+- `_RE_RECON_UA`, `_RE_MASS_UA` — scanner/recon user-agent heuristics
+- `_classify_purpose` (~line 407) — overall classification flow; exploit DB is
   checked at step 1 (after the binary-method guard), before all heuristics
 
-## Step 6 — Validate
+## Step 7 — Validate
 
 After any edits:
 
@@ -110,7 +165,7 @@ python3 -m py_compile honeypots/http_honeypot.py && echo "http_honeypot.py OK"
 Run a spot-check smoke test confirming each new pattern matches the actual path
 that triggered it (construct a small Python test inline).
 
-## Step 7 — Update the checkpoint
+## Step 8 — Update the checkpoint
 
 Write the maximum knock ID seen in step 2 to `data/http_knocks_last_checked_id.txt`:
 
@@ -118,7 +173,7 @@ Write the maximum knock ID seen in step 2 to `data/http_knocks_last_checked_id.t
 echo "<max_id>" > data/http_knocks_last_checked_id.txt
 ```
 
-## Step 8 — Report
+## Step 9 — Report
 
 Summarise what was added: a table of new entries (name, CVE if any, purpose) and
 any `http_honeypot.py` changes. Note how many total entries the JSON now has.

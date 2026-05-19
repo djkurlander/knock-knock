@@ -469,6 +469,9 @@ def handle_connection(client_sock, client_ip, port, tls_active=False):
         except MQTTParseError as e:
             fields = {'mqtt_parse_error': safe_text(str(e), 120)}
             stage = 'malformed_connect'
+            mqtt_trace(client_ip, 'malformed_connect',
+                       error=str(e),
+                       first_bytes_hex=packet_preview_hex(first, encoded_rl, body))
 
         knock = {
             'type': 'KNOCK',

@@ -463,6 +463,23 @@ def handle_connection(client_sock, client_ip, port, tls_active=False):
             }))
             return
 
+        # CONNECT requires flags == 0. Non-zero flags (e.g. TLS ClientHello 0x16
+        # gives flags=6) mean this is a protocol probe, not a real MQTT client.
+        if flags != 0:
+            raw_bytes = bytes([first]) + bytes(encoded_rl or []) + (body or b'')
+            mqtt_trace(client_ip, 'protocol_probe_as_connect',
+                       flags=flags, first_bytes_hex=packet_preview_hex(first, encoded_rl, body))
+            emit_knock(annotate_signature({
+                'type': 'KNOCK',
+                'proto': KNOCK_PROTO,
+                'ip': client_ip,
+                'mqtt_port': port,
+                'mqtt_tls': tls_active,
+                'mqtt_stage': 'protocol probe',
+                'display_format': 'non_connect',
+            }))
+            return
+
         try:
             fields = parse_connect(body)
             stage = 'connect'

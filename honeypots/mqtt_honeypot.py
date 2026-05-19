@@ -37,6 +37,7 @@ MQTT_TRACE_IP = os.environ.get('MQTT_TRACE_IP', '').strip()
 MQTT_AUTH_MODE = os.environ.get('MQTT_AUTH_MODE', 'open').strip().lower()
 if MQTT_AUTH_MODE not in ('open', 'require', 'reject'):
     MQTT_AUTH_MODE = 'open'
+MQTT_IGNORE_PROBES = os.environ.get('MQTT_IGNORE_PROBES', 'true').lower() not in ('0', 'false', 'no')
 
 PACKET_TYPES = {
     1: 'CONNECT',
@@ -438,6 +439,8 @@ def handle_connection(client_sock, client_ip, port, tls_active=False):
             is_http = any(raw_bytes.startswith(m) for m in http_methods)
 
             if not packet_valid or is_http:
+                if MQTT_IGNORE_PROBES:
+                    return
                 stage_label = 'protocol probe'
                 knock_fields = {
                     'mqtt_stage': stage_label,
@@ -466,18 +469,18 @@ def handle_connection(client_sock, client_ip, port, tls_active=False):
         # CONNECT requires flags == 0. Non-zero flags (e.g. TLS ClientHello 0x16
         # gives flags=6) mean this is a protocol probe, not a real MQTT client.
         if flags != 0:
-            raw_bytes = bytes([first]) + bytes(encoded_rl or []) + (body or b'')
             mqtt_trace(client_ip, 'protocol_probe_as_connect',
                        flags=flags, first_bytes_hex=packet_preview_hex(first, encoded_rl, body))
-            emit_knock(annotate_signature({
-                'type': 'KNOCK',
-                'proto': KNOCK_PROTO,
-                'ip': client_ip,
-                'mqtt_port': port,
-                'mqtt_tls': tls_active,
-                'mqtt_stage': 'protocol probe',
-                'display_format': 'non_connect',
-            }))
+            if not MQTT_IGNORE_PROBES:
+                emit_knock(annotate_signature({
+                    'type': 'KNOCK',
+                    'proto': KNOCK_PROTO,
+                    'ip': client_ip,
+                    'mqtt_port': port,
+                    'mqtt_tls': tls_active,
+                    'mqtt_stage': 'protocol probe',
+                    'display_format': 'non_connect',
+                }))
             return
 
         try:
@@ -489,6 +492,8 @@ def handle_connection(client_sock, client_ip, port, tls_active=False):
             mqtt_trace(client_ip, 'malformed_connect',
                        error=str(e),
                        first_bytes_hex=packet_preview_hex(first, encoded_rl, body))
+            if MQTT_IGNORE_PROBES:
+                return
 
         knock = {
             'type': 'KNOCK',

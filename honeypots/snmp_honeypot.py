@@ -335,6 +335,31 @@ def build_response(req):
     return tlv(0x30, msg)
 
 
+_SENSITIVE_OID_PREFIXES = (
+    '1.3.6.1.2.1.25',   # Host Resources (processes, storage)
+    '1.3.6.1.2.1.4.21', # Routing table
+    '1.3.6.1.2.1.4.22', # ARP table
+    '1.3.6.1.2.1.4.24', # CIDR route table
+    '1.3.6.1.2.1.47',   # Hardware inventory (ENTITY-MIB)
+)
+
+
+def classify_snmp_exploit(community, pdu, oid):
+    """Return an exploit label or None for benign knocks."""
+    write = pdu == 'SetRequest'
+    non_public = community.lower() not in ('public', '')
+    sensitive = any(oid.startswith(p) for p in _SENSITIVE_OID_PREFIXES)
+    if write:
+        return 'write attempt'
+    if non_public and sensitive:
+        return 'write community recon'
+    if non_public:
+        return 'credential probe (write)'
+    if sensitive:
+        return 'network recon'
+    return None
+
+
 def emit_knock(client_ip, port, req):
     oids = [oid_text(oid) for oid in req['oids']]
     knock = {
@@ -352,6 +377,9 @@ def emit_knock(client_ip, port, req):
         'snmp_set_value': req.get('set_value'),
         'display_format': 'snmp',
     }
+    exploit = classify_snmp_exploit(req['community'], req['pdu_name'], oids[0] if oids else '')
+    if exploit:
+        knock['snmp_exploit'] = exploit
     if len(oids) > 1:
         knock['snmp_oid_count'] = len(oids)
     print(json.dumps({k: v for k, v in knock.items() if v is not None}), flush=True)

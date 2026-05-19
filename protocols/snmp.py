@@ -22,6 +22,7 @@ DEFINITION = ProtocolDefinition(
         Column("snmp_oid",        "TEXT"),
         Column("snmp_oid_count",  "INTEGER"),
         Column("snmp_set_value",  "TEXT"),
+        Column("snmp_exploit",    "TEXT"),
     ],
     passthrough_prefixes=["snmp_"],
     display_fields=[
@@ -31,6 +32,9 @@ DEFINITION = ProtocolDefinition(
     ],
     display_formats={
         "snmp": [
+            [
+                {"label": "exploit", "value_key": "snmp_exploit"},
+            ],
             [
                 {"label": "op",   "value_key": "snmp_pdu"},
                 {"label": "count", "value_key": "snmp_oid_count"},

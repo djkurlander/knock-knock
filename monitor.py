@@ -633,7 +633,7 @@ def _start_forward_worker():
             finally:
                 if sock:
                     try: sock.close()
-                    except: pass
+                    except Exception: pass
             time.sleep(5)
     threading.Thread(target=_worker, daemon=True).start()
 
@@ -649,7 +649,7 @@ def _start_ingest_server(knock_queue):
             pass
         finally:
             try: conn.close()
-            except: pass
+            except Exception: pass
 
     def _server():
         srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -884,8 +884,10 @@ def get_geo_enriched(ip, city_reader, asn_reader):
             a_res = asn_reader.asn(ip)
             geo["isp"] = a_res.autonomous_system_organization or "Unknown"
             geo["asn"] = a_res.autonomous_system_number
-    except:
-        pass
+    except geoip2.errors.AddressNotFoundError:
+        pass  # private/reserved IP — no GeoIP data available, defaults are fine
+    except Exception as e:
+        print(f"⚠️ GeoIP lookup failed for {ip}: {e}", flush=True)
     return geo
 
 def add_to_blocklist(ip, r, proto=None, knock_count=None, ban_duration_days=30):

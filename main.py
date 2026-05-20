@@ -117,7 +117,7 @@ if LOG_VISITORS:
                 a_res = visitor_asn_reader.asn(ip)
                 geo["isp"] = a_res.autonomous_system_organization
                 geo["asn"] = a_res.autonomous_system_number
-        except:
+        except Exception:
             pass
         return geo
 

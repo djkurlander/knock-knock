@@ -516,3 +516,53 @@ It is safe to run multiple times — all operations are idempotent.
 - Keep your real SSH on a non-standard port
 - Consider IP blocklisting repeat offenders via `data/blocklist.txt`
 - The honeypot always rejects authentication - no shell access is ever granted
+
+---
+
+## Multi-Server / Aggregator Setup
+
+Knock-Knock supports running multiple honeypot servers that forward all knock data to a single central aggregator for unified dashboarding. This is optional — single-server setups work fine without any of this.
+
+### How it works
+
+- **Feeder servers** run the honeypots and forward every knock to the aggregator over TCP
+- **The aggregator** receives knock streams from all feeders, enriches with GeoIP, writes to its database, and serves the combined dashboard
+- Each server's knocks are tagged with a `SOURCE_ID` so you can see which server captured what
+
+### Aggregator setup
+
+On the aggregator server, set `INGEST_PORT` in `.env`:
+
+```bash
+INGEST_PORT=9999   # TCP port to listen for incoming knock streams
+SOURCE_ID=agg1     # Identifies this server in the dashboard
+```
+
+**Restrict the ingest port to feeder IPs only** — the ingest port accepts raw knock data and must not be open to the internet:
+
+```bash
+# Allow each feeder server by IP
+ufw allow from <feeder-ip-1> to any port 9999/tcp
+ufw allow from <feeder-ip-2> to any port 9999/tcp
+# Do NOT add a general: ufw allow 9999/tcp
+```
+
+### Feeder server setup
+
+On each feeder server, set `AGGREGATOR_HOST` and `SOURCE_ID` in `.env`:
+
+```bash
+AGGREGATOR_HOST=your-aggregator-hostname-or-ip
+AGGREGATOR_PORT=9999   # must match INGEST_PORT on aggregator (default 9999)
+SOURCE_ID=nyc1         # unique name for this server shown in the dashboard
+```
+
+Restart the monitor service after making changes:
+
+```bash
+./restart.sh
+```
+
+### Dashboard
+
+The aggregator dashboard shows a "reported by" line on each knock identifying which feeder captured it, and a source breakdown panel showing hit counts per server. Set `SOURCE_ID` to something meaningful (city code, hostname, etc.).

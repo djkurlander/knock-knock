@@ -398,6 +398,10 @@ docker compose up -d
 systemctl restart knock-web
 ```
 
+### Visitor Logging (`LOG_VISITORS`)
+
+Disabled by default. Set `LOG_VISITORS=true` in `.env` to log dashboard visitors (IP, geolocation, referrer, user agent) to `data/visitors.db`. Note that storing visitor IPs may have privacy implications depending on your jurisdiction — see `extras/visitor-logging/` for reporting tools and details.
+
 ### IP Blocklist
 
 To immediately reject connections from specific IPs, add them to `data/blocklist.txt` (one per line). The file is loaded into Redis at monitor startup; to apply changes while running, restart `knock-monitor`. Lines starting with `#` are ignored.

@@ -82,6 +82,8 @@ if LOG_VISITORS:
     def init_visitors_db():
         conn = sqlite3.connect(VISITORS_DB_PATH, timeout=10)
         cur = conn.cursor()
+        cur.execute("PRAGMA journal_mode=WAL")
+        cur.fetchone()
         cur.execute("""CREATE TABLE IF NOT EXISTS visitors (
             ip TEXT NOT NULL,
             date TEXT NOT NULL,

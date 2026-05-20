@@ -512,11 +512,12 @@ systemctl restart knock-web   # or: docker compose restart web
 
 ### Upgrading
 
-After pulling new code with `git pull`, apply any database schema changes before restarting:
+After pulling new code with `git pull`, update dependencies and apply any database schema changes before restarting:
 
 ```bash
 # Systemd
 source .venv/bin/activate
+uv pip install -r requirements.txt
 python extras/db-migrations/updatedb.py
 ./restart.sh
 

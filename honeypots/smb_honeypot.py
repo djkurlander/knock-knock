@@ -32,7 +32,8 @@ SMB_SERVER_DOMAIN     = (os.environ.get('SMB_SERVER_DOMAIN', '').strip()
                          or 'WORKGROUP')
 SMB_NATIVE_OS         = 'Windows Server 2019 Standard 17763'
 SMB_NATIVE_LAN_MAN    = 'Windows Server 2019 Standard 17763'
-SMB_QUARANTINE_DIR    = os.environ.get('SMB_QUARANTINE_DIR', '').strip()
+SMB_QUARANTINE_DIR       = os.environ.get('SMB_QUARANTINE_DIR', '').strip()
+SMB_QUARANTINE_MAX_MB    = int(os.environ.get('SMB_QUARANTINE_MAX_TOTAL_MB', '500'))
 
 
 def _default_smb_server_name() -> str:
@@ -222,6 +223,15 @@ def _quarantine_overlay_file(client_ip: str, smb_version: str, share: str, path:
         return None
     try:
         os.makedirs(SMB_QUARANTINE_DIR, exist_ok=True)
+        # Enforce total directory quota before writing
+        dir_bytes = sum(
+            os.path.getsize(os.path.join(SMB_QUARANTINE_DIR, f))
+            for f in os.listdir(SMB_QUARANTINE_DIR)
+            if os.path.isfile(os.path.join(SMB_QUARANTINE_DIR, f))
+        )
+        if dir_bytes + len(data) > SMB_QUARANTINE_MAX_MB * 1024 * 1024:
+            print(f'[smb] Quarantine quota ({SMB_QUARANTINE_MAX_MB} MB) reached, skipping write from {client_ip}', flush=True)
+            return None
         stamp = time.strftime('%Y%m%dT%H%M%SZ', time.gmtime())
         safe_ip = _sanitize_quarantine_component(client_ip)
         safe_share = _sanitize_quarantine_component(share)

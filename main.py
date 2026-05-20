@@ -5,6 +5,7 @@ import redis.asyncio as redis
 import geoip2.database
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, Response
+from fastapi import HTTPException
 from datetime import datetime
 from fastapi.staticfiles import StaticFiles
 from constants import PROTO, PROTO_NAME, PROTOCOL_META, DEFAULT_ENABLED_PROTOCOLS, sort_protocols_for_ui
@@ -497,43 +498,41 @@ async def websocket_endpoint(websocket: WebSocket):
     except WebSocketDisconnect:
         manager.disconnect(websocket)
 
+def _read_file(path: str) -> str:
+    try:
+        return open(path).read()
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Not found")
+
 @app.head("/")
 @app.get("/")
 async def get():
-    return HTMLResponse(content=open("index.html").read(), headers={"Cache-Control": "no-cache"})
+    return HTMLResponse(content=_read_file("index.html"), headers={"Cache-Control": "no-cache"})
 
 @app.head("/internet-background-radiation")
 @app.get("/internet-background-radiation")
 async def get_ibr():
-    return HTMLResponse(content=open("internet-background-radiation.html").read(), headers={"Cache-Control": "no-cache"})
+    return HTMLResponse(content=_read_file("internet-background-radiation.html"), headers={"Cache-Control": "no-cache"})
 
 @app.head("/summary")
 @app.get("/summary")
 async def get_summary():
-    return HTMLResponse(content=open("summary.html").read(), headers={"Cache-Control": "no-cache"})
+    return HTMLResponse(content=_read_file("summary.html"), headers={"Cache-Control": "no-cache"})
 
 @app.head("/summary.html")
 @app.get("/summary.html")
 async def get_summary_html():
-    return HTMLResponse(content=open("summary.html").read(), headers={"Cache-Control": "no-cache"})
+    return HTMLResponse(content=_read_file("summary.html"), headers={"Cache-Control": "no-cache"})
 
 @app.head("/sitemap.xml")
 @app.get("/sitemap.xml")
 async def get_sitemap():
-    return Response(
-        content=open("sitemap.xml").read(),
-        media_type="application/xml",
-        headers={"Cache-Control": "no-cache"},
-    )
+    return Response(content=_read_file("sitemap.xml"), media_type="application/xml", headers={"Cache-Control": "no-cache"})
 
 @app.head("/robots.txt")
 @app.get("/robots.txt")
 async def get_robots():
-    return Response(
-        content=open("robots.txt").read(),
-        media_type="text/plain",
-        headers={"Cache-Control": "no-cache"},
-    )
+    return Response(content=_read_file("robots.txt"), media_type="text/plain", headers={"Cache-Control": "no-cache"})
 
 if __name__ == "__main__":
     ssl_args = {}

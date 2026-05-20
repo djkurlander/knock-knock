@@ -14,17 +14,18 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-DB_PATH = PROJECT_ROOT / os.environ.get('DB_DIR', 'data') / 'knock_knock.db'
 
-# --- Load .env file if it exists ---
-env_path = PROJECT_ROOT / '.env'
-if env_path.exists():
-    with open(env_path) as f:
-        for line in f:
-            line = line.strip()
-            if line and not line.startswith('#') and '=' in line:
-                key, value = line.split('=', 1)
-                os.environ.setdefault(key.strip(), value.strip())
+
+def _load_env():
+    """Load .env from project root into os.environ (deferred to avoid import-time I/O)."""
+    env_path = PROJECT_ROOT / '.env'
+    if env_path.exists():
+        with open(env_path) as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith('#') and '=' in line:
+                    key, value = line.split('=', 1)
+                    os.environ.setdefault(key.strip(), value.strip())
 
 
 def resolve_exclusions(exclusion_str):
@@ -41,19 +42,16 @@ def resolve_exclusions(exclusion_str):
             try:
                 ips = socket.gethostbyname_ex(entry)[2]
                 exact.update(ips)
-            except socket.gaierror:
-                print(f"Warning: Could not resolve {entry}")
+            except (socket.gaierror, socket.herror):
+                print(f"Warning: Could not resolve {entry}", file=sys.stderr)
         else:
             exact.add(entry)
     return exact, prefixes
 
 
-_exact_ips, _prefix_ips = resolve_exclusions(os.environ.get('EXCLUDE_IPS', ''))
-
-
-def is_excluded(ip):
+def is_excluded(ip, exact_ips, prefix_ips):
     """Check if an IP matches any exclusion (exact or prefix)."""
-    return ip in _exact_ips or any(ip.startswith(p) for p in _prefix_ips)
+    return ip in exact_ips or any(ip.startswith(p) for p in prefix_ips)
 
 
 # AbuseIPDB category sets per protocol integer
@@ -78,7 +76,7 @@ def _has_table(conn, name):
     ).fetchone() is not None
 
 
-def fetch_ips(hours, proto_filter=None):
+def fetch_ips(hours, proto_filter=None, db_path=None):
     """
     Return list of (ip, total_hits, last_seen, proto_names, categories_str)
     within the lookback window, grouped by IP.
@@ -87,7 +85,7 @@ def fetch_ips(hours, proto_filter=None):
     falls back to ip_intel (SSH-only / pre-migration schema).
     """
     cutoff = (datetime.now() - timedelta(hours=hours)).strftime('%Y-%m-%d %H:%M:%S')
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(db_path or (PROJECT_ROOT / os.environ.get('DB_DIR', 'data') / 'knock_knock.db'))
     has_proto = _has_table(conn, 'ip_intel_proto')
 
     if has_proto:
@@ -188,6 +186,11 @@ def parse_proto_filter(proto_str):
 
 
 def main():
+    _load_env()
+    exact_ips, prefix_ips = resolve_exclusions(os.environ.get('EXCLUDE_IPS', ''))
+
+    db_path = PROJECT_ROOT / os.environ.get('DB_DIR', 'data') / 'knock_knock.db'
+
     parser = argparse.ArgumentParser(description='Report attacker IPs to AbuseIPDB')
     parser.add_argument('--hours', type=int, default=24, help='Lookback window in hours (default: 24)')
     parser.add_argument('--proto', type=str, default=None, help='Filter by protocol(s), e.g. SSH,RDP')
@@ -198,14 +201,16 @@ def main():
     if not api_key and not args.dry_run:
         print('Error: ABUSEIPDB_API_KEY environment variable is required', file=sys.stderr)
         sys.exit(1)
+    if not api_key and args.dry_run:
+        print('Warning: --dry-run active but ABUSEIPDB_API_KEY is not set — production runs will fail.', file=sys.stderr)
 
-    if not DB_PATH.exists():
-        print(f'Error: database not found at {DB_PATH}', file=sys.stderr)
+    if not db_path.exists():
+        print(f'Error: database not found at {db_path}', file=sys.stderr)
         sys.exit(1)
 
     proto_filter = parse_proto_filter(args.proto) if args.proto else None
-    all_rows = fetch_ips(args.hours, proto_filter)
-    rows = [r for r in all_rows if not is_excluded(r[0])]
+    all_rows = fetch_ips(args.hours, proto_filter, db_path)
+    rows = [r for r in all_rows if not is_excluded(r[0], exact_ips, prefix_ips)]
     excluded = len(all_rows) - len(rows)
 
     if not rows:

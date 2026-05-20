@@ -21,6 +21,7 @@ logger = logging.getLogger("uvicorn.error")
 LOG_UNHANDLED_HTTP = os.environ.get('LOG_UNHANDLED_HTTP', '').lower() == 'true'
 EXCLUDE_PANELS = set(p.strip().upper() for p in os.environ.get('EXCLUDE_PANELS', '').split(',') if p.strip())
 TRUST_PROXY_HEADERS = os.environ.get('TRUST_PROXY_HEADERS', 'true').lower() not in ('0', 'false', 'no')
+WS_MAX_CONNECTIONS  = int(os.environ.get('WS_MAX_CONNECTIONS', '0'))  # 0 = unlimited
 
 def get_request_client_ip(request: Request) -> str:
     """Extract real client IP honoring proxy headers when TRUST_PROXY_HEADERS is set."""
@@ -414,6 +415,9 @@ class ConnectionManager:
         return payload
 
     async def connect(self, websocket: WebSocket):
+        if WS_MAX_CONNECTIONS and len(self.active_connections) >= WS_MAX_CONNECTIONS:
+            await websocket.close(code=1008)
+            return False
         try:
             await websocket.accept()
             # The 100ms breather we discussed for Cloudflare stability

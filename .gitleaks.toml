@@ -1,0 +1,5 @@
+[allowlist]
+  description = "Intentional honeypot decoy credentials — not real secrets"
+  paths = [
+    "honeypots/decoys/",
+  ]

@@ -20,26 +20,19 @@ app = FastAPI(lifespan=lifespan)
 logger = logging.getLogger("uvicorn.error")
 LOG_UNHANDLED_HTTP = os.environ.get('LOG_UNHANDLED_HTTP', '').lower() == 'true'
 EXCLUDE_PANELS = set(p.strip().upper() for p in os.environ.get('EXCLUDE_PANELS', '').split(',') if p.strip())
+TRUST_PROXY_HEADERS = os.environ.get('TRUST_PROXY_HEADERS', 'true').lower() not in ('0', 'false', 'no')
 
 def get_request_client_ip(request: Request) -> str:
-    """Extract real client IP: CF-Connecting-IP > X-Forwarded-For > direct."""
-    cf_ip = request.headers.get('cf-connecting-ip')
-    if cf_ip:
-        return cf_ip.strip()
-    xff = request.headers.get('x-forwarded-for')
-    if xff:
-        return xff.split(',')[0].strip()
+    """Extract real client IP honoring proxy headers when TRUST_PROXY_HEADERS is set."""
+    if TRUST_PROXY_HEADERS:
+        cf_ip = request.headers.get('cf-connecting-ip')
+        if cf_ip:
+            return cf_ip.strip()
+        xff = request.headers.get('x-forwarded-for')
+        if xff:
+            return xff.split(',')[0].strip()
     return request.client.host if request.client else None
 
-def get_client_ip(websocket: WebSocket) -> str:
-    """Extract real client IP: CF-Connecting-IP > X-Forwarded-For > direct."""
-    cf_ip = websocket.headers.get('cf-connecting-ip')
-    if cf_ip:
-        return cf_ip.strip()
-    xff = websocket.headers.get('x-forwarded-for')
-    if xff:
-        return xff.split(',')[0].strip()
-    return websocket.client.host if websocket.client else None
 
 @app.middleware("http")
 async def http_middleware(request: Request, call_next):

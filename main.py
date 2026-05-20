@@ -59,7 +59,7 @@ async def http_middleware(request: Request, call_next):
             referrer = request.headers.get('referer') or request.headers.get('referrer')
             if referrer and 'knock-knock' in referrer.lower():
                 referrer = None
-            asyncio.get_event_loop().run_in_executor(
+            asyncio.get_running_loop().run_in_executor(
                 None, log_visitor, ip,
                 request.headers.get('user-agent'),
                 referrer,
@@ -256,7 +256,7 @@ class GlobalStatsCache:
         self.last_updated = None
 
     async def _refresh_cache(self):
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         # ALL leaderboards (existing tables, index-driven)
         self.top_locations = await loop.run_in_executor(None, self._get_top_stats, "location", None)
         self.top_passwords = await loop.run_in_executor(None, self._get_top_stats, "password", None)

@@ -54,6 +54,7 @@ _GEOCODE_CACHE_FILE = os.path.join(os.environ.get('DB_DIR', 'data'), 'geocode_ca
 _GEOCODE_SEED_FILE = os.path.join(os.path.dirname(__file__), 'geocode_cache_seed.json')
 _geocode_cache = {}        # description string -> [lat, lng] or None
 _geocode_cache_lock = threading.Lock()
+_nominatim_lock = threading.Lock()   # serializes Nominatim calls to enforce 1 req/s ToS limit
 _last_nominatim_ts = 0.0
 
 
@@ -105,15 +106,16 @@ def geocode_description(desc, country_iso=None):
     cc = (country_iso or '').strip().lower()
     cc_param = f'&countrycodes={urllib.parse.quote(cc)}' if cc else ''
     url = f'https://nominatim.openstreetmap.org/search?q={urllib.parse.quote(query)}&format=json&limit=1{cc_param}'
-    headers = {'User-Agent': 'knock-knock-honeypot/1.0'}
+    headers = {'User-Agent': 'knock-knock-honeypot/1.0 (https://github.com/djkurlander/knock-knock)'}
     result = None
     try:
-        # Rate limit: max 1 req/sec
-        now = time.time()
-        wait = 1.0 - (now - _last_nominatim_ts)
-        if wait > 0:
-            time.sleep(wait)
-        _last_nominatim_ts = time.time()
+        with _nominatim_lock:
+            # Serialize all Nominatim calls to enforce the 1 req/s ToS limit
+            now = time.time()
+            wait = 1.0 - (now - _last_nominatim_ts)
+            if wait > 0:
+                time.sleep(wait)
+            _last_nominatim_ts = time.time()
         req = urllib.request.Request(url, headers=headers)
         t0 = time.time()
         with urllib.request.urlopen(req, timeout=10) as resp:

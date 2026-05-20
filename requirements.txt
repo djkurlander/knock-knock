@@ -1,0 +1,8 @@
+asyncssh==2.23.0
+impacket==0.13.1
+geoip2==5.2.0
+redis==7.4.0
+fastapi==0.136.1
+uvicorn[standard]==0.47.0
+phonenumbers==9.0.30
+python-dotenv

@@ -197,7 +197,7 @@ cd knock-knock
 
 uv venv
 source .venv/bin/activate
-uv pip install asyncssh==2.22.0 geoip2 redis fastapi uvicorn[standard] python-dotenv impacket phonenumbers
+uv pip install -r requirements.txt
 ```
 
 ### Configure
@@ -286,7 +286,7 @@ cd knock-knock
 
 uv venv
 source .venv/bin/activate
-uv pip install asyncssh==2.22.0 geoip2 redis fastapi uvicorn[standard] python-dotenv impacket phonenumbers
+uv pip install -r requirements.txt
 ```
 
 ### Configure

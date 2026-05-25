@@ -2944,7 +2944,7 @@
     installPanelHeaderScrollToTop();
 
     const getFlag = (iso) => {
-        if (iso === 'XX' || !iso) return '🏴‍☠️';
+        if (!iso || iso === 'XX' || !/^[A-Za-z]{2}$/.test(iso)) return '🏴‍☠️';
         return iso.toUpperCase().replace(/./g, char => String.fromCodePoint(char.charCodeAt(0) + 127397));
     };
 

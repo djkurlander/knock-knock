@@ -443,7 +443,9 @@ def parse_dial_country(dial_string):
 
     def _result(pn):
         iso = phonenumbers.region_code_for_number(pn)
-        country = pn_geocoder.country_name_for_number(pn, 'en') or iso
+        if not iso or len(iso) != 2 or not iso.isalpha():
+            iso = 'XX'
+        country = pn_geocoder.country_name_for_number(pn, 'en') or 'International Network'
         desc = pn_geocoder.description_for_number(pn, 'en')
         name = f'{desc}, {country}' if desc and desc != country else country
         e164 = phonenumbers.format_number(pn, phonenumbers.PhoneNumberFormat.E164)

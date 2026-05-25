@@ -872,8 +872,8 @@ def get_geo_enriched(ip, city_reader, asn_reader):
     try:
         if city_reader:
             c_res = city_reader.city(ip)
-            geo["iso"] = c_res.country.iso_code
-            geo["country"] = c_res.country.name
+            geo["iso"] = c_res.country.iso_code or "XX"
+            geo["country"] = c_res.country.name or "Unknown"
             geo["city"] = c_res.city.name or "Unknown"
             if c_res.subdivisions.most_specific.name:
                 geo["region"] = c_res.subdivisions.most_specific.name

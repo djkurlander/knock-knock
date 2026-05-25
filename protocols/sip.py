@@ -15,9 +15,9 @@ def db_update(data, cur, ctx):
         now = ctx['now']
         cur.execute(
             """INSERT INTO dial_intel VALUES (?, 1, ?, ?, ?, ?, ?, ?)
-               ON CONFLICT(number) DO UPDATE SET hits=hits+1, last_seen=?, country_name=?""",
+               ON CONFLICT(number) DO UPDATE SET hits=hits+1, last_seen=?, country=excluded.country, country_name=excluded.country_name""",
             (dial_number, now, now, country, country_name,
-             data.get('sip_dial_lat'), data.get('sip_dial_lng'), now, country_name),
+             data.get('sip_dial_lat'), data.get('sip_dial_lng'), now),
         )
 
 

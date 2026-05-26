@@ -495,6 +495,17 @@ python extras/db-migrations/updatedb.py
 ./restart.sh
 ```
 
+## Testing
+
+The repository includes integration smoke tests that start each honeypot on a high port, send a credential attempt over a real socket, and verify a knock is logged. No running services, database, or Redis instance is required.
+
+```bash
+pip install pytest
+python -m pytest tests/ -v
+```
+
+Tests run in under 10 seconds and are also executed automatically in CI before each Docker image build.
+
 ## Maintenance
 
 ```bash

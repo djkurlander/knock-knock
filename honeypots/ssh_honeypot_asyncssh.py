@@ -9,6 +9,7 @@ import shutil
 
 import asyncssh
 import asyncssh.rsa
+import asyncssh.connection
 from asyncssh.kex import _kex_algs as _asyncssh_kex_algs
 
 _SUPPORTED_KEX = {a.decode() if isinstance(a, bytes) else a for a in _asyncssh_kex_algs}
@@ -18,6 +19,16 @@ _SUPPORTED_KEX = {a.decode() if isinstance(a, bytes) else a for a in _asyncssh_k
 asyncssh.rsa.RSAKey.sig_algorithms = (
     b'rsa-sha2-512', b'rsa-sha2-256'
 )
+
+# Suppress asyncssh-specific 'global-requests-ok' EXT_INFO extension —
+# real OpenSSH servers don't send it and it's a fingerprinting tell.
+assert hasattr(asyncssh.connection.SSHConnection, '_send_ext_info'), \
+    "asyncssh internals changed — review global-requests-ok suppression patch"
+_orig_send_ext_info = asyncssh.connection.SSHConnection._send_ext_info
+def _patched_send_ext_info(self):
+    self._extensions_to_send.pop(b'global-requests-ok', None)
+    _orig_send_ext_info(self)
+asyncssh.connection.SSHConnection._send_ext_info = _patched_send_ext_info
 
 # Keep kex-strict-s-v00@openssh.com (Terrapin countermeasure).  Technically
 # added in OpenSSH 9.6, but widely backported to 8.x packages and required

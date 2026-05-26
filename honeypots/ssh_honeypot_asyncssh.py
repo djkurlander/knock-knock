@@ -9,11 +9,14 @@ import shutil
 
 import asyncssh
 import asyncssh.rsa
+from asyncssh.kex import _kex_algs as _asyncssh_kex_algs
+
+_SUPPORTED_KEX = {a.decode() if isinstance(a, bytes) else a for a in _asyncssh_kex_algs}
 
 # Remove AsyncSSH-specific @ssh.com host key algorithm variants that
 # real OpenSSH never advertises (fingerprinting tell).
 asyncssh.rsa.RSAKey.sig_algorithms = (
-    b'rsa-sha2-256', b'rsa-sha2-512'
+    b'rsa-sha2-512', b'rsa-sha2-256'
 )
 
 # Keep kex-strict-s-v00@openssh.com (Terrapin countermeasure).  Technically
@@ -46,35 +49,39 @@ PROFILES = {
     "openssh_8_9_ubuntu": {
         "server_version": "OpenSSH_8.9p1 Ubuntu-3ubuntu0.14",
         "kex_algs": [
+            "sntrup761x25519-sha512@openssh.com",
             "curve25519-sha256",
             "curve25519-sha256@libssh.org",
             "ecdh-sha2-nistp256",
             "ecdh-sha2-nistp384",
             "ecdh-sha2-nistp521",
-            "diffie-hellman-group14-sha256",
+            "diffie-hellman-group-exchange-sha256",
             "diffie-hellman-group16-sha512",
             "diffie-hellman-group18-sha512",
+            "diffie-hellman-group14-sha256",
         ],
         "encryption_algs": [
             "chacha20-poly1305@openssh.com",
-            "aes128-gcm@openssh.com",
-            "aes256-gcm@openssh.com",
             "aes128-ctr",
             "aes192-ctr",
             "aes256-ctr",
+            "aes128-gcm@openssh.com",
+            "aes256-gcm@openssh.com",
         ],
         "mac_algs": [
             "umac-64-etm@openssh.com",
             "umac-128-etm@openssh.com",
             "hmac-sha2-256-etm@openssh.com",
             "hmac-sha2-512-etm@openssh.com",
+            "hmac-sha1-etm@openssh.com",
             "umac-64@openssh.com",
             "umac-128@openssh.com",
             "hmac-sha2-256",
             "hmac-sha2-512",
+            "hmac-sha1",
         ],
         "compression_algs": ["none", "zlib@openssh.com"],
-        "signature_algs": ["ssh-ed25519", "ecdsa-sha2-nistp256", "rsa-sha2-512", "rsa-sha2-256"],
+        "signature_algs": ["rsa-sha2-512", "rsa-sha2-256", "ecdsa-sha2-nistp256", "ssh-ed25519"],
     },
     # Optional broader profile that accepts older clients/probes.
     "legacy_compat": {
@@ -124,6 +131,8 @@ def _clamp_delay_bounds(min_ms, max_ms):
 
 def _build_profile():
     profile = dict(PROFILES.get(SSH_PROFILE, PROFILES["openssh_8_9_ubuntu"]))
+    # Drop any kex algs the installed asyncssh doesn't support (e.g. sntrup without liboqs)
+    profile["kex_algs"] = [a for a in profile.get("kex_algs", []) if a in _SUPPORTED_KEX]
     overrides = {
         "server_version": os.environ.get("SSH_SERVER_VERSION", "").strip() or None,
         "kex_algs": _parse_csv_env("SSH_KEX_ALGS"),
@@ -225,8 +234,8 @@ async def start_honeypot():
         max_auth_attempts=SSH_MAX_AUTH_ATTEMPTS,
     )
 
-    # Match real Ubuntu OpenSSH key order: ECDSA, Ed25519, RSA
-    host_keys = [p for p in (SSH_ECDSA_KEY_PATH, SSH_ED25519_KEY_PATH, SSH_HOST_KEY_PATH)
+    # Match real Ubuntu OpenSSH key order: RSA, ECDSA, Ed25519
+    host_keys = [p for p in (SSH_HOST_KEY_PATH, SSH_ECDSA_KEY_PATH, SSH_ED25519_KEY_PATH)
                  if os.path.exists(p)]
 
     listen_kwargs = {

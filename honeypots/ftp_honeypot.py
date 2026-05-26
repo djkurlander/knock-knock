@@ -51,9 +51,9 @@ def handle_connection(client_sock, client_ip):
         except:
             pass
 
-def start_honeypot():
-    sock = create_dualstack_tcp_listener(21, backlog=100)
-    print("🚀 FTP Honeypot Active on Port 21 (IPv4+IPv6). Collecting knocks...", flush=True)
+def start_honeypot(port=21):
+    sock = create_dualstack_tcp_listener(port, backlog=100)
+    print(f"🚀 FTP Honeypot Active on Port {port} (IPv4+IPv6). Collecting knocks...", flush=True)
     while True:
         client, addr = sock.accept()
         client_ip = normalize_ip(addr[0])
@@ -63,4 +63,8 @@ def start_honeypot():
         threading.Thread(target=handle_connection, args=(client, client_ip), daemon=True).start()
 
 if __name__ == "__main__":
-    start_honeypot()
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--port', type=int, default=21)
+    args = parser.parse_args()
+    start_honeypot(port=args.port)

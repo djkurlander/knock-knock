@@ -29,6 +29,16 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
 
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Run honeypot smoke tests
+        run: |
+          pip install pytest asyncssh redis phonenumbers
+          python -m pytest tests/ -v --tb=short
+
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v4
 

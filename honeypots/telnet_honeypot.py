@@ -118,11 +118,11 @@ def handle_connection(client_sock, client_ip):
         except:
             pass
 
-def start_honeypot():
+def start_honeypot(port=23):
     # Dual-stack socket: accepts both IPv4 and IPv6
-    sock = create_dualstack_tcp_listener(23, backlog=100)
+    sock = create_dualstack_tcp_listener(port, backlog=100)
 
-    print("🚀 Telnet Honeypot Active on Port 23 (IPv4+IPv6). Collecting knocks...", flush=True)
+    print(f"🚀 Telnet Honeypot Active on Port {port} (IPv4+IPv6). Collecting knocks...", flush=True)
 
     while True:
         client, addr = sock.accept()
@@ -133,4 +133,8 @@ def start_honeypot():
         threading.Thread(target=handle_connection, args=(client, client_ip), daemon=True).start()
 
 if __name__ == "__main__":
-    start_honeypot()
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--port', type=int, default=23)
+    args = parser.parse_args()
+    start_honeypot(port=args.port)

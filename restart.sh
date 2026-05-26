@@ -80,6 +80,7 @@ if [ "$MODE" = "docker" ]; then
         $DC up -d --build
         echo "  [+] Docker containers built and started"
     else
+        $DC pull
         $DC up -d
         echo "  [+] Docker containers started"
     fi

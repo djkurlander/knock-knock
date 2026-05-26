@@ -6,8 +6,19 @@ import subprocess
 import sys
 import threading
 import time
+import unittest.mock
 
 import pytest
+
+# Stub heavy optional deps so test_unit.py can import monitor.py on machines
+# that don't have the full requirements installed (e.g. a dev laptop).
+# In CI, pip install -r requirements.txt runs first, so the real modules load.
+for _mod in (
+    'geoip2', 'geoip2.database',
+    'impacket', 'impacket.examples', 'impacket.examples.secretsdump',
+    'impacket.ntlm', 'impacket.spnego',
+):
+    sys.modules.setdefault(_mod, unittest.mock.MagicMock())
 
 HONEYPOTS_DIR = os.path.join(os.path.dirname(__file__), '..', 'honeypots')
 

@@ -56,11 +56,28 @@ def test_telnet_knock(honeypot_proc):
     )
 
     s = socket.create_connection(('127.0.0.1', _TNET_PORT), timeout=5)
-    s.recv(256)                          # IAC negotiation + banner + "login: "
+    s.settimeout(3)
+    # Drain IAC negotiation + login banner (may arrive in multiple chunks)
+    buf = b''
+    try:
+        while b'login:' not in buf.lower():
+            buf += s.recv(256)
+    except socket.timeout:
+        pass
     s.sendall(b'admin\r\n')
-    s.recv(256)                          # "\r\nPassword: "
+    # Drain echoed username chars + "Password:" prompt
+    buf = b''
+    try:
+        while b'password:' not in buf.lower():
+            buf += s.recv(256)
+    except socket.timeout:
+        pass
     s.sendall(b'admin123\r\n')
-    s.recv(256)                          # "Login incorrect"
+    # Wait for "Login incorrect" — server sends this only after emitting the KNOCK
+    try:
+        s.recv(256)
+    except socket.timeout:
+        pass
     s.close()
 
     knock = read_knock(q, 'TNET')

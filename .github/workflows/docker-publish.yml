@@ -16,7 +16,6 @@ on:
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   build-and-push:
@@ -85,9 +84,11 @@ jobs:
 
     steps:
       - name: Delete old untagged package versions
-        uses: actions/delete-package-versions@v5
-        with:
-          package-name: knock-knock
-          package-type: container
-          delete-only-untagged-versions: true
-          min-versions-to-keep: 5
+        run: |
+          gh api "/user/packages/container/knock-knock/versions?per_page=100" \
+            --jq '.[] | select(.metadata.container.tags | length == 0) | .id' | \
+            tail -n +6 | \
+            xargs -r -I{} gh api --method DELETE \
+              "/user/packages/container/knock-knock/versions/{}"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

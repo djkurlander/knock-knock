@@ -502,14 +502,14 @@ The repository includes two test suites:
 **Unit tests** — pure function tests with no network or database dependencies. These run in CI before every Docker image build.
 
 ```bash
-pip install pytest
+.venv/bin/pip3 install pytest
 python -m pytest tests/test_unit.py -v
 ```
 
 **Integration tests** — start each honeypot on a high port, send a real credential attempt, and verify a knock is logged. Run locally only (CI runners block arbitrary port binding).
 
 ```bash
-pip install pytest
+.venv/bin/pip3 install pytest
 python -m pytest tests/test_honeypot_knocks.py -v
 ```
 

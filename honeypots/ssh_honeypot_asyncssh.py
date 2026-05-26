@@ -13,7 +13,7 @@ import asyncssh.rsa
 # Remove AsyncSSH-specific @ssh.com host key algorithm variants that
 # real OpenSSH never advertises (fingerprinting tell).
 asyncssh.rsa.RSAKey.sig_algorithms = (
-    b'rsa-sha2-256', b'rsa-sha2-512', b'ssh-rsa'
+    b'rsa-sha2-256', b'rsa-sha2-512'
 )
 
 # Keep kex-strict-s-v00@openssh.com (Terrapin countermeasure).  Technically
@@ -29,6 +29,9 @@ SSH_HOST_KEY_PATH = os.environ.get(
 )
 SSH_ED25519_KEY_PATH = os.environ.get(
     "SSH_ED25519_KEY_PATH", os.path.join(_DB_DIR, "ssh_host_ed25519_key")
+)
+SSH_ECDSA_KEY_PATH = os.environ.get(
+    "SSH_ECDSA_KEY_PATH", os.path.join(_DB_DIR, "ssh_host_ecdsa_key")
 )
 SSH_LEGACY_HOST_KEY_PATH = "server.key"
 SSH_PORT = int(os.environ.get("SSH_PORT", "22"))
@@ -71,7 +74,7 @@ PROFILES = {
             "hmac-sha2-512",
         ],
         "compression_algs": ["none", "zlib@openssh.com"],
-        "signature_algs": ["ssh-ed25519", "rsa-sha2-512", "rsa-sha2-256"],
+        "signature_algs": ["ssh-ed25519", "ecdsa-sha2-nistp256", "rsa-sha2-512", "rsa-sha2-256"],
     },
     # Optional broader profile that accepts older clients/probes.
     "legacy_compat": {
@@ -154,6 +157,11 @@ def ensure_host_keys():
         ed_key = asyncssh.generate_private_key("ssh-ed25519")
         ed_key.write_private_key(SSH_ED25519_KEY_PATH)
         os.chmod(SSH_ED25519_KEY_PATH, 0o600)
+    # ECDSA key (nistp256, matches Ubuntu default)
+    if not os.path.exists(SSH_ECDSA_KEY_PATH):
+        ecdsa_key = asyncssh.generate_private_key("ecdsa-sha2-nistp256")
+        ecdsa_key.write_private_key(SSH_ECDSA_KEY_PATH)
+        os.chmod(SSH_ECDSA_KEY_PATH, 0o600)
 
 
 class SSHHoneypotServer(asyncssh.SSHServer):
@@ -217,8 +225,9 @@ async def start_honeypot():
         max_auth_attempts=SSH_MAX_AUTH_ATTEMPTS,
     )
 
-    # Ed25519 first (preferred by modern OpenSSH), RSA as fallback
-    host_keys = [SSH_ED25519_KEY_PATH, SSH_HOST_KEY_PATH]
+    # Match real Ubuntu OpenSSH key order: ECDSA, Ed25519, RSA
+    host_keys = [p for p in (SSH_ECDSA_KEY_PATH, SSH_ED25519_KEY_PATH, SSH_HOST_KEY_PATH)
+                 if os.path.exists(p)]
 
     listen_kwargs = {
         "port": SSH_PORT,

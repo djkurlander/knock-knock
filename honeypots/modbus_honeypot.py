@@ -16,7 +16,7 @@ import socket
 import struct
 import threading
 
-from common import create_dualstack_tcp_listener, is_blocked, normalize_ip
+from common import PerIpTokenBucket, create_dualstack_tcp_listener, is_blocked, normalize_ip
 
 
 MODB_PORT = int(os.environ.get('MODB_PORT', '502'))
@@ -25,6 +25,7 @@ MODB_TIMEOUT = float(os.environ.get('MODB_TIMEOUT', '20'))
 MODB_MAX_REQUESTS = int(os.environ.get('MODB_MAX_REQUESTS', '16'))
 MODB_TRACE = os.environ.get('MODB_TRACE', '0').lower() not in ('0', 'false', 'no')
 MODB_TRACE_IP = os.environ.get('MODB_TRACE_IP', '').strip()
+_throttle = PerIpTokenBucket(os.environ.get('MODB_THROTTLE_PER_SEC', '0'))
 
 FC_NAMES = {
     0x01: 'Read Coils',
@@ -242,6 +243,8 @@ def _display_format(fc):
 
 
 def emit_knock(client_ip, port, transaction_id, unit_id, fc, data, protocol_id):
+    if not _throttle.allow(client_ip):
+        return
     knock = {
         'type': 'KNOCK',
         'proto': KNOCK_PROTO,

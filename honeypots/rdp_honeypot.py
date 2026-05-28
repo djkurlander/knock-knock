@@ -15,6 +15,7 @@ import random
 import string
 import uuid
 from common import (
+    PerIpTokenBucket,
     create_dualstack_tcp_listener,
     ensure_self_signed_server_cert,
     get_redis_client,
@@ -47,6 +48,47 @@ RDP_CLASSIC_CAPTURE = os.environ.get('RDP_CLASSIC_CAPTURE', '0').lower() in ('1'
 # on subsequent attempts to probe for plaintext credential flows.
 RDP_FORCE_CLASSIC_EXPERIMENT = True
 RDP_FORCE_CLASSIC_TTL_SEC = 1800
+RDP_DEDUP_WINDOW_SEC = max(0, int(os.environ.get('RDP_DEDUP_WINDOW_SEC', '0')))
+_dedup_lock = threading.Lock()
+_dedup_seen: dict = {}
+_throttle = PerIpTokenBucket(os.environ.get('RDP_THROTTLE_PER_SEC', '0'))
+
+
+def _rdp_dedup_key(knock):
+    return (
+        knock.get('ip') or '',
+        knock.get('user') or '',
+        knock.get('domain') or '',
+        knock.get('rdp_workstation') or '',
+    )
+
+
+def _should_emit_rdp_knock(client_ip, knock):
+    if RDP_DEDUP_WINDOW_SEC <= 0:
+        return _throttle.allow(client_ip)
+
+    now = time.time()
+    key = _rdp_dedup_key(knock)
+    with _dedup_lock:
+        cutoff = now - RDP_DEDUP_WINDOW_SEC
+        stale = [k for k, ts in _dedup_seen.items() if ts < cutoff]
+        for k in stale:
+            _dedup_seen.pop(k, None)
+        if key in _dedup_seen:
+            return False
+        if not _throttle.allow(client_ip):
+            return False
+        _dedup_seen[key] = now
+        return True
+
+
+def _emit_rdp_knock(client_ip, knock):
+    if _should_emit_rdp_knock(client_ip, knock):
+        print(json.dumps(knock), flush=True)
+        return True
+    return False
+
+
 RDP_FORCE_CLASSIC_FAILS_THRESHOLD = 2
 
 _classic_import_error = None
@@ -634,22 +676,30 @@ def handle_connection(client_sock, client_ip):
                              "ip": client_ip, "user": emit_user, "rdp_source": "classic"}
                     if domain:
                         knock["domain"] = domain
-                    print(json.dumps(knock), flush=True)
-                    trace(session_id, client_ip, 'emit_classic_knock',
-                          user=username, has_password=bool(password), domain=domain)
-                    final_stage = 'classic_knock_emitted'
+                    knock_emitted = _emit_rdp_knock(client_ip, knock)
+                    trace(session_id, client_ip, 'classic_creds_captured',
+                          user=username, has_password=bool(password), domain=domain,
+                          knock_emitted=knock_emitted)
+                    final_stage = (
+                        'classic_creds_captured_emitted'
+                        if knock_emitted else 'classic_creds_captured_suppressed'
+                    )
                     creds_captured = True
                     clear_force_classic(client_ip)
                     return True
                 if cookie_user:
                     emit_user = normalize_knock_username(cookie_user)
-                    trace(session_id, client_ip, 'emit_cookie_fallback_classic')
                     knock = {"type": "KNOCK", "proto": "RDP",
                              "ip": client_ip, "user": emit_user, "rdp_source": "cookie"}
                     if cookie_domain:
                         knock["domain"] = cookie_domain
-                    print(json.dumps(knock), flush=True)
-                    final_stage = f'cookie_fallback_after_classic:{classic_status}'
+                    knock_emitted = _emit_rdp_knock(client_ip, knock)
+                    trace(session_id, client_ip, 'cookie_fallback_classic',
+                          knock_emitted=knock_emitted)
+                    final_stage = (
+                        f'cookie_fallback_after_classic:{classic_status}:emitted'
+                        if knock_emitted else f'cookie_fallback_after_classic:{classic_status}:suppressed'
+                    )
                     return True
             except Exception as e:
                 reason = classify_socket_error(e)
@@ -684,13 +734,15 @@ def handle_connection(client_sock, client_ip):
             # Don't attempt NLA after having already emitted classic confirm on this socket.
             if cookie_user:
                 emit_user = normalize_knock_username(cookie_user)
-                trace(session_id, client_ip, 'emit_cookie_knock_after_forced_classic')
                 knock = {"type": "KNOCK", "proto": "RDP",
                          "ip": client_ip, "user": emit_user, "rdp_source": "cookie"}
                 if cookie_domain:
                     knock["domain"] = cookie_domain
-                print(json.dumps(knock), flush=True)
-                final_stage = f'{final_stage}|cookie_knock_after_forced_classic'
+                knock_emitted = _emit_rdp_knock(client_ip, knock)
+                trace(session_id, client_ip, 'cookie_creds_after_forced_classic',
+                      knock_emitted=knock_emitted)
+                suffix = 'cookie_creds_after_forced_classic_emitted' if knock_emitted else 'cookie_creds_after_forced_classic_suppressed'
+                final_stage = f'{final_stage}|{suffix}'
             else:
                 final_stage = f'{final_stage}|forced_classic_no_credentials'
             return
@@ -702,16 +754,18 @@ def handle_connection(client_sock, client_ip):
                 # Client doesn't want SSL — emit cookie knock if we have one, then done
                 if cookie_user:
                     emit_user = normalize_knock_username(cookie_user)
-                    trace(session_id, client_ip, 'emit_cookie_knock')
                     knock = {"type": "KNOCK", "proto": "RDP",
                              "ip": client_ip, "user": emit_user, "rdp_source": "cookie"}
                     if cookie_domain:
                         knock["domain"] = cookie_domain
-                    print(json.dumps(knock), flush=True)
+                    knock_emitted = _emit_rdp_knock(client_ip, knock)
+                    trace(session_id, client_ip, 'cookie_creds_captured',
+                          knock_emitted=knock_emitted)
+                    suffix = 'cookie_creds_emitted_non_ssl' if knock_emitted else 'cookie_creds_suppressed_non_ssl'
                     if final_stage.startswith('classic_'):
-                        final_stage = f'{final_stage}|cookie_knock_emitted_non_ssl'
+                        final_stage = f'{final_stage}|{suffix}'
                     else:
-                        final_stage = 'cookie_knock_emitted_non_ssl'
+                        final_stage = suffix
                 else:
                     trace(session_id, client_ip, 'non_ssl_no_cookie')
                     if final_stage.startswith('classic_'):
@@ -733,17 +787,22 @@ def handle_connection(client_sock, client_ip):
             final_stage = f'nla_outer_exception:{reason}'
 
         if captures:
+            emitted_count = 0
             for i, (username, domain, workstation) in enumerate(captures, start=1):
                 emit_user = normalize_knock_username(username)
-                trace(session_id, client_ip, 'emit_nla_knock', attempt=i, user=username, domain=domain, workstation=workstation)
                 knock = {"type": "KNOCK", "proto": "RDP",
                          "ip": client_ip, "user": emit_user, "rdp_source": "nla"}
                 if domain:
                     knock["domain"] = domain
                 if workstation:
                     knock["rdp_workstation"] = workstation
-                print(json.dumps(knock), flush=True)
-            final_stage = f'nla_knocks_emitted:{len(captures)}'
+                knock_emitted = _emit_rdp_knock(client_ip, knock)
+                if knock_emitted:
+                    emitted_count += 1
+                trace(session_id, client_ip, 'nla_creds_captured',
+                      attempt=i, user=username, domain=domain, workstation=workstation,
+                      knock_emitted=knock_emitted)
+            final_stage = f'nla_creds_captured:{len(captures)}|knocks_emitted:{emitted_count}'
             creds_captured = True
             clear_force_classic(client_ip)
         else:
@@ -753,16 +812,20 @@ def handle_connection(client_sock, client_ip):
                       count=fail_count, force_classic_enabled=forced, status=nla_status)
         if (not captures) and cookie_user:
             emit_user = normalize_knock_username(cookie_user)
-            trace(session_id, client_ip, 'emit_cookie_fallback_knock')
             knock = {"type": "KNOCK", "proto": "RDP",
                      "ip": client_ip, "user": emit_user, "rdp_source": "cookie"}
             if cookie_domain:
                 knock["domain"] = cookie_domain
-            print(json.dumps(knock), flush=True)
+            knock_emitted = _emit_rdp_knock(client_ip, knock)
+            trace(session_id, client_ip, 'cookie_fallback_creds_captured',
+                  knock_emitted=knock_emitted)
             if nla_status:
-                final_stage = f'cookie_fallback_after:{nla_status}'
+                final_stage = (
+                    f'cookie_fallback_after:{nla_status}:emitted'
+                    if knock_emitted else f'cookie_fallback_after:{nla_status}:suppressed'
+                )
             else:
-                final_stage = 'cookie_fallback_knock_emitted'
+                final_stage = 'cookie_fallback_creds_emitted' if knock_emitted else 'cookie_fallback_creds_suppressed'
         else:
             trace(session_id, client_ip, 'no_credentials_captured')
             if final_stage == 'nla_completed':

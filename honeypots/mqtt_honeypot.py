@@ -17,6 +17,7 @@ import ssl
 import threading
 
 from common import (
+    PerIpTokenBucket,
     create_dualstack_tcp_listener,
     ensure_self_signed_server_cert,
     is_blocked,
@@ -34,6 +35,7 @@ FOLLOWUP_PACKETS = int(os.environ.get('MQTT_FOLLOWUP_PACKETS', '10'))
 PINGREQ_LOG_EVERY = max(1, int(os.environ.get('MQTT_PINGREQ_LOG_EVERY', '1')))
 MQTT_TRACE = os.environ.get('MQTT_TRACE', '0').lower() not in ('0', 'false', 'no')
 MQTT_TRACE_IP = os.environ.get('MQTT_TRACE_IP', '').strip()
+_throttle = PerIpTokenBucket(os.environ.get('MQTT_THROTTLE_PER_SEC', '0'))
 MQTT_AUTH_MODE = os.environ.get('MQTT_AUTH_MODE', 'open').strip().lower()
 if MQTT_AUTH_MODE not in ('open', 'require', 'reject'):
     MQTT_AUTH_MODE = 'open'
@@ -374,6 +376,8 @@ def parse_publish_topic(body, flags):
 
 
 def emit_knock(payload):
+    if not _throttle.allow(payload.get('ip')):
+        return
     if payload.get('proto') == KNOCK_PROTO and not payload.get('display_format'):
         set_display_format(payload)
     clean = {k: v for k, v in payload.items() if v is not None}

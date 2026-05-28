@@ -9,13 +9,14 @@ import json
 import os
 import socket
 
-from common import create_dualstack_udp_listener, is_blocked, normalize_ip
+from common import PerIpTokenBucket, create_dualstack_udp_listener, is_blocked, normalize_ip
 
 
 SNMP_PORT = int(os.environ.get('SNMP_PORT', '161'))
 KNOCK_PROTO = os.environ.get('KNOCK_PROTO', 'SNMP').strip().upper() or 'SNMP'
 SNMP_TRACE = os.environ.get('SNMP_TRACE', '0').lower() not in ('0', 'false', 'no')
 SNMP_TRACE_IP = os.environ.get('SNMP_TRACE_IP', '').strip()
+_throttle = PerIpTokenBucket(os.environ.get('SNMP_THROTTLE_PER_SEC', '0'))
 
 PDU_NAMES = {
     0xA0: 'GetRequest',
@@ -361,6 +362,8 @@ def classify_snmp_exploit(community, pdu, oid):
 
 
 def emit_knock(client_ip, port, req):
+    if not _throttle.allow(client_ip):
+        return
     oids = [oid_text(oid) for oid in req['oids']]
     knock = {
         'type': 'KNOCK',

@@ -35,7 +35,7 @@ asyncssh.connection.SSHConnection._send_ext_info = _patched_send_ext_info
 # for correct packet sequencing with modern clients that advertise
 # kex-strict-c.  Removing it causes "Bad packet length" corruption.
 
-from common import is_blocked, normalize_ip
+from common import PerIpTokenBucket, is_blocked, normalize_ip
 
 _DB_DIR = os.environ.get("DB_DIR", "data")
 SSH_HOST_KEY_PATH = os.environ.get(
@@ -54,6 +54,8 @@ SSH_LOGIN_TIMEOUT = float(os.environ.get("SSH_LOGIN_TIMEOUT", "120"))
 SSH_MAX_AUTH_ATTEMPTS = int(os.environ.get("SSH_MAX_AUTH_ATTEMPTS", "6"))
 SSH_AUTH_DELAY_MS_MIN = int(os.environ.get("SSH_AUTH_DELAY_MS_MIN", "200"))
 SSH_AUTH_DELAY_MS_MAX = int(os.environ.get("SSH_AUTH_DELAY_MS_MAX", "600"))
+_throttle = PerIpTokenBucket(os.environ.get("SSH_THROTTLE_PER_SEC", "0"))
+
 
 PROFILES = {
     # Modern profile aligned to our current Paramiko banner/fingerprint intent.
@@ -214,18 +216,19 @@ class SSHHoneypotServer(asyncssh.SSHServer):
         lo, hi = self._auth_delay_range_ms
         if hi > 0:
             await asyncio.sleep(random.uniform(lo, hi) / 1000.0)
-        print(
-            json.dumps(
-                {
-                    "type": "KNOCK",
-                    "proto": "SSH",
-                    "ip": self._client_ip,
-                    "user": username,
-                    "pass": password,
-                }
-            ),
-            flush=True,
-        )
+        if _throttle.allow(self._client_ip):
+            print(
+                json.dumps(
+                    {
+                        "type": "KNOCK",
+                        "proto": "SSH",
+                        "ip": self._client_ip,
+                        "user": username,
+                        "pass": password,
+                    }
+                ),
+                flush=True,
+            )
         self._auth_attempt_count += 1
         if self._auth_attempt_count >= self._max_auth_attempts and self._conn:
             self._conn.close()

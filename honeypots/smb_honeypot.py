@@ -18,7 +18,7 @@ import threading
 import time
 
 from impacket import ntlm, smb
-from common import create_dualstack_tcp_listener, is_blocked, normalize_ip
+from common import PerIpTokenBucket, create_dualstack_tcp_listener, is_blocked, normalize_ip
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -28,6 +28,7 @@ SMB_PORT              = int(os.environ.get('SMB_PORT', '445'))
 TRACE_ENABLED         = os.environ.get('SMB_TRACE', '0').lower() not in ('0', 'false', 'no')
 TRACE_IP              = os.environ.get('SMB_TRACE_IP', '').strip()
 EMIT_DEDUP_WINDOW_SEC = max(1, int(os.environ.get('SMB_DEDUP_WINDOW_SEC', '60')))
+_throttle = PerIpTokenBucket(os.environ.get('SMB_THROTTLE_PER_SEC', '0'))
 SMB_SERVER_DOMAIN     = (os.environ.get('SMB_SERVER_DOMAIN', '').strip()
                          or 'WORKGROUP')
 SMB_NATIVE_OS         = 'Windows Server 2019 Standard 17763'
@@ -704,8 +705,11 @@ def should_emit(ip, user, domain, host, version, share=None):
             _dedup_seen.pop(k, None)
         if key in _dedup_seen:
             return False
+        if not _throttle.allow(ip):
+            return False
         _dedup_seen[key] = now
         return True
+
 
 # ---------------------------------------------------------------------------
 # Knock emission + trace
@@ -744,7 +748,7 @@ _SMB_ACTION_FORMAT = {
 def _emit_knock(ip, user=None, smb_share=None, smb_version=None,
                 smb_domain=None, smb_host=None,
                 smb_file=None, smb_action=None, smb_service_name=None,
-                trace_stage='knock'):
+                trace_stage='knock', throttle=True):
     action = smb_action or 'UNKNOWN'
     knock = {'type': 'KNOCK', 'proto': 'SMB', 'ip': ip,
              'display_format': _SMB_ACTION_FORMAT.get(action, 'file_op')}
@@ -757,6 +761,8 @@ def _emit_knock(ip, user=None, smb_share=None, smb_version=None,
     if smb_domain:         knock['smb_domain']       = smb_domain
     if smb_host:           knock['smb_host']         = smb_host
     if smb_service_name:   knock['smb_service_name'] = smb_service_name
+    if throttle and not _throttle.allow(ip):
+        return
     print(json.dumps(knock), flush=True)
     trace(ip, trace_stage, user=user, smb_share=smb_share, smb_file=smb_file,
           smb_version=smb_version, domain=smb_domain, host=smb_host)
@@ -2350,7 +2356,8 @@ def _smb2_post_negotiate(client_sock, client_ip, smb_version, selected_dialect=0
                       tid=hex(new_tree_id), type='decoy')
                 if should_emit(client_ip, user, domain, host, smb_version, share):
                     _emit_knock(client_ip, user, share, smb_version, domain, host,
-                                smb_action='CONNECT', trace_stage='knock_emitted_tree')
+                                smb_action='CONNECT', trace_stage='knock_emitted_tree',
+                                throttle=False)
                 else:
                     trace(client_ip, 'knock_dedup', user=user, share=share,
                           smb_version=smb_version)
@@ -2366,7 +2373,8 @@ def _smb2_post_negotiate(client_sock, client_ip, smb_version, selected_dialect=0
                       tid=hex(new_tree_id), type=tree_type)
                 if should_emit(client_ip, user, domain, host, smb_version, share):
                     _emit_knock(client_ip, user, share, smb_version, domain, host,
-                                smb_action='CONNECT', trace_stage='knock_emitted_tree')
+                                smb_action='CONNECT', trace_stage='knock_emitted_tree',
+                                throttle=False)
                 else:
                     trace(client_ip, 'knock_dedup', user=user, share=share,
                           smb_version=smb_version)
@@ -2855,7 +2863,8 @@ def _smb2_post_negotiate(client_sock, client_ip, smb_version, selected_dialect=0
 
     if not got_auth and should_emit(client_ip, None, None, None, smb_version, None):
         _emit_knock(client_ip, None, None, smb_version, None, None,
-                    smb_action='PROBE', trace_stage='knock_emitted_probe')
+                    smb_action='PROBE', trace_stage='knock_emitted_probe',
+                    throttle=False)
     for share, files in overlay_files.items():
         for path, content in files.items():
             if content and (share, path) not in quarantined_paths:
@@ -3730,7 +3739,8 @@ def handle_smb1(client_sock, client_ip, first_payload):
                       tid=hex(new_tid), type=tree_type)
             if should_emit(client_ip, user, domain, host, 'SMB1', share):
                 _emit_knock(client_ip, user, share, 'SMB1', domain, host,
-                            smb_action='CONNECT', trace_stage='knock_emitted_tree')
+                            smb_action='CONNECT', trace_stage='knock_emitted_tree',
+                            throttle=False)
             else:
                 trace(client_ip, 'knock_dedup', user=user, share=share,
                       smb_version='SMB1')
@@ -4084,7 +4094,8 @@ def handle_smb1(client_sock, client_ip, first_payload):
 
     if not got_auth and should_emit(client_ip, None, None, None, 'SMB1', None):
         _emit_knock(client_ip, None, None, 'SMB1', None, None,
-                    smb_action='PROBE', trace_stage='knock_emitted_probe')
+                    smb_action='PROBE', trace_stage='knock_emitted_probe',
+                    throttle=False)
     for share, files in overlay_files.items():
         for path, content in files.items():
             if content and (share, path) not in quarantined_paths:

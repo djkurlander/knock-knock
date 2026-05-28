@@ -238,6 +238,20 @@ Port 80 is open to all — it's a honeypot port. Port 443 can also be mapped to 
 | `SSH_PROFILE` | `openssh_8_9_ubuntu` | Banner/fingerprint profile to emulate |
 | `SSH_LOGIN_TIMEOUT` | `120` | Seconds before unauthenticated connection is dropped |
 | `SSH_MAX_AUTH_ATTEMPTS` | `6` | Max auth attempts per connection |
+| `SSH_THROTTLE_PER_SEC` | `0` (off) | Per-IP knock emission throttle, currently token-bucket average per second (0 = disabled; supports fractions, e.g. `0.1` = 1 per 10s) |
+
+### FTP Honeypot
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `FTP_THROTTLE_PER_SEC` | `0` (off) | Per-IP knock emission throttle, currently token-bucket average per second |
+
+### Telnet Honeypot
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `TNET_DEDUP_WINDOW_SEC` | `0` (off) | Seconds to suppress duplicate `(ip, user, pass)` tuples (0 = disabled) |
+| `TNET_THROTTLE_PER_SEC` | `0` (off) | Per-IP knock emission throttle, currently token-bucket average per second |
 
 ### SMTP Honeypot
 
@@ -250,6 +264,7 @@ Port 80 is open to all — it's a honeypot port. Port 443 can also be mapped to 
 | `SMTP_TLS_KEY_PATH` | `data/smtp.key` | TLS key path |
 | `SMTP_TRACE` | unset | Set to `true` to trace all SMTP sessions to stdout |
 | `SMTP_TRACE_IP` | unset | Trace only sessions from this specific IP |
+| `SMTP_THROTTLE_PER_SEC` | `0` (off) | Per-IP knock emission throttle, currently token-bucket average per second |
 
 ### SMB Honeypot
 
@@ -261,6 +276,7 @@ Port 80 is open to all — it's a honeypot port. Port 443 can also be mapped to 
 | `SMB_SERVER_DOMAIN` | unset | Domain name advertised in SMB negotiation |
 | `SMB_QUARANTINE_DIR` | unset | Directory to save uploaded files from attackers |
 | `SMB_DEDUP_WINDOW_SEC` | `60` | Seconds to suppress duplicate knocks from the same IP |
+| `SMB_THROTTLE_PER_SEC` | `0` (off) | Per-IP knock emission throttle, currently token-bucket average per second |
 | `SMB_NBSS_MAX` | `4194304` | Max NetBIOS session message size (4 MB) |
 | `SMB_TRACE` | unset | Set to `true` to trace SMB sessions to stdout |
 | `SMB_TRACE_IP` | unset | Trace only sessions from this specific IP |
@@ -276,6 +292,7 @@ Port 80 is open to all — it's a honeypot port. Port 443 can also be mapped to 
 | `SIP_MAX_MESSAGES_PER_CONN` | `6` | Max SIP messages per connection |
 | `SIP_CONN_TIMEOUT` | `20` | Connection timeout in seconds |
 | `SIP_DEDUP_WINDOW_SEC` | `60` | Seconds to suppress duplicate knocks from the same IP |
+| `SIP_THROTTLE_PER_SEC` | `10` | Per-IP knock emission throttle, currently token-bucket average per second |
 | `SIP_TRACE` | unset | Set to `true` to trace SIP sessions to stdout |
 | `SIP_TRACE_IP` | unset | Trace only sessions from this specific IP |
 
@@ -291,6 +308,7 @@ Port 80 is open to all — it's a honeypot port. Port 443 can also be mapped to 
 | `HTTPS_KEY_PATH` | `data/https.key` | TLS key |
 | `HTTP_TRACE` | unset | Set to `true` to trace HTTP requests to stdout |
 | `HTTP_TRACE_IP` | unset | Trace only requests from this specific IP |
+| `HTTP_THROTTLE_PER_SEC` | `20` | Per-IP knock emission throttle, currently token-bucket average per second |
 
 ### RDP Honeypot
 
@@ -300,6 +318,32 @@ Port 80 is open to all — it's a honeypot port. Port 443 can also be mapped to 
 | `RDP_TRACE_IP` | unset | Trace only sessions from this specific IP |
 | `RDP_MAX_NLA_ATTEMPTS` | `3` | Max NLA authentication rounds |
 | `RDP_CLASSIC_CAPTURE` | `false` | Also capture classic RDP (non-NLA) credentials |
+| `RDP_DEDUP_WINDOW_SEC` | `0` (off) | Seconds to suppress duplicate `(ip, user, domain, rdp_workstation)` knocks |
+| `RDP_THROTTLE_PER_SEC` | `0` (off) | Per-IP knock emission throttle, currently token-bucket average per second |
+
+### MQTT Honeypot
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `MQTT_THROTTLE_PER_SEC` | `0` (off) | Per-IP knock emission throttle, currently token-bucket average per second |
+
+### Node-RED Honeypot
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `NRED_THROTTLE_PER_SEC` | `20` | Per-IP knock emission throttle, currently token-bucket average per second |
+
+### SNMP Honeypot
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `SNMP_THROTTLE_PER_SEC` | `0` (off) | Per-IP knock emission throttle, currently token-bucket average per second |
+
+### Modbus Honeypot
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `MODB_THROTTLE_PER_SEC` | `0` (off) | Per-IP knock emission throttle, currently token-bucket average per second |
 
 ## Protocol Enum
 

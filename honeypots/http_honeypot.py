@@ -15,9 +15,8 @@ import re
 import socket
 import ssl
 import threading
-import time
 
-from common import create_dualstack_tcp_listener, ensure_self_signed_server_cert, is_blocked, normalize_ip
+from common import PerIpTokenBucket, create_dualstack_tcp_listener, ensure_self_signed_server_cert, is_blocked, normalize_ip
 
 HTTPS_CERT_PATH = os.environ.get('HTTPS_CERT_PATH', 'data/https.crt')
 HTTPS_KEY_PATH  = os.environ.get('HTTPS_KEY_PATH',  'data/https.key')
@@ -116,12 +115,7 @@ HTTP_MAX_BODY    = int(os.environ.get('HTTP_MAX_BODY',    4096))
 
 _HTTP_PORT = HTTP_PORT  # updated by --port arg; emitted in every knock
 
-# Per-IP knock throttle: max this many knocks per second per IP.
-_HTTP_THROTTLE_PER_SEC = 20
-
-_throttle_lock   = threading.Lock()
-_throttle_window = 0       # current second (int)
-_throttle_counts: dict = {}
+_throttle = PerIpTokenBucket(os.environ.get('HTTP_THROTTLE_PER_SEC', '20'))
 
 
 def _http_trace_enabled_for(client_ip: str) -> bool:
@@ -188,17 +182,7 @@ _RESPONSE_404 = (
 # ---------------------------------------------------------------------------
 
 def _should_emit(client_ip: str) -> bool:
-    global _throttle_window, _throttle_counts
-    now = int(time.time())
-    with _throttle_lock:
-        if now != _throttle_window:
-            _throttle_window = now
-            _throttle_counts = {}
-        count = _throttle_counts.get(client_ip, 0)
-        if count >= _HTTP_THROTTLE_PER_SEC:
-            return False
-        _throttle_counts[client_ip] = count + 1
-        return True
+    return _throttle.allow(client_ip)
 
 # ---------------------------------------------------------------------------
 # Purpose classification

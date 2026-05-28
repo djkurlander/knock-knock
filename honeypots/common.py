@@ -2,6 +2,8 @@
 import os
 import socket
 import subprocess
+import threading
+import time
 
 import redis
 
@@ -11,6 +13,47 @@ def get_redis_client():
 
 
 _redis = get_redis_client()
+
+
+class PerIpTokenBucket:
+    """Per-IP token bucket for throttling emitted knock events."""
+
+    def __init__(self, per_sec, *, capacity=None, cleanup_interval=60):
+        self.per_sec = max(0.0, float(per_sec))
+        self.capacity = (
+            max(1.0, float(capacity))
+            if capacity is not None
+            else max(1.0, float(int(self.per_sec + 0.999999)))
+        )
+        self.cleanup_interval = max(1.0, float(cleanup_interval))
+        self._lock = threading.Lock()
+        self._buckets = {}
+        self._last_cleanup = 0.0
+
+    def allow(self, client_ip):
+        if self.per_sec <= 0:
+            return True
+
+        now = time.monotonic()
+        with self._lock:
+            self._cleanup(now)
+            tokens, last_ts = self._buckets.get(client_ip, (self.capacity, now))
+            tokens = min(self.capacity, tokens + ((now - last_ts) * self.per_sec))
+            if tokens < 1.0:
+                self._buckets[client_ip] = (tokens, now)
+                return False
+            self._buckets[client_ip] = (tokens - 1.0, now)
+            return True
+
+    def _cleanup(self, now):
+        if now - self._last_cleanup < self.cleanup_interval:
+            return
+        self._last_cleanup = now
+        full_refill_seconds = self.capacity / self.per_sec
+        cutoff = now - max(self.cleanup_interval, full_refill_seconds * 2.0)
+        stale = [ip for ip, (_tokens, last_ts) in self._buckets.items() if last_ts < cutoff]
+        for ip in stale:
+            self._buckets.pop(ip, None)
 
 
 def is_blocked(ip_or_client, ip=None):

@@ -22,6 +22,7 @@ import urllib.parse
 from collections import Counter
 
 from common import (
+    PerIpTokenBucket,
     create_dualstack_tcp_listener,
     ensure_self_signed_server_cert,
     is_blocked,
@@ -43,10 +44,7 @@ NRED_TLS_CERT_PATH = os.environ.get('NRED_TLS_CERT_PATH', 'data/nodered.crt')
 NRED_TLS_KEY_PATH = os.environ.get('NRED_TLS_KEY_PATH', 'data/nodered.key')
 
 _NRED_PORT = NRED_PORT
-_THROTTLE_PER_SEC = 20
-_throttle_lock = threading.Lock()
-_throttle_window = 0
-_throttle_counts = {}
+_throttle = PerIpTokenBucket(os.environ.get('NRED_THROTTLE_PER_SEC', '20'))
 _PROFILE = None
 
 
@@ -108,17 +106,7 @@ def _trace(client_ip, stage, **kwargs):
 
 
 def _should_emit(client_ip):
-    global _throttle_window, _throttle_counts
-    now = int(time.time())
-    with _throttle_lock:
-        if now != _throttle_window:
-            _throttle_window = now
-            _throttle_counts = {}
-        count = _throttle_counts.get(client_ip, 0)
-        if count >= _THROTTLE_PER_SEC:
-            return False
-        _throttle_counts[client_ip] = count + 1
-        return True
+    return _throttle.allow(client_ip)
 
 
 def _safe_text(value, limit=400):

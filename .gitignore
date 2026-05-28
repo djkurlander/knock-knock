@@ -6,6 +6,7 @@ server.key.pub
 # Data and logs
 data/*
 !data/.gitkeep
+honeypots/data/
 *.log
 
 # Docker overrides

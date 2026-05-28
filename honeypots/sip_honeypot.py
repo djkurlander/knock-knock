@@ -18,6 +18,7 @@ import phonenumbers
 from phonenumbers import geocoder as pn_geocoder
 
 from common import (
+    PerIpTokenBucket,
     create_dualstack_tcp_listener,
     create_dualstack_udp_listener,
     is_blocked,
@@ -32,12 +33,9 @@ TRACE_ENABLED = os.environ.get('SIP_TRACE', '0').lower() not in ('0', 'false', '
 TRACE_IP = os.environ.get('SIP_TRACE_IP', '').strip()
 SIP_AUTH_CHALLENGE_MODE = os.environ.get('SIP_AUTH_CHALLENGE_MODE', 'mixed').strip().lower()
 SIP_INVITE_MODE = os.environ.get('SIP_INVITE_MODE', 'answer').strip().lower()
-SIP_THROTTLE_PER_SEC = 10
 SIP_DEDUP_WINDOW_SEC = int(os.environ.get('SIP_DEDUP_WINDOW_SEC', '60'))
 
-_emit_lock = threading.Lock()
-_emit_window_sec = int(time.time())
-_emit_window_counts = {}
+_throttle = PerIpTokenBucket(os.environ.get('SIP_THROTTLE_PER_SEC', '10'))
 _dedup_lock = threading.Lock()
 _dedup_seen = {}
 _ack_lock = threading.Lock()
@@ -151,23 +149,7 @@ def trace(session_id, client_ip, stage, **fields):
 
 
 def should_emit_knock(client_ip):
-    """
-    Per-IP drop throttle: at most SIP_THROTTLE_PER_SEC knock events per second
-    for each source IP. Applies across UDP and all TCP worker threads.
-    """
-    global _emit_window_sec, _emit_window_counts
-    if SIP_THROTTLE_PER_SEC <= 0:
-        return True
-    now = int(time.time())
-    with _emit_lock:
-        if now != _emit_window_sec:
-            _emit_window_sec = now
-            _emit_window_counts = {}
-        current = _emit_window_counts.get(client_ip, 0)
-        if current >= SIP_THROTTLE_PER_SEC:
-            return False
-        _emit_window_counts[client_ip] = current + 1
-        return True
+    return _throttle.allow(client_ip)
 
 
 def _dedup_key(client_ip, req):
@@ -178,7 +160,7 @@ def _dedup_key(client_ip, req):
     return (client_ip, call_id, method, uri)
 
 
-def should_emit_dedup(dedup_key):
+def should_emit_dedup(dedup_key, *, mark=True):
     global _dedup_seen
     if SIP_DEDUP_WINDOW_SEC <= 0:
         return True
@@ -191,7 +173,8 @@ def should_emit_dedup(dedup_key):
         ts = _dedup_seen.get(dedup_key)
         if ts is not None and (now - ts) < SIP_DEDUP_WINDOW_SEC:
             return False
-        _dedup_seen[dedup_key] = now
+        if mark:
+            _dedup_seen[dedup_key] = now
         return True
 
 
@@ -632,10 +615,12 @@ def build_response(req, code, reason, extra_headers=None, body=None):
 
 
 def emit_knock(client_ip, extra=None, dedup_key=None):
+    if dedup_key is not None and not should_emit_dedup(dedup_key, mark=False):
+        return
     if not should_emit_knock(client_ip):
         return
-    if dedup_key is not None and not should_emit_dedup(dedup_key):
-        return
+    if dedup_key is not None:
+        should_emit_dedup(dedup_key)
     knock = {
         'type': 'KNOCK',
         'proto': 'SIP',

@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
+import json
+import os
 import socket
 import threading
-import json
-from common import create_dualstack_tcp_listener, is_blocked, normalize_ip, recv_line
+from common import PerIpTokenBucket, create_dualstack_tcp_listener, is_blocked, normalize_ip, recv_line
 
 MAX_LOGIN_ATTEMPTS = 3
+_throttle = PerIpTokenBucket(os.environ.get("FTP_THROTTLE_PER_SEC", "0"))
 
 def handle_connection(client_sock, client_ip):
     username = None
@@ -28,7 +30,8 @@ def handle_connection(client_sock, client_ip):
                 password = line[5:].strip()
                 knock = {"type": "KNOCK", "proto": "FTP",
                          "ip": client_ip, "user": username or '', "pass": password}
-                print(json.dumps(knock), flush=True)
+                if _throttle.allow(client_ip):
+                    print(json.dumps(knock), flush=True)
                 attempts += 1
                 if attempts >= MAX_LOGIN_ATTEMPTS:
                     client_sock.sendall(b"421 Service not available, remote server has closed connection\r\n")

@@ -10,6 +10,7 @@ import time
 import uuid
 import ssl
 from common import (
+    PerIpTokenBucket,
     create_dualstack_tcp_listener,
     ensure_smtp_cert,
     extract_addr,
@@ -81,6 +82,7 @@ SMTP_TRACE_ENABLED = os.environ.get('SMTP_TRACE', '0').lower() not in ('0', 'fal
 SMTP_TRACE_IP = os.environ.get('SMTP_TRACE_IP', '').strip()
 SMTP_TLS_CERT_PATH = os.environ.get('SMTP_TLS_CERT_PATH', 'data/smtp.crt')
 SMTP_TLS_KEY_PATH = os.environ.get('SMTP_TLS_KEY_PATH', 'data/smtp.key')
+_throttle = PerIpTokenBucket(os.environ.get('SMTP_THROTTLE_PER_SEC', '0'))
 
 
 def queue_ok_reply(queue_id):
@@ -143,6 +145,8 @@ def emit_smtp_knock(
         knock["subject"] = subject
     if body:
         knock["body"] = body
+    if not _throttle.allow(client_ip):
+        return
     print(json.dumps(knock), flush=True)
 
 def classify_no_knock_reason(*, commands_seen, stop_reason, tls_active, authed, saw_starttls, saw_auth, saw_mail, saw_rcpt, saw_data, saw_unrecognized):

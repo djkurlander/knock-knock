@@ -13,11 +13,8 @@ Knock-Knock is a multi-protocol honeypot monitoring system that captures unautho
 # Restart all services
 ./restart.sh
 
-# Reset all data and restart (blocklist is preserved)
+# Reset all data and restart (including all bans)
 ./restart.sh --reset-all
-
-# Reset blocklist only (deletes blocklist.txt + clears knock:blocked:* in Redis)
-python monitor.py --reset-blocklist
 
 # Individual service control
 systemctl start|stop|restart|status knock-monitor knock-web
@@ -157,10 +154,16 @@ SMTP Attacker   → honeypots/smtp_honeypot.py           (ports 25,587)┘      
 All persistent data lives in `data/`:
 - `data/knock_knock.db` — main attack database
 - `data/visitors.db` — dashboard visitor tracking
-- `data/blocklist.txt` — IPs to reject immediately (durable source of truth; seeded into Redis on startup)
 - `data/geocode_cache.json` — SIP dial number geocode cache
 
-**Note:** `blocklist.txt` and `knock:blocked:*` keys survive `--reset-all` intentionally. Use `--reset-blocklist` to clear them.
+**Bans:** Stored in `ip_intel.ban_until` (SQLite) and mirrored as `knock:blocked:{ip}` keys in Redis (with TTL). On startup, Redis block keys are re-seeded from SQLite. Use `ip_ban.py` to manage bans:
+```bash
+python ip_ban.py --list
+python ip_ban.py --ban 1.2.3.4 --days 30
+python ip_ban.py --unban 1.2.3.4
+python ip_ban.py --clear-all
+```
+`./restart.sh --reset-all` clears everything including bans.
 
 ## Port Configuration
 
@@ -197,7 +200,7 @@ Port 80 is open to all — it's a honeypot port. Port 443 can also be mapped to 
 |----------|---------|---------|
 | `REDIS_HOST` | `localhost` | Redis server hostname (set to `redis` in Docker) |
 | `REDIS_DB` | `0` | Redis database index |
-| `DB_DIR` | `data` | Directory for SQLite databases, blocklist, and caches |
+| `DB_DIR` | `data` | Directory for SQLite databases and caches |
 | `ENABLED_PROTOCOLS` | all protocols | Comma-separated list of active protocols with optional port overrides, e.g. `SSH,SMTP:25,SMTP:587,HTTP:80,HTTP:443`. Empty string = ingest-only mode (no local honeypots). |
 
 ### Web Server (`main.py`)

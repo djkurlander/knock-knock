@@ -644,7 +644,7 @@
     "source": "db",
     "method": "GET",
     "path": "/actuator/env",
-    "ua": "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)",
+    "ua": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
     "body": "",
     "expected_purpose": "config_exposure",
     "expected_name": "Spring Boot Actuator"
@@ -743,7 +743,7 @@
     "type": "named",
     "source": "db",
     "method": "GET",
-    "path": "/robots.txt",
+    "path": "/sitemap.xml",
     "ua": "Mozilla/5.0 (compatible; CensysInspect/1.1; +https://about.censys.io/)",
     "body": "",
     "expected_purpose": "research_scanner",
@@ -1054,7 +1054,7 @@
     "source": "db",
     "method": "GET",
     "path": "/.git/config",
-    "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    "ua": "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)",
     "body": "",
     "expected_purpose": "config_exposure",
     "expected_name": "Git Metadata Exposure"
@@ -1134,7 +1134,7 @@
     "source": "db",
     "method": "GET",
     "path": "/server-status",
-    "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36 Edg/124.0.0.0",
+    "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
     "body": "",
     "expected_purpose": "config_exposure",
     "expected_name": "Apache mod_status Exposure"
@@ -1434,7 +1434,7 @@
     "source": "db",
     "method": "GET",
     "path": "/dump.sql",
-    "ua": "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36",
+    "ua": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
     "body": "",
     "expected_purpose": "config_exposure",
     "expected_name": "Exposed SQL Dump"
@@ -1644,7 +1644,7 @@
     "source": "db",
     "method": "GET",
     "path": "/.DS_Store",
-    "ua": "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_4_1) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15",
+    "ua": "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36",
     "body": "",
     "expected_purpose": "config_exposure",
     "expected_name": "DS_Store File Exposure"
@@ -1694,7 +1694,7 @@
     "source": "db",
     "method": "GET",
     "path": "/.aws/credentials",
-    "ua": "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)",
+    "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:125.0) Gecko/20100101 Firefox/125.0",
     "body": "",
     "expected_purpose": "config_exposure",
     "expected_name": "AWS Config Exposure"
@@ -1994,7 +1994,7 @@
     "source": "db",
     "method": "GET",
     "path": "/___proxy_subdomain_whm/login/",
-    "ua": "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_4_1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    "ua": "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_4_1) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15",
     "body": "",
     "expected_purpose": "credential_theft",
     "expected_name": "cPanel/WHM Admin Brute Force"
@@ -2084,7 +2084,7 @@
     "source": "db",
     "method": "GET",
     "path": "/",
-    "ua": "Mozilla/5.0 zgrab/0.x",
+    "ua": "curl/7.68.0",
     "body": "",
     "expected_purpose": "basic_probe",
     "expected_name": null
@@ -2094,7 +2094,7 @@
     "source": "db",
     "method": "GET",
     "path": "/.htpasswd",
-    "ua": "Mozilla/5.0 (X11; Linux x86_64; rv:125.0) Gecko/20100101 Firefox/125.0",
+    "ua": "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36",
     "body": "",
     "expected_purpose": "config_exposure",
     "expected_name": null
@@ -2203,7 +2203,7 @@
     "type": "heuristic",
     "source": "db",
     "method": "GET",
-    "path": "/dvOlm660X2XRoyE",
+    "path": "/Hzf1gPUbh7N4MJ",
     "ua": "python-requests/2.28.1",
     "body": "",
     "expected_purpose": "resource_discovery",

@@ -19,9 +19,37 @@ import os
 import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..', 'honeypots'))
-from http_honeypot import _classify_purpose  # noqa: E402
+from http_honeypot import _classify_purpose, _EXPLOITS  # noqa: E402
 
 import sqlite3
+
+
+def _all_matching_entries(method, path, ua, body):
+    """
+    Return every exploit entry whose patterns all match (method, path, ua, body),
+    in priority order (lowest priority number first = highest precedence).
+
+    Replicates _match_exploit() logic but collects ALL matches instead of
+    stopping at the first, so callers can detect shadowing conflicts.
+    """
+    results = []
+    for e in _EXPLOITS:
+        has_method = e['method_re'] is not None
+        has_path   = e['path_re']   is not None
+        has_body   = e['body_re']   is not None
+        has_ua     = e['ua_re']     is not None
+        if not (has_method or has_path or has_body or has_ua):
+            continue
+        if has_method and not e['method_re'].search(method):
+            continue
+        if has_path   and not e['path_re'].search(path):
+            continue
+        if has_body   and not e['body_re'].search(body):
+            continue
+        if has_ua     and not e['ua_re'].search(ua):
+            continue
+        results.append(e)
+    return results
 
 EXPLOITS_PATH = os.path.join(
     os.path.dirname(__file__), '..', '..', '..', 'honeypots', 'http_exploits.json'
@@ -153,6 +181,32 @@ def main():
                 f"VERIFY FAIL [{src}] {name!r} → got {gn!r} | {m} {p!r} ua={u!r}"
             )
             continue
+
+        # Cross-check: find every JSON entry whose patterns match this trigger.
+        # The first (lowest priority number) must be our entry — guaranteed above.
+        # Any others indicate overlap that could become a shadowing bug if priorities shift.
+        all_hits = _all_matching_entries(m, p, u, b_trunc)
+        for other in all_hits:
+            if other['name'] == name:
+                continue
+            if other['priority'] == entry['priority']:
+                # Same priority → file-order-dependent, treat as an error
+                failures.append(
+                    f"PRIORITY TIE [{name!r} p{entry['priority']}] trigger also matches "
+                    f"{other['name']!r} at same priority — file order determines winner"
+                )
+            else:
+                # Different priority → informational warning only
+                rel = "lower-p (would shadow if promoted)" if other['priority'] > entry['priority'] \
+                      else "higher-p (shadowing already caught by VERIFY FAIL)"
+                print(f"  overlap [{name!r}]: trigger also matches "
+                      f"{other['name']!r} (p{other['priority']}, {rel})")
+
+        if any(
+            other['name'] != name and other['priority'] == entry['priority']
+            for other in all_hits
+        ):
+            continue  # priority-tie error already recorded above
 
         golden.append(make_case('named', src, m, p, u, b_trunc, purpose, name))
 

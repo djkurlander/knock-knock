@@ -130,7 +130,76 @@ are added — recheck before committing each new entry.
 `proxy_abuse`, `api_probe`, `malware_comm`, `crypto_mining`, `open_redirect`,
 `mass_scanner`, `research_scanner`, `protocol_probe`
 
-## Step 6 — Consider honeypot code changes
+## Step 6 — Update the regression golden set
+
+For every entry added or widened in step 5, append a corresponding test case to
+`extras/tests/http/http_classifier_golden.json`. Use a real DB example where possible,
+synthetic otherwise. The case must verify before being appended.
+
+```python
+import json, sqlite3, sys
+sys.path.insert(0, 'honeypots')
+from http_honeypot import _classify_purpose
+
+GOLDEN_PATH = 'extras/tests/http/http_classifier_golden.json'
+
+# Replace with the names/purposes of entries actually added this run:
+new_entries = [
+    {'name': '<name>', 'purpose': '<purpose>'},
+    # ...
+]
+
+with open(GOLDEN_PATH) as f:
+    golden = json.load(f)
+existing_names = {g['expected_name'] for g in golden}
+
+con = sqlite3.connect('data/knock_knock.db')
+
+for entry in new_entries:
+    name, purpose = entry['name'], entry['purpose']
+    if name in existing_names:
+        print(f"  already covered: {name!r}")
+        continue
+
+    # Try to find a real DB example
+    rows = con.execute(
+        "SELECT http_method, http_path, http_user_agent, http_body "
+        "FROM knocks_http ORDER BY id DESC LIMIT 100000"
+    ).fetchall()
+
+    case = None
+    for method, path, ua, body in rows:
+        m, p, u, b = method or '', path or '', ua or '', body or ''
+        _, gn, _ = _classify_purpose(m, p, u, b)
+        if gn == name:
+            case = {'type':'named','source':'db',
+                    'method':m,'path':p,'ua':u,'body':b[:200],
+                    'expected_purpose':purpose,'expected_name':name}
+            break
+
+    if not case:
+        # Construct a synthetic trigger manually and verify it
+        m, p, u, b = 'GET', '/FILL-IN-PATH', '', ''  # <-- edit for each entry
+        _, gn, _ = _classify_purpose(m, p, u, b)
+        assert gn == name, f"synthetic trigger wrong: got {gn!r}"
+        case = {'type':'named','source':'synthetic',
+                'method':m,'path':p,'ua':u,'body':b,
+                'expected_purpose':purpose,'expected_name':name}
+
+    golden.append(case)
+    print(f"  added: {name!r} [{case['source']}]")
+
+con.close()
+with open(GOLDEN_PATH, 'w') as f:
+    json.dump(golden, f, indent=2)
+print(f"Golden set: {len(golden)} cases")
+```
+
+If entries were only **widened** (pattern broadened, not a new name), re-run the
+regression test — if it still passes the existing case is sufficient. Only add a
+new case if the widen covers a distinct trigger that wasn't in the golden set before.
+
+## Step 8 — Consider honeypot code changes
 
 If a pattern is better expressed as a heuristic regex in `http_honeypot.py` than
 as a JSON entry (e.g. a broad structural rule, a URL-encoding variant of an existing
@@ -147,7 +216,7 @@ Key locations in `http_honeypot.py`:
 - `_classify_purpose` (~line 407) — overall classification flow; exploit DB is
   checked at step 1 (after the binary-method guard), before all heuristics
 
-## Step 7 — Validate
+## Step 9 — Validate
 
 After any edits:
 
@@ -183,7 +252,7 @@ commit the new `http_classifier_golden.json`.
 Also run a spot-check smoke test confirming each *new* pattern matches the actual
 path that triggered it (construct a small Python test inline).
 
-## Step 8 — Update the checkpoint
+## Step 10 — Update the checkpoint
 
 Write the maximum knock ID seen in step 2 to `extras/tests/http/last_checked_id.txt`:
 
@@ -191,7 +260,7 @@ Write the maximum knock ID seen in step 2 to `extras/tests/http/last_checked_id.
 echo "<max_id>" > extras/tests/http/last_checked_id.txt
 ```
 
-## Step 9 — Report
+## Step 11 — Report
 
 Summarise what was added: a table of new entries (name, CVE if any, purpose) and
 any `http_honeypot.py` changes. Note how many total entries the JSON now has.

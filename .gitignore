@@ -12,6 +12,9 @@ honeypots/data/
 # Docker overrides
 docker-compose.override.yml
 
+# HTTP classifier checkpoint (db-specific runtime state)
+extras/tests/http/last_checked_id.txt
+
 # three-globe bug repro
 extras/three-globe-bug/
 static/three-globe-leak-repro.html

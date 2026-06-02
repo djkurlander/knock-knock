@@ -9,13 +9,19 @@ that aren't yet classified by the exploit database or honeypot heuristics, resea
 what they are, and adds named entries to `honeypots/http_exploits.json` (and adjusts
 `honeypots/http_honeypot.py` heuristics when the JSON can't capture the pattern).
 
+**Classification has two layers** — both must be considered when triaging unmatched traffic:
+1. **Named entries** (`honeypots/http_exploits.json`) — checked first; return `(purpose, name, cve)`
+2. **Heuristic regexes** (`_RE_*` in `http_honeypot.py`) — catch-all for broad attack classes;
+   return `(purpose, None, None)`. These are intentionally open-ended and should NOT be
+   replaced with JSON entries — they cover novel variants that don't yet have a name.
+
 ## Step 1 — Determine the review window
 
-Read `data/http_knocks_last_checked_id.txt` to get the last reviewed knock ID.
+Read `extras/tests/http/last_checked_id.txt` to get the last reviewed knock ID.
 If the file doesn't exist, default to reviewing the last 500 entries.
 
 ```bash
-cat data/http_knocks_last_checked_id.txt 2>/dev/null || echo "0"
+cat extras/tests/http/last_checked_id.txt 2>/dev/null || echo "0"
 ```
 
 ## Step 2 — Fetch new entries
@@ -42,7 +48,7 @@ import sys, json, re, sqlite3
 sys.path.insert(0, 'honeypots')
 from http_honeypot import _classify_purpose, _EXPLOITS
 
-LAST_ID = int(open('data/http_knocks_last_checked_id.txt').read().strip())
+LAST_ID = int(open('extras/tests/http/last_checked_id.txt').read().strip())
 
 con = sqlite3.connect('data/knock_knock.db')
 rows = con.execute(
@@ -162,15 +168,27 @@ print('Patterns:', 'all OK' if not errors else errors)
 python3 -m py_compile honeypots/http_honeypot.py && echo "http_honeypot.py OK"
 ```
 
-Run a spot-check smoke test confirming each new pattern matches the actual path
-that triggered it (construct a small Python test inline).
+Run the regression test to catch priority conflicts and pattern regressions across
+both classification layers (named entries AND heuristics):
+
+```bash
+python3 extras/tests/http/test_http_classifier.py
+```
+
+If any existing case now fails, you've introduced a regression — either fix the
+priority of the new entry or update the golden set if the new classification is
+intentionally better. To update the golden set, re-run the generation script and
+commit the new `http_classifier_golden.json`.
+
+Also run a spot-check smoke test confirming each *new* pattern matches the actual
+path that triggered it (construct a small Python test inline).
 
 ## Step 8 — Update the checkpoint
 
-Write the maximum knock ID seen in step 2 to `data/http_knocks_last_checked_id.txt`:
+Write the maximum knock ID seen in step 2 to `extras/tests/http/last_checked_id.txt`:
 
 ```bash
-echo "<max_id>" > data/http_knocks_last_checked_id.txt
+echo "<max_id>" > extras/tests/http/last_checked_id.txt
 ```
 
 ## Step 9 — Report

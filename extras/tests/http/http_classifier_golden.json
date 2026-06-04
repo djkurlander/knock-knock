@@ -2070,14 +2070,14 @@
     "expected_name": "PowerMTA Admin Panel Probe"
   },
   {
-    "type": "heuristic",
+    "type": "named",
     "source": "db",
     "method": "GET",
     "path": "/a2billing/admin/Public/index.php",
     "ua": "curl/7.29.0",
     "body": "",
     "expected_purpose": "app_discovery",
-    "expected_name": null
+    "expected_name": "A2Billing Admin Discovery"
   },
   {
     "type": "heuristic",
@@ -2218,5 +2218,145 @@
     "body": "",
     "expected_purpose": "unknown",
     "expected_name": null
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "POST",
+    "path": "/admin/modules/backup/page.backup.php?action=deletedataset&dir=';wget",
+    "ua": "",
+    "body": "",
+    "expected_purpose": "rce",
+    "expected_name": "FreePBX Backup Module Command Injection"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "POST",
+    "path": "/vtigercrm/phprint.php?module=Home&action=deletedataset&dir=';wget",
+    "ua": "",
+    "body": "",
+    "expected_purpose": "rce",
+    "expected_name": "VTiger CRM Command Injection"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "POST",
+    "path": "/yii/config.all.php",
+    "ua": "",
+    "body": "",
+    "expected_purpose": "config_exposure",
+    "expected_name": "FreePBX Config Export Probe"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/ssl-vpn/login.esp",
+    "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36",
+    "body": "",
+    "expected_purpose": "device_infiltration",
+    "expected_name": "Barracuda SSL-VPN Login Discovery"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/telescope/requests",
+    "ua": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:103.0) Gecko/20100101 Firefox/103.0 abuse.xmco.fr",
+    "body": "",
+    "expected_purpose": "config_exposure",
+    "expected_name": "Laravel Telescope Debug Panel"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/debug/vars",
+    "ua": "Mozilla/5.0 (compatible; silver.inc/2.0)",
+    "body": "",
+    "expected_purpose": "mass_scanner",
+    "expected_name": "silver.inc Scanner"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/api/client_secret.json",
+    "ua": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36",
+    "body": "",
+    "expected_purpose": "credential_theft",
+    "expected_name": "Google Cloud Credential Files"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/azure.json",
+    "ua": "Mozilla/5.0 (compatible; silver.inc/2.0)",
+    "body": "",
+    "expected_purpose": "config_exposure",
+    "expected_name": "Azure Credential Files"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/.git/logs/HEAD",
+    "ua": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36",
+    "body": "",
+    "expected_purpose": "config_exposure",
+    "expected_name": "Exposed Git Repository Files"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/config/settings.py",
+    "ua": "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)",
+    "body": "",
+    "expected_purpose": "config_exposure",
+    "expected_name": "Python Config Source Exposure"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "POST",
+    "path": "/vtigercrm/ops.php?56",
+    "ua": "",
+    "body": "",
+    "expected_purpose": "app_discovery",
+    "expected_name": "VTiger CRM Discovery"
+  },
+  {
+    "type": "named",
+    "source": "synthetic",
+    "method": "GET",
+    "path": "/sslvpn_logon.shtml",
+    "ua": "",
+    "body": "",
+    "expected_purpose": "device_infiltration",
+    "expected_name": "SonicWall SSL-VPN Portal Discovery"
+  },
+  {
+    "type": "named",
+    "source": "synthetic",
+    "method": "GET",
+    "path": "/nifi-api/flow/about",
+    "ua": "",
+    "body": "",
+    "expected_purpose": "app_discovery",
+    "expected_name": "Apache NiFi Discovery"
+  },
+  {
+    "type": "named",
+    "source": "synthetic",
+    "method": "POST",
+    "path": "/admin/ajax.php?module=blacklist",
+    "ua": "",
+    "body": "",
+    "expected_purpose": "app_discovery",
+    "expected_name": "FreePBX Admin Panel Discovery"
   }
 ]

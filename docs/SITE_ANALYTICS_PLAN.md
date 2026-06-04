@@ -124,13 +124,17 @@ Add to `DEFINITION` in `protocols/http.py`:
 
 ---
 
-### 3. nginx/Apache Log Adapter (`extras/nginx-adapter/`)
+### 3. Web Server Log Adapter (`extras/log-adapter/`)
 
 **Files:**
-- `extras/nginx-adapter/knock_adapter.py` — the adapter script
-- `extras/nginx-adapter/nginx-log-format.conf` — drop-in nginx config snippet
+- `extras/log-adapter/knock_adapter.py` — the adapter script
+- `extras/log-adapter/configs/nginx.conf` — drop-in nginx config snippet
+- `extras/log-adapter/configs/apache.conf` — Apache config snippet (see escaping note)
+- `extras/log-adapter/configs/caddy.json` — Caddy `log` block snippet
+- `extras/log-adapter/configs/traefik.yaml` — Traefik access log config snippet
+- `extras/log-adapter/README.md` — per-server setup instructions and caveats
 
-**nginx log format** (use `escape=json` to handle special chars):
+**nginx** (use `escape=json` to handle special chars):
 ```nginx
 log_format knock_json escape=json
   '{"ip":"$remote_addr","method":"$request_method","path":"$request_uri",'
@@ -138,17 +142,44 @@ log_format knock_json escape=json
 access_log /var/log/nginx/knock_json.log knock_json;
 ```
 
-**Apache equivalent** (documented in README within the adapter dir):
+**Apache** — JSON escaping caveat: Apache's `LogFormat` has no `escape=json` equivalent. User-Agent strings containing backslashes or quotes will produce malformed JSON. Two options:
+- Use `--lenient` mode (see below), which repairs common single-field escaping failures
+- Use piped logging through a sanitizer (documented in README) for production accuracy
+
 ```apache
 LogFormat '{"ip":"%a","method":"%m","path":"%U%q","ua":"%{User-Agent}i","host":"%V","port":"%p"}' knock_json
 CustomLog /var/log/apache2/knock_json.log knock_json
 ```
 
+**Caddy** — native structured JSON logging, no escaping issues:
+```json
+{
+  "logs": {
+    "default": {
+      "encoder": { "format": "json" },
+      "output": { "output": "file", "filename": "/var/log/caddy/access.log" }
+    }
+  }
+}
+```
+Field mapping differs from nginx (Caddy uses `request.remote_ip`, `request.method`, etc.) — `knock_adapter.py` handles this via `--format caddy`.
+
+**Traefik** — native JSON access logs:
+```yaml
+accessLog:
+  filePath: "/var/log/traefik/access.log"
+  format: json
+```
+Field mapping handled via `--format traefik`.
+
+**Phase 1 scope: nginx, Apache, Caddy, Traefik** — all log-file-tail based. Push-based sources (Cloudflare Pages, serverless functions) require HTTP ingest support on INGEST_PORT and are covered in Phase 2.
+
 **`knock_adapter.py` behaviour:**
-- CLI args: `--log-file`, `--host` (default `localhost`), `--port` (INGEST_PORT), `--source` (source ID for dashboard label), `--from-beginning` (replay existing log on startup, default: tail only new lines)
+- CLI args: `--log-file`, `--host` (default `localhost`), `--port` (INGEST_PORT), `--source` (source ID for dashboard label), `--from-beginning` (replay existing log on startup, default: tail only new lines), `--format` (default `nginx`; also `apache`, `caddy`, `traefik`), `--lenient` (tolerate malformed JSON lines — repair or skip rather than abort)
+- `--lenient` mode: attempts `json.loads()`; on failure, falls back to regex extraction of `ip`, `method`, `path`, `port` fields (which are safe), logs a warning for the UA field, and emits the knock without `http_user_agent` rather than dropping the line entirely
 - Opens a persistent TCP connection to host:port; reconnects with backoff on failure
 - Tails the log file with inotify or polling fallback
-- Maps each nginx JSON line → knock JSON:
+- Maps each log line → knock JSON:
   ```json
   {"type":"KNOCK","proto":"HTTP","ip":"...","http_method":"...","http_path":"...",
    "http_user_agent":"...","http_host":"...","http_port":80,"source":"my-site"}
@@ -212,18 +243,93 @@ If `asn_type` is added to `get_geo_enriched()` (preferred), the `log_to_enriched
 
 ---
 
+## Phase 2 — HTTP Ingest + Push-Based Sources
+
+### HTTP Ingest on INGEST_PORT
+
+**Why needed:** Log-file adapters (Phase 1) require local file access. Edge/serverless sources — Cloudflare Pages Functions, AWS Lambda, Vercel edge functions — can only make HTTPS `fetch()` calls and cannot open a raw TCP socket to INGEST_PORT.
+
+**Approach:** Extend the INGEST_PORT listener in `monitor.py` to detect the protocol from the first bytes of each new connection, routing accordingly:
+
+```python
+first = await reader.read(5)
+if first.startswith(b'POST '):
+    await handle_http_ingest(reader, writer, first)
+else:
+    await handle_tcp_feeder(reader, writer, first)  # existing path unchanged
+```
+
+Raw TCP feeder connections start with `{` (JSON); HTTP POST requests start with `POST ` — unambiguous. The HTTP handler reads headers, validates an auth token, parses the single-knock JSON body, and drops it into the same internal queue as TCP feeder knocks. All downstream enrichment (GeoIP, bot detection, DB writes, Redis publish) is identical.
+
+**Authentication:** Required — INGEST_PORT is internal today, but HTTP POST over the internet needs a pre-shared token checked in the `Authorization` header. Configured via `INGEST_SECRET` env var; requests without a valid token are rejected with 401.
+
+**No new port, no new config variable beyond `INGEST_SECRET`.**
+
+---
+
+### Cloudflare Pages Adapter (`extras/cf-pages-adapter/`)
+
+Enabled by the HTTP ingest above. A Cloudflare Pages Function that fires an async POST to INGEST_PORT on every request:
+
+```javascript
+// functions/_middleware.js
+export async function onRequest(context) {
+  const { request } = context;
+  context.waitUntil(fetch('https://your-server/ingest-port-via-proxy', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer ' + INGEST_SECRET
+    },
+    body: JSON.stringify({
+      type: 'KNOCK', proto: 'HTTP',
+      ip: request.headers.get('CF-Connecting-IP'),
+      http_method: request.method,
+      http_path: new URL(request.url).pathname,
+      http_user_agent: request.headers.get('User-Agent') || '',
+      http_host: new URL(request.url).hostname,
+      source: KNOCK_SOURCE_ID
+    })
+  }));
+  return context.next();
+}
+```
+
+`INGEST_SECRET` and `KNOCK_SOURCE_ID` are set as Cloudflare Pages environment variables. `context.waitUntil()` ensures the POST fires without blocking the response to the visitor.
+
+**Files:**
+- `extras/cf-pages-adapter/functions/_middleware.js` — the Pages Function
+- `extras/cf-pages-adapter/README.md` — setup instructions (env vars, Pages project config)
+
+**Cloudflare Logpush** (Pro plan+) is an alternative for users who prefer not to deploy a Pages Function — Cloudflare pushes batched NDJSON to a custom HTTPS endpoint. A small receiver script would unpack and forward to INGEST_PORT. Documented as an option in the README but not a first-class deliverable.
+
+---
+
 ## File Change Summary
+
+**Phase 1**
 
 | File | Change |
 |------|--------|
 | `extras/update-asn-types.py` | New: ASN type database download/refresh script |
-| `extras/nginx-adapter/knock_adapter.py` | New: log tail → INGEST_PORT adapter |
-| `extras/nginx-adapter/nginx-log-format.conf` | New: example nginx config snippet |
+| `extras/log-adapter/knock_adapter.py` | New: log tail → INGEST_PORT adapter (`--format nginx\|apache\|caddy\|traefik`, `--lenient`) |
+| `extras/log-adapter/configs/nginx.conf` | New: nginx `log_format` config snippet |
+| `extras/log-adapter/configs/apache.conf` | New: Apache `LogFormat` config snippet (with escaping caveats) |
+| `extras/log-adapter/configs/caddy.json` | New: Caddy structured log config snippet |
+| `extras/log-adapter/configs/traefik.yaml` | New: Traefik JSON access log config snippet |
 | `monitor.py` | `_load_asn_types()`, extend `get_geo_enriched()`, DB migration for `isp_intel.asn_type`, include `asn_type` in package |
 | `protocols/http.py` | Add `process_knock` hook (classification + bot detection), `_detect_bot()`, `"bot"` display format, two new Columns |
 | `main.py` | Include `asn_type` in `top_providers` query and broadcast |
 | `index.html` | `[DC]`/`[ISP]` badge on ISP leaderboard rows |
 | `requirements.txt` | Add `device-detector` |
+
+**Phase 2**
+
+| File | Change |
+|------|--------|
+| `monitor.py` | Extend INGEST_PORT listener with protocol sniffing; add `handle_http_ingest()` with token auth (`INGEST_SECRET`) |
+| `extras/cf-pages-adapter/functions/_middleware.js` | New: Cloudflare Pages Function middleware |
+| `extras/cf-pages-adapter/README.md` | New: setup instructions for Cloudflare Pages + Logpush alternative |
 
 ---
 

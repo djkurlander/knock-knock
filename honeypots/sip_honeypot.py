@@ -5,6 +5,7 @@ import os
 import random
 import re
 import socket
+import sqlite3
 import string
 import sys
 import threading
@@ -44,7 +45,10 @@ _ack_seen = {}
 _reg_lock = threading.Lock()
 _registered_extensions = {}
 _dial_cache_lock = threading.Lock()
-_dial_cache = []  # list of (digits_str, iso, name, lat, lng), max 50 entries
+_dial_cache = []  # list of (digits_str, iso, name, lat, lng)
+_DIAL_CACHE_MAX = 500
+_DIAL_CACHE_MIN_HITS = 2
+_DIAL_INTEL_DB = os.path.join(os.environ.get('DB_DIR', 'data'), 'knock_knock.db')
 
 # ---------------------------------------------------------------------------
 # Nominatim geocoding cache — city-level coordinates for SIP dial descriptions
@@ -83,6 +87,59 @@ def _save_geocode_cache():
             json.dump(_geocode_cache, f, ensure_ascii=False, indent=1)
     except Exception as e:
         print(f'SIP GEOCODE: cache save error: {e}', file=sys.stderr)
+
+
+def _seed_dial_cache_from_db(db_path=None):
+    """Warm the in-memory dial cache from monitor.py's persisted dial_intel table."""
+    path = db_path or _DIAL_INTEL_DB
+    if not os.path.isfile(path):
+        return 0
+
+    try:
+        conn = sqlite3.connect(path, timeout=2)
+        cur = conn.cursor()
+        cur.execute(
+            """SELECT number, country, country_name, lat, lng, hits, last_seen
+               FROM dial_intel
+               WHERE number IS NOT NULL
+                 AND hits >= ?
+                 AND country IS NOT NULL
+                 AND country != 'XX'
+               ORDER BY last_seen DESC, hits DESC
+               LIMIT ?""",
+            (_DIAL_CACHE_MIN_HITS, _DIAL_CACHE_MAX),
+        )
+        rows = cur.fetchall()
+        conn.close()
+    except sqlite3.Error as e:
+        if TRACE_ENABLED:
+            print(f'SIP CACHE: dial_intel seed skipped: {e}', file=sys.stderr)
+        return 0
+
+    seeded = []
+    for number, iso, name, lat, lng, hits, last_seen in rows:
+        digits = re.sub(r'\D', '', number or '')
+        if len(digits) < 7:
+            continue
+        candidate = (digits, iso, name, lat, lng, int(hits or 0), last_seen or '')
+        conflicts = [
+            entry for entry in seeded
+            if digits.endswith(entry[0]) or entry[0].endswith(digits)
+        ]
+        candidate_score = (candidate[5], candidate[6], -len(candidate[0]))
+        if conflicts and max((entry[5], entry[6], -len(entry[0])) for entry in conflicts) >= candidate_score:
+            continue
+        seeded = [
+            entry for entry in seeded
+            if not (digits.endswith(entry[0]) or entry[0].endswith(digits))
+        ]
+        seeded.append(candidate)
+
+    with _dial_cache_lock:
+        _dial_cache[:] = [entry[:5] for entry in seeded]
+    if TRACE_ENABLED and seeded:
+        print(f'SIP CACHE: seeded {len(seeded)} dial targets from {path}', file=sys.stderr)
+    return len(seeded)
 
 
 def _clean_description(desc):
@@ -445,7 +502,7 @@ def parse_dial_country(dial_string):
             _dial_cache[:] = [(d, i, n, la, ln) for d, i, n, la, ln in _dial_cache
                               if d != digits and not d.endswith(digits)]
             _dial_cache.append((digits, iso, name, lat, lng))
-            if len(_dial_cache) > 50:
+            if len(_dial_cache) > _DIAL_CACHE_MAX:
                 _dial_cache.pop(0)
         if TRACE_ENABLED: print(f'SIP CACHE: stored +{digits} -> {iso} ({name})', file=sys.stderr)
         return iso, name, e164, lat, lng
@@ -455,7 +512,12 @@ def parse_dial_country(dial_string):
     if re.match(r'^\d{7,}$', digits_only):
         with _dial_cache_lock:
             for cached_digits, cached_iso, cached_name, cached_lat, cached_lng in _dial_cache:
-                if digits_only.endswith(cached_digits):
+                nanp_alias = (
+                    len(cached_digits) == 11
+                    and cached_digits.startswith('1')
+                    and digits_only.endswith(cached_digits[1:])
+                )
+                if digits_only.endswith(cached_digits) or nanp_alias:
                     if TRACE_ENABLED: print(f'SIP CACHE: hit {digits_only} matched +{cached_digits} -> {cached_iso} ({cached_name})', file=sys.stderr)
                     return cached_iso, cached_name, f'+{cached_digits}', cached_lat, cached_lng
 
@@ -717,13 +779,18 @@ def process_sip_request(req, client_ip, allow_b2bua=False):
             and SIP_INVITE_MODE in ('ring', 'answer')
             and sip_b2bua.should_bridge(common.get('sip_dial_number'), common.get('sip_dial_country'))
         )
-        if sip_b2bua.enabled():
-            common['sip_asterisk_forwarded'] = 1 if bridge_candidate else 0
+        common['sip_pbx_state'] = 0
+        bridge_id = None
+        if bridge_candidate:
+            common['sip_pbx_state'] = 1
+            bridge_id = sip_b2bua.new_bridge_id()
+            common['sip_pbx_bridge_id'] = bridge_id
         emit_knock(client_ip, extra=common, dedup_key=dedup_key)
         if bridge_candidate:
             return 'INVITE_B2BUA', req, {
                 'dial_number': common.get('sip_dial_number'),
                 'dial_country': common.get('sip_dial_country'),
+                'bridge_id': bridge_id,
             }
         if SIP_INVITE_MODE in ('ring', 'answer'):
             return 'INVITE_FAKE', req, None
@@ -740,10 +807,11 @@ def process_sip_request(req, client_ip, allow_b2bua=False):
     return 200, 'OK', None
 
 
-def _send_invite_sequence(req, send_fn):
+def _send_invite_sequence(req, send_fn, send_trying=True):
     """Send 100 Trying → 183 Session Progress → 200 OK with realistic delays."""
     sdp = build_fake_sdp()
-    send_fn(build_response(req, 100, 'Trying'))
+    if send_trying:
+        send_fn(build_response(req, 100, 'Trying'))
     time.sleep(random.uniform(0.05, 0.2))
     send_fn(build_response(req, 183, 'Session Progress', body=sdp))
     if SIP_INVITE_MODE == 'answer':
@@ -754,6 +822,7 @@ def _send_invite_sequence(req, send_fn):
 def _start_b2bua_or_fake(req, client_ip, addr, sock, bridge_info):
     def udp_send(resp, _addr=addr):
         sock.sendto(resp, _addr)
+    udp_send(build_response(req, 100, 'Trying'))
     bridge = sip_b2bua.maybe_start_bridge(
         req=req,
         client_ip=client_ip,
@@ -761,9 +830,10 @@ def _start_b2bua_or_fake(req, client_ip, addr, sock, bridge_info):
         send_to_attacker=udp_send,
         dial_number=(bridge_info or {}).get('dial_number'),
         dial_country=(bridge_info or {}).get('dial_country'),
+        bridge_id=(bridge_info or {}).get('bridge_id'),
     )
     if not bridge:
-        _send_invite_sequence(req, udp_send)
+        _send_invite_sequence(req, udp_send, send_trying=False)
 
 
 def udp_loop(sock):
@@ -931,6 +1001,7 @@ def tcp_loop(sock):
 
 
 def start_honeypot():
+    _seed_dial_cache_from_db()
     udp_sock = create_dualstack_udp_listener(SIP_PORT)
 
     tcp_sock = create_dualstack_tcp_listener(SIP_PORT, backlog=200)

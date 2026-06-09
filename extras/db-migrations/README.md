@@ -29,6 +29,12 @@ Current scripts:
 - `rename_source_id.py`
   - Renames or merges a `SOURCE_ID` across SQLite and Redis
 
+- `prune_dial_intel_suffix_artifacts.py`
+  - Dry-run-first maintenance script for removing likely low-hit SIP
+    `dial_intel` parser artifacts when a much stronger shorter suffix target
+    exists
+  - Only touches `dial_intel`; historical `knocks_sip` rows are preserved
+
 Examples:
 
 ```bash
@@ -39,6 +45,10 @@ python extras/db-migrations/migrate_mail_to_smtp.py data/knock_knock.db
 python extras/db-migrations/fix_mail_migration.py data/knock_knock.db
 python extras/db-migrations/migrate_visitors_v2.py
 python extras/db-migrations/rename_source_id.py --from ams2 --to AMS2 --dry-run
+python extras/db-migrations/prune_dial_intel_suffix_artifacts.py --db data/knock_knock.db
+python extras/db-migrations/prune_dial_intel_suffix_artifacts.py --db data/knock_knock.db --max-suspect-hits 50 --with-knock-samples
+python extras/db-migrations/prune_dial_intel_suffix_artifacts.py --db data/knock_knock.db --mode nanp-alias --with-knock-samples
+python extras/db-migrations/prune_dial_intel_suffix_artifacts.py --db data/knock_knock.db --apply
 ```
 
 These scripts are intended to be safe to run multiple times.

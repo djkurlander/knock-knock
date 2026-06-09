@@ -5,6 +5,7 @@ No network connections, Redis, SQLite, or subprocess spawning — these
 functions are tested in isolation and cannot affect the DB or UI.
 """
 import os
+import sqlite3
 import sys
 import time
 
@@ -17,6 +18,7 @@ from common import normalize_ip, extract_addr, smtp_tls_cert_subject
 from ip_ban import fmt_ban_until
 from ssh_honeypot_asyncssh import _clamp_delay_bounds
 import sip_b2bua
+import sip_honeypot
 import monitor
 from monitor import sanitize_credential, sanitize_body, _parse_protocol_entry, ProtocolEntry
 
@@ -209,15 +211,99 @@ def test_sip_b2bua_build_sdp_audio():
 
 
 def test_sip_b2bua_should_bridge_policy(monkeypatch):
-    monkeypatch.setattr(sip_b2bua, 'PBX_HOST', '127.0.0.1')
-    monkeypatch.setattr(sip_b2bua, 'PBX_DIAL_POLICY', 'US,+4420')
+    monkeypatch.setenv('PBX_HOST', '127.0.0.1')
+    monkeypatch.setenv('PBX_DIAL_POLICY', 'US,+4420')
     assert sip_b2bua.should_bridge('+12025550123', 'US') is True
     assert sip_b2bua.should_bridge('+442071234567', 'GB') is True
     assert sip_b2bua.should_bridge('+33123456789', 'FR') is False
 
 
 def test_sip_b2bua_disabled_without_host(monkeypatch):
-    monkeypatch.setattr(sip_b2bua, 'PBX_HOST', '')
-    monkeypatch.setattr(sip_b2bua, 'PBX_DIAL_POLICY', 'all')
+    monkeypatch.delenv('PBX_HOST', raising=False)
+    monkeypatch.setenv('PBX_DIAL_POLICY', 'all')
     assert sip_b2bua.enabled() is False
     assert sip_b2bua.should_bridge('+12025550123', 'US') is False
+
+
+def test_sip_dial_cache_seed_from_db(tmp_path):
+    db_path = tmp_path / 'knock_knock.db'
+    conn = sqlite3.connect(db_path)
+    conn.execute(
+        """CREATE TABLE dial_intel (
+               number TEXT PRIMARY KEY,
+               hits INTEGER,
+               first_seen DATETIME,
+               last_seen DATETIME,
+               country TEXT,
+               country_name TEXT,
+               lat REAL,
+               lng REAL
+           )"""
+    )
+    conn.executemany(
+        "INSERT INTO dial_intel VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        [
+            ('+15052954065', 3, '2026-06-09 19:45:23', '2026-06-09 20:13:42', 'US', 'Albuquerque, NM, United States', 35.0841034, -106.650985),
+            ('+615052954065', 1, '2026-06-09 20:07:23', '2026-06-09 20:07:23', 'XX', 'International Network', None, None),
+        ],
+    )
+    conn.commit()
+    conn.close()
+
+    with sip_honeypot._dial_cache_lock:
+        sip_honeypot._dial_cache[:] = []
+    assert sip_honeypot._seed_dial_cache_from_db(str(db_path)) == 1
+    assert sip_honeypot.parse_dial_country('900615052954065')[:3] == (
+        'US',
+        'Albuquerque, NM, United States',
+        '+15052954065',
+    )
+
+
+def test_sip_dial_cache_seed_prefers_higher_hit_suffix_conflict(tmp_path):
+    db_path = tmp_path / 'knock_knock.db'
+    conn = sqlite3.connect(db_path)
+    conn.execute(
+        """CREATE TABLE dial_intel (
+               number TEXT PRIMARY KEY,
+               hits INTEGER,
+               first_seen DATETIME,
+               last_seen DATETIME,
+               country TEXT,
+               country_name TEXT,
+               lat REAL,
+               lng REAL
+           )"""
+    )
+    conn.executemany(
+        "INSERT INTO dial_intel VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        [
+            ('+2092977081', 4, '2026-06-02 09:22:36', '2026-06-09 21:00:00', 'EG', 'Egypt', None, None),
+            ('+12092977081', 18199, '2026-04-21 17:25:50', '2026-06-09 15:47:08', 'US', 'California, United States', None, None),
+        ],
+    )
+    conn.commit()
+    conn.close()
+
+    with sip_honeypot._dial_cache_lock:
+        sip_honeypot._dial_cache[:] = []
+    assert sip_honeypot._seed_dial_cache_from_db(str(db_path)) == 1
+    with sip_honeypot._dial_cache_lock:
+        assert sip_honeypot._dial_cache[0][:3] == ('12092977081', 'US', 'California, United States')
+    assert sip_honeypot.parse_dial_country('800112092977081')[:3] == (
+        'US',
+        'California, United States',
+        '+12092977081',
+    )
+
+
+def test_sip_dial_cache_matches_nanp_national_alias():
+    with sip_honeypot._dial_cache_lock:
+        sip_honeypot._dial_cache[:] = [
+            ('12092977081', 'US', 'California, United States', None, None)
+        ]
+    assert sip_honeypot.parse_dial_country('2092977081')[:3] == (
+        'US',
+        'California, United States',
+        '+12092977081',
+    )

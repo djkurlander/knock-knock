@@ -30,7 +30,21 @@ _ports_lock = threading.Lock()
 _used_ports = set()
 
 
+def reload_config():
+    global PBX_HOST, PBX_PORT, PBX_DIAL_POLICY, SIP_PUBLIC_IP
+    global PBX_RTP_PORT_START, PBX_RTP_PORT_END, PBX_CALL_TIMEOUT, PBX_TRACE
+    PBX_HOST = os.environ.get('PBX_HOST', '').strip()
+    PBX_PORT = int(os.environ.get('PBX_PORT', '5060'))
+    PBX_DIAL_POLICY = os.environ.get('PBX_DIAL_POLICY', 'all').strip()
+    SIP_PUBLIC_IP = os.environ.get('SIP_PUBLIC_IP', '').strip()
+    PBX_RTP_PORT_START = int(os.environ.get('PBX_RTP_PORT_START', '30000'))
+    PBX_RTP_PORT_END = int(os.environ.get('PBX_RTP_PORT_END', '30100'))
+    PBX_CALL_TIMEOUT = max(5.0, float(os.environ.get('PBX_CALL_TIMEOUT', '120')))
+    PBX_TRACE = os.environ.get('PBX_TRACE', '0').strip().lower() not in ('', '0', 'false', 'no')
+
+
 def enabled():
+    reload_config()
     return bool(PBX_HOST)
 
 
@@ -39,6 +53,10 @@ def trace(bridge_id, stage, **fields):
         return
     suffix = ' '.join(f'{k}={v!r}' for k, v in fields.items())
     print(f"SIPB2BUA id={bridge_id} stage={stage} {suffix}".rstrip(), file=sys.stderr, flush=True)
+
+
+def new_bridge_id():
+    return uuid.uuid4().hex[:10]
 
 
 def _token(size=12):
@@ -67,23 +85,10 @@ def _discover_public_ip():
 
 
 def should_bridge(dial_number=None, dial_country=None):
-    if not enabled():
+    reload_config()
+    if not PBX_HOST:
         return False
-    policy = (PBX_DIAL_POLICY or '').strip()
-    if not policy or policy.lower() == 'none':
-        return False
-    if policy.lower() == 'all':
-        return bool(dial_number)
-    for raw_token in policy.split(','):
-        token = raw_token.strip()
-        if not token:
-            continue
-        if len(token) == 2 and token.isalpha():
-            if (dial_country or '').upper() == token.upper():
-                return True
-        elif dial_number and (dial_number == token or dial_number.startswith(token)):
-            return True
-    return False
+    return _policy_matches(dial_number, dial_country)
 
 
 def parse_sdp(body):
@@ -196,8 +201,8 @@ def _release_port(port):
 
 
 class Bridge:
-    def __init__(self, inbound_req, client_ip, client_addr, send_to_attacker, dial_number, dial_country):
-        self.id = uuid.uuid4().hex[:10]
+    def __init__(self, inbound_req, client_ip, client_addr, send_to_attacker, dial_number, dial_country, bridge_id=None):
+        self.id = bridge_id or new_bridge_id()
         self.inbound_req = inbound_req
         self.client_ip = client_ip
         self.client_addr = client_addr
@@ -349,6 +354,10 @@ class Bridge:
         self._send_to_pbx(('\r\n'.join(lines) + '\r\n\r\n').encode() + body)
 
     def _handle_pbx_response(self, resp):
+        code = int(resp.get('code') or 0)
+        if code == 100:
+            trace(self.id, 'pbx_response_suppressed', code=code)
+            return
         self.pbx_response_headers = resp.get('headers') or {}
         body = resp.get('body') or ''
         out_body = None
@@ -361,7 +370,6 @@ class Bridge:
         inbound_response = _build_inbound_response(self.inbound_req, resp, out_body)
         self.last_inbound_response = inbound_response
         self.send_to_attacker(inbound_response)
-        code = int(resp.get('code') or 0)
         trace(self.id, 'pbx_response', code=code)
         if code >= 300:
             self.close()
@@ -468,14 +476,33 @@ def _default_reason(code):
     }.get(int(code or 0), '')
 
 
-def maybe_start_bridge(req, client_ip, client_addr, send_to_attacker, dial_number=None, dial_country=None):
-    if not should_bridge(dial_number, dial_country):
+def maybe_start_bridge(req, client_ip, client_addr, send_to_attacker, dial_number=None, dial_country=None, bridge_id=None):
+    reload_config()
+    if not PBX_HOST or not _policy_matches(dial_number, dial_country):
         return None
     try:
-        return Bridge(req, client_ip, client_addr, send_to_attacker, dial_number, dial_country).start()
+        return Bridge(req, client_ip, client_addr, send_to_attacker, dial_number, dial_country, bridge_id=bridge_id).start()
     except Exception as e:
         print(f'SIP B2BUA: setup failed for {client_ip}: {e}', file=sys.stderr)
         return None
+
+
+def _policy_matches(dial_number=None, dial_country=None):
+    policy = (PBX_DIAL_POLICY or '').strip()
+    if not policy or policy.lower() == 'none':
+        return False
+    if policy.lower() == 'all':
+        return bool(dial_number)
+    for raw_token in policy.split(','):
+        token = raw_token.strip()
+        if not token:
+            continue
+        if len(token) == 2 and token.isalpha():
+            if (dial_country or '').upper() == token.upper():
+                return True
+        elif dial_number and (dial_number == token or dial_number.startswith(token)):
+            return True
+    return False
 
 
 def handle_in_dialog(req, client_ip, send_to_attacker):

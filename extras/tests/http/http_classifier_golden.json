@@ -2090,14 +2090,14 @@
     "expected_name": null
   },
   {
-    "type": "heuristic",
+    "type": "named",
     "source": "db",
     "method": "GET",
     "path": "/.htpasswd",
     "ua": "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36",
     "body": "",
     "expected_purpose": "config_exposure",
-    "expected_name": null
+    "expected_name": "Apache .htpasswd Exposure"
   },
   {
     "type": "heuristic",
@@ -2358,5 +2358,105 @@
     "body": "",
     "expected_purpose": "app_discovery",
     "expected_name": "FreePBX Admin Panel Discovery"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/.env.example",
+    "ua": "l9explore/1.2.2",
+    "body": "",
+    "expected_purpose": "config_exposure",
+    "expected_name": "DotEnv Backup File Exposure"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/wp-config.php.bak",
+    "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+    "body": "",
+    "expected_purpose": "config_exposure",
+    "expected_name": "WordPress Config Backup Exposure"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/backup_web_config.txt",
+    "ua": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+    "body": "",
+    "expected_purpose": "config_exposure",
+    "expected_name": "IIS Web Config Backup Exposure"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/pinfo.php",
+    "ua": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+    "body": "",
+    "expected_purpose": "config_exposure",
+    "expected_name": "PHP Info Disclosure"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/stalker_portal/server/tools/auth_simple.php",
+    "ua": "Mozilla/5.0 (Windows NT 5.1; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/60.0.3112.90 Safari/537.36",
+    "body": "",
+    "expected_purpose": "credential_theft",
+    "expected_name": "Ministra/Stalker IPTV Portal Discovery"
+  },
+  {
+    "type": "named",
+    "source": "synthetic",
+    "method": "GET",
+    "path": "/agc/timeclock.php",
+    "ua": "",
+    "body": "",
+    "expected_purpose": "credential_theft",
+    "expected_name": "VICIdial Call Center"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "POST",
+    "path": "/api.php??act=cmd",
+    "ua": "",
+    "body": "p=system(\"echo T3rr0r; echo T3rr0r\");",
+    "expected_purpose": "rce",
+    "expected_name": "T3rr0r PHP Webshell"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "POST",
+    "path": "/var/mod_conf.php?c99shcook[login]=0",
+    "ua": "",
+    "body": "",
+    "expected_purpose": "rce",
+    "expected_name": "c99 PHP Shell"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/?_HELP_ME_ESCAPE_FROM_BELARUS_PLEASE_",
+    "ua": "Wget/1.21.4 (HelpMeEscapeFromBelarus@proton.me)",
+    "body": "",
+    "expected_purpose": "research_scanner",
+    "expected_name": "Help Me Escape from Belarus Scanner"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "POST",
+    "path": "/",
+    "ua": "Mozlila/5.0 (Linux; Android 7.0; SM-G892A Bulid/NRD90M; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/60.0.3112.107 Moblie Safari/537.36",
+    "body": "{{7*7}}",
+    "expected_purpose": "mass_scanner",
+    "expected_name": "Mozlila Source Map Scanner"
   }
 ]

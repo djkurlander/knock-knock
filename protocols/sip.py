@@ -44,6 +44,7 @@ DEFINITION = ProtocolDefinition(
         Column("sip_dial_country_name", "TEXT"),
         Column("sip_dial_lat",          "REAL"),
         Column("sip_dial_lng",          "REAL"),
+        Column("sip_asterisk_forwarded", "INTEGER"),
     ],
     passthrough_prefixes=["sip_"],
     after_save="protocols.sip:after_save",

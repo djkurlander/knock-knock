@@ -17,6 +17,7 @@ import uuid
 import phonenumbers
 from phonenumbers import geocoder as pn_geocoder
 
+import sip_b2bua
 from common import (
     PerIpTokenBucket,
     create_dualstack_tcp_listener,
@@ -631,7 +632,7 @@ def emit_knock(client_ip, extra=None, dedup_key=None):
     print(json.dumps(knock), flush=True)
 
 
-def process_sip_request(req, client_ip):
+def process_sip_request(req, client_ip, allow_b2bua=False):
     headers = req.get('headers', {})
     method = req.get('method', 'UNKNOWN')
     uri = req.get('uri', '')
@@ -711,7 +712,19 @@ def process_sip_request(req, client_ip):
             reg_ext = _registered_extensions.get(client_ip)
         if reg_ext:
             common['sip_extension'] = reg_ext
+        bridge_candidate = (
+            allow_b2bua
+            and SIP_INVITE_MODE in ('ring', 'answer')
+            and sip_b2bua.should_bridge(common.get('sip_dial_number'), common.get('sip_dial_country'))
+        )
+        if sip_b2bua.enabled():
+            common['sip_asterisk_forwarded'] = 1 if bridge_candidate else 0
         emit_knock(client_ip, extra=common, dedup_key=dedup_key)
+        if bridge_candidate:
+            return 'INVITE_B2BUA', req, {
+                'dial_number': common.get('sip_dial_number'),
+                'dial_country': common.get('sip_dial_country'),
+            }
         if SIP_INVITE_MODE in ('ring', 'answer'):
             return 'INVITE_FAKE', req, None
         return 484, 'Address Incomplete', None
@@ -738,6 +751,21 @@ def _send_invite_sequence(req, send_fn):
         send_fn(build_response(req, 200, 'OK', body=sdp))
 
 
+def _start_b2bua_or_fake(req, client_ip, addr, sock, bridge_info):
+    def udp_send(resp, _addr=addr):
+        sock.sendto(resp, _addr)
+    bridge = sip_b2bua.maybe_start_bridge(
+        req=req,
+        client_ip=client_ip,
+        client_addr=addr,
+        send_to_attacker=udp_send,
+        dial_number=(bridge_info or {}).get('dial_number'),
+        dial_country=(bridge_info or {}).get('dial_country'),
+    )
+    if not bridge:
+        _send_invite_sequence(req, udp_send)
+
+
 def udp_loop(sock):
     while True:
         try:
@@ -753,9 +781,20 @@ def udp_loop(sock):
                 trace(session_id, client_ip, 'udp_parse_invalid')
                 continue
             trace(session_id, client_ip, 'udp_parsed', method=req.get('method'), uri=req.get('uri'))
-            result = process_sip_request(req, client_ip)
+            def udp_send(resp, _addr=addr): sock.sendto(resp, _addr)
+            if sip_b2bua.handle_in_dialog(req, client_ip, udp_send):
+                trace(session_id, client_ip, 'udp_b2bua_in_dialog', method=req.get('method'))
+                continue
+            result = process_sip_request(req, client_ip, allow_b2bua=True)
+            if result[0] == 'INVITE_B2BUA':
+                threading.Thread(
+                    target=_start_b2bua_or_fake,
+                    args=(result[1], client_ip, addr, sock, result[2]),
+                    daemon=True,
+                ).start()
+                trace(session_id, client_ip, 'udp_invite_b2bua', mode=SIP_INVITE_MODE)
+                continue
             if result[0] == 'INVITE_FAKE':
-                def udp_send(resp, _addr=addr): sock.sendto(resp, _addr)
                 threading.Thread(target=_send_invite_sequence, args=(result[1], udp_send), daemon=True).start()
                 trace(session_id, client_ip, 'udp_invite_fake', mode=SIP_INVITE_MODE)
                 continue

@@ -16,6 +16,7 @@ sys.path.insert(0, os.path.join(_ROOT, 'honeypots'))
 from common import normalize_ip, extract_addr, smtp_tls_cert_subject
 from ip_ban import fmt_ban_until
 from ssh_honeypot_asyncssh import _clamp_delay_bounds
+import sip_b2bua
 import monitor
 from monitor import sanitize_credential, sanitize_body, _parse_protocol_entry, ProtocolEntry
 
@@ -177,3 +178,46 @@ def test_parse_protocol_entry_bad_port():
 
 def test_parse_protocol_entry_empty():
     assert _parse_protocol_entry('') is None
+
+
+# ---------------------------------------------------------------------------
+# sip_b2bua helpers
+# ---------------------------------------------------------------------------
+
+def test_sip_b2bua_parse_sdp_audio():
+    sdp = (
+        'v=0\r\n'
+        'o=- 1 1 IN IP4 203.0.113.10\r\n'
+        's=test\r\n'
+        'c=IN IP4 203.0.113.10\r\n'
+        't=0 0\r\n'
+        'm=audio 49170 RTP/AVP 0 8\r\n'
+    )
+    media = sip_b2bua.parse_sdp(sdp)
+    assert media['connection_ip'] == '203.0.113.10'
+    assert media['audio_port'] == 49170
+    assert media['payloads'] == ['0', '8']
+
+
+def test_sip_b2bua_build_sdp_audio():
+    sdp = sip_b2bua.build_sdp('198.51.100.5', 30000, ['0', '101'])
+    assert 'c=IN IP4 198.51.100.5' in sdp
+    assert 'm=audio 30000 RTP/AVP 0' in sdp
+    assert '101' not in sdp
+    assert 'a=rtpmap:0 PCMU/8000' in sdp
+    assert 'a=rtpmap:8 PCMA/8000' not in sdp
+
+
+def test_sip_b2bua_should_bridge_policy(monkeypatch):
+    monkeypatch.setattr(sip_b2bua, 'PBX_HOST', '127.0.0.1')
+    monkeypatch.setattr(sip_b2bua, 'PBX_DIAL_POLICY', 'US,+4420')
+    assert sip_b2bua.should_bridge('+12025550123', 'US') is True
+    assert sip_b2bua.should_bridge('+442071234567', 'GB') is True
+    assert sip_b2bua.should_bridge('+33123456789', 'FR') is False
+
+
+def test_sip_b2bua_disabled_without_host(monkeypatch):
+    monkeypatch.setattr(sip_b2bua, 'PBX_HOST', '')
+    monkeypatch.setattr(sip_b2bua, 'PBX_DIAL_POLICY', 'all')
+    assert sip_b2bua.enabled() is False
+    assert sip_b2bua.should_bridge('+12025550123', 'US') is False

@@ -91,7 +91,8 @@ def test_telnet_knock(honeypot_proc):
 # ---------------------------------------------------------------------------
 
 def test_smtp_knock(honeypot_proc):
-    _, q = honeypot_proc('smtp_honeypot.py', _SMTP_PORT, args=['--port', str(_SMTP_PORT)])
+    _, q = honeypot_proc('smtp_honeypot.py', _SMTP_PORT, args=['--port', str(_SMTP_PORT)],
+                         env={'SMTP_HOSTNAME': 'test.local'})
 
     s = socket.create_connection(('127.0.0.1', _SMTP_PORT), timeout=5)
     s.recv(512)                          # 220 banner

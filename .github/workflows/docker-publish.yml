@@ -36,7 +36,7 @@ jobs:
 
       - name: Run unit tests
         run: |
-          pip install pytest redis asyncssh
+          pip install -r requirements.txt pytest
           python -m pytest tests/test_unit.py -v --tb=short
 
       - name: Set up QEMU

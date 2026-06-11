@@ -7,4 +7,5 @@ WORKDIR /app
 COPY monitor.py main.py constants.py protocol_api.py index.html summary.html sitemap.xml robots.txt ./
 COPY honeypots/ honeypots/
 COPY protocols/ protocols/
+COPY extras/ extras/
 COPY static/ static/

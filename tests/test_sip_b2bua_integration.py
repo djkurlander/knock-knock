@@ -109,6 +109,7 @@ def test_sip_b2bua_fake_pbx_round_trip(monkeypatch):
     monkeypatch.setenv('PBX_PORT', str(pbx_sock.getsockname()[1]))
     monkeypatch.setenv('PBX_DIAL_POLICY', 'all')
     monkeypatch.setenv('SIP_PUBLIC_IP', '127.0.0.1')
+    monkeypatch.setenv('SOURCE_ID', 'LA1')
     monkeypatch.setenv('PBX_RTP_PORT_START', '31000')
     monkeypatch.setenv('PBX_RTP_PORT_END', '31010')
     sip_b2bua.reload_config()
@@ -126,14 +127,73 @@ def test_sip_b2bua_fake_pbx_round_trip(monkeypatch):
         assert bridge is not None
         outbound = pbx_invites.get(timeout=2).decode('utf-8', errors='replace')
         assert outbound.startswith('INVITE sip:12025550123@127.0.0.1 SIP/2.0')
-        assert 'X-Knock-Bridge-ID: testbridge' in outbound
-        assert 'X-Knock-Source-IP: 127.0.0.1' in outbound
+        assert 'X-Bridge-ID: testbridge' in outbound
+        assert 'X-Source-IP: 127.0.0.1' in outbound
+        assert 'X-Source-ID: LA1' in outbound
 
         inbound = sent_to_attacker.get(timeout=2).decode('utf-8', errors='replace')
         assert inbound.startswith('SIP/2.0 200 OK')
         assert 'Call-ID: call-1@example.net' in inbound
         assert 'm=audio ' in inbound
         assert 'c=IN IP4 127.0.0.1' in inbound
+    finally:
+        stop.set()
+        if bridge:
+            bridge.close()
+        pbx_sock.close()
+        rtp_sock.close()
+
+
+def test_sip_b2bua_live_permit_headers(monkeypatch):
+    sys.path.insert(0, 'honeypots')
+    import sip_b2bua
+
+    pbx_sock = _udp_socket_or_skip()
+    rtp_sock = _udp_socket_or_skip()
+    sent_to_attacker = queue.Queue()
+    pbx_invites = queue.Queue()
+    stop = threading.Event()
+
+    def fake_pbx():
+        pbx_sock.settimeout(0.5)
+        while not stop.is_set():
+            try:
+                data, addr = pbx_sock.recvfrom(65535)
+            except socket.timeout:
+                continue
+            pbx_invites.put(data)
+            pbx_sock.sendto(_fake_pbx_response(data, rtp_sock.getsockname()[1]), addr)
+            return
+
+    thread = threading.Thread(target=fake_pbx, daemon=True)
+    thread.start()
+
+    monkeypatch.setenv('PBX_HOST', '127.0.0.1')
+    monkeypatch.setenv('PBX_PORT', str(pbx_sock.getsockname()[1]))
+    monkeypatch.setenv('PBX_DIAL_POLICY', 'none')
+    monkeypatch.setenv('SIP_PUBLIC_IP', '127.0.0.1')
+    monkeypatch.setenv('PBX_RTP_PORT_START', '31020')
+    monkeypatch.setenv('PBX_RTP_PORT_END', '31030')
+    sip_b2bua.reload_config()
+
+    bridge = sip_b2bua.maybe_start_bridge(
+        req=_sip_invite(),
+        client_ip='127.0.0.1',
+        client_addr=('127.0.0.1', 5060),
+        send_to_attacker=sent_to_attacker.put,
+        dial_number='+12025550123',
+        dial_country='US',
+        bridge_id='livebridge',
+        force=True,
+        live_permit={'permit_id': 'manual-test', 'max_seconds': 45},
+    )
+    try:
+        assert bridge is not None
+        outbound = pbx_invites.get(timeout=2).decode('utf-8', errors='replace')
+        assert 'X-Live-Outbound: 1' in outbound
+        assert 'X-Live-Permit-ID: manual-test' in outbound
+        assert 'X-Live-Max-Seconds: 45' in outbound
+        assert 'X-Live-Provider' not in outbound
     finally:
         stop.set()
         if bridge:

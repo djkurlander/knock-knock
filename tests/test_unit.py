@@ -9,6 +9,8 @@ import sqlite3
 import sys
 import time
 
+import pytest
+
 # Make repo root and honeypots/ importable
 _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, _ROOT)
@@ -19,7 +21,9 @@ from ip_ban import fmt_ban_until
 from ssh_honeypot_asyncssh import _clamp_delay_bounds
 import sip_b2bua
 import sip_honeypot
+import sip_live_permit
 import monitor
+import protocols.sip as sip_protocol
 from monitor import sanitize_credential, sanitize_body, _parse_protocol_entry, ProtocolEntry
 
 
@@ -223,6 +227,195 @@ def test_sip_b2bua_disabled_without_host(monkeypatch):
     monkeypatch.setenv('PBX_DIAL_POLICY', 'all')
     assert sip_b2bua.enabled() is False
     assert sip_b2bua.should_bridge('+12025550123', 'US') is False
+
+
+def test_sip_live_permit_requires_strict_e164():
+    assert sip_live_permit.require_e164('+442039960320') == '+442039960320'
+    for dial_number in ('442039960320', '00442039960320', '011442039960320', '+44 20 3996 0320'):
+        with pytest.raises(ValueError):
+            sip_live_permit.require_e164(dial_number)
+
+
+def test_sip_live_permit_releases_lock_on_bad_json():
+    class FakeRedis:
+        def __init__(self):
+            self.values = {
+                sip_live_permit.permit_key('203.0.113.8', '+12025550123'): 'not-json',
+            }
+
+        def eval(self, _script, numkeys, *args):
+            if numkeys == 3:
+                exact_key, wildcard_key, active_key, bridge_id, ttl = args
+                permit_key = exact_key if exact_key in self.values else wildcard_key
+                value = self.values.get(permit_key)
+                if not value or active_key in self.values:
+                    return None
+                del self.values[permit_key]
+                self.values[active_key] = bridge_id
+                return [value, permit_key]
+            active_key, bridge_id = args
+            if self.values.get(active_key) == bridge_id:
+                del self.values[active_key]
+                return 1
+            return 0
+
+    fake = FakeRedis()
+
+    permit = sip_live_permit.consume_permit_and_acquire_live(
+        fake,
+        '203.0.113.8',
+        '+12025550123',
+        'bridge-1',
+    )
+
+    assert permit is None
+    assert sip_live_permit.ACTIVE_KEY not in fake.values
+
+
+def test_sip_live_permit_uses_wildcard_after_exact():
+    class FakeRedis:
+        def __init__(self):
+            self.values = {
+                sip_live_permit.permit_key('*', '+12025550123'): (
+                    '{"permit_id": "wild", "max_seconds": 45}'
+                ),
+            }
+            self.expirations = {}
+
+        def eval(self, _script, numkeys, *args):
+            assert numkeys == 3
+            exact_key, wildcard_key, active_key, bridge_id, ttl = args
+            permit_key = exact_key if exact_key in self.values else wildcard_key
+            value = self.values.get(permit_key)
+            if not value or active_key in self.values:
+                return None
+            del self.values[permit_key]
+            self.values[active_key] = bridge_id
+            return [value, permit_key]
+
+        def expire(self, key, ttl):
+            self.expirations[key] = ttl
+
+    fake = FakeRedis()
+
+    permit = sip_live_permit.consume_permit_and_acquire_live(
+        fake,
+        '203.0.113.8',
+        '+12025550123',
+        'bridge-1',
+    )
+
+    assert permit['permit_id'] == 'wild'
+    assert permit['permit_key'] == sip_live_permit.permit_key('*', '+12025550123')
+    assert sip_live_permit.permit_key('*', '+12025550123') not in fake.values
+
+
+def test_sip_live_permit_prefers_exact_over_wildcard():
+    class FakeRedis:
+        def __init__(self):
+            self.values = {
+                sip_live_permit.permit_key('203.0.113.8', '+12025550123'): (
+                    '{"permit_id": "exact", "max_seconds": 45}'
+                ),
+                sip_live_permit.permit_key('*', '+12025550123'): (
+                    '{"permit_id": "wild", "max_seconds": 45}'
+                ),
+            }
+
+        def eval(self, _script, numkeys, *args):
+            assert numkeys == 3
+            exact_key, wildcard_key, active_key, bridge_id, ttl = args
+            permit_key = exact_key if exact_key in self.values else wildcard_key
+            value = self.values.get(permit_key)
+            if not value:
+                return None
+            del self.values[permit_key]
+            self.values[active_key] = bridge_id
+            return [value, permit_key]
+
+        def expire(self, _key, _ttl):
+            pass
+
+    fake = FakeRedis()
+
+    permit = sip_live_permit.consume_permit_and_acquire_live(
+        fake,
+        '203.0.113.8',
+        '+12025550123',
+        'bridge-1',
+    )
+
+    assert permit['permit_id'] == 'exact'
+    assert sip_live_permit.permit_key('203.0.113.8', '+12025550123') not in fake.values
+    assert sip_live_permit.permit_key('*', '+12025550123') in fake.values
+
+
+def test_sip_live_permit_invite_overrides_bridge_policy(monkeypatch):
+    emitted = []
+
+    def fake_emit_knock(client_ip, extra=None, dedup_key=None):
+        emitted.append((client_ip, extra or {}, dedup_key))
+
+    monkeypatch.setattr(sip_honeypot, 'emit_knock', fake_emit_knock)
+    monkeypatch.setattr(sip_honeypot.sip_b2bua, 'enabled', lambda: True)
+    monkeypatch.setattr(sip_honeypot.sip_b2bua, 'should_bridge', lambda *_args: False)
+    monkeypatch.setattr(sip_honeypot.sip_b2bua, 'new_bridge_id', lambda: 'livebridge')
+    monkeypatch.setattr(
+        sip_honeypot.sip_live_permit,
+        'consume_permit_and_acquire_live',
+        lambda *_args: {'permit_id': 'manual-test', 'max_seconds': 45},
+    )
+    req = sip_honeypot.parse_sip_message(
+        (
+            'INVITE sip:+442039960320@198.51.100.10 SIP/2.0\r\n'
+            'Via: SIP/2.0/UDP 172.110.223.203:5060;branch=z9hG4bKtest\r\n'
+            'From: <sip:10000@172.110.223.203>;tag=abc\r\n'
+            'To: <sip:+442039960320@198.51.100.10>\r\n'
+            'Call-ID: live-permit-test\r\n'
+            'CSeq: 1 INVITE\r\n'
+            'Content-Length: 0\r\n'
+            '\r\n'
+        ).encode()
+    )
+
+    result = sip_honeypot.process_sip_request(req, '172.110.223.203', allow_b2bua=True)
+
+    assert result[0] == 'INVITE_B2BUA'
+    assert result[2]['force'] is True
+    assert result[2]['bridge_id'] == 'livebridge'
+    assert emitted[0][1]['sip_pbx_live_permit_id'] == 'manual-test'
+    assert emitted[0][1]['sip_pbx_bridge_id'] == 'livebridge'
+
+
+def test_sip_invite_captures_from_user(monkeypatch):
+    emitted = []
+
+    def fake_emit_knock(client_ip, extra=None, dedup_key=None):
+        emitted.append((client_ip, extra or {}, dedup_key))
+
+    monkeypatch.setattr(sip_honeypot, 'emit_knock', fake_emit_knock)
+    req = sip_honeypot.parse_sip_message(
+        (
+            'INVITE sip:12025550123@198.51.100.10 SIP/2.0\r\n'
+            'Via: SIP/2.0/UDP 203.0.113.20:5060;branch=z9hG4bKtest\r\n'
+            'From: "Guido" <sip:guido@203.0.113.20>;tag=abc\r\n'
+            'To: <sip:12025550123@198.51.100.10>\r\n'
+            'Call-ID: from-user-test\r\n'
+            'CSeq: 1 INVITE\r\n'
+            'Content-Length: 0\r\n'
+            '\r\n'
+        ).encode()
+    )
+
+    assert sip_honeypot.process_sip_request(req, '203.0.113.20')[0] == 'INVITE_FAKE'
+    assert emitted
+    assert emitted[0][1]['sip_from_user'] == 'guido'
+
+
+def test_sip_after_save_uses_from_user_as_caller():
+    package = {}
+    sip_protocol.after_save({'sip_from_user': 'guido', 'sip_uri_user': '12025550123'}, package, {})
+    assert package['sip_caller'] == 'guido'
 
 
 def test_sip_dial_cache_seed_from_db(tmp_path):

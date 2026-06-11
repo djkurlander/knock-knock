@@ -15,6 +15,8 @@ import threading
 import time
 import uuid
 
+import sip_live_permit
+
 PBX_HOST = os.environ.get('PBX_HOST', '').strip()
 PBX_PORT = int(os.environ.get('PBX_PORT', '5060'))
 PBX_DIAL_POLICY = os.environ.get('PBX_DIAL_POLICY', 'all').strip()
@@ -23,15 +25,17 @@ PBX_RTP_PORT_START = int(os.environ.get('PBX_RTP_PORT_START', '30000'))
 PBX_RTP_PORT_END = int(os.environ.get('PBX_RTP_PORT_END', '30100'))
 PBX_CALL_TIMEOUT = max(5.0, float(os.environ.get('PBX_CALL_TIMEOUT', '120')))
 PBX_TRACE = os.environ.get('PBX_TRACE', '0').strip().lower() not in ('', '0', 'false', 'no')
+SOURCE_ID = ''
 
 _bridges_lock = threading.Lock()
 _bridges = {}
 _ports_lock = threading.Lock()
 _used_ports = set()
+_live_permit_redis = sip_live_permit.redis_client()
 
 
 def reload_config():
-    global PBX_HOST, PBX_PORT, PBX_DIAL_POLICY, SIP_PUBLIC_IP
+    global PBX_HOST, PBX_PORT, PBX_DIAL_POLICY, SIP_PUBLIC_IP, SOURCE_ID
     global PBX_RTP_PORT_START, PBX_RTP_PORT_END, PBX_CALL_TIMEOUT, PBX_TRACE
     PBX_HOST = os.environ.get('PBX_HOST', '').strip()
     PBX_PORT = int(os.environ.get('PBX_PORT', '5060'))
@@ -41,6 +45,7 @@ def reload_config():
     PBX_RTP_PORT_END = int(os.environ.get('PBX_RTP_PORT_END', '30100'))
     PBX_CALL_TIMEOUT = max(5.0, float(os.environ.get('PBX_CALL_TIMEOUT', '120')))
     PBX_TRACE = os.environ.get('PBX_TRACE', '0').strip().lower() not in ('', '0', 'false', 'no')
+    SOURCE_ID = _safe_source_id(os.environ.get('SOURCE_ID', ''))
 
 
 def enabled():
@@ -57,6 +62,11 @@ def trace(bridge_id, stage, **fields):
 
 def new_bridge_id():
     return uuid.uuid4().hex[:10]
+
+
+def _safe_source_id(value):
+    value = re.sub(r'[^A-Za-z0-9_-]+', '_', (value or '').strip())
+    return value.strip('_') or 'unknown'
 
 
 def _token(size=12):
@@ -187,6 +197,7 @@ def _alloc_udp_socket():
             sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             try:
                 sock.bind(('0.0.0.0', port))
+                sock.settimeout(0.5)
             except OSError:
                 sock.close()
                 continue
@@ -201,7 +212,17 @@ def _release_port(port):
 
 
 class Bridge:
-    def __init__(self, inbound_req, client_ip, client_addr, send_to_attacker, dial_number, dial_country, bridge_id=None):
+    def __init__(
+        self,
+        inbound_req,
+        client_ip,
+        client_addr,
+        send_to_attacker,
+        dial_number,
+        dial_country,
+        bridge_id=None,
+        live_permit=None,
+    ):
         self.id = bridge_id or new_bridge_id()
         self.inbound_req = inbound_req
         self.client_ip = client_ip
@@ -209,6 +230,7 @@ class Bridge:
         self.send_to_attacker = send_to_attacker
         self.dial_number = dial_number
         self.dial_country = dial_country
+        self.live_permit = live_permit or {}
         self.created_at = time.time()
         self.public_ip = _discover_public_ip()
         self.attacker_media = parse_sdp(inbound_req.get('body') or '')
@@ -278,6 +300,11 @@ class Bridge:
             _release_port(self.attacker_rtp_port)
         if self.pbx_rtp_port:
             _release_port(self.pbx_rtp_port)
+        if self.live_permit:
+            try:
+                sip_live_permit.release_active_lock(_live_permit_redis, self.id)
+            except Exception:
+                pass
         trace(self.id, 'closed')
 
     def _timeout_loop(self):
@@ -292,6 +319,8 @@ class Bridge:
         while not self.closed:
             try:
                 data, addr = sock.recvfrom(4096)
+            except socket.timeout:
+                continue
             except Exception:
                 if not self.closed:
                     time.sleep(0.01)
@@ -346,11 +375,22 @@ class Bridge:
             f'Call-ID: {self.out_call_id}',
             f'CSeq: {self.out_cseq} INVITE',
             f'Contact: {self.out_contact_header}',
-            f'X-Knock-Bridge-ID: {self.id}',
-            f'X-Knock-Source-IP: {self.client_ip}',
+            f'X-Bridge-ID: {self.id}',
+            f'X-Source-IP: {self.client_ip}',
+            f'X-Source-ID: {SOURCE_ID or "unknown"}',
+        ]
+        if self.live_permit:
+            permit_id = str(self.live_permit.get('permit_id') or '')
+            max_seconds = str(self.live_permit.get('max_seconds') or '')
+            lines.append('X-Live-Outbound: 1')
+            if permit_id:
+                lines.append(f'X-Live-Permit-ID: {permit_id}')
+            if max_seconds:
+                lines.append(f'X-Live-Max-Seconds: {max_seconds}')
+        lines.extend([
             'Content-Type: application/sdp',
             f'Content-Length: {len(body)}',
-        ]
+        ])
         self._send_to_pbx(('\r\n'.join(lines) + '\r\n\r\n').encode() + body)
 
     def _handle_pbx_response(self, resp):
@@ -476,13 +516,37 @@ def _default_reason(code):
     }.get(int(code or 0), '')
 
 
-def maybe_start_bridge(req, client_ip, client_addr, send_to_attacker, dial_number=None, dial_country=None, bridge_id=None):
+def maybe_start_bridge(
+    req,
+    client_ip,
+    client_addr,
+    send_to_attacker,
+    dial_number=None,
+    dial_country=None,
+    bridge_id=None,
+    force=False,
+    live_permit=None,
+):
     reload_config()
-    if not PBX_HOST or not _policy_matches(dial_number, dial_country):
+    if not PBX_HOST or (not force and not _policy_matches(dial_number, dial_country)):
         return None
     try:
-        return Bridge(req, client_ip, client_addr, send_to_attacker, dial_number, dial_country, bridge_id=bridge_id).start()
+        return Bridge(
+            req,
+            client_ip,
+            client_addr,
+            send_to_attacker,
+            dial_number,
+            dial_country,
+            bridge_id=bridge_id,
+            live_permit=live_permit,
+        ).start()
     except Exception as e:
+        if live_permit:
+            try:
+                sip_live_permit.release_active_lock(_live_permit_redis, bridge_id)
+            except Exception:
+                pass
         print(f'SIP B2BUA: setup failed for {client_ip}: {e}', file=sys.stderr)
         return None
 

@@ -19,6 +19,7 @@ import phonenumbers
 from phonenumbers import geocoder as pn_geocoder
 
 import sip_b2bua
+import sip_live_permit
 from common import (
     PerIpTokenBucket,
     create_dualstack_tcp_listener,
@@ -49,6 +50,7 @@ _dial_cache = []  # list of (digits_str, iso, name, lat, lng)
 _DIAL_CACHE_MAX = 500
 _DIAL_CACHE_MIN_HITS = 2
 _DIAL_INTEL_DB = os.path.join(os.environ.get('DB_DIR', 'data'), 'knock_knock.db')
+_live_permit_redis = sip_live_permit.redis_client()
 
 # ---------------------------------------------------------------------------
 # Nominatim geocoding cache — city-level coordinates for SIP dial descriptions
@@ -713,6 +715,9 @@ def process_sip_request(req, client_ip, allow_b2bua=False):
         'sip_cseq': _header_first(headers, 'cseq') or '',
         'sip_ack_seen': ack_seen,
     }
+    from_user, _ = extract_user_pass_from_sip_uri(_header_first(headers, 'from'))
+    if from_user:
+        common['sip_from_user'] = from_user
     if ack_age_ms is not None:
         common['sip_ack_age_ms'] = ack_age_ms
     if method == 'INVITE':
@@ -781,16 +786,37 @@ def process_sip_request(req, client_ip, allow_b2bua=False):
         )
         common['sip_pbx_state'] = 0
         bridge_id = None
-        if bridge_candidate:
+        live_permit = None
+        if allow_b2bua and common.get('sip_dial_number') and sip_b2bua.enabled():
+            live_bridge_id = sip_b2bua.new_bridge_id()
+            try:
+                live_permit = sip_live_permit.consume_permit_and_acquire_live(
+                    _live_permit_redis,
+                    client_ip,
+                    common.get('sip_dial_number'),
+                    live_bridge_id,
+                )
+            except Exception as e:
+                if TRACE_ENABLED:
+                    print(f'SIP LIVE PERMIT: check failed for {client_ip}: {e}', file=sys.stderr)
+                live_permit = None
+            if live_permit:
+                bridge_id = live_bridge_id
+                common['sip_pbx_live_permit_id'] = live_permit.get('permit_id') or ''
+        live_candidate = live_permit is not None
+        if bridge_candidate or live_candidate:
             common['sip_pbx_state'] = 1
-            bridge_id = sip_b2bua.new_bridge_id()
+            if not bridge_id:
+                bridge_id = sip_b2bua.new_bridge_id()
             common['sip_pbx_bridge_id'] = bridge_id
         emit_knock(client_ip, extra=common, dedup_key=dedup_key)
-        if bridge_candidate:
+        if live_candidate or bridge_candidate:
             return 'INVITE_B2BUA', req, {
                 'dial_number': common.get('sip_dial_number'),
                 'dial_country': common.get('sip_dial_country'),
                 'bridge_id': bridge_id,
+                'force': live_candidate,
+                'live_permit': live_permit if live_candidate else None,
             }
         if SIP_INVITE_MODE in ('ring', 'answer'):
             return 'INVITE_FAKE', req, None
@@ -831,6 +857,8 @@ def _start_b2bua_or_fake(req, client_ip, addr, sock, bridge_info):
         dial_number=(bridge_info or {}).get('dial_number'),
         dial_country=(bridge_info or {}).get('dial_country'),
         bridge_id=(bridge_info or {}).get('bridge_id'),
+        force=bool((bridge_info or {}).get('force')),
+        live_permit=(bridge_info or {}).get('live_permit'),
     )
     if not bridge:
         _send_invite_sequence(req, udp_send, send_trying=False)

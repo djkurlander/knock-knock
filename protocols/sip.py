@@ -2,7 +2,12 @@ from protocol_api import Column, ProtocolDefinition, TableDefinition
 
 
 def after_save(knock, package, ctx):
-    caller = knock.get('sip_extension') or knock.get('sip_auth_user') or knock.get('sip_uri_user')
+    caller = (
+        knock.get('sip_extension')
+        or knock.get('sip_auth_user')
+        or knock.get('sip_from_user')
+        or knock.get('sip_uri_user')
+    )
     if caller:
         package['sip_caller'] = caller
 
@@ -40,12 +45,14 @@ DEFINITION = ProtocolDefinition(
         Column("sip_call_id",           "TEXT"),
         Column("sip_cseq",              "TEXT"),
         Column("sip_extension",         "TEXT"),
+        Column("sip_from_user",         "TEXT"),
         Column("sip_dial_country",      "TEXT"),
         Column("sip_dial_country_name", "TEXT"),
         Column("sip_dial_lat",          "REAL"),
         Column("sip_dial_lng",          "REAL"),
         Column("sip_pbx_state",         "INTEGER"),
         Column("sip_pbx_bridge_id",     "TEXT"),
+        Column("sip_pbx_live_permit_id", "TEXT"),
     ],
     passthrough_prefixes=["sip_"],
     after_save="protocols.sip:after_save",

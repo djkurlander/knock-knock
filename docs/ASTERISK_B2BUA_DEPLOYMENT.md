@@ -161,7 +161,7 @@ exten => _X.,1,NoOp(Knock honeypot call to ${EXTEN})
  same => n,Ringing()
  same => n,Wait(3)
  same => n,Answer()
- same => n,MixMonitor(/var/spool/asterisk/honeypot/${KNOCK_SOURCE_ID}-${KNOCK_BRIDGE_ID}-${CALLERID(num)}-${EPOCH}.wav)
+ same => n,MixMonitor(/var/spool/asterisk/honeypot/${KNOCK_SOURCE_ID}-${KNOCK_SRC_IP}-${CALLERID(num)}-${EXTEN}-${EPOCH}-${KNOCK_BRIDGE_ID}.wav)
  same => n,Wait(1)
  same => n,Playback(/var/lib/asterisk/sounds/en/custom/freesound_community-hello-91045)
  same => n,Wait(30)
@@ -169,7 +169,8 @@ exten => _X.,1,NoOp(Knock honeypot call to ${EXTEN})
  same => n,Hangup()
 
  same => n(live),Answer()
- same => n,MixMonitor(/var/spool/asterisk/live-outbound/${KNOCK_SOURCE_ID}-${KNOCK_BRIDGE_ID}-${KNOCK_LIVE_PERMIT_ID}-${CALLERID(num)}-${EXTEN}-${EPOCH}.wav)
+ same => n,Set(LIVE_BASE=${KNOCK_SOURCE_ID}-${KNOCK_SRC_IP}-${CALLERID(num)}-${EXTEN}-${EPOCH}-${KNOCK_BRIDGE_ID})
+ same => n,MixMonitor(/var/spool/asterisk/live-outbound/mixed-${LIVE_BASE}.wav,r(/var/spool/asterisk/live-outbound/rx-${LIVE_BASE}.wav)t(/var/spool/asterisk/live-outbound/tx-${LIVE_BASE}.wav))
  same => n,Set(CALLERID(num)=<VALID_TELNYX_OR_VERIFIED_NUMBER>)
  same => n,Set(CALLERID(name)=<VALID_TELNYX_OR_VERIFIED_NUMBER>)
  same => n,Set(CALLERID(pres)=prohib)
@@ -670,9 +671,12 @@ PBX_RTP_DUMP_DIR=data/rtp_dumps
 PBX_RTP_DUMP_MAX_PACKETS=12000
 ```
 
-Filenames mirror the Asterisk `MixMonitor` convention so they correlate:
-`${SOURCE_ID}-${BRIDGE_ID}-${PERMIT_ID}-${CLIENT_IP}-${DIAL_NUMBER}-${EPOCH}.rtp`.
-The `BRIDGE_ID` maps back to `knocks_sip.sip_pbx_bridge_id`.
+Filenames mirror the Asterisk `MixMonitor` convention so the two correlate
+(the `.rtp` is the attacker/receive leg, so it matches the `rx-` WAV minus the
+leg prefix): `${SOURCE_ID}-${SRC_IP}-${CALLER}-${DIAL_NUMBER}-${EPOCH}-${BRIDGE_ID}.rtp`.
+`SRC_IP` is the real network source; `CALLER` is the (spoofable) From caller-ID.
+The trailing `BRIDGE_ID` maps back to `knocks_sip.sip_pbx_bridge_id`, from which
+every other field (permit, dial-string prefix, geo, timestamp) is recoverable.
 
 Convert a dump to a gap-accurate 8 kHz WAV (silence is inserted for lost packets
 from RTP timestamps, so on/off beacon timing is preserved):

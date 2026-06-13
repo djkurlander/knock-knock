@@ -351,11 +351,13 @@ class Bridge:
             return None
         try:
             os.makedirs(PBX_RTP_DUMP_DIR, exist_ok=True)
-            permit_id = str((self.live_permit or {}).get('permit_id') or 'nolive')
             num = (self.dial_number or 'unknown').lstrip('+') or 'unknown'
+            from_h = _header_first(self.inbound_req.get('headers'), 'from')
+            caller = _extract_display_user(from_h) or 'unknown'
             safe = lambda s: re.sub(r'[^A-Za-z0-9_.+-]', '_', str(s))[:64]
-            fname = (f"{SOURCE_ID or 'unknown'}-{self.id}-{safe(permit_id)}-"
-                     f"{safe(self.client_ip)}-{safe(num)}-{int(time.time())}.rtp")
+            # Mirror the Asterisk MixMonitor field order: source-ip-caller-number-epoch-bridge.
+            fname = (f"{SOURCE_ID or 'unknown'}-{safe(self.client_ip)}-{safe(caller)}-"
+                     f"{safe(num)}-{int(time.time())}-{self.id}.rtp")
             dump = _RtpDump(os.path.join(PBX_RTP_DUMP_DIR, fname), PBX_RTP_DUMP_MAX_PACKETS)
             trace(self.id, 'rtp_dump_armed', file=fname)
             return dump

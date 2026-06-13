@@ -1,0 +1,16 @@
+# Investigation Notes
+
+Field notes from honeypot bot investigations — one self-contained note per
+investigation. When starting a new one, add a file here and a row to the index
+below.
+
+**Naming:** `<protocol>-<campaign-or-topic>-<key>.md` (e.g. `sip-ab00day-audio-beacon.md`).
+Keep each note self-contained: background, data tables, method, and verdict, so
+it can be read on its own.
+
+## Index
+
+| Note | Protocol | Subject | Status | Dates |
+|------|----------|---------|--------|-------|
+| [sip-ab00day-audio-beacon.md](sip-ab00day-audio-beacon.md) | SIP | Does the `ab00day` bot (`172.110.223.203`) encode an identifier in its post-answer tone? **No** — it loops one fixed G.711 frame; it's an answer/media-presence probe tone. | Resolved | 2026-06-12 → 13 |
+| [smb-payload-capture.md](smb-payload-capture.md) | SMB | SMB/`SVCCTL` bots staging payloads on the decoy writable share before attempting service creation. | Ongoing | 2026-04 → |

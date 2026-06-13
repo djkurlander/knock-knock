@@ -35,7 +35,7 @@ SIP_CONN_TIMEOUT = max(2.0, float(os.environ.get('SIP_CONN_TIMEOUT', '20')))
 TRACE_ENABLED = os.environ.get('SIP_TRACE', '0').lower() not in ('0', 'false', 'no')
 TRACE_IP = os.environ.get('SIP_TRACE_IP', '').strip()
 SIP_AUTH_CHALLENGE_MODE = os.environ.get('SIP_AUTH_CHALLENGE_MODE', 'mixed').strip().lower()
-SIP_INVITE_MODE = os.environ.get('SIP_INVITE_MODE', 'answer').strip().lower()
+SIP_OK_DIALPLAN = os.environ.get('SIP_OK_DIALPLAN', '+,bare,00,011,9').strip().lower()
 SIP_DEDUP_WINDOW_SEC = int(os.environ.get('SIP_DEDUP_WINDOW_SEC', '60'))
 
 _throttle = PerIpTokenBucket(os.environ.get('SIP_THROTTLE_PER_SEC', '10'))
@@ -574,6 +574,42 @@ def parse_dial_country(dial_string):
     return None, None, None, None, None
 
 
+# --- INVITE dialplan: which dialed forms this fake PBX answers (200) vs rejects (404) ---
+# SIP_OK_DIALPLAN values:
+#   all   - answer anything that resolves to an E.164 (most permissive)
+#   none  - answer nothing
+#   <set> - comma list of literal dial-out prefixes prepended to the bare E.164 digits:
+#           'bare' (no prefix), '+', or digit prefixes like '00', '011', '9'.
+# A dialed string is accepted iff  canon(dial) == token + digits(computed E.164),
+# i.e. the dialed digits equal one allowed prefix followed by the E.164 we resolved for
+# this number (cache included). Numbers that resolve to no E.164 are always rejected.
+def _parse_dialplan(value):
+    v = (value or '').strip().lower()
+    if v in ('', 'all'):
+        return 'all', frozenset()
+    if v == 'none':
+        return 'none', frozenset()
+    tokens = {('' if t.strip() == 'bare' else t.strip()) for t in v.split(',') if t.strip()}
+    return ('set', frozenset(tokens)) if tokens else ('none', frozenset())
+
+
+_DIALPLAN_MODE, _DIALPLAN_TOKENS = _parse_dialplan(SIP_OK_DIALPLAN)
+
+
+def _dialplan_accepts(dial_string, e164):
+    """True if SIP_OK_DIALPLAN says this fake PBX should answer (200) this INVITE."""
+    if _DIALPLAN_MODE == 'none':
+        return False
+    if not e164:
+        return False  # unresolvable to an E.164 → always reject
+    if _DIALPLAN_MODE == 'all':
+        return True
+    e_digits = re.sub(r'\D', '', e164)
+    ds = (dial_string or '').strip()
+    canon = ('+' if ds.startswith('+') else '') + re.sub(r'\D', '', ds)
+    return any(canon == tok + e_digits for tok in _DIALPLAN_TOKENS)
+
+
 def parse_auth_header(auth_value):
     if not auth_value:
         return None, {}
@@ -779,9 +815,10 @@ def process_sip_request(req, client_ip, allow_b2bua=False):
             reg_ext = _registered_extensions.get(client_ip)
         if reg_ext:
             common['sip_extension'] = reg_ext
+        dialplan_ok = _dialplan_accepts(dial_string, common.get('sip_dial_number'))
         bridge_candidate = (
             allow_b2bua
-            and SIP_INVITE_MODE in ('ring', 'answer')
+            and dialplan_ok
             and sip_b2bua.should_bridge(common.get('sip_dial_number'), common.get('sip_dial_country'))
         )
         common['sip_pbx_state'] = 0
@@ -809,6 +846,8 @@ def process_sip_request(req, client_ip, allow_b2bua=False):
             if not bridge_id:
                 bridge_id = sip_b2bua.new_bridge_id()
             common['sip_pbx_bridge_id'] = bridge_id
+        # SIP status we hand back to the caller: 200 if we answer/bridge, else 404.
+        common['sip_result'] = 200 if (live_candidate or bridge_candidate or dialplan_ok) else 404
         emit_knock(client_ip, extra=common, dedup_key=dedup_key)
         if live_candidate or bridge_candidate:
             return 'INVITE_B2BUA', req, {
@@ -818,9 +857,9 @@ def process_sip_request(req, client_ip, allow_b2bua=False):
                 'force': live_candidate,
                 'live_permit': live_permit if live_candidate else None,
             }
-        if SIP_INVITE_MODE in ('ring', 'answer'):
+        if dialplan_ok:
             return 'INVITE_FAKE', req, None
-        return 484, 'Address Incomplete', None
+        return 404, 'Not Found', None
 
     # --- Other methods: challenge or accept, no knock ---
     if scheme in ('basic', 'digest') and auth.get('username') is not None:
@@ -840,9 +879,8 @@ def _send_invite_sequence(req, send_fn, send_trying=True):
         send_fn(build_response(req, 100, 'Trying'))
     time.sleep(random.uniform(0.05, 0.2))
     send_fn(build_response(req, 183, 'Session Progress', body=sdp))
-    if SIP_INVITE_MODE == 'answer':
-        time.sleep(random.uniform(2.0, 5.0))
-        send_fn(build_response(req, 200, 'OK', body=sdp))
+    time.sleep(random.uniform(2.0, 5.0))
+    send_fn(build_response(req, 200, 'OK', body=sdp))
 
 
 def _start_b2bua_or_fake(req, client_ip, addr, sock, bridge_info):
@@ -890,11 +928,11 @@ def udp_loop(sock):
                     args=(result[1], client_ip, addr, sock, result[2]),
                     daemon=True,
                 ).start()
-                trace(session_id, client_ip, 'udp_invite_b2bua', mode=SIP_INVITE_MODE)
+                trace(session_id, client_ip, 'udp_invite_b2bua')
                 continue
             if result[0] == 'INVITE_FAKE':
                 threading.Thread(target=_send_invite_sequence, args=(result[1], udp_send), daemon=True).start()
-                trace(session_id, client_ip, 'udp_invite_fake', mode=SIP_INVITE_MODE)
+                trace(session_id, client_ip, 'udp_invite_fake')
                 continue
             code, reason, extra_headers = result[:3]
             resp = build_response(req, code, reason, extra_headers=extra_headers)
@@ -976,7 +1014,7 @@ def handle_tcp_client(client_sock, client_ip):
             if result[0] == 'INVITE_FAKE':
                 try:
                     _send_invite_sequence(result[1], client_sock.sendall)
-                    trace(session_id, client_ip, 'tcp_invite_fake', index=message_count, mode=SIP_INVITE_MODE)
+                    trace(session_id, client_ip, 'tcp_invite_fake', index=message_count)
                 except Exception:
                     stop_reason = 'send_failed'
                     trace(session_id, client_ip, 'tcp_invite_fake_send_failed', index=message_count)

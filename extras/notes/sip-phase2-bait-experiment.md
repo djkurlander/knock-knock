@@ -63,10 +63,20 @@ prefix variants (`00…`, `011…`, `9…`, exotic), and all other numbers.
 
 ## Four mechanisms
 
-1. **Selective response** — `sip_honeypot.py` `process_sip_request` INVITE branch,
-   gated on `client_ip == TARGET`: blessed E.164 → complete (sticky/real);
-   everything else → `404 Not Found`. Non-target traffic keeps current decoy
-   behavior.
+1. **Believable dialplan** *(implemented 2026-06-13)* — `sip_honeypot.py`
+   `SIP_OK_DIALPLAN` decides which dialed forms the fake PBX answers (200) vs
+   rejects (404), applied **globally** (a real PBX doesn't vary its dialplan by
+   caller). Default `+,bare,00,011,9` answers the standard dial-out forms and
+   404s the resolver's brute-strip/garbage forms that the old "answer everything"
+   default fake-accepted — removing the "accepts every prefix" honeypot tell.
+   A dial is accepted iff `canon(dial) == prefix + computed-E.164` (cache
+   included); unresolvable numbers always 404. Knocks are still recorded before
+   the gate. Replaces the deleted `SIP_INVITE_MODE` (`reject` → `none`; `ring`
+   path removed). **The per-target bait lives one layer down**, not here: the
+   existing `sip_live_permit` + `PBX_DIAL_POLICY` machinery (keyed on
+   `client_ip`+number) is what actually completes a real, media-bearing call to a
+   chosen bot — and bridging, not a media-less fake 200, is the signal a bot uses
+   to conclude a route works. So no per-IP dialplan gating was needed.
 2. **Sticky / durable completion** — route blessed-route calls through the B2BUA
    into a new Asterisk `sticky-hold` context: `Answer` → brief ringback →
    realistic hold media (looping music/IVR) → **do not hang up** until the bot
@@ -110,7 +120,9 @@ prefix variants (`00…`, `011…`, `9…`, exotic), and all other numbers.
 
 ## Build pieces (status)
 
-1. [ ] Selective-response (E.164-only) + routing to sticky-hold — `sip_honeypot.py`.
+1. [x] Believable global dialplan (`SIP_OK_DIALPLAN`, default `+,bare,00,011,9`)
+   replacing `SIP_INVITE_MODE` — `sip_honeypot.py`. Per-target completion stays in
+   the existing `sip_live_permit`/`PBX_DIAL_POLICY` layer (no per-IP dialplan).
 2. [ ] `MAX_KNOCKS_EXEMPT` allowlist — `monitor.py`.
 3. [ ] Asterisk `sticky-hold` context + holdtime logging.
 

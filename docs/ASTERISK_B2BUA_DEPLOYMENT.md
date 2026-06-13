@@ -650,6 +650,41 @@ If relative `Playback(custom/name)` fails despite the file appearing in
 same => n,Playback(/var/lib/asterisk/sounds/en/custom/freesound_community-hello-91045)
 ```
 
+## Capture Bot Audio (Raw RTP Dump)
+
+The B2BUA can save the attacker's inbound RTP — the pristine source-side copy of
+the audio the bot streams after answer — to a per-bridge `.rtp` file. This is the
+same media Asterisk records as the `rx` leg, but captured on the honeypot before
+any jitter buffer or transcode, with no `tx`/PBX audio mixed in. It is opt-in and
+applies to every bridged call, not only live-permit calls, so a large corpus of
+bot beacons accumulates passively.
+
+Set on the honeypot (monitor-managed service or a test instance). Use full-line
+comments only — `.env` is read by systemd `EnvironmentFile` / Docker `env_file`,
+which (unlike a shell `source`) keep any trailing `# ...` as part of the value:
+
+```text
+# Directory for per-bridge RTP dumps; unset/empty disables capture.
+PBX_RTP_DUMP_DIR=data/rtp_dumps
+# Per-bridge packet cap (~240s at 50pps).
+PBX_RTP_DUMP_MAX_PACKETS=12000
+```
+
+Filenames mirror the Asterisk `MixMonitor` convention so they correlate:
+`${SOURCE_ID}-${BRIDGE_ID}-${PERMIT_ID}-${CLIENT_IP}-${DIAL_NUMBER}-${EPOCH}.rtp`.
+The `BRIDGE_ID` maps back to `knocks_sip.sip_pbx_bridge_id`.
+
+Convert a dump to a gap-accurate 8 kHz WAV (silence is inserted for lost packets
+from RTP timestamps, so on/off beacon timing is preserved):
+
+```bash
+python extras/sip_rtp_to_wav.py data/rtp_dumps/LA1-<bridge>-....rtp
+python extras/sip_rtp_to_wav.py data/rtp_dumps/LA1-<bridge>-....rtp --info  # stats only
+```
+
+Add a retention/shipping job for `PBX_RTP_DUMP_DIR` as with the Asterisk
+recordings.
+
 ## Production Notes
 
 - Set `PBX_HOST` on the monitor-managed honeypot service only after test calls pass.

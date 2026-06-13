@@ -10,6 +10,7 @@ import random
 import re
 import socket
 import string
+import struct
 import sys
 import threading
 import time
@@ -25,7 +26,15 @@ PBX_RTP_PORT_START = int(os.environ.get('PBX_RTP_PORT_START', '30000'))
 PBX_RTP_PORT_END = int(os.environ.get('PBX_RTP_PORT_END', '30100'))
 PBX_CALL_TIMEOUT = max(5.0, float(os.environ.get('PBX_CALL_TIMEOUT', '120')))
 PBX_TRACE = os.environ.get('PBX_TRACE', '0').strip().lower() not in ('', '0', 'false', 'no')
+# Opt-in capture of the attacker's inbound RTP (bot -> honeypot) to a per-bridge
+# .rtp dump file. Unset = disabled. This is the pristine source-side copy of the
+# audio the bot streams after answer (the same leg Asterisk records as `rx`,
+# but grabbed before any jitter buffer / transcode). PBX side is never dumped.
+PBX_RTP_DUMP_DIR = os.environ.get('PBX_RTP_DUMP_DIR', '').strip()
+PBX_RTP_DUMP_MAX_PACKETS = int(os.environ.get('PBX_RTP_DUMP_MAX_PACKETS', '12000'))
 SOURCE_ID = ''
+
+_RTP_DUMP_MAGIC = b'KKRTP1\n'
 
 _bridges_lock = threading.Lock()
 _bridges = {}
@@ -45,6 +54,9 @@ def reload_config():
     PBX_RTP_PORT_END = int(os.environ.get('PBX_RTP_PORT_END', '30100'))
     PBX_CALL_TIMEOUT = max(5.0, float(os.environ.get('PBX_CALL_TIMEOUT', '120')))
     PBX_TRACE = os.environ.get('PBX_TRACE', '0').strip().lower() not in ('', '0', 'false', 'no')
+    global PBX_RTP_DUMP_DIR, PBX_RTP_DUMP_MAX_PACKETS
+    PBX_RTP_DUMP_DIR = os.environ.get('PBX_RTP_DUMP_DIR', '').strip()
+    PBX_RTP_DUMP_MAX_PACKETS = int(os.environ.get('PBX_RTP_DUMP_MAX_PACKETS', '12000'))
     SOURCE_ID = _safe_source_id(os.environ.get('SOURCE_ID', ''))
 
 
@@ -211,6 +223,64 @@ def _release_port(port):
         _used_ports.discard(port)
 
 
+class _RtpDump:
+    """Append-only capture of inbound RTP packets to a self-describing file.
+
+    The file is opened lazily on the first real packet, so calls that answer
+    and hang up without media leave no stub file behind. Format: magic line
+    `KKRTP1\\n`, then per-packet records of
+    `>dHIBH` = (arrival_time_rel, seq, rtp_timestamp, payload_type, payload_len)
+    followed by the raw payload bytes (arrival_time_rel is relative to the first
+    captured packet). Decode/convert with `extras/sip_rtp_to_wav.py`. Capped at
+    max_packets to bound disk use.
+    """
+
+    def __init__(self, path, max_packets):
+        self._path = path
+        self._f = None  # opened lazily on first packet
+        self._t0 = None
+        self._n = 0
+        self._max = max_packets
+        self._failed = False
+        self._lock = threading.Lock()
+
+    def write(self, data):
+        if len(data) < 12:
+            return  # too short to be RTP
+        if 192 <= data[1] <= 223:
+            return  # RTCP (SR/RR/SDES/BYE/APP) muxed on the RTP port, not audio (RFC 5761)
+        hdr = 12 + 4 * (data[0] & 0x0F)  # fixed header + CSRC list
+        if len(data) <= hdr:
+            return
+        pt = data[1] & 0x7F
+        seq = (data[2] << 8) | data[3]
+        ts = struct.unpack('>I', data[4:8])[0]
+        payload = data[hdr:]
+        with self._lock:
+            if self._failed or self._n >= self._max:
+                return
+            if self._f is None:  # first audio packet — create the file now
+                try:
+                    self._f = open(self._path, 'wb')
+                    self._f.write(_RTP_DUMP_MAGIC)
+                    self._f.flush()  # so a hard-killed bridge leaves a valid file, not 0 bytes
+                except Exception:
+                    self._failed = True
+                    return
+                self._t0 = time.time()
+            rec = struct.pack('>dHIBH', time.time() - self._t0, seq, ts, pt, len(payload)) + payload
+            self._f.write(rec)
+            self._n += 1
+
+    def close(self):
+        with self._lock:
+            if self._f is not None:
+                try:
+                    self._f.close()
+                except Exception:
+                    pass
+
+
 class Bridge:
     def __init__(
         self,
@@ -249,6 +319,7 @@ class Bridge:
         self.out_contact_header = None
         self.out_cseq = 1
         self.closed = False
+        self.rtp_dump = None
 
     def _initial_attacker_rtp_addr(self):
         port = self.attacker_media.get('audio_port')
@@ -265,6 +336,7 @@ class Bridge:
         self.pbx_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.pbx_sock.bind(('0.0.0.0', 0))
         self.pbx_sock.settimeout(0.5)
+        self.rtp_dump = self._open_rtp_dump()
         self._register()
         threading.Thread(target=self._rtp_loop, args=(self.attacker_rtp_sock, 'attacker'), daemon=True).start()
         threading.Thread(target=self._rtp_loop, args=(self.pbx_rtp_sock, 'pbx'), daemon=True).start()
@@ -273,6 +345,23 @@ class Bridge:
         self._send_invite_to_pbx()
         trace(self.id, 'started', attacker_rtp=self.attacker_rtp_port, pbx_rtp=self.pbx_rtp_port)
         return self
+
+    def _open_rtp_dump(self):
+        if not PBX_RTP_DUMP_DIR:
+            return None
+        try:
+            os.makedirs(PBX_RTP_DUMP_DIR, exist_ok=True)
+            permit_id = str((self.live_permit or {}).get('permit_id') or 'nolive')
+            num = (self.dial_number or 'unknown').lstrip('+') or 'unknown'
+            safe = lambda s: re.sub(r'[^A-Za-z0-9_.+-]', '_', str(s))[:64]
+            fname = (f"{SOURCE_ID or 'unknown'}-{self.id}-{safe(permit_id)}-"
+                     f"{safe(self.client_ip)}-{safe(num)}-{int(time.time())}.rtp")
+            dump = _RtpDump(os.path.join(PBX_RTP_DUMP_DIR, fname), PBX_RTP_DUMP_MAX_PACKETS)
+            trace(self.id, 'rtp_dump_armed', file=fname)
+            return dump
+        except Exception as e:
+            trace(self.id, 'rtp_dump_open_failed', err=str(e))
+            return None
 
     def _register(self):
         call_id = _header_first(self.inbound_req.get('headers'), 'call-id') or self.id
@@ -290,6 +379,8 @@ class Bridge:
             return
         self.closed = True
         self._unregister()
+        if self.rtp_dump is not None:
+            self.rtp_dump.close()
         for sock in (self.pbx_sock, self.attacker_rtp_sock, self.pbx_rtp_sock):
             if sock:
                 try:
@@ -327,6 +418,11 @@ class Bridge:
                 continue
             if side == 'attacker':
                 self.attacker_rtp_addr = addr
+                if self.rtp_dump is not None:
+                    try:
+                        self.rtp_dump.write(data)
+                    except Exception:
+                        pass
                 if self.pbx_rtp_addr:
                     try:
                         self.pbx_rtp_sock.sendto(data, self.pbx_rtp_addr)

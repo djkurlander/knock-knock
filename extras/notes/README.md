@@ -13,4 +13,5 @@ it can be read on its own.
 | Note | Protocol | Subject | Status | Dates |
 |------|----------|---------|--------|-------|
 | [sip-ab00day-audio-beacon.md](sip-ab00day-audio-beacon.md) | SIP | Does the `ab00day` bot (`172.110.223.203`) encode an identifier in its post-answer tone? **No** — it loops one fixed G.711 frame; it's an answer/media-presence probe tone. | Resolved | 2026-06-12 → 13 |
+| [sip-phase2-bait-experiment.md](sip-phase2-bait-experiment.md) | SIP | Bait monetization (phase 2): present one bot a clean, durable, E.164-only completing route + sticky hold + ban-exemption + holdtime logging; watch for discovery→exploit escalation. | Planned | 2026-06-13 → |
 | [smb-payload-capture.md](smb-payload-capture.md) | SMB | SMB/`SVCCTL` bots staging payloads on the decoy writable share before attempting service creation. | Ongoing | 2026-04 → |

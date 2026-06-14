@@ -196,6 +196,42 @@ dialog** (a bare `CANCEL` is ignored post-answer), `CANCEL` only pre-answer. Han
 the **CANCEL/200 glare**: a pre-answer cancel keeps the PBX leg alive so a 2xx racing
 the cancel still gets `ACK`+`BYE` (`attacker_gone` branch) instead of zombying.
 
+### 2026-06-14 (cont.) — patience spectrum, a CANCEL-branch bug, and the FIRST holder
+
+Ran `Wait(15)` overnight to measure patience (the answer-supervision timeout). Three
+results:
+
+**(a) Patience is bimodal and bot-dependent** (over ~487 bridges):
+
+| bot | calls | behaviour | patience |
+|---|---|---|---|
+| `15.204.184.126` | 423 | pre-answer CANCEL, razor-tight | **~4.16s** |
+| `107.189.26.20` / `153.75.83.238` / `160.119.76.47` / `37.59.79.205` / `213.136.66.226` | ~48 | ride the full 15s ring → silent abandon | **≥15s** |
+
+So one impatient bot at 4.16s (a single sharp spike) and a cluster of patient bots
+(≥15s). No single `Wait` separates "scanner" from "serious caller" across bots — which
+confirms patience is *characterization*, not a usable filter, and reinforces the
+ACK-gate (bot-independent) as the real lever.
+
+**(b) CANCEL-branch bug (found + fixed).** A long ring finally exercised the
+*pre-answer* CANCEL path: the forwarded `CANCEL` used a **fresh Via branch**, so
+Asterisk couldn't match it to the INVITE (`481`), ignored it, rang out the full 15s,
+answered, and recorded 63s of silence → a new zombie class. Fix: store the INVITE's
+branch (`self.invite_branch`) and have `CANCEL` reuse it (and the tag-less To). Only
+CANCEL needs this; ACK/BYE are new transactions and keep fresh branches.
+
+**(c) FIRST holder — `107.189.20.125`.** It **ACKed and held 3/16 calls** to our 45s
+cap (`b2bua_timeout`), no `BYE`, **no media** — the first observed completion. Reframed
+as route verification, not monetization. Full detail in
+[sip-107189-cli-counter.md](sip-107189-cli-counter.md).
+
+**Follow-up running now:** widened caps to see the *true* holdtime —
+`PBX_CALL_TIMEOUT=300`, `PBX_ABANDON_SECONDS=30` (so a slightly-slow ACK isn't cut),
+and the Asterisk hold raised to a 310s `TIMEOUT(absolute)` over **looped silence**
+(`silence90` in a `Goto(hold)` loop, or a single `silence315` file). Question it
+answers: does a completion **`BYE` at a consistent duration** (verification) or **ride
+to the cap** (duration-accrual)?
+
 ## Cost control — keep probers off the PBX/Telnyx (Phase-B billing safeguard)
 
 These probers complete nothing, yet each one currently spins up an Asterisk channel

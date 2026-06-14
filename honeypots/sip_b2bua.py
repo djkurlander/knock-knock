@@ -323,6 +323,9 @@ class Bridge:
         self.out_from_header = None
         self.out_contact_header = None
         self.out_cseq = 1
+        # Branch of our outbound INVITE — a CANCEL MUST reuse it (RFC 3261) or the
+        # PBX can't match it to the INVITE transaction (replies 481) and rings on.
+        self.invite_branch = f'z9hG4bK{_token(12)}'
         self.closed = False
         self.attacker_ack_seen = False
         self.pbx_answered = False      # PBX sent a 2xx for our INVITE
@@ -495,7 +498,7 @@ class Bridge:
         self.out_contact_header = f'<sip:{caller}@{self.public_ip}>'
         lines = [
             f'INVITE sip:{target_user}@{PBX_HOST} SIP/2.0',
-            f'Via: SIP/2.0/UDP {self.public_ip};branch=z9hG4bK{_token(12)}',
+            f'Via: SIP/2.0/UDP {self.public_ip};branch={self.invite_branch}',
             'Max-Forwards: 70',
             f'From: {self.out_from_header}',
             f'To: <sip:{target_user}@{PBX_HOST}>',
@@ -598,11 +601,19 @@ class Bridge:
 
     def _build_outbound_request(self, method, include_body=False):
         target_user = (self.dial_number or 's').lstrip('+') or 's'
-        to_h = _header_first(self.pbx_response_headers, 'to') or f'<sip:{target_user}@{PBX_HOST}>'
+        # A CANCEL must match the INVITE it cancels: same Via branch and same
+        # (tag-less) To. ACK/BYE are new transactions in the answered dialog, so
+        # they get a fresh branch and the answered To-tag from the PBX response.
+        if method == 'CANCEL':
+            branch = self.invite_branch
+            to_h = f'<sip:{target_user}@{PBX_HOST}>'
+        else:
+            branch = f'z9hG4bK{_token(12)}'
+            to_h = _header_first(self.pbx_response_headers, 'to') or f'<sip:{target_user}@{PBX_HOST}>'
         body = b''
         lines = [
             f'{method} sip:{target_user}@{PBX_HOST} SIP/2.0',
-            f'Via: SIP/2.0/UDP {self.public_ip};branch=z9hG4bK{_token(12)}',
+            f'Via: SIP/2.0/UDP {self.public_ip};branch={branch}',
             'Max-Forwards: 70',
             f'From: {self.out_from_header or f"<sip:{self.client_ip}@{self.public_ip}>;tag={self.out_from_tag}"}',
             f'To: {to_h}',

@@ -25,6 +25,9 @@ SIP_PUBLIC_IP = os.environ.get('SIP_PUBLIC_IP', '').strip()
 PBX_RTP_PORT_START = int(os.environ.get('PBX_RTP_PORT_START', '30000'))
 PBX_RTP_PORT_END = int(os.environ.get('PBX_RTP_PORT_END', '30100'))
 PBX_CALL_TIMEOUT = max(5.0, float(os.environ.get('PBX_CALL_TIMEOUT', '120')))
+# Tear a bridge down if the PBX answered but the attacker never ACKed within this
+# many seconds (silent-abandon probers: INVITE, see 200, vanish). 0 disables.
+PBX_ABANDON_SECONDS = float(os.environ.get('PBX_ABANDON_SECONDS', '4'))
 PBX_TRACE = os.environ.get('PBX_TRACE', '0').strip().lower() not in ('', '0', 'false', 'no')
 # Opt-in capture of the attacker's inbound RTP (bot -> honeypot) to a per-bridge
 # .rtp dump file. Unset = disabled. This is the pristine source-side copy of the
@@ -46,6 +49,7 @@ _live_permit_redis = sip_live_permit.redis_client()
 def reload_config():
     global PBX_HOST, PBX_PORT, PBX_DIAL_POLICY, SIP_PUBLIC_IP, SOURCE_ID
     global PBX_RTP_PORT_START, PBX_RTP_PORT_END, PBX_CALL_TIMEOUT, PBX_TRACE
+    global PBX_ABANDON_SECONDS
     PBX_HOST = os.environ.get('PBX_HOST', '').strip()
     PBX_PORT = int(os.environ.get('PBX_PORT', '5060'))
     PBX_DIAL_POLICY = os.environ.get('PBX_DIAL_POLICY', 'all').strip()
@@ -53,6 +57,7 @@ def reload_config():
     PBX_RTP_PORT_START = int(os.environ.get('PBX_RTP_PORT_START', '30000'))
     PBX_RTP_PORT_END = int(os.environ.get('PBX_RTP_PORT_END', '30100'))
     PBX_CALL_TIMEOUT = max(5.0, float(os.environ.get('PBX_CALL_TIMEOUT', '120')))
+    PBX_ABANDON_SECONDS = float(os.environ.get('PBX_ABANDON_SECONDS', '4'))
     PBX_TRACE = os.environ.get('PBX_TRACE', '0').strip().lower() not in ('', '0', 'false', 'no')
     global PBX_RTP_DUMP_DIR, PBX_RTP_DUMP_MAX_PACKETS
     PBX_RTP_DUMP_DIR = os.environ.get('PBX_RTP_DUMP_DIR', '').strip()
@@ -69,7 +74,7 @@ def trace(bridge_id, stage, **fields):
     if not PBX_TRACE:
         return
     suffix = ' '.join(f'{k}={v!r}' for k, v in fields.items())
-    print(f"SIPB2BUA id={bridge_id} stage={stage} {suffix}".rstrip(), file=sys.stderr, flush=True)
+    print(f"SIPTRACE component=b2bua id={bridge_id} stage={stage} {suffix}".rstrip(), file=sys.stderr, flush=True)
 
 
 def new_bridge_id():
@@ -319,6 +324,12 @@ class Bridge:
         self.out_contact_header = None
         self.out_cseq = 1
         self.closed = False
+        self.attacker_ack_seen = False
+        self.pbx_answered = False      # PBX sent a 2xx for our INVITE
+        self.answered_at = None        # when that 2xx arrived (for no-ACK abandon timer)
+        self.pbx_acked = False         # we have ACKed that 2xx
+        self.pbx_byed = False          # we have torn the PBX dialog down (ACK+BYE)
+        self.attacker_gone = False     # attacker tore down before the PBX answered
         self.rtp_dump = None
 
     def _initial_attacker_rtp_addr(self):
@@ -376,10 +387,19 @@ class Bridge:
             if _bridges.get((self.client_ip, call_id)) is self:
                 _bridges.pop((self.client_ip, call_id), None)
 
-    def close(self):
+    def close(self, reason='unspecified'):
         if self.closed:
             return
         self.closed = True
+        # Centralised teardown: on ANY close path (cancel, bye, timeout, abandon,
+        # glare, error) cleanly end an answered PBX dialog — ACK the 2xx then BYE.
+        # A bare CANCEL is ignored post-answer, and just dropping our sockets leaves
+        # the PBX leg up playing silence to nobody (the zombie recording).
+        if self.pbx_answered and not self.pbx_byed:
+            try:
+                self._teardown_answered_pbx()
+            except Exception:
+                pass
         self._unregister()
         if self.rtp_dump is not None:
             self.rtp_dump.close()
@@ -398,15 +418,24 @@ class Bridge:
                 sip_live_permit.release_active_lock(_live_permit_redis, self.id)
             except Exception:
                 pass
-        trace(self.id, 'closed')
+        trace(self.id, 'closed', reason=reason, age=round(time.time() - self.created_at, 3))
 
     def _timeout_loop(self):
         while not self.closed:
-            if time.time() - self.created_at > PBX_CALL_TIMEOUT:
+            now = time.time()
+            if now - self.created_at > PBX_CALL_TIMEOUT:
                 trace(self.id, 'timeout')
-                self.close()
+                self.close('b2bua_timeout')
                 return
-            time.sleep(1)
+            # Silent-abandon prober: PBX answered but the attacker never ACKed
+            # (INVITE, see 200, vanish). Tear down fast instead of holding to the cap.
+            if (PBX_ABANDON_SECONDS > 0 and self.answered_at is not None
+                    and not self.attacker_ack_seen
+                    and now - self.answered_at > PBX_ABANDON_SECONDS):
+                trace(self.id, 'attacker_no_ack', age=round(now - self.created_at, 3))
+                self.close('attacker_no_ack')
+                return
+            time.sleep(0.5)
 
     def _rtp_loop(self, sock, side):
         while not self.closed:
@@ -497,6 +526,15 @@ class Bridge:
             trace(self.id, 'pbx_response_suppressed', code=code)
             return
         self.pbx_response_headers = resp.get('headers') or {}
+        if 200 <= code < 300:
+            self.pbx_answered = True
+            if self.answered_at is None:
+                self.answered_at = time.time()
+            # Glare: the attacker tore down before this answer arrived. Don't bridge
+            # a departed attacker — close() ends the PBX dialog (ACK+BYE).
+            if self.attacker_gone:
+                self.close('attacker_gone_pre_answer')
+                return
         body = resp.get('body') or ''
         out_body = None
         if body:
@@ -510,7 +548,19 @@ class Bridge:
         self.send_to_attacker(inbound_response)
         trace(self.id, 'pbx_response', code=code)
         if code >= 300:
-            self.close()
+            self.close(f'pbx_final_response_{code}')
+
+    def _teardown_answered_pbx(self):
+        """Cleanly end an answered PBX dialog: ACK the 2xx (once) so the dialog is
+        confirmed, then BYE. A bare CANCEL is ignored by Asterisk after answer — the
+        bug that left zombie calls recording silence to a departed attacker."""
+        if not self.pbx_acked:
+            self._send_to_pbx(self._build_outbound_request('ACK', include_body=False))
+            self.pbx_acked = True
+        self.out_cseq += 1
+        self._send_to_pbx(self._build_outbound_request('BYE', include_body=False))
+        self.pbx_byed = True
+        trace(self.id, 'pbx_teardown', via='ACK+BYE', age=round(time.time() - self.created_at, 3))
 
     def forward_in_dialog(self, req):
         method = req.get('method')
@@ -518,18 +568,31 @@ class Bridge:
             self.send_to_attacker(self.last_inbound_response or _build_simple_response(req, 100, 'Trying'))
             return True
         if method == 'ACK':
+            if not self.attacker_ack_seen:
+                self.attacker_ack_seen = True
+                trace(self.id, 'attacker_ack', age=round(time.time() - self.created_at, 3))
             self._send_to_pbx(self._build_outbound_request('ACK', include_body=False))
+            self.pbx_acked = True
             return True
         if method == 'BYE':
-            self.out_cseq += 1
-            self._send_to_pbx(self._build_outbound_request('BYE', include_body=False))
+            trace(self.id, 'attacker_bye', age=round(time.time() - self.created_at, 3))
             self.send_to_attacker(_build_simple_response(req, 200, 'OK'))
-            self.close()
+            if not self.pbx_answered:
+                self._send_to_pbx(self._build_outbound_request('CANCEL', include_body=False))
+            self.close('attacker_bye')          # close() does ACK+BYE if answered
             return True
         if method == 'CANCEL':
-            self._send_to_pbx(self._build_outbound_request('CANCEL', include_body=False))
+            trace(self.id, 'attacker_cancel', age=round(time.time() - self.created_at, 3))
             self.send_to_attacker(_build_simple_response(req, 200, 'OK'))
-            self.close()
+            if self.pbx_answered:
+                # Post-answer CANCEL (observed bot behavior): invalid on an answered
+                # dialog — Asterisk ignores it. close() does the ACK+BYE teardown.
+                self.close('attacker_cancel')
+            else:
+                # Genuine pre-answer CANCEL: forward it, but keep the PBX leg alive so
+                # a 2xx racing the CANCEL (glare) gets ACK+BYE in _handle_pbx_response.
+                self._send_to_pbx(self._build_outbound_request('CANCEL', include_body=False))
+                self.attacker_gone = True
             return True
         return False
 

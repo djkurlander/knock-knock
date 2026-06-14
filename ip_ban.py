@@ -92,7 +92,9 @@ def cmd_ban(args):
 def cmd_unban(args):
     ip = args.unban
     conn = sqlite3.connect(DB_PATH, timeout=10)
-    conn.execute("UPDATE ip_intel SET ban_until=NULL WHERE ip=?", (ip,))
+    # Clean slate: lift the ban and zero the auto-ban counter so the IP starts
+    # over (also lets you pre-emptively reset an IP before it trips MAX_KNOCKS).
+    conn.execute("UPDATE ip_intel SET ban_until=NULL, hits_since_cleared=0 WHERE ip=?", (ip,))
     conn.commit()
     conn.close()
 
@@ -100,7 +102,7 @@ def cmd_unban(args):
     if r:
         r.delete(f"knock:blocked:{ip}")
 
-    print(f"✅ Unbanned {ip}")
+    print(f"✅ Unbanned {ip} (ban lifted, hits_since_cleared reset)")
 
 
 def cmd_clear_all(args):
@@ -126,7 +128,7 @@ if __name__ == "__main__":
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--list", action="store_true", help="List all banned IPs")
     group.add_argument("--ban", metavar="IP", help="Ban an IP address")
-    group.add_argument("--unban", metavar="IP", help="Lift a ban")
+    group.add_argument("--unban", metavar="IP", help="Lift a ban and reset the IP's hits_since_cleared counter")
     group.add_argument("--clear-all", action="store_true", help="Clear all bans")
     parser.add_argument("--days", type=int, default=0,
                         help="Ban duration in days (default: 0 = permanent, used with --ban)")

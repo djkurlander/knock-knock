@@ -232,6 +232,33 @@ and the Asterisk hold raised to a 310s `TIMEOUT(absolute)` over **looped silence
 answers: does a completion **`BYE` at a consistent duration** (verification) or **ride
 to the cap** (duration-accrual)?
 
+### 2026-06-14 (evening) — holders confirmed; they ride the cap *every time*, never BYE
+
+With the 300s cap live (and the FR campaign un-banned), **7 completions, all from
+`153.75.90.249` (caller `"test"`), and all 7 held to the 300s `b2bua_timeout` — zero
+`attacker_bye`.** Not one bot voluntarily hung up. So a completion does **not** hold a
+fixed duration and leave; **it holds as long as we allow.** (The `~30s`/`480364`
+recordings are silent abandons cut at the 30s timer; the `~285s`/`4553644` ones are
+the real holds cut at our 300s cap.) We still can't separate "duration-accrual" from
+"verify a *long* call" because we keep cutting it before its own decision point — but
+caller `"test"` + "holds maximally" reads as **route-verification of long-hold
+capability.**
+
+Campaign structure (over ~90 bridges since 17:25):
+- **Role split:** within the FR campaign only **one** IP completes/holds
+  (`153.75.90.249`); the rest probe-and-abandon (`153.75.90.242` 28 calls, 0 ACK).
+  The UK `"cisco"` campaign (`87.106.105.253` → `+442037696790`) is pure abandon.
+  → one "deep verifier" per campaign, many cheap probes.
+- **IP rotation:** the holder role moved off `107.189.20.125` (went quiet since 17:25)
+  onto `153.75.90.249`. Un-banning the campaign + the wider caps surfaced new IPs
+  (`153.75.90.x`, `87.106.105.253`) and the hold behaviour that 45s had hidden.
+
+**Follow-up running now:** raised the cap to **`PBX_CALL_TIMEOUT=1200`** (Asterisk
+`TIMEOUT(absolute)=1210` over the same looped silence) to find the holder's natural
+ceiling — does `153.75.90.249` ever send `attacker_bye`, and at what duration? Rides
+20 min too ⇒ effectively indefinite (duration-accrual); BYEs at a fixed point ⇒
+long-call verification. Watch the ~50-bridge RTP-port pool and disk (~19MB/hold).
+
 ## Cost control — keep probers off the PBX/Telnyx (Phase-B billing safeguard)
 
 These probers complete nothing, yet each one currently spins up an Asterisk channel

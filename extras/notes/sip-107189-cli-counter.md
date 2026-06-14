@@ -71,6 +71,20 @@ the "abandons" could be slower-ACK completions we cut early. Follow-up (in progr
 (a) stop cutting completions and (b) see the *true* holdtime — `BYE` at a consistent
 duration ⇒ verification; rides to the 300s cap ⇒ duration-accrual.
 
+## Campaign context (2026-06-14 evening) — it's not one bot
+
+`107.189.20.125` is one IP in a larger **FR campaign**: ≥8 IPs share the single target
+`+33756758573` (`107.189.20.125/.26.20`, `153.75.83.238/.90.242/.90.249`,
+`144.172.94.33`, `45.61.148.193`, `172.86.114.75`, `104.223.22.102`), separate from the
+SK campaign (`15.204.184.126` → `+421232229875`, no IP overlap). The **complete-and-hold
+role rotates**: with the 300s cap, the deep-hold behaviour appeared on
+`153.75.90.249` (caller `"test"`), which held **7/7 completions to the cap, never
+`BYE`ing**, while `107.189.20.125` went quiet. So within a campaign **one IP does the
+expensive completion at a time, the rest probe-and-abandon** — and the holder rides the
+cap rather than holding a fixed duration. Full holder analysis +
+the 1200s ceiling experiment:
+[sip-phase2-bait-experiment.md](sip-phase2-bait-experiment.md) (2026-06-14 evening).
+
 ## Interpretation (candidate)
 
 A per-call **correlation/sequence token**. If the operator controls

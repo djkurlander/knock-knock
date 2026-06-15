@@ -719,7 +719,11 @@ def maybe_start_bridge(
                 sip_live_permit.release_active_lock(_live_permit_redis, bridge_id)
             except Exception:
                 pass
-        print(f'SIP B2BUA: setup failed for {client_ip}: {e}', file=sys.stderr)
+        # Use a SIPTRACE-prefixed direct print (not trace(), so it's NOT gated by
+        # PBX_TRACE) — monitor.py only forwards non-JSON lines matching ^...TRACE,
+        # so this is how a setup failure (e.g. RTP pool exhausted) reaches the log.
+        print(f'SIPTRACE component=b2bua stage=setup_failed ip={client_ip!r} err={str(e)!r}',
+              file=sys.stderr, flush=True)
         return None
 
 

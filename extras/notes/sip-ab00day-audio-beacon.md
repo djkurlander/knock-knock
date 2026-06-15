@@ -92,6 +92,33 @@ attacker-controlled `+442039960320` confirms the route, and the **dialed prefix*
 that succeeded tells them how to reach an outside line from that PBX. The honeypot
 records all of that at the SIP layer (`knocks_sip`).
 
+## Call lifecycle (2026-06-15)
+
+The *shape* of an ab00day call (from B2BUA traces, with a `Wait(15)` ring):
+
+```
+started → 100 → 183 → 180 → 200 (retransmitted ~4×, NO ACK)
+attacker_bye age≈20s
+closed reason='attacker_bye'
+```
+
+- **Never ACKs** — the `200` is retransmitted for want of an ACK, like the plain
+  answer-supervision probers. It blasts RTP without completing the dialog.
+- **Holds ~5s post-answer** (answer ~15s via the ring, BYE ~20s) — that ~5s is the
+  tone window; the ~5–8s recordings (`77804`–`120684` bytes) are exactly it.
+- **Ends with an explicit `BYE` at ~20s** — it doesn't silently vanish or ride a cap.
+
+So ab00day is a **media-presence probe**, a third class distinct from the others seen:
+| class | ACK? | media? | ends |
+|---|---|---|---|
+| answer-supervision prober | no | no | silent → cut at the abandon timer |
+| **ab00day (tone)** | **no** | **yes (~5s tone)** | **explicit `BYE` ~20s** |
+| "holder" (e.g. 153.75.90.249) | yes | no | rides to the cap, never BYEs |
+
+The three test *different* things: answer supervision (does it ring?), media path
+(does my tone go through?), and duration (can I keep the line up?). ab00day cares
+about the media path, which is why it bothers to send the tone but not to hold.
+
 ## Reproduce / discriminator
 
 The one-line test for any future bot — count distinct RTP payloads across calls:

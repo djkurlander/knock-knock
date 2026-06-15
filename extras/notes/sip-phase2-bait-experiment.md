@@ -132,6 +132,11 @@ prefix variants (`00…`, `011…`, `9…`, exotic), and all other numbers.
 2. [x] Ban management — `ip_ban.py --unban` now also resets `hits_since_cleared`
    (clean slate); no persistent exemption knob needed at observed volumes.
 3. [ ] Asterisk `sticky-hold` context + holdtime logging.
+4. [ ] **Number-level bogus-reject** (realism / pass honeypot-detection control probes):
+   `404` known-bad numbers (toll-free `555`, fictional `555-01XX`, N11, obvious junk)
+   even though they resolve to a valid E.164, so a bot's negative-control probe *passes*
+   and it trusts the route. Distinct axis from `SIP_OK_DIALPLAN` (form) — this gates on
+   the *number*. See [sip-negative-control-probes.md](sip-negative-control-probes.md).
 
 Implement Phase A (free) first.
 

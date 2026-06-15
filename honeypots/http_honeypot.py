@@ -669,20 +669,32 @@ def main():
     while True:
         try:
             conn, addr = server.accept()
+        except OSError:
+            # The listen socket itself failed (genuinely fatal) — stop serving.
+            break
+        try:
             client_ip = normalize_ip(addr[0])
             if is_blocked(client_ip):
                 conn.close()
                 continue
             if ssl_context:
+                # A client that resets/aborts mid-handshake raises OSError
+                # (ConnectionResetError), not ssl.SSLError — catch both so one bad
+                # TLS handshake drops only that connection, not the whole server.
                 try:
                     conn = ssl_context.wrap_socket(conn, server_side=True)
-                except ssl.SSLError:
+                except (ssl.SSLError, OSError):
                     conn.close()
                     continue
             threading.Thread(target=handle_connection, args=(conn, client_ip),
                              daemon=True).start()
-        except OSError:
-            break
+        except Exception:
+            # Never let a single bad connection kill the accept loop.
+            try:
+                conn.close()
+            except Exception:
+                pass
+            continue
 
 
 if __name__ == '__main__':

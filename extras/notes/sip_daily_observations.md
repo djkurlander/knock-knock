@@ -73,3 +73,14 @@ Bonus (surfaced by `b2bua_trace.py`): `+12132610503` (Los Angeles, NANP), source
    frame hash `980b7e2c90` or the 666.7 Hz lag-12 single-frame test — it's
    ASN-agnostic. Details folded into [sip-ab00day-audio-beacon.md](sip-ab00day-audio-beacon.md)
    and [sip-media-presence-probes.md](sip-media-presence-probes.md).
+
+### Logged leads (not yet investigated)
+- **Second multi-IP modal-frame signature `042891e750`.** The new
+  `sip_rtp_triage.py --fingerprint` sweep flagged a second identical-frame-across-IPs
+  signature besides the 666.7 Hz beacon: `md5 042891e750` from `172.232.40.55` and
+  `31.70.86.130`, both dialing UK London (`+442038072087`, `+442038076721`). `freq
+  n/a` (not a clean tone — only 2 dumps, likely a short/keepalive-style frame, not
+  the beacon). Also note `31.70.86.130` shares a `/24` with single-IP `31.70.86.142`
+  (`b1f189f4d1`). Worth a look later: what the frame is, who the two IPs are, and
+  whether it's another shared tool. Re-find with
+  `python extras/sip_rtp_triage.py data/rtp_dumps/ --fingerprint`.

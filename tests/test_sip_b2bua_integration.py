@@ -192,7 +192,10 @@ def test_sip_b2bua_live_permit_headers(monkeypatch):
         outbound = pbx_invites.get(timeout=2).decode('utf-8', errors='replace')
         assert 'X-Live-Outbound: 1' in outbound
         assert 'X-Live-Permit-ID: manual-test' in outbound
-        assert 'X-Live-Max-Seconds: 45' in outbound
+        # max_seconds=45 caps below PBX_CALL_TIMEOUT, so the per-bridge cap header
+        # carries 45 (X-Live-Max-Seconds was collapsed into X-Bridge-Max-Seconds).
+        assert 'X-Bridge-Max-Seconds: 45' in outbound
+        assert 'X-Live-Max-Seconds' not in outbound
         assert 'X-Live-Provider' not in outbound
     finally:
         stop.set()

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""One-shot SIP live-call permit helpers."""
+"""SIP live-call permit helpers (single- or multi-use)."""
 
 import json
 import os
@@ -12,6 +12,8 @@ DEFAULT_TTL_SECONDS = 24 * 60 * 60
 MAX_TTL_SECONDS = int(os.environ.get('SIP_LIVE_PERMIT_MAX_TTL', str(2 * 24 * 60 * 60)))
 DEFAULT_MAX_SECONDS = 45
 MAX_CALL_SECONDS_CAP = int(os.environ.get('SIP_LIVE_MAX_CALL_SECONDS_CAP', '90'))
+DEFAULT_MAX_CALLS = 1
+MAX_CALLS_CAP = int(os.environ.get('SIP_LIVE_MAX_CALLS_CAP', '10'))
 KEY_PREFIX = os.environ.get('SIP_LIVE_PERMIT_PREFIX', 'knock:sip:live-permit')
 ACTIVE_KEY = os.environ.get('SIP_LIVE_ACTIVE_KEY', 'knock:sip:live-active')
 E164_RE = re.compile(r'^\+[1-9]\d{1,14}$')
@@ -59,15 +61,27 @@ def clamp_max_seconds(max_seconds):
     return min(seconds, MAX_CALL_SECONDS_CAP)
 
 
-def make_permit(source_ip, dial_number, *, permit_id, max_seconds=None, note=''):
+def clamp_max_calls(max_calls):
+    """Number of real completions a permit authorizes. Caps total billable
+    exposure to roughly max_calls * max_seconds for the target destination."""
+    calls = int(max_calls if max_calls is not None else DEFAULT_MAX_CALLS)
+    if calls <= 0:
+        raise ValueError('max calls must be positive')
+    return min(calls, MAX_CALLS_CAP)
+
+
+def make_permit(source_ip, dial_number, *, permit_id, max_seconds=None, max_calls=None, note=''):
     if not permit_id:
         raise ValueError('permit_id is required')
     dial_number = require_e164(dial_number)
+    calls = clamp_max_calls(max_calls)
     return {
         'permit_id': str(permit_id),
         'source_ip': permit_source_ip(source_ip),
         'dial_number': dial_number,
         'max_seconds': clamp_max_seconds(max_seconds),
+        'max_calls': calls,
+        'uses_remaining': calls,
         'note': str(note or ''),
     }
 
@@ -106,7 +120,11 @@ return 0
 
 
 def consume_permit_and_acquire_live(client, source_ip, dial_number, bridge_id):
-    """Atomically consume an exact or wildcard permit and acquire the live-call lock."""
+    """Atomically consume one use of an exact or wildcard permit and acquire the
+    live-call lock. A multi-use permit is decremented and kept (preserving its
+    TTL) until its last use, then deleted. Legacy permits with no use counter are
+    treated as single-use. The returned permit is the pre-decrement snapshot, so
+    use_index reflects which completion this is (1-based)."""
     exact_key = permit_key(source_ip, dial_number)
     wildcard_key = permit_key('*', dial_number)
     script = """
@@ -122,7 +140,17 @@ end
 if redis.call('EXISTS', KEYS[3]) == 1 then
   return false
 end
-redis.call('DEL', permit_key)
+local ok, decoded = pcall(cjson.decode, permit)
+local uses = nil
+if ok and type(decoded) == 'table' and decoded.uses_remaining ~= nil then
+  uses = tonumber(decoded.uses_remaining)
+end
+if uses ~= nil and uses > 1 then
+  decoded.uses_remaining = uses - 1
+  redis.call('SET', permit_key, cjson.encode(decoded), 'KEEPTTL')
+else
+  redis.call('DEL', permit_key)
+end
 redis.call('SET', KEYS[3], ARGV[1], 'EX', ARGV[2])
 return {permit, permit_key}
 """
@@ -140,5 +168,11 @@ return {permit, permit_key}
         return None
     permit['permit_key'] = consumed_key
     permit['max_seconds'] = clamp_max_seconds(permit.get('max_seconds'))
+    # Derive which completion this is from the pre-decrement snapshot. Legacy
+    # permits without a counter are single-use (1 of 1).
+    max_calls = int(permit.get('max_calls') or 1)
+    uses_remaining = int(permit.get('uses_remaining') or 1)
+    permit['max_calls'] = max_calls
+    permit['use_index'] = max(1, max_calls - uses_remaining + 1)
     client.expire(ACTIVE_KEY, max(5, permit['max_seconds'] + 10))
     return permit

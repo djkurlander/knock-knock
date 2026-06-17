@@ -29,6 +29,10 @@ PBX_CALL_TIMEOUT = max(5.0, float(os.environ.get('PBX_CALL_TIMEOUT', '120')))
 # many seconds (silent-abandon probers: INVITE, see 200, vanish). 0 disables.
 PBX_ABANDON_SECONDS = float(os.environ.get('PBX_ABANDON_SECONDS', '4'))
 PBX_TRACE = os.environ.get('PBX_TRACE', '0').strip().lower() not in ('', '0', 'false', 'no')
+# Durable, journald-independent capture: when set, every trace() line is also
+# appended (with an ISO-8601 UTC timestamp) to this file. The systemd journal is
+# a size-capped ring buffer; this file is the experiment system-of-record.
+PBX_TRACE_FILE = os.environ.get('PBX_TRACE_FILE', '').strip()
 # Opt-in capture of the attacker's inbound RTP (bot -> honeypot) to a per-bridge
 # .rtp dump file. Unset = disabled. This is the pristine source-side copy of the
 # audio the bot streams after answer (the same leg Asterisk records as `rx`,
@@ -49,7 +53,7 @@ _live_permit_redis = sip_live_permit.redis_client()
 def reload_config():
     global PBX_HOST, PBX_PORT, PBX_DIAL_POLICY, SIP_PUBLIC_IP, SOURCE_ID
     global PBX_RTP_PORT_START, PBX_RTP_PORT_END, PBX_CALL_TIMEOUT, PBX_TRACE
-    global PBX_ABANDON_SECONDS
+    global PBX_ABANDON_SECONDS, PBX_TRACE_FILE
     PBX_HOST = os.environ.get('PBX_HOST', '').strip()
     PBX_PORT = int(os.environ.get('PBX_PORT', '5060'))
     PBX_DIAL_POLICY = os.environ.get('PBX_DIAL_POLICY', 'all').strip()
@@ -59,6 +63,7 @@ def reload_config():
     PBX_CALL_TIMEOUT = max(5.0, float(os.environ.get('PBX_CALL_TIMEOUT', '120')))
     PBX_ABANDON_SECONDS = float(os.environ.get('PBX_ABANDON_SECONDS', '4'))
     PBX_TRACE = os.environ.get('PBX_TRACE', '0').strip().lower() not in ('', '0', 'false', 'no')
+    PBX_TRACE_FILE = os.environ.get('PBX_TRACE_FILE', '').strip()
     global PBX_RTP_DUMP_DIR, PBX_RTP_DUMP_MAX_PACKETS
     PBX_RTP_DUMP_DIR = os.environ.get('PBX_RTP_DUMP_DIR', '').strip()
     PBX_RTP_DUMP_MAX_PACKETS = int(os.environ.get('PBX_RTP_DUMP_MAX_PACKETS', '12000'))
@@ -70,11 +75,37 @@ def enabled():
     return bool(PBX_HOST)
 
 
+_trace_file_lock = threading.Lock()
+_trace_fh = None
+
+
+def _trace_to_file(line):
+    """Append one trace line to PBX_TRACE_FILE with an ISO-8601 UTC timestamp.
+
+    Durable system-of-record for the experiment, independent of journald's
+    size-capped ring buffer. Lazy append-mode open, line-buffered; errors are
+    swallowed so trace capture can never disrupt a live bridge."""
+    global _trace_fh
+    if not PBX_TRACE_FILE:
+        return
+    try:
+        with _trace_file_lock:
+            if _trace_fh is None or _trace_fh.name != PBX_TRACE_FILE:
+                if _trace_fh is not None:
+                    _trace_fh.close()
+                _trace_fh = open(PBX_TRACE_FILE, 'a', buffering=1)
+            _trace_fh.write(f"{time.strftime('%Y-%m-%dT%H:%M:%S+00:00', time.gmtime())} {line}\n")
+    except Exception:
+        pass
+
+
 def trace(bridge_id, stage, **fields):
     if not PBX_TRACE:
         return
     suffix = ' '.join(f'{k}={v!r}' for k, v in fields.items())
-    print(f"SIPTRACE component=b2bua id={bridge_id} stage={stage} {suffix}".rstrip(), file=sys.stderr, flush=True)
+    line = f"SIPTRACE component=b2bua id={bridge_id} stage={stage} {suffix}".rstrip()
+    print(line, file=sys.stderr, flush=True)
+    _trace_to_file(line)
 
 
 def new_bridge_id():
@@ -206,6 +237,36 @@ def _parse_response(data):
     }
 
 
+def _parse_request(data):
+    """Parse an inbound SIP *request* (e.g. a PBX-initiated BYE) on the bridge's
+    PBX socket. _parse_response only matches status lines, so without this a BYE
+    from Asterisk is silently dropped."""
+    text = data.decode('utf-8', errors='replace')
+    header_end = text.find('\r\n\r\n')
+    if header_end < 0:
+        header_end = text.find('\n\n')
+    header_text = text if header_end < 0 else text[:header_end]
+    lines = [ln.rstrip('\r') for ln in header_text.split('\n') if ln != '']
+    if not lines:
+        return None
+    m = re.match(r'^([A-Za-z]+)\s+\S+\s+SIP/2\.0$', lines[0].strip())
+    if not m:
+        return None
+    headers = {}
+    current = None
+    for line in lines[1:]:
+        if line.startswith((' ', '\t')) and current:
+            headers[current][-1] += ' ' + line.strip()
+            continue
+        if ':' not in line:
+            continue
+        key, value = line.split(':', 1)
+        key_l = key.strip().lower()
+        headers.setdefault(key_l, []).append(value.strip())
+        current = key_l
+    return {'method': m.group(1).upper(), 'headers': headers, 'raw': text}
+
+
 def _alloc_udp_socket():
     with _ports_lock:
         for port in range(PBX_RTP_PORT_START, PBX_RTP_PORT_END + 1):
@@ -307,6 +368,19 @@ class Bridge:
         self.dial_country = dial_country
         self.live_permit = live_permit or {}
         self.created_at = time.time()
+        # Hard cap on total bridge life. For permit (live) bridges this is the
+        # smaller of the global PBX_CALL_TIMEOUT and the permit's max_seconds, so
+        # max_seconds actually bounds billable duration and the B2BUA stays the
+        # teardown initiator — leading the Asterisk-side TIMEOUT(absolute) backstop
+        # so the BYE flows B2BUA -> Asterisk (which we handle cleanly) rather than
+        # the reverse.
+        self.max_call_seconds = PBX_CALL_TIMEOUT
+        permit_max = self.live_permit.get('max_seconds')
+        if permit_max:
+            try:
+                self.max_call_seconds = min(PBX_CALL_TIMEOUT, float(permit_max))
+            except (TypeError, ValueError):
+                pass
         self.public_ip = _discover_public_ip()
         self.attacker_media = parse_sdp(inbound_req.get('body') or '')
         self.attacker_rtp_addr = self._initial_attacker_rtp_addr()
@@ -426,8 +500,8 @@ class Bridge:
     def _timeout_loop(self):
         while not self.closed:
             now = time.time()
-            if now - self.created_at > PBX_CALL_TIMEOUT:
-                trace(self.id, 'timeout')
+            if now - self.created_at > self.max_call_seconds:
+                trace(self.id, 'timeout', cap=self.max_call_seconds)
                 self.close('b2bua_timeout')
                 return
             # Silent-abandon prober: PBX answered but the attacker never ACKed
@@ -481,9 +555,12 @@ class Bridge:
                     trace(self.id, 'pbx_recv_error')
                 return
             resp = _parse_response(data)
-            if not resp:
+            if resp:
+                self._handle_pbx_response(resp)
                 continue
-            self._handle_pbx_response(resp)
+            req = _parse_request(data)
+            if req:
+                self._handle_pbx_request(req)
 
     def _send_to_pbx(self, payload):
         self.pbx_sock.sendto(payload, (PBX_HOST, PBX_PORT))
@@ -508,15 +585,15 @@ class Bridge:
             f'X-Bridge-ID: {self.id}',
             f'X-Source-IP: {self.client_ip}',
             f'X-Source-ID: {SOURCE_ID or "unknown"}',
+            # Authoritative per-bridge cap so Asterisk's TIMEOUT(absolute) backstop
+            # tracks the B2BUA cap (B2BUA leads teardown). Sent on every bridge.
+            f'X-Bridge-Max-Seconds: {int(self.max_call_seconds)}',
         ]
         if self.live_permit:
             permit_id = str(self.live_permit.get('permit_id') or '')
-            max_seconds = str(self.live_permit.get('max_seconds') or '')
             lines.append('X-Live-Outbound: 1')
             if permit_id:
                 lines.append(f'X-Live-Permit-ID: {permit_id}')
-            if max_seconds:
-                lines.append(f'X-Live-Max-Seconds: {max_seconds}')
         lines.extend([
             'Content-Type: application/sdp',
             f'Content-Length: {len(body)}',
@@ -552,6 +629,47 @@ class Bridge:
         trace(self.id, 'pbx_response', code=code)
         if code >= 300:
             self.close(f'pbx_final_response_{code}')
+
+    def _handle_pbx_request(self, req):
+        """Handle an in-dialog request from the PBX. The important case is the PBX
+        hanging up first — the far/Telnyx callee dropping, or the Asterisk
+        TIMEOUT(absolute) backstop firing — which sends us a BYE. The old
+        response-only loop dropped it, so the bridge held its lock/ports until
+        PBX_CALL_TIMEOUT. Now we 200 it and tear down promptly."""
+        method = req.get('method')
+        if method in ('BYE', 'CANCEL'):
+            try:
+                self._send_to_pbx(self._build_pbx_request_response(req, 200, 'OK'))
+            except Exception:
+                pass
+            trace(self.id, f'pbx_{method.lower()}', age=round(time.time() - self.created_at, 3))
+            # The PBX already ended its dialog, so suppress our own ACK+BYE in
+            # close() — nothing left to tear down on that leg.
+            self.pbx_byed = True
+            self.close(f'pbx_{method.lower()}')
+        elif method == 'OPTIONS':
+            try:
+                self._send_to_pbx(self._build_pbx_request_response(req, 200, 'OK'))
+            except Exception:
+                pass
+
+    def _build_pbx_request_response(self, req, code, reason):
+        headers = req.get('headers') or {}
+        via = _header_first(headers, 'via') or f'SIP/2.0/UDP {self.public_ip}'
+        from_h = _header_first(headers, 'from') or self.out_from_header or '<sip:unknown@unknown>'
+        to_h = _header_first(headers, 'to') or '<sip:unknown@unknown>'
+        call_id = _header_first(headers, 'call-id') or self.out_call_id
+        cseq = _header_first(headers, 'cseq') or '1 BYE'
+        lines = [
+            f'SIP/2.0 {code} {reason}',
+            f'Via: {via}',
+            f'From: {from_h}',
+            f'To: {to_h}',
+            f'Call-ID: {call_id}',
+            f'CSeq: {cseq}',
+            'Content-Length: 0',
+        ]
+        return ('\r\n'.join(lines) + '\r\n\r\n').encode()
 
     def _teardown_answered_pbx(self):
         """Cleanly end an answered PBX dialog: ACK the 2xx (once) so the dialog is
@@ -597,6 +715,27 @@ class Bridge:
                 self._send_to_pbx(self._build_outbound_request('CANCEL', include_body=False))
                 self.attacker_gone = True
             return True
+        if method == 'INFO':
+            # Attackers may answer the bait IVR with DTMF carried in SIP INFO
+            # (application/dtmf-relay "Signal=N", or application/dtmf with the
+            # digit as the body). That is signaling, not RTP, so it never shows
+            # up in the RTP dump — trace it so an IVR-navigating bot's keypresses
+            # aren't lost. Reply 200 so the dialog stays alive and we keep
+            # looking like a real UA.
+            raw = req.get('raw') or ''
+            parts = re.split(r'\r\n\r\n|\n\n', raw, maxsplit=1)
+            body = parts[1] if len(parts) > 1 else ''
+            ct = (_header_first(req.get('headers') or {}, 'content-type') or '').lower()
+            m = re.search(r'Signal\s*=\s*([0-9A-Da-d*#])', body)
+            digit = m.group(1) if m else (body.strip()[:8] if 'dtmf' in ct else None)
+            trace(self.id, 'attacker_info',
+                  age=round(time.time() - self.created_at, 3), digit=digit, ct=ct)
+            self.send_to_attacker(_build_simple_response(req, 200, 'OK'))
+            return True
+        # Any other in-dialog request (NOTIFY, OPTIONS, MESSAGE, UPDATE, …):
+        # trace it so unexpected attacker behaviour isn't dropped silently.
+        trace(self.id, 'attacker_in_dialog', method=method,
+              age=round(time.time() - self.created_at, 3))
         return False
 
     def _build_outbound_request(self, method, include_body=False):

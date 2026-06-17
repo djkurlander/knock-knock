@@ -1,0 +1,4 @@
+# Telnyx voice rate sheet — proprietary vendor data, ~25 MB.
+# Co-located here so classify_intl_targets.py finds it by default, but NOT
+# committed (size + redistribution). Drop your own export in as rates.csv.
+rates.csv

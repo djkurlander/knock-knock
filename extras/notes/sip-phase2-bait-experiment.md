@@ -264,6 +264,21 @@ ceiling — does `153.75.90.249` ever send `attacker_bye`, and at what duration?
 20 min too ⇒ effectively indefinite (duration-accrual); BYEs at a fixed point ⇒
 long-call verification. Watch the ~50-bridge RTP-port pool and disk (~19MB/hold).
 
+### 2026-06-16 — answer: rides 20 min too; reframed as monetization-shaped
+
+`107.189.20.125` returned as the FR holder and **rode the 1200s cap 16× in ~2 days,
+never `BYE`ing** (silent, 0 RTP) — so the holder ceiling is still just "whatever we
+allow," confirming duration-accrual over fixed-duration verification. Combined with
+the target's carrier being **Transatel** (an IRSF-favored mobile range, sustained
+multi-source pumping), the "route-verification of long-hold capability" reading above
+is **revised**: these holds are **monetization-shaped and not distinguishable from
+verification** from the honeypot — the only discriminator (do minutes bill at `+337`?)
+is exactly what the decoy can't produce, and a botnet may skip a separate verify phase
+entirely (a long billable hold both proves the route and collects). Also: the CLI
+mismatch on a live bait is **not** a tell (privacy mode = normal PBX behavior;
+degrades to time-correlation). Full revision + the IRSF-confirmation checklist:
+[sip-107189-cli-counter.md](sip-107189-cli-counter.md).
+
 ## Cost control — keep probers off the PBX/Telnyx (Phase-B billing safeguard)
 
 These probers complete nothing, yet each one currently spins up an Asterisk channel

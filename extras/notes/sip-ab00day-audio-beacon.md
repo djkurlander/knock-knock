@@ -129,7 +129,11 @@ The one-line test for any future bot — count distinct RTP payloads across call
 ```
 
 (see the `uniq payloads` column above; full procedure in this repo's git history
-for commit `43b0d02`).
+for commit `43b0d02`). This discriminator is now implemented as a batch tool,
+`extras/sip_rtp_triage.py` (RMS + distinct-payload, no WAV needed). The
+media-presence probe technique is generalized across campaigns — with a second
+example (`77.42.86.8`, a one-shot burst) — in
+[sip-media-presence-probes.md](sip-media-presence-probes.md).
 
 ## Scope / caveats
 

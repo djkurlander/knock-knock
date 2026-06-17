@@ -152,11 +152,11 @@ exten => _X.,1,NoOp(Knock honeypot call to ${EXTEN})
  same => n,Set(KNOCK_SOURCE_ID=${PJSIP_HEADER(read,X-Source-ID)})
  same => n,Set(KNOCK_LIVE=${PJSIP_HEADER(read,X-Live-Outbound)})
  same => n,Set(KNOCK_LIVE_PERMIT_ID=${PJSIP_HEADER(read,X-Live-Permit-ID)})
- same => n,Set(KNOCK_LIVE_MAX=${PJSIP_HEADER(read,X-Live-Max-Seconds)})
+ same => n,Set(KNOCK_MAX=${PJSIP_HEADER(read,X-Bridge-Max-Seconds)})
  same => n,ExecIf($["${KNOCK_BRIDGE_ID}" = ""]?Set(KNOCK_BRIDGE_ID=no-bridge-${UNIQUEID}))
  same => n,ExecIf($["${KNOCK_SOURCE_ID}" = ""]?Set(KNOCK_SOURCE_ID=unknown))
  same => n,ExecIf($["${KNOCK_SRC_IP}" = ""]?Set(KNOCK_SRC_IP=unknown))
- same => n,ExecIf($["${KNOCK_LIVE_MAX}" = ""]?Set(KNOCK_LIVE_MAX=45))
+ same => n,ExecIf($["${KNOCK_MAX}" = ""]?Set(KNOCK_MAX=120))
  same => n,GotoIf($["${KNOCK_LIVE}" = "1"]?live)
  same => n,Progress()
  same => n,Ringing()
@@ -170,12 +170,13 @@ exten => _X.,1,NoOp(Knock honeypot call to ${EXTEN})
  same => n,Hangup()
 
  same => n(live),Answer()
+ same => n,Set(TIMEOUT(absolute)=$[${KNOCK_MAX} + 10])
  same => n,Set(LIVE_BASE=${KNOCK_SOURCE_ID}-${KNOCK_SRC_IP}-${CALLERID(num)}-${EXTEN}-${EPOCH}-${KNOCK_BRIDGE_ID})
  same => n,MixMonitor(/var/spool/asterisk/live-outbound/mixed-${LIVE_BASE}.wav,r(/var/spool/asterisk/live-outbound/rx-${LIVE_BASE}.wav)t(/var/spool/asterisk/live-outbound/tx-${LIVE_BASE}.wav))
  same => n,Set(CALLERID(num)=<VALID_TELNYX_OR_VERIFIED_NUMBER>)
  same => n,Set(CALLERID(name)=<VALID_TELNYX_OR_VERIFIED_NUMBER>)
  same => n,Set(CALLERID(pres)=prohib)
- same => n,Dial(PJSIP/${EXTEN}@telnyx,${KNOCK_LIVE_MAX})
+ same => n,Dial(PJSIP/${EXTEN}@telnyx,${KNOCK_MAX})
  same => n,StopMixMonitor()
  same => n,Hangup()
 EOF
@@ -193,10 +194,31 @@ scanners to hang up before media is captured.
 `MixMonitor()` filename makes Asterisk recordings correlate back to SIP knock
 rows that have `sip_pbx_bridge_id`.
 
-The `live` branch is only used when the honeypot B2BUA consumes an exact
-one-shot Redis permit. The default path remains answer/play/record only.
+The `live` branch is only used when the honeypot B2BUA consumes a use of a
+matching Redis permit. The default path remains answer/play/record only.
 `<VALID_TELNYX_OR_VERIFIED_NUMBER>` must be replaced before enabling live
 outbound calls.
+
+`TIMEOUT(absolute)` caps the **total** billable call duration (`Dial()`'s second
+argument is only the ring/answer timeout, not a talk-time limit). It is set to
+`KNOCK_MAX` **plus a small margin**, where `KNOCK_MAX` comes from the
+`X-Bridge-Max-Seconds` header the B2BUA stamps on *every* outbound INVITE — its
+authoritative per-bridge cap, `min(PBX_CALL_TIMEOUT, permit max_seconds)`. So the
+B2BUA caps the bridge at exactly that value and tears down a few seconds *first*,
+sending the BYE B2BUA → Asterisk (the direction the B2BUA handles cleanly,
+releasing its live lock and RTP ports promptly). Because the header carries the
+B2BUA's own cap, the Asterisk backstop tracks it automatically — change
+`PBX_CALL_TIMEOUT` (or a permit's `max_seconds`) and `TIMEOUT(absolute)` follows
+with no dialplan edit, so the B2BUA always leads by construction. The
+`TIMEOUT(absolute)` guarantee only matters if the B2BUA fails to lead — then
+Asterisk still stops the Telnyx leg and the meter. The B2BUA also now answers a
+PBX-initiated BYE (far-end/Telnyx callee hangup, or this timeout firing first),
+so neither ordering leaves a lingering bridge.
+
+Use the same `Set(TIMEOUT(absolute)=$[${KNOCK_MAX} + 10])` on any hold-style
+decoy branch (e.g. a looped-silence `Goto(hold)`); do not hardcode the cap, or it
+will silently desync from `PBX_CALL_TIMEOUT`. The default branch above hangs up
+on its own fixed timing, so it does not need the line.
 
 ## Install a Custom Playback Prompt
 
@@ -447,16 +469,28 @@ exten => s,1,NoOp(Playing captured bot tone to answered Telnyx leg)
 
 Do not include the file extension in `Playback()`.
 
-## One-Shot Live Outbound Permits
+## Live Outbound Permits
 
 By default, SIP INVITEs follow the normal configured behavior: fake answer,
 Asterisk recording/playback, or PBX bridging according to `PBX_DIAL_POLICY`.
-For rare investigations, a one-shot permit can override that flow for one exact
+For rare investigations, a permit can override that flow for one exact
 source IP and parsed dial number. A permit may also use `*` as the source IP to
 match the next source that targets that exact dial number. When a matching INVITE
-arrives, the permit is atomically consumed, the call is sent to Asterisk with
-live outbound headers, and the Asterisk `live` branch dials the requested target
-through Telnyx.
+arrives, one use of the permit is atomically consumed, the call is sent to
+Asterisk with live outbound headers, and the Asterisk `live` branch dials the
+requested target through Telnyx.
+
+A permit authorizes `--max-calls` real completions (default `1` = the classic
+one-shot). This keeps a route "blessed" across more than one INVITE, which the
+phase-2 monetization bait needs: eliciting a test monetization call is two events
+— the completion that lets the operator's destination cross-check succeed and
+builds trust in the route, then the bot's *follow-up* call. With a one-shot
+permit the follow-up falls back to the decoy and fails the very cross-check the
+first call just passed. A small `--max-calls` (e.g. `2`–`3`) lets both the
+validation call and the elicited test call(s) complete for real. Total billable
+exposure to the destination is bounded by roughly `max_calls × max_seconds`, and
+the permit's TTL is the time backstop — whichever bound is hit first exhausts it.
+See [`../extras/notes/sip-phase2-bait-experiment.md`](../extras/notes/sip-phase2-bait-experiment.md).
 
 The permit is fail-closed:
 
@@ -465,8 +499,12 @@ The permit is fail-closed:
 - The strict E.164 dial number must match exactly.
 - The source IP must match exactly, unless the permit source is `*`.
 - If both exact and wildcard permits exist for the same number, exact wins.
-- The permit is consumed once.
-- A global active-call lock allows only one live outbound bridge at a time.
+- Each matching INVITE consumes one use; the permit is deleted on its last use
+  (its TTL is preserved across intermediate uses). Permits created before
+  `--max-calls` existed are treated as single-use.
+- A global active-call lock allows only one live outbound bridge at a time, so a
+  concurrent burst gets one live completion at a time and the rest fall back to
+  the decoy.
 - `sip_pbx_live_permit_id` is stored on the matching `knocks_sip` row.
 
 Create a permit from the honeypot server:
@@ -479,7 +517,7 @@ python extras/sip_permit.py create 172.110.223.203 +442039960320 \
   --note "watch ab00day campaign"
 ```
 
-Create a one-shot campaign permit for any source IP hitting the exact number:
+Create a campaign permit for any source IP hitting the exact number:
 
 ```bash
 python extras/sip_permit.py create '*' +442039960320 \
@@ -489,7 +527,19 @@ python extras/sip_permit.py create '*' +442039960320 \
   --note "next source in campaign"
 ```
 
-List pending permits:
+Create a multi-use bait permit (blessed window) so a validation call and the
+elicited follow-up test call(s) both complete for real:
+
+```bash
+python extras/sip_permit.py create 172.110.223.203 +442039960320 \
+  --permit-id bait-20260611-001 \
+  --hours 24 \
+  --max-seconds 60 \
+  --max-calls 3 \
+  --note "phase-2 monetization bait"
+```
+
+List pending permits (shows `uses=remaining/max`):
 
 ```bash
 python extras/sip_permit.py list
@@ -508,6 +558,7 @@ rejected instead of normalized. Runtime caps are controlled by:
 ```text
 SIP_LIVE_PERMIT_MAX_TTL=172800
 SIP_LIVE_MAX_CALL_SECONDS_CAP=90
+SIP_LIVE_MAX_CALLS_CAP=10
 ```
 
 ## Firewall: Honeypot Server

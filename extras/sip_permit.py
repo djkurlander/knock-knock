@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Create and inspect one-shot SIP live-call permits."""
+"""Create and inspect SIP live-call permits (single- or multi-use)."""
 
 import argparse
 import os
@@ -40,6 +40,7 @@ def cmd_create(args):
         args.dial_number,
         permit_id=permit_id,
         max_seconds=args.max_seconds,
+        max_calls=args.max_calls,
         note=args.note,
     )
     key, actual_ttl = sip_live_permit.create_permit(client, permit, ttl)
@@ -47,6 +48,7 @@ def cmd_create(args):
     print(f'permit_id={permit["permit_id"]}')
     print(f'dial_number={permit["dial_number"]}')
     print(f'max_seconds={permit["max_seconds"]}')
+    print(f'max_calls={permit["max_calls"]}')
     print(f'ttl={actual_ttl}s')
 
 
@@ -55,6 +57,8 @@ def cmd_list(_args):
     found = False
     for key, ttl, permit in sip_live_permit.list_permits(client):
         found = True
+        max_calls = permit.get('max_calls', 1)
+        uses_remaining = permit.get('uses_remaining', max_calls)
         print(
             f'{key} ttl={_fmt_ttl(ttl)} '
             f'expires_at={_fmt_expires_at(ttl)} '
@@ -62,6 +66,7 @@ def cmd_list(_args):
             f'source_ip={permit.get("source_ip", "")} '
             f'dial_number={permit.get("dial_number", "")} '
             f'max_seconds={permit.get("max_seconds", "")} '
+            f'uses={uses_remaining}/{max_calls} '
             f'note={permit.get("note", "")}'
         )
     if not found:
@@ -78,13 +83,17 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest='cmd', required=True)
 
-    create = sub.add_parser('create', help='create a one-shot exact IP/phone permit')
+    create = sub.add_parser('create', help='create an exact or wildcard IP/phone permit')
     create.add_argument('source_ip', help='exact source IP, or * for any source IP targeting this number')
     create.add_argument('dial_number', help='strict E.164 number, e.g. +442039960320')
     create.add_argument('--permit-id')
     create.add_argument('--ttl', type=int, default=sip_live_permit.DEFAULT_TTL_SECONDS, help='TTL in seconds')
     create.add_argument('--hours', type=float, help='TTL in hours; overrides --ttl')
     create.add_argument('--max-seconds', type=int, default=sip_live_permit.DEFAULT_MAX_SECONDS)
+    create.add_argument('--max-calls', type=int, default=sip_live_permit.DEFAULT_MAX_CALLS,
+                        help='number of real completions this permit authorizes before it is '
+                             'exhausted (default 1). Keeps the route blessed across the '
+                             'validation call and the elicited test monetization call(s).')
     create.add_argument('--note', default='')
     create.set_defaults(func=cmd_create)
 

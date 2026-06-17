@@ -51,7 +51,7 @@ def _alaw_decode(b):
 def read_dump(path):
     with open(path, 'rb') as f:
         if f.read(len(MAGIC)) != MAGIC:
-            sys.exit(f'{path}: not a KKRTP1 dump (bad magic)')
+            raise ValueError(f'{path}: not a KKRTP1 dump (bad magic)')
         pkts = []
         while True:
             head = f.read(REC.size)
@@ -72,7 +72,10 @@ def main():
     ap.add_argument('--info', action='store_true', help='print stats only')
     args = ap.parse_args()
 
-    pkts = read_dump(args.rtp)
+    try:
+        pkts = read_dump(args.rtp)
+    except ValueError as e:
+        sys.exit(str(e))
     if not pkts:
         sys.exit(f'{args.rtp}: no packets')
 

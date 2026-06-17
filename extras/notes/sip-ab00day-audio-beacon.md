@@ -142,3 +142,18 @@ Conclusive for the `172.110.223.203` / `ab00day` bot. A denser bot,
 Asterisk MixMonitor WAVs (no pristine RTP) and showed the same 666.7 Hz tone, so
 it is very likely the same mechanism — but it has not been confirmed at the RTP
 payload level. If captured, run the discriminator above.
+
+**Update (2026-06-17): RTP-confirmed — and it's a byte-identical toolkit frame.**
+`51.38.52.76` is now captured at the RTP payload level (21 `.rtp` dumps, all
+`TONE(1-frame)`, payload type 0, ~3–15 s holds Jun 14–17). Its looped frame is
+**byte-for-byte identical** to ab00day's — both hash to `md5 980b7e2c90`
+(160-byte G.711 µ-law; autocorrelation lag 12 → 666.7 Hz; the 1350/2650/4000 Hz
+spectral peaks are just its 2nd/4th/6th harmonics). Not merely the same pitch —
+the *same generated frame*. A corpus sweep of `data/rtp_dumps` finds this exact
+frame from **two source IPs only**: `172.110.223.203` (ab00day, AS47154, → UK
+`+442039960320`) and `51.38.52.76` (OVH, a different ASN, → US `+12132610503`).
+Identical frame across two networks and two targets points to **shared tooling**
+(a commodity scanner emitting this beacon) more than to a single operator —
+though same-operator / different-infra isn't excluded. Either way, `md5
+980b7e2c90` (or the 666.7 Hz lag-12 single-frame test) is a clean cross-actor
+fingerprint. See [sip-media-presence-probes.md](sip-media-presence-probes.md).

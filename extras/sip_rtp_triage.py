@@ -23,10 +23,18 @@ Usage:
     python extras/sip_rtp_triage.py data/rtp_dumps/*.rtp        # globbed files
     python extras/sip_rtp_triage.py capture.rtp                 # one file
     python extras/sip_rtp_triage.py data/rtp_dumps/ --min-rms 200 --only-interesting
+    python extras/sip_rtp_triage.py data/rtp_dumps/ --fingerprint        # group by tone md5
+    python extras/sip_rtp_triage.py data/rtp_dumps/ --fingerprint --match-md5 980b7e2c90
+
+`--fingerprint` (alias `--beacon`) groups dumps by their modal-frame md5 + tone
+frequency: the same md5 seen from multiple source IPs/ASNs means a shared toolkit
+(e.g. the 666.7 Hz `980b7e2c90` beacon emitted by both ab00day and 51.38.52.76).
 
 No third-party deps beyond numpy (reuses the decoders in sip_rtp_to_wav.py).
 """
 import argparse
+import collections
+import hashlib
 import os
 import sys
 
@@ -37,6 +45,48 @@ from sip_rtp_to_wav import read_dump, _ulaw_decode, _alaw_decode  # noqa: E402
 
 DECODE = {0: _ulaw_decode, 8: _alaw_decode}
 WIN = 160  # 20 ms at 8 kHz, for windowed silence fraction
+
+
+def _src_from_name(path):
+    """Pull (source_ip, dialed_number) from a dump filename, handling both the
+    bridged form `LA1-<ip>-<fromuser>-<num>-<epoch>-<bridgeid>.rtp` and the older
+    `LA1-<bridgeid>-nolive-<ip>-<num>-<epoch>.rtp` form."""
+    p = os.path.basename(path).split('-')
+    if len(p) > 4 and p[2] == 'nolive':
+        return p[3], p[4]
+    if len(p) > 3:
+        return p[1], p[3]
+    return '?', '?'
+
+
+def _dom_freq(samp):
+    """Dominant tone frequency (Hz) of a frame via autocorrelation, or None."""
+    s = samp - samp.mean()
+    if len(s) < 24 or s.std() < 1e-6:
+        return None
+    ac = np.correlate(s, s, 'full')[len(s) - 1:]
+    if ac[0] == 0:
+        return None
+    ac = ac / ac[0]
+    rng = range(8, min(60, len(ac) - 1))
+    best = max(rng, key=lambda l: ac[l])
+    return 8000.0 / best if ac[best] > 0.5 else None
+
+
+def fingerprint(path):
+    """Modal-frame md5 + dominant tone for a dump — a generator-agnostic signature.
+    The same md5 from multiple source IPs/ASNs ⇒ shared tooling (e.g. the 666.7 Hz
+    `980b7e2c90` beacon shared by ab00day and 51.38.52.76)."""
+    pkts = read_dump(path)
+    audio = [(pt, pl) for _t, _seq, _ts, pt, pl in pkts if pt in DECODE and pl]
+    if not audio:
+        return None
+    modal = collections.Counter(pl for _pt, pl in audio).most_common(1)[0][0]
+    pt = next(pt for pt, pl in audio if pl == modal)
+    ip, num = _src_from_name(path)
+    return {'path': path, 'md5': hashlib.md5(modal).hexdigest()[:10],
+            'freq': _dom_freq(DECODE[pt](modal).astype(np.float64)),
+            'ip': ip, 'num': num, 'distinct': len({pl for _pt, pl in audio})}
 
 
 def analyze(path, silent_rms):
@@ -79,6 +129,43 @@ def collect_paths(args_paths):
     return paths
 
 
+def _fingerprint_report(paths, match_md5):
+    fps = []
+    for path in paths:
+        try:
+            fp = fingerprint(path)
+        except (ValueError, OSError) as e:
+            print(f'  skip {path}: {e}', file=sys.stderr)
+            continue
+        if fp:
+            fps.append(fp)
+    if match_md5:
+        sel = [f for f in fps if f['md5'].startswith(match_md5)]
+        print(f"dumps with modal-frame md5 ~ {match_md5}: {len(sel)}")
+        for f in sorted(sel, key=lambda f: (f['ip'], f['path'])):
+            fr = f"{f['freq']:.1f}Hz" if f['freq'] else 'n/a'
+            print(f"  {f['md5']}  {fr:>9}  ip={f['ip']:16} num=+{f['num']:14} "
+                  f"{os.path.basename(f['path'])}")
+        return 0
+    groups = collections.defaultdict(lambda: {'n': 0, 'ips': set(), 'nums': set(), 'freq': None})
+    for f in fps:
+        g = groups[f['md5']]
+        g['n'] += 1
+        g['ips'].add(f['ip'])
+        g['nums'].add(f['num'])
+        g['freq'] = g['freq'] or f['freq']
+    print(f"{len(fps)} dump(s); {len(groups)} distinct modal-frame fingerprint(s). "
+          f"Shared md5 across IPs ⇒ same generator/toolkit.\n")
+    print(f"{'md5':<11}{'freq':>9}{'files':>7}  {'src IPs':<36} sample dialed")
+    for md5, g in sorted(groups.items(), key=lambda kv: -kv[1]['n']):
+        fr = f"{g['freq']:.1f}Hz" if g['freq'] else 'n/a'
+        ips = ', '.join(sorted(g['ips']))
+        nums = ', '.join('+' + n for n in sorted(g['nums'])[:4])
+        flag = '  <- multi-IP toolkit' if len(g['ips']) > 1 else ''
+        print(f"{md5:<11}{fr:>9}{g['n']:>7}  {ips:<36} {nums}{flag}")
+    return 0
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -89,7 +176,16 @@ def main(argv=None):
                     help='print only non-silent, decodable files')
     ap.add_argument('--sort', choices=('rms', 'name', 'dur'), default='rms',
                     help='sort order (default: rms, loudest first)')
+    ap.add_argument('--fingerprint', '--beacon', action='store_true', dest='fingerprint',
+                    help='group dumps by modal-frame md5 + tone freq (shared md5 across '
+                         'IPs = same toolkit, e.g. the 666.7 Hz 980b7e2c90 beacon)')
+    ap.add_argument('--match-md5', metavar='PREFIX',
+                    help='with --fingerprint: list individual dumps whose modal-frame '
+                         'md5 starts with PREFIX')
     args = ap.parse_args(argv)
+
+    if args.fingerprint:
+        return _fingerprint_report(collect_paths(args.paths), args.match_md5)
 
     rows = []
     for path in collect_paths(args.paths):
@@ -126,4 +222,10 @@ def main(argv=None):
 
 
 if __name__ == '__main__':
-    main()
+    try:
+        main()
+    except BrokenPipeError:
+        # downstream (head/grep) closed the pipe — redirect stdout to devnull so
+        # the interpreter's final flush doesn't re-raise, then exit quietly.
+        os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
+        sys.exit(0)

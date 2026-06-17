@@ -93,3 +93,21 @@ finding), **1 `silent`** (`149.202.60.153`, 2-packet near-keepalive), and **1
 - Cross-reference media-presence probers against the campaign breakdowns in the
   phase-2 and embassy-beacon notes — is media-presence probing correlated with the
   "deep verifier" role (the one IP per campaign that does the expensive checks)?
+
+## Corpus sweep (2026-06-17): the 666.7 Hz frame is a byte-identical toolkit signature
+
+Swept all of `data/rtp_dumps` (143 G.711 dumps): **137 are the 666.7 Hz
+single-frame beacon**, and every one carries the *identical* looped payload —
+**`md5 980b7e2c90`** (160-byte G.711 µ-law). It comes from **two source IPs**:
+`172.110.223.203` (ab00day, AS47154 → UK `+442039960320`) and `51.38.52.76`
+(OVH, a different ASN → US `+12132610503`). Same exact frame, two networks, two
+targets ⇒ a **shared toolkit** (commodity tone generator) is more likely than a
+single operator on different infra — though the latter isn't ruled out.
+
+Practical upshot: **fingerprint media-presence probers by the frame hash
+(`980b7e2c90`) or the 666.7 Hz lag-12 single-frame test** — it cuts across source
+IP and ASN, so it catches the same tool wherever it's hosted. This confirms (at
+the RTP payload level) the `51.38.52.76` caveat left open in
+[sip-ab00day-audio-beacon.md](sip-ab00day-audio-beacon.md). Note the dump corpus
+only contains *media-sending* bots (silent probers leave no file), so "137/143"
+means the beacon dominates the audio-sending population — not all SIP traffic.

@@ -338,6 +338,10 @@ class _RtpDump:
             self._f.write(rec)
             self._n += 1
 
+    def opened(self):
+        """True once a real audio packet has been captured (file created lazily)."""
+        return self._f is not None
+
     def close(self):
         with self._lock:
             if self._f is not None:
@@ -407,7 +411,9 @@ class Bridge:
         self.pbx_acked = False         # we have ACKed that 2xx
         self.pbx_byed = False          # we have torn the PBX dialog down (ACK+BYE)
         self.attacker_gone = False     # attacker tore down before the PBX answered
-        self.rtp_dump = None
+        self.rtp_dump = None           # attacker->callee (bot audio)
+        self.pbx_rtp_dump = None       # callee->attacker (ringback/voicemail — the billed audio)
+        self.last_attacker_rtp = 0.0   # last time the bot sent us RTP (silence gen yields to it)
 
     def _initial_attacker_rtp_addr(self):
         port = self.attacker_media.get('audio_port')
@@ -424,17 +430,23 @@ class Bridge:
         self.pbx_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.pbx_sock.bind(('0.0.0.0', 0))
         self.pbx_sock.settimeout(0.5)
-        self.rtp_dump = self._open_rtp_dump()
+        self.rtp_dump = self._open_rtp_dump('attacker')
+        # Callee->attacker (ringback/voicemail) is only worth recording on a real
+        # permitted dialout. On non-permit bridges (e.g. PBX_DIAL_POLICY=all) the PBX
+        # leg is just silence, so dumping it would litter the dir with empty WAVs.
+        self.pbx_rtp_dump = self._open_rtp_dump('pbx') if self.live_permit else None
         self._register()
         threading.Thread(target=self._rtp_loop, args=(self.attacker_rtp_sock, 'attacker'), daemon=True).start()
         threading.Thread(target=self._rtp_loop, args=(self.pbx_rtp_sock, 'pbx'), daemon=True).start()
+        if self.live_permit:
+            threading.Thread(target=self._silence_loop, daemon=True).start()
         threading.Thread(target=self._sip_loop, daemon=True).start()
         threading.Thread(target=self._timeout_loop, daemon=True).start()
         self._send_invite_to_pbx()
         trace(self.id, 'started', attacker_rtp=self.attacker_rtp_port, pbx_rtp=self.pbx_rtp_port)
         return self
 
-    def _open_rtp_dump(self):
+    def _open_rtp_dump(self, side='attacker'):
         if not PBX_RTP_DUMP_DIR:
             return None
         try:
@@ -444,13 +456,18 @@ class Bridge:
             caller = _extract_display_user(from_h) or 'unknown'
             safe = lambda s: re.sub(r'[^A-Za-z0-9_.+-]', '_', str(s))[:64]
             # Mirror the Asterisk MixMonitor field order: source-ip-caller-number-epoch-bridge.
+            # The attacker (bot->callee) leg keeps the bare name; the callee->attacker
+            # leg (ringback/voicemail the PBX sends back — the billed audio) gets a
+            # -pbx suffix so the two directions decode to separate WAVs. Both share the
+            # bridge id, which is the unambiguous pairing key.
+            suffix = '-pbx' if side == 'pbx' else ''
             fname = (f"{SOURCE_ID or 'unknown'}-{safe(self.client_ip)}-{safe(caller)}-"
-                     f"{safe(num)}-{int(time.time())}-{self.id}.rtp")
+                     f"{safe(num)}-{int(time.time())}-{self.id}{suffix}.rtp")
             dump = _RtpDump(os.path.join(PBX_RTP_DUMP_DIR, fname), PBX_RTP_DUMP_MAX_PACKETS)
-            trace(self.id, 'rtp_dump_armed', file=fname)
+            trace(self.id, 'rtp_dump_armed', file=fname, side=side)
             return dump
         except Exception as e:
-            trace(self.id, 'rtp_dump_open_failed', err=str(e))
+            trace(self.id, 'rtp_dump_open_failed', err=str(e), side=side)
             return None
 
     def _register(self):
@@ -480,6 +497,15 @@ class Bridge:
         self._unregister()
         if self.rtp_dump is not None:
             self.rtp_dump.close()
+        if self.pbx_rtp_dump is not None:
+            self.pbx_rtp_dump.close()
+        # Answered (billed) but the callee never sent a single audio packet: classic
+        # false-answer-supervision / dead-air-billing fingerprint. The lazily-opened
+        # pbx dump leaves no file in this case, so flag it in the trace instead.
+        if (PBX_RTP_DUMP_DIR and self.live_permit and self.pbx_answered
+                and (self.pbx_rtp_dump is None or not self.pbx_rtp_dump.opened())):
+            trace(self.id, 'pbx_no_media_after_answer',
+                  billed=round(time.time() - self.answered_at, 3) if self.answered_at else None)
         for sock in (self.pbx_sock, self.attacker_rtp_sock, self.pbx_rtp_sock):
             if sock:
                 try:
@@ -526,6 +552,7 @@ class Bridge:
                 continue
             if side == 'attacker':
                 self.attacker_rtp_addr = addr
+                self.last_attacker_rtp = time.time()
                 if self.rtp_dump is not None:
                     try:
                         self.rtp_dump.write(data)
@@ -538,11 +565,45 @@ class Bridge:
                         pass
             else:
                 self.pbx_rtp_addr = addr
+                if self.pbx_rtp_dump is not None:
+                    try:
+                        self.pbx_rtp_dump.write(data)
+                    except Exception:
+                        pass
                 if self.attacker_rtp_addr:
                     try:
                         self.attacker_rtp_sock.sendto(data, self.attacker_rtp_addr)
                     except Exception:
                         pass
+
+    def _silence_loop(self):
+        """Keep Asterisk's inbound media path alive on live (permit) calls. Asterisk
+        will not pump/record the bridge for a leg it never hears RTP from, and these
+        silent-abandon bots send none — so we act like a normal media endpoint and
+        stream ~50 pps of codec silence to the PBX once answered, until the call
+        closes. We yield whenever the bot is itself sending audio (its verbatim relay
+        carries the uplink then), so a talkative bot is never doubled on the wire."""
+        payloads = self.attacker_media.get('payloads') or []
+        try:
+            pt = int(payloads[0]) if payloads else 0
+        except (ValueError, TypeError):
+            pt = 0
+        silence = bytes([0xD5 if pt == 8 else 0xFF]) * 160  # a-law/mu-law silence, 20 ms @ 8 kHz
+        ssrc = random.getrandbits(32)
+        seq = random.getrandbits(16)
+        ts = random.getrandbits(32)
+        while not self.closed:
+            if (self.pbx_rtp_addr and self.pbx_answered
+                    and time.time() - self.last_attacker_rtp > 0.12):
+                pkt = struct.pack('>BBHII', 0x80, pt & 0x7F, seq & 0xFFFF,
+                                  ts & 0xFFFFFFFF, ssrc) + silence
+                try:
+                    self.pbx_rtp_sock.sendto(pkt, self.pbx_rtp_addr)
+                except Exception:
+                    pass
+                seq = (seq + 1) & 0xFFFF
+                ts = (ts + 160) & 0xFFFFFFFF
+            time.sleep(0.02)
 
     def _sip_loop(self):
         while not self.closed:
@@ -615,6 +676,20 @@ class Bridge:
             if self.attacker_gone:
                 self.close('attacker_gone_pre_answer')
                 return
+            # Confirm OUR leg (B2BUA->PBX) by ACKing the 2xx ourselves, decoupled from
+            # whether the attacker ever ACKs us. Asterisk will not pump the callee's
+            # media (recording / pbx dump) to an unconfirmed dialog, and these bots are
+            # silent-abandon probers that never ACK. Re-sent on each 2xx retransmit per
+            # RFC 3261 13.2.2.4. Live (permit) calls only — non-permit playback calls
+            # already get media via the dialplan's Answer() and we don't touch that
+            # high-volume path. attacker_ack_seen is deliberately NOT set here, so the
+            # PBX_ABANDON_SECONDS teardown still fires and caps the recording window.
+            if self.live_permit:
+                first_ack = not self.pbx_acked
+                self._send_to_pbx(self._build_outbound_request('ACK', include_body=False))
+                self.pbx_acked = True
+                if first_ack:
+                    trace(self.id, 'pbx_early_ack', age=round(time.time() - self.created_at, 3))
         body = resp.get('body') or ''
         out_body = None
         if body:
@@ -692,8 +767,11 @@ class Bridge:
             if not self.attacker_ack_seen:
                 self.attacker_ack_seen = True
                 trace(self.id, 'attacker_ack', age=round(time.time() - self.created_at, 3))
-            self._send_to_pbx(self._build_outbound_request('ACK', include_body=False))
-            self.pbx_acked = True
+            # Guard against a double ACK: a live permit call may already have early-ACKed
+            # the PBX in _handle_pbx_response, decoupled from this attacker ACK.
+            if not self.pbx_acked:
+                self._send_to_pbx(self._build_outbound_request('ACK', include_body=False))
+                self.pbx_acked = True
             return True
         if method == 'BYE':
             trace(self.id, 'attacker_bye', age=round(time.time() - self.created_at, 3))

@@ -29,6 +29,17 @@ PBX_CALL_TIMEOUT = max(5.0, float(os.environ.get('PBX_CALL_TIMEOUT', '120')))
 # Tear a bridge down if the PBX answered but the attacker never ACKed within this
 # many seconds (silent-abandon probers: INVITE, see 200, vanish). 0 disables.
 PBX_ABANDON_SECONDS = float(os.environ.get('PBX_ABANDON_SECONDS', '4'))
+# Reap a bridge the PBX never responds to *at all* (no 100/18x/2xx) within this many
+# seconds. Asterisk emits 100 Trying near-instantly, so silence here means the INVITE
+# was dropped (e.g. Asterisk overloaded under a pump). Without this, such zombie
+# bridges squat their RTP relay ports until PBX_CALL_TIMEOUT. 0 disables.
+PBX_NO_RESPONSE_SECONDS = float(os.environ.get('PBX_NO_RESPONSE_SECONDS', '10'))
+# Cap on concurrent bridges from a single source IP. A single bot bursting INVITEs
+# (e.g. ~70/min) can swamp the shared remote-Asterisk leg and the RTP port pool; this
+# bounds how many bridges one IP can hold at once. Over-cap INVITEs are not bridged —
+# maybe_start_bridge returns None and the honeypot answers them normally (no tell).
+# Set generously so legitimate high-concurrency pump *holds* are still captured. 0 disables.
+PBX_MAX_BRIDGES_PER_IP = int(os.environ.get('PBX_MAX_BRIDGES_PER_IP', '25'))
 PBX_TRACE = os.environ.get('PBX_TRACE', '0').strip().lower() not in ('', '0', 'false', 'no')
 # Durable, journald-independent capture: when set, every trace() line is also
 # appended (with an ISO-8601 UTC timestamp) to this file. The systemd journal is
@@ -59,7 +70,7 @@ _live_permit_redis = sip_live_permit.redis_client()
 def reload_config():
     global PBX_HOST, PBX_PORT, PBX_DIAL_POLICY, SIP_PUBLIC_IP, SOURCE_ID
     global PBX_RTP_PORT_START, PBX_RTP_PORT_END, PBX_CALL_TIMEOUT, PBX_TRACE
-    global PBX_ABANDON_SECONDS, PBX_TRACE_FILE
+    global PBX_ABANDON_SECONDS, PBX_NO_RESPONSE_SECONDS, PBX_MAX_BRIDGES_PER_IP, PBX_TRACE_FILE
     PBX_HOST = os.environ.get('PBX_HOST', '').strip()
     PBX_PORT = int(os.environ.get('PBX_PORT', '5060'))
     PBX_DIAL_POLICY = os.environ.get('PBX_DIAL_POLICY', 'all').strip()
@@ -68,6 +79,8 @@ def reload_config():
     PBX_RTP_PORT_END = int(os.environ.get('PBX_RTP_PORT_END', '30100'))
     PBX_CALL_TIMEOUT = max(5.0, float(os.environ.get('PBX_CALL_TIMEOUT', '120')))
     PBX_ABANDON_SECONDS = float(os.environ.get('PBX_ABANDON_SECONDS', '4'))
+    PBX_NO_RESPONSE_SECONDS = float(os.environ.get('PBX_NO_RESPONSE_SECONDS', '10'))
+    PBX_MAX_BRIDGES_PER_IP = int(os.environ.get('PBX_MAX_BRIDGES_PER_IP', '25'))
     PBX_TRACE = os.environ.get('PBX_TRACE', '0').strip().lower() not in ('', '0', 'false', 'no')
     PBX_TRACE_FILE = os.environ.get('PBX_TRACE_FILE', '').strip()
     global PBX_RTP_DUMP_DIR, PBX_RTP_DUMP_MAX_PACKETS, PBX_SILENCE_STOP_AFTER_CALLEE
@@ -450,6 +463,7 @@ class Bridge:
         self.closed = False
         self.attacker_ack_seen = False
         self.pbx_answered = False      # PBX sent a 2xx for our INVITE
+        self.pbx_responded = False     # PBX sent ANY response (incl 100) — liveness signal
         self.answered_at = None        # when that 2xx arrived (for no-ACK abandon timer)
         self.pbx_acked = False         # we have ACKed that 2xx
         self.pbx_byed = False          # we have torn the PBX dialog down (ACK+BYE)
@@ -608,6 +622,14 @@ class Bridge:
             if now - self.created_at > self.max_call_seconds:
                 trace(self.id, 'timeout', cap=self.max_call_seconds)
                 self.close('b2bua_timeout')
+                return
+            # Zombie bridge: the PBX never sent ANY response (not even 100 Trying) —
+            # the INVITE was dropped (e.g. Asterisk overloaded under a pump). Reap it
+            # fast to free the RTP relay ports instead of squatting to the call cap.
+            if (PBX_NO_RESPONSE_SECONDS > 0 and not self.pbx_responded
+                    and now - self.created_at > PBX_NO_RESPONSE_SECONDS):
+                trace(self.id, 'pbx_no_response', age=round(now - self.created_at, 3))
+                self.close('pbx_no_response')
                 return
             # Silent-abandon prober: PBX answered but the attacker never ACKed
             # (INVITE, see 200, vanish). Tear down fast instead of holding to the cap.
@@ -780,6 +802,7 @@ class Bridge:
 
     def _handle_pbx_response(self, resp):
         code = int(resp.get('code') or 0)
+        self.pbx_responded = True   # any response (incl 100) ⇒ Asterisk is processing
         if code == 100:
             trace(self.id, 'pbx_response_suppressed', code=code)
             return
@@ -1036,6 +1059,19 @@ def maybe_start_bridge(
     reload_config()
     if not PBX_HOST or (not force and not _policy_matches(dial_number, dial_country)):
         return None
+    # Per-IP concurrent-bridge cap: don't let one bursting IP swamp the shared Asterisk
+    # leg / RTP pool. Active count is derived from the registry (keyed (client_ip,call_id)).
+    # Over cap → return None; the honeypot answers the INVITE normally (no 486 tell).
+    # live_permit calls are exempt (deliberate, low-volume bait dials).
+    if PBX_MAX_BRIDGES_PER_IP > 0 and not live_permit:
+        with _bridges_lock:
+            active = sum(1 for ip, _ in _bridges if ip == client_ip)
+        if active >= PBX_MAX_BRIDGES_PER_IP:
+            # Direct print (not trace()) so it's visible without PBX_TRACE, like setup_failed.
+            print(f'SIPTRACE component=b2bua stage=rejected reason=per_ip_cap '
+                  f'ip={client_ip!r} active={active} cap={PBX_MAX_BRIDGES_PER_IP}',
+                  file=sys.stderr, flush=True)
+            return None
     try:
         return Bridge(
             req,

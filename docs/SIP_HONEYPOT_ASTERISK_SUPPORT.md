@@ -90,6 +90,8 @@ Unset `PBX_HOST` means B2BUA bridging is disabled.
 | `PBX_RTP_PORT_START` | `30000` | First local RTP relay port on the honeypot |
 | `PBX_RTP_PORT_END` | `30100` | Last local RTP relay port on the honeypot |
 | `PBX_CALL_TIMEOUT` | `120` | Maximum bridge lifetime before cleanup |
+| `PBX_NO_RESPONSE_SECONDS` | `10` | Reap a bridge the PBX never responds to (no 100/18x/2xx) after this many seconds, freeing its RTP ports instead of squatting to `PBX_CALL_TIMEOUT`. `0` disables |
+| `PBX_MAX_BRIDGES_PER_IP` | `25` | Max concurrent bridges per source IP; over-cap INVITEs aren't bridged (honeypot answers them normally). Bounds one bursting bot's load on the shared Asterisk leg + RTP pool. `live_permit` calls exempt. `0` disables |
 | `PBX_TRACE` | `false` | Emit bridge debug traces to stdout/stderr |
 
 ### `PBX_DIAL_POLICY` values

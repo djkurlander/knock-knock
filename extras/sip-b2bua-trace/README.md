@@ -32,7 +32,7 @@ python extras/sip-b2bua-trace/b2bua_trace.py --completions --number 541139876436
 # SIP-INFO / DTMF captures (stage=attacker_info) — IVR keypresses
 python extras/sip-b2bua-trace/b2bua_trace.py --dtmf
 
-# Listener verdict: is the callee/bait audio we relay actually reaching a consumer?
+# Two-axis media analysis: could our callee audio reach them (recv) × did they stream to us (sent)?
 python extras/sip-b2bua-trace/b2bua_trace.py --listeners
 python extras/sip-b2bua-trace/b2bua_trace.py --listeners --number 12022234942
 
@@ -55,24 +55,26 @@ cat data/b2bua_trace.log | python extras/sip-b2bua-trace/b2bua_trace.py -
   SIP INFO is signaling, not RTP — caught separately as `--dtmf` / `attacker_info`.
 - **Concentration** of completed/held bridges by destination, to separate the
   monetization targets (hold-to-cap) from probes.
-- **Listener verdict** (`--listeners`, also a column in `--completions` and a tally
-  in the summary): does the audio we relay actually reach a consumer? Fuses three
-  per-bridge signals the B2BUA now emits — `stage=sdp_media` (the RTP endpoint the
-  bot advertised + a reachability class: `global`/`private`/`unspecified`/…),
-  `stage=rtp_unreachable` (our relay drew an ICMP port-unreachable — nobody on that
-  port), and inbound RTP/DTMF (positive media). Verdicts:
-  - `listener` — engaged: sent us sustained RTP or DTMF (even behind a private SDP,
-    the B2BUA latches onto the real RTP source, so our audio is delivered there).
-  - `not-listener` — relay bounced off a closed port, or it advertised an unroutable
-    endpoint (private/absent/…) and sent nothing to latch onto.
-  - `possible` — advertised a real public endpoint, no bounce, but stayed silent:
-    could be receiving, unprovable from our side.
-  - `unknown` — pre-instrumentation bridge (no `sdp_media` line).
+- **Two-axis media analysis** (`--listeners`, also columns in `--completions` and a
+  tally in the summary): "did they listen to the callee audio?" is a *downlink*
+  question, so it's tracked separately from *uplink* activity — never collapsed into one
+  label (which would hide a bot that's reachable AND engaged, the strongest candidate).
+  Two independent axes per bridge, from the signals the B2BUA emits (`stage=sdp_media`
+  = advertised RTP endpoint + reachability class; `stage=rtp_unreachable` = our relay
+  drew an ICMP port-unreachable; inbound RTP/DTMF = uplink media):
+  - **`recv`** (downlink — *the 'listened' axis*): could our callee audio reach them?
+    - `reachable` — `cls=global` and no `rtp_unreachable` bounce → it could land.
+    - `unreachable` — bounced, or advertised a private/unroutable addr.
+    - `unknown` — no `sdp_media` (pre-instrumentation bridge); **not evaluated**, not negative.
+  - **`sent`** (uplink): did they stream RTP/DTMF to us? `engaged` / `silent`. Proves an
+    active media stack, but says nothing about whether they received our downlink.
 
-  The per-actor roll-up headlines each `(source IP → destination)` with its dominant
-  verdict and keeps the `L/P/N` split, so e.g. the Albania embassy beacon reads
-  `not-listener cls=private addr=192.168.1.83:25282` — a fixed RFC1918 media endpoint
-  it can't receive on, confirming the call-tree bait is for naught for that actor.
+  "May have listened" = **`recv=reachable`** (any `sent`); the strongest case is
+  **`reachable` AND `engaged`**, which the summary/roll-up count explicitly. The per-actor
+  roll-up shows both axes (`recv reach/unr/?`, `sent eng/sil`, `both`) and the reachable
+  media address, sorted reachable-first. E.g. the Albania embassy reads
+  `recv reach=0/unr=767 sent eng=2/sil=766` — a fixed RFC1918 endpoint it can't receive
+  on, confirming the call-tree bait is for naught for that actor.
 
 See the investigation notes: [../notes/sip-intl-clusters-cost.md](../notes/sip-intl-clusters-cost.md),
 [../notes/sip-ab00day-audio-beacon.md](../notes/sip-ab00day-audio-beacon.md),

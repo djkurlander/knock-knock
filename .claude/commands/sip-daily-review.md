@@ -72,10 +72,13 @@ durable, self-timestamped tee of every bridge stage. **Query it, not `journalctl
 - **No-ACK floods = answer-supervision / route-discovery**, often to stable
   "always-answers" numbers (embassies, UK landline blocks) used as route anchors —
   **not** payout targets, even when high-volume.
-- **Listener verdict** (`--listeners`): does the callee/bait audio actually reach a
-  consumer? `sdp_media cls=global` + no `rtp_unreachable` + inbound RTP/DTMF ⇒ a real
-  listener; `cls=private/absent` or `rtp_unreachable` ⇒ `not-listener` (bait wasted).
-  The instrumentation is capture-only (IP_RECVERR), invisible to the bot.
+- **Two-axis media analysis** (`--listeners`): "did they listen to the callee audio?"
+  is a *downlink* question, kept separate from *uplink* activity. **`recv`** (downlink):
+  `reachable` (`sdp_media cls=global` + no `rtp_unreachable`) / `unreachable` (bounce or
+  private/unroutable) / `unknown` (no `sdp_media`). **`sent`** (uplink): `engaged`
+  (inbound RTP/DTMF) / `silent`. "May have listened" = `recv=reachable`; strongest =
+  `reachable` AND `engaged`. The instrumentation is capture-only (IP_RECVERR), invisible
+  to the bot.
 
 **Source mapping.** `knocks_sip.source` is an integer; `0` = **LA1** (this server,
 where the B2BUA runs and the trace/RTP live). The diary is LA1-focused; check
@@ -181,15 +184,16 @@ For each held destination, classify it as a payout target with the **passive** s
 grep -F '<destnum>' data/iprn_harvested_targets.csv   # block membership / prior harvest
 ```
 
-## Step 5 — Listener verdicts (is the bait reaching anyone?)
+## Step 5 — Two-axis media analysis (could the bait reach anyone / did anyone stream?)
 
 ```bash
 python3 extras/sip-b2bua-trace/b2bua_trace.py /tmp/tr.log --listeners --top 25
 ```
 
-Diary-worthy: a **new `cls=global` actor** (advertises a real public RTP endpoint —
-the only case where the bait could be heard / `rtp_unreachable` can fire), any
-`rtp_unreachable` hits, and confirmation that beacons remain `not-listener`
+Diary-worthy: a **new `recv=reachable` actor** (advertises a real public RTP endpoint,
+no bounce — our callee audio could land; "may have listened"), any **`reachable` AND
+`engaged`** bridges (strongest candidate — reachable downlink *and* streamed uplink),
+new `rtp_unreachable` volume, and confirmation that beacons stay `unreachable`
 (e.g. embassy `cls=private`). Cross-check against `--number <embassy_did>`.
 
 ## Step 6 — RTP media-probe triage
@@ -245,7 +249,8 @@ Quality bar for a candidate (skip noise):
 - **New** monetization holds (held_to_cap) and their payout classification — highest value.
 - **New** high-volume floods (IP, ASN/org, dest, rate, peak concurrency); note if they
   caused `setup_failed`/RTP-pool exhaustion.
-- **New** listener evidence (a `cls=global` actor; `rtp_unreachable`).
+- **New** media-reachability evidence (a `recv=reachable` actor, or any `reachable` AND
+  `engaged` bridge; `rtp_unreachable` volume).
 - **New** RTP fingerprints / shared-toolkit frames.
 - Behavioural phase shifts in known actors; actors resuming or going silent.
 - Close the loop on any "planned experiment" from the previous entry.

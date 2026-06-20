@@ -15,12 +15,15 @@ Modes:
     (default)       summary: outcome breakdown + completed/held destinations
     --completions   per-bridge list of bridges that ACKed / held to cap / BYE'd
     --dtmf          SIP-INFO/DTMF captures (stage=attacker_info)
-    --listeners     SDP media reachability + listener verdict, rolled up by actor
+    --listeners     two-axis media analysis (recv × sent), rolled up by actor
 
-The listener verdict fuses three signals the B2BUA now emits per bridge: the
-advertised RTP endpoint (stage=sdp_media: where the bot said to send audio, and
-its reachability class), the live ICMP feedback (stage=rtp_unreachable: our relay
-bounced off a closed port), and any positive media (inbound RTP dump / DTMF).
+The two axes are kept separate (never collapsed into one verdict, which would hide
+a bot that is reachable AND engaged — the strongest "may have listened" case):
+  recv (downlink — the 'listened' axis): could the callee audio we relay reach them?
+        reachable (stage=sdp_media cls=global + no stage=rtp_unreachable bounce) /
+        unreachable (bounce, or private/unroutable advertised addr) / unknown (no sdp_media)
+  sent (uplink): did they stream RTP/DTMF to us? engaged / silent — proves an active
+        media stack, but says nothing about the downlink.
 
 Usage:
     python extras/sip-b2bua-trace/b2bua_trace.py
@@ -136,37 +139,45 @@ def hold(d):
 ENGAGED_MIN_BYTES = 400  # ≥~2 G.711 packets of inbound RTP ⇒ a real, active media
                          # stack — filters 1-packet probe noise from 'engaged'.
 
-VERDICT_DESC = {
-    'listener':     'engaged: sent RTP/DTMF — our audio is delivered',
-    'possible':     'public RTP endpoint, silent — could be receiving',
-    'not-listener': 'unroutable endpoint or ICMP port-unreachable',
-    'unknown':      'no sdp_media line (pre-instrumentation bridge)',
+# Two orthogonal axes per bridge — never collapse them into one label, or an actor
+# that is reachable on the downlink AND streaming on the uplink (the strongest
+# "may have listened" candidate) gets hidden behind whichever axis is checked first.
+RECV_DESC = {
+    'reachable':   'public RTP endpoint, no bounce — our callee audio could land',
+    'unreachable': 'ICMP port-unreachable, or private/unroutable advertised addr',
+    'unknown':     'no sdp_media line (pre-instrumentation bridge)',
+}
+SENT_DESC = {
+    'engaged': 'streamed RTP/DTMF to us — an active media stack',
+    'silent':  'sent us no media',
 }
 
 
-def listener_verdict(d, dumps):
-    """Could the callee/bait audio we relay actually reach a consumer on this bridge?
-    Precedence (strongest evidence wins):
-      listener      positive media: it sent us sustained RTP, or DTMF. Even behind a
-                    private SDP the B2BUA latches onto the real RTP source, so audio
-                    is delivered there.
-      not-listener  our relay bounced off a closed port (ICMP 3/3), OR it advertised
-                    an unroutable media endpoint (private/absent/…) and sent nothing
-                    to latch onto.
-      possible      advertised a real public RTP endpoint, no bounce, but stayed
-                    silent — it *could* be receiving, unprovable from our side.
-      unknown       no sdp_media line (pre-instrumentation bridge)."""
-    mb = media_size(d, dumps) or 0
-    if mb >= ENGAGED_MIN_BYTES or d['dtmf']:
-        return 'listener'
-    if 'rtp_unreachable' in d['stages']:
-        return 'not-listener'
+def recv_status(d):
+    """Downlink: could the callee/bait audio we relay reach a consumer on this bridge?
+    This is the axis that actually bears on 'did they listen'. Independent of whether
+    the bot sent us anything."""
     cls = d.get('sdp_cls')
     if cls is None:
-        return 'unknown'
+        return 'unknown'                       # no sdp_media — not evaluable
+    if 'rtp_unreachable' in d['stages']:
+        return 'unreachable'                   # we relayed audio there, it bounced
     if cls == 'global':
-        return 'possible'
-    return 'not-listener'
+        return 'reachable'                     # routable public addr, no bounce seen
+    return 'unreachable'                        # private/unspecified/absent/… — can't land
+
+
+def sent_status(d, dumps):
+    """Uplink: did the bot stream media to us? Proves an active media stack, but says
+    nothing about whether it received our downlink — a different pipe."""
+    mb = media_size(d, dumps) or 0
+    return 'engaged' if (mb >= ENGAGED_MIN_BYTES or d['dtmf']) else 'silent'
+
+
+def may_have_listened(d):
+    """The question of interest: could our callee audio have reached them? = downlink
+    reachable, regardless of uplink. (reachable+engaged is the strongest such case.)"""
+    return recv_status(d) == 'reachable'
 
 
 def main(argv=None):
@@ -180,7 +191,7 @@ def main(argv=None):
                     help='list bridges that ACKed / held / BYE\'d (with media + DTMF)')
     ap.add_argument('--dtmf', action='store_true', help='list SIP-INFO/DTMF captures')
     ap.add_argument('--listeners', action='store_true',
-                    help='SDP media reachability + listener verdict, rolled up by actor')
+                    help='two-axis media analysis (recv downlink × sent uplink), by actor')
     ap.add_argument('--number', help='filter to a dialed number (digits, no +)')
     ap.add_argument('--ip', help='filter to a source IP')
     ap.add_argument('--top', type=int, default=15, help='top-N rows (default 15)')
@@ -221,46 +232,54 @@ def main(argv=None):
             dt = f" dtmf={d['dtmf']}" if d['dtmf'] else ""
             print(f"  {d.get('last_ts','?')}  ip={d.get('ip','?'):16} num=+{d.get('num','?'):14} "
                   f"{outcome(d):13} hold={tag:14} media={media}{dt} "
-                  f"listener={listener_verdict(d, dumps)}")
+                  f"recv={recv_status(d)} sent={sent_status(d, dumps)}")
         return 0
 
     if args.listeners:
         med = sum(1 for _, d in items if 'sdp_media' in d['stages'])
-        print(f"listener analysis: {len(items)} bridge(s) in window; "
+        print(f"two-axis media analysis: {len(items)} bridge(s) in window; "
               f"{med} carry sdp_media instrumentation")
-        tally = collections.Counter(listener_verdict(d, dumps) for _, d in items)
-        print("\nverdict tally (all bridges in window):")
-        for v in ('listener', 'possible', 'not-listener', 'unknown'):
-            if tally.get(v):
-                print(f"  {v:13} {tally[v]:6}   {VERDICT_DESC[v]}")
-        # Per-actor roll-up of everything we can actually verdict (drop the 'unknown'
-        # pre-instrumentation tail so the table isn't flooded). Includes media-engaged
-        # actors (no sdp_media but non-empty RTP dump → 'listener') alongside the
-        # sdp_media reachability rows; cls/addr show '-' where there's no SDP line.
+        print("  recv = could our callee audio reach them (downlink — the 'listened' axis); "
+              "sent = did they stream to us (uplink). Independent.")
+        rt = collections.Counter(recv_status(d) for _, d in items)
+        st = collections.Counter(sent_status(d, dumps) for _, d in items)
+        print("\nrecv (downlink — 'may have listened' = reachable):")
+        for v in ('reachable', 'unreachable', 'unknown'):
+            if rt.get(v):
+                print(f"  {v:12} {rt[v]:6}   {RECV_DESC[v]}")
+        print("sent (uplink):")
+        for v in ('engaged', 'silent'):
+            if st.get(v):
+                print(f"  {v:12} {st[v]:6}   {SENT_DESC[v]}")
+        both = sum(1 for _, d in items
+                   if recv_status(d) == 'reachable' and sent_status(d, dumps) == 'engaged')
+        print(f"\nreachable AND engaged (strongest 'listened' candidates): {both} bridge(s)")
+
+        # Per-actor roll-up. Keep any actor we can say something about: recv evaluable
+        # OR uplink-engaged — so engaged-but-recv-unknown probes (pre-instrumentation)
+        # still appear instead of being hidden. Drops only (recv=unknown, silent) noise.
         groups = collections.defaultdict(list)
         for _, d in items:
-            if listener_verdict(d, dumps) != 'unknown':
+            if recv_status(d) != 'unknown' or sent_status(d, dumps) == 'engaged':
                 groups[(d.get('ip'), d.get('num'))].append(d)
         rows = []
         for (ip, num), ds in groups.items():
-            vs = collections.Counter(listener_verdict(x, dumps) for x in ds)
-            # Headline = the actor's dominant verdict; the L/P/N column keeps the
-            # minority detail (e.g. one stray-RTP bridge among many not-listeners).
-            headline = vs.most_common(1)[0][0]
-            cls_c = collections.Counter(x['sdp_cls'] for x in ds if x.get('sdp_cls'))
-            cls = cls_c.most_common(1)[0][0] if cls_c else '-'
-            addr_c = collections.Counter(f"{x['sdp_ip']}:{x['sdp_port']}"
-                                         for x in ds if x.get('sdp_ip'))
-            addr = addr_c.most_common(1)[0][0] if addr_c else '-'
-            unreach = sum(1 for x in ds if 'rtp_unreachable' in x['stages'])
-            rows.append((len(ds), ip, num, headline, cls, addr, vs, unreach))
-        print(f"\nby source IP → destination (verdicted bridges), top {args.top}:")
-        for n, ip, num, headline, cls, addr, vs, unreach in \
-                sorted(rows, key=lambda r: -r[0])[:args.top]:
-            lpn = f"L{vs.get('listener',0)}/P{vs.get('possible',0)}/N{vs.get('not-listener',0)}"
+            rc = collections.Counter(recv_status(x) for x in ds)
+            sc = collections.Counter(sent_status(x, dumps) for x in ds)
+            bth = sum(1 for x in ds
+                      if recv_status(x) == 'reachable' and sent_status(x, dumps) == 'engaged')
+            addr_c = collections.Counter(f"{x['sdp_ip']}:{x['sdp_port']}" for x in ds
+                                         if x.get('sdp_ip') and recv_status(x) == 'reachable')
+            raddr = addr_c.most_common(1)[0][0] if addr_c else '-'
+            rows.append((rc.get('reachable', 0), bth, len(ds), ip, num, rc, sc, raddr))
+        print(f"\nby source IP → destination, top {args.top} "
+              f"(sorted by reachable, then both-directions):")
+        for reach, bth, n, ip, num, rc, sc, raddr in \
+                sorted(rows, key=lambda r: (-r[0], -r[1], -r[2]))[:args.top]:
+            recvc = f"reach={rc.get('reachable',0)}/unr={rc.get('unreachable',0)}/?={rc.get('unknown',0)}"
+            sentc = f"eng={sc.get('engaged',0)}/sil={sc.get('silent',0)}"
             print(f"  ip={ip or '?':16} num=+{num or '?':14} bridges={n:4} "
-                  f"{headline:13} cls={cls:11} addr={addr:21} {lpn:11} "
-                  f"unreach={unreach}")
+                  f"recv[{recvc:22}] sent[{sentc:14}] both={bth:<3} reach_addr={raddr}")
         return 0
 
     # default summary
@@ -284,13 +303,16 @@ def main(argv=None):
             by_num[k][2] = max(by_num[k][2], hold(d))
     for k, (c, m, mx) in sorted(by_num.items(), key=lambda kv: -kv[1][0])[:args.top]:
         print(f"  {k:16} bridges={c:4} media-sent={m:3} max-hold={mx:.0f}s")
-    lt = collections.Counter(listener_verdict(d, dumps) for _, d in items)
-    if any(v != 'unknown' for v in lt):
-        print("\nlistener verdict (sdp_media instrumentation):")
-        for v in ('listener', 'possible', 'not-listener', 'unknown'):
-            if lt.get(v):
-                print(f"  {v:13} {lt[v]:6}")
-        print("  (run with --listeners for the per-actor roll-up)")
+    rt = collections.Counter(recv_status(d) for _, d in items)
+    st = collections.Counter(sent_status(d, dumps) for _, d in items)
+    if rt.get('reachable') or rt.get('unreachable') or st.get('engaged'):
+        both = sum(1 for _, d in items
+                   if recv_status(d) == 'reachable' and sent_status(d, dumps) == 'engaged')
+        print("\nmedia reachability (sdp_media instrumentation):")
+        print(f"  recv (could hear our callee audio): reachable={rt.get('reachable',0)} "
+              f"unreachable={rt.get('unreachable',0)} unknown={rt.get('unknown',0)}")
+        print(f"  sent (streamed to us): engaged={st.get('engaged',0)} silent={st.get('silent',0)}")
+        print(f"  reachable AND engaged: {both}   (run with --listeners for the per-actor roll-up)")
     dtmf_total = sum(len(d['dtmf']) for _, d in items)
     if dtmf_total:
         print(f"\nSIP-INFO/DTMF events: {dtmf_total} (run with --dtmf for detail)")

@@ -8,6 +8,60 @@ field notes — promote anything that grows into a full investigation to its own
 
 ## 2026-06-20
 
+### Observations since 2026-06-20 05:42 UTC, LA1
+
+- **New sustained French monetization pump — `37.187.144.149` → `+33972307742`.** OVH
+  (AS16276), single IP / single target, dialing since 06-15 (~2,000 INVITEs). This window:
+  **233 ACK + hold-to-1200s-cap** (ACK ≈5 s, `ACK+BYE` teardown) — the dominant holder,
+  ≈78 h of held time in ~11 h. From-user enumerates extensions (`101/111/1011/2000/…`);
+  SDP `0.0.0.0` → `not-listener`. Not in the IPRN harvest; rate/payout TBD (`+33 9` is
+  French non-geographic). Full profile: [sip-37187-fr-pump.md](sip-37187-fr-pump.md).
+
+- **Asterisk stress event ~11:49–12:08 UTC under the FR-pump load.** 20 embassy
+  (`209.222.101.54` → `+12022234942`) INVITEs got **no PBX response at all** and squatted
+  the **full 1200 s cap** as zombie bridges (`started` → `timeout`, no `100/183/200`),
+  plus **13× `488 Not Acceptable Here`**. No RTP-pool exhaustion (`setup_failed=0`). The
+  embassy bot did **not** start holding — these are stuck no-response bridges. *Possible
+  reap bug:* a bridge that never gets a PBX response should be torn down fast, not ride the
+  1200 s cap tying up relay ports.
+
+- **Listener instrumentation's first real yield: 229 `rtp_unreachable`, and the first
+  `cls=global` actors.** `153.75.90.249` → `+33756758573` advertises a **real public media
+  endpoint** (`132.185.229.16:8000`) — 9 `possible` / 19 bounced; `192.210.236.35`
+  (HostPapa, IT+US) and `160.119.71.111` (IT) also `cls=global`. The embassy stays
+  `not-listener` (`cls=private 192.168.1.83:25282`, 90 bounces). The `possible` verdicts
+  are the first "could-be-listening" cases since instrumentation went live.
+
+- **Multi-source pumping of the Transatel `+33756758573` continues.** `153.75.90.249`
+  (RouterHosting, AS14956) is a co-source alongside `107.189.20.125` — and is the first
+  *monetization* actor advertising a routable media address (`cls=global`).
+  [sip-107189-cli-counter.md](sip-107189-cli-counter.md).
+
+### Infrastructure changes (B2BUA resilience)
+
+Fixes / mitigations for the zombie-bridge / Asterisk-overload exposure flagged above
+(`sip_b2bua.py`, **pending B2BUA restart**):
+
+- **No-response reap** (`PBX_NO_RESPONSE_SECONDS`, default 10 s): a bridge the PBX never
+  responds to is torn down at ~10 s (`stage=pbx_no_response`) instead of squatting its RTP
+  ports to the 1200 s cap. Asterisk `100`s instantly, so zero response = a dropped INVITE
+  on the remote-Asterisk UDP leg. (Fully fixes the zombie/port-squat part.)
+- **Per-IP concurrent-bridge cap** (`PBX_MAX_BRIDGES_PER_IP`, default 25): bounds how many
+  concurrent bridges one IP can hold (RTP pool + Asterisk channels). Over-cap INVITEs aren't
+  bridged (`stage=rejected reason=per_ip_cap`); the honeypot answers them normally (no 486
+  tell) and the knock is still recorded. `live_permit` exempt. Retroactively covers the
+  06-17 York RTP-pool exhaustion class. **Note:** this is a *resource* cap, not a rate
+  limit — during ramp-up Asterisk can still see up to ~25 rapid INVITEs, so it mitigates
+  but doesn't fully bound the INVITE *arrival rate* that drove the no-response drops.
+- **Root cause:** a ~4-min, ~35× INVITE burst (44→71/min) from the FR pump + embassy at
+  11:49–11:52 UTC overran the remote-Asterisk UDP leg; ~35% of INVITEs got no response, and
+  the single-shot (no-retransmit) INVITE turned each drop into a 20-min zombie.
+- **Known residual gap (deferred):** the intake-*rate* overload itself isn't fully solved.
+  A per-IP INVITE **rate limit** and/or **INVITE retransmission** (Timer A/B, makes drops
+  non-fatal) were considered and deferred — revisit if it recurs.
+- **For future trace reads:** post-restart, expect new stages `pbx_no_response` and
+  `rejected reason=per_ip_cap`.
+
 ### Infrastructure changes
 
 - **B2BUA media-reachability instrumentation.** Added two per-bridge traces plus a

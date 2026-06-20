@@ -32,6 +32,10 @@ python extras/sip-b2bua-trace/b2bua_trace.py --completions --number 541139876436
 # SIP-INFO / DTMF captures (stage=attacker_info) — IVR keypresses
 python extras/sip-b2bua-trace/b2bua_trace.py --dtmf
 
+# Listener verdict: is the callee/bait audio we relay actually reaching a consumer?
+python extras/sip-b2bua-trace/b2bua_trace.py --listeners
+python extras/sip-b2bua-trace/b2bua_trace.py --listeners --number 12022234942
+
 # Filter, or read a different file / stdin
 python extras/sip-b2bua-trace/b2bua_trace.py --ip 172.110.223.197
 cat data/b2bua_trace.log | python extras/sip-b2bua-trace/b2bua_trace.py -
@@ -51,6 +55,24 @@ cat data/b2bua_trace.log | python extras/sip-b2bua-trace/b2bua_trace.py -
   SIP INFO is signaling, not RTP — caught separately as `--dtmf` / `attacker_info`.
 - **Concentration** of completed/held bridges by destination, to separate the
   monetization targets (hold-to-cap) from probes.
+- **Listener verdict** (`--listeners`, also a column in `--completions` and a tally
+  in the summary): does the audio we relay actually reach a consumer? Fuses three
+  per-bridge signals the B2BUA now emits — `stage=sdp_media` (the RTP endpoint the
+  bot advertised + a reachability class: `global`/`private`/`unspecified`/…),
+  `stage=rtp_unreachable` (our relay drew an ICMP port-unreachable — nobody on that
+  port), and inbound RTP/DTMF (positive media). Verdicts:
+  - `listener` — engaged: sent us sustained RTP or DTMF (even behind a private SDP,
+    the B2BUA latches onto the real RTP source, so our audio is delivered there).
+  - `not-listener` — relay bounced off a closed port, or it advertised an unroutable
+    endpoint (private/absent/…) and sent nothing to latch onto.
+  - `possible` — advertised a real public endpoint, no bounce, but stayed silent:
+    could be receiving, unprovable from our side.
+  - `unknown` — pre-instrumentation bridge (no `sdp_media` line).
+
+  The per-actor roll-up headlines each `(source IP → destination)` with its dominant
+  verdict and keeps the `L/P/N` split, so e.g. the Albania embassy beacon reads
+  `not-listener cls=private addr=192.168.1.83:25282` — a fixed RFC1918 media endpoint
+  it can't receive on, confirming the call-tree bait is for naught for that actor.
 
 See the investigation notes: [../notes/sip-intl-clusters-cost.md](../notes/sip-intl-clusters-cost.md),
 [../notes/sip-ab00day-audio-beacon.md](../notes/sip-ab00day-audio-beacon.md),

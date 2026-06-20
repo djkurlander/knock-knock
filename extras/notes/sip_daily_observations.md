@@ -6,6 +6,116 @@ field notes — promote anything that grows into a full investigation to its own
 
 ---
 
+## 2026-06-20
+
+### Infrastructure changes
+
+- **B2BUA media-reachability instrumentation.** Added two per-bridge traces plus a
+  listener verdict to answer "does the callee/bait audio we relay actually reach a
+  consumer?": `stage=sdp_media` (the RTP endpoint the bot advertised + a reachability
+  class — `global`/`private`/`unspecified`/…) and `stage=rtp_unreachable` (our relay drew
+  an ICMP port-unreachable — nobody on that port; captured via `IP_RECVERR`, so **no probe
+  traffic and no wire footprint** — undetectable to the bot). Roll-up + verdict
+  (`listener`/`possible`/`not-listener`/`unknown`) in `b2bua_trace.py --listeners`, also a
+  column in `--completions`. Observe-only, Linux-gated (`MSG_ERRQUEUE`), no realism cost.
+  See `extras/sip-b2bua-trace/`.
+
+### Observations since 2026-06-18 19:41 UTC, LA1
+
+- **Albanian embassy bot — current visitor status.** The dominant ReliableSite actor
+  `209.222.101.54` → `+12022234942` is in a new **extension-enumeration phase**: `From=<ext>`
+  rotates a candidate-extension wordlist (`8548, 419, 9300, 4501, …`; PBX ranges
+  `1xx`/`2xx`/`4xxx`/`9xxx`) in a tight **2-call cycle** — bare `12022234942`, then
+  `9+`→`912022234942` — then a new ext. Verified 60/60 bare-vs-`9+`, exactly 2 calls/From.
+  Reads as **dial-plan / class-of-service mapping**, a step beyond bare answer-supervision
+  (the earlier `00…`/`011…` prefixes are gone this phase). **Measured `not-listener`:** every
+  call advertises a fixed RFC1918 media endpoint `192.168.1.83:25282` (`cls=private`,
+  `sig_match=False`), never ACKs, sends no RTP/DTMF — the call-tree bait is **for naught**
+  for it (first *measured*, not inferred, confirmation). **Self-caps at ~32 s** (SIP Timer H),
+  not our cap: the non-live leg isn't self-ACKed, so Asterisk Timer-H's the un-ACKed `200`
+  and BYEs (`pbx_bye`). Full profile folded into [sip-embassy-beacons.md](sip-embassy-beacons.md).
+
+- **New Palestine-mobile monetization burst.** `153.75.90.249` (RouterHosting, AS14956) →
+  `+970567209720` held **28 calls ACK + to the 1200 s cap** overnight (`23:14`→`02:04`,
+  06-19→20), then stopped. Highest-cost cluster (~$0.2422/min, per
+  [sip-intl-clusters-cost.md](sip-intl-clusters-cost.md)); same ASN as the `107.189`
+  Transatel actor.
+
+- **`107.189.20.125` Transatel pump continues** → `+33756758573` (French mobile): 10 more
+  holds-to-cap, metronomic, interleaved with the Palestine holds.
+  [sip-107189-cli-counter.md](sip-107189-cli-counter.md).
+
+- **Two high-volume no-ACK floods (route/answer-supervision, not holds).** `185.213.155.237`
+  (31173 Services AB, AS39351 — same org as the Jun-17 York flooder) → `+14109839432`
+  (Maryland) **2000× in ~54 min**; `185.243.5.118` (ReliableSite, AS23470) → `+15108929741`
+  (California 510) 2000× as a slow ~26 h drip. **No RTP-pool exhaustion this period** despite them.
+
+- **Listener verdict validates the media-probe split.** The known 666.7 Hz actors
+  `172.110.223.203` (ab00day) and `51.38.52.76` (OVH) classify **`listener`** (engaged —
+  sustained inbound RTP), cleanly distinct from the embassy/floods (`not-listener` /
+  answer-supervision). First quantified separation of media-probe vs answer-supervision
+  actors. [sip-media-presence-probes.md](sip-media-presence-probes.md).
+
+- **`77.42.86.8` (the settled concurrency pump) silent** since the cutoff.
+
+### Re: the 2026-06-18 planned experiments
+
+- **`PBX_ABANDON_SECONDS=60` is moot for no-ACK probes.** Timer H tears the un-ACKed leg at
+  ~32 s, *before* the 60 s abandon window — so the "catch late ACKs out to 60 s" test can't
+  observe anything past ~32 s (no `attacker_ack age>30` seen). Actually extending a no-ACK
+  call would require self-ACKing the non-live Asterisk leg, which is itself an unrealistic tell.
+
+---
+
+## 2026-06-18
+
+### Observations since 2026-06-17 22:13 UTC, LA1 only
+
+- **`77.42.86.8` looks like a settled monetization / concurrency pump, not route
+  discovery.** On LA1 (`source=0` / `SOURCE_ID=LA1`), it produced `102` bridged
+  SIP rows across only **4 normalized destinations** and **8 raw dial strings**:
+  two dial-out forms per number (`00...` and `900...`). B2BUA trace confirms `50`
+  completed calls: all sent `ACK`, none sent `BYE`, and all rode the `1200s`
+  `b2bua_timeout` cap. Peak confirmed concurrency was `50`. The destination rates
+  are not high in `rates.csv`; the signal is duration and parallelism, not a high
+  per-minute tariff. The paired / near-paired targets (`+442080890189/190`,
+  `+97233751349/351`) look more like owned or allocated endpoints than random
+  victims. Full note: [sip-7742868-concurrency-pump.md](sip-7742868-concurrency-pump.md).
+
+- **No embassy dialing seen since the diary mtime.** Checked normalized and raw
+  dial strings for Albania `+12022234942`, France `+12029446000`, Saudi
+  `+12023423800`, and Britain `+12025886500`; no hits on LA1 or the broader DB
+  since `2026-06-17 22:13:33 UTC`.
+
+- **Large no-ACK answer-supervision wave from `193.181.46.158`.**
+  `193.181.46.158` (Arelion Sweden AB / AS1299) dialed one Georgia NANP target
+  `+12295989162` exactly `2000` times using `30` dial strings. B2BUA trace shows
+  these as `attacker_no_ack`, not holders. Peak per-IP concurrency was about `12`.
+  This is high-volume route / answer-supervision probing, not a monetization hold.
+
+- **Known 666.7 Hz media-presence probe continues.** RTP triage over LA1 dumps
+  since the cutoff found `43` dumps and `42` carry the known `980b7e2c90` /
+  `666.7Hz` one-frame toolkit signature, from `172.110.223.203` and
+  `51.38.52.76`. One additional single-file non-tone fingerprint appeared from
+  `217.154.196.179` to `+442038077708`.
+
+### Planned experiment / instrumentation
+
+- **Raise no-ACK cleanup window for one day.** Temporarily set
+  `PBX_ABANDON_SECONDS=60` to test whether any answer-supervision probes send
+  very late `ACK`s after the usual ~30s SIP no-ACK window. Watch for
+  `stage=attacker_ack age>30`, resource occupancy, and whether late ACKs
+  transition into `b2bua_timeout` or `attacker_bye`.
+
+- **Split-leg Asterisk recordings for recipient-audio checks.** On the Asterisk
+  server, start recording separate receive/transmit legs (`rx` / `tx`) for bridged
+  calls, then run energy / silence detection on the far-end leg. Goal: determine
+  whether the destination endpoint sends any non-silence audio during
+  monetization-shaped holds, without relying on mixed recordings or manual
+  listening.
+
+---
+
 ## 2026-06-17
 
 ### Infrastructure changes

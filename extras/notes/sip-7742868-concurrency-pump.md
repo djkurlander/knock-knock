@@ -1,0 +1,117 @@
+# SIP `77.42.86.8` concurrency pump — settled targets, cap-riding holds
+
+**Date:** 2026-06-18  
+**Status:** Open / watch for recurrence
+
+## Summary
+
+`77.42.86.8` (Hetzner Online GmbH, AS24940; DB geolocation: Finland) produced the
+cleanest LA1 example so far of a **settled concurrency pump**: a small set of
+destinations, two stable dial-out forms per number, high parallelism, `ACK`, no
+voluntary `BYE`, and every confirmed call riding the B2BUA cap.
+
+This is not shaped like ordinary phone-route discovery. Discovery usually spreads
+across many dial strings, many prefixes, and often abandons after answer
+supervision. This run optimized for completed call duration and concurrency.
+
+## Window and scope
+
+- Server: LA1 (`SOURCE_ID=LA1`, SQLite `source=0`)
+- Window reviewed: since the daily diary mtime, `2026-06-17 22:13:33 UTC`
+- Primary data:
+  - `data/knock_knock.db`, table `knocks_sip`
+  - `data/b2bua_trace.log`
+
+## Dialing pattern
+
+LA1 DB rows for `77.42.86.8`:
+
+| Metric | Count |
+|---|---:|
+| SIP rows | 102 |
+| Normalized destinations | 4 |
+| Raw dial strings | 8 |
+| Rows marked bridged | 102 |
+
+Breakdown:
+
+| Destination | Raw dial string | Bridged rows |
+|---|---|---:|
+| `+97233751351` | `0097233751351` | 30 |
+| `+97233751351` | `90097233751351` | 16 |
+| `+442080890190` | `00442080890190` | 28 |
+| `+442080890190` | `900442080890190` | 16 |
+| `+442080890189` | `00442080890189` | 3 |
+| `+442080890189` | `900442080890189` | 3 |
+| `+97233751349` | `0097233751349` | 3 |
+| `+97233751349` | `90097233751349` | 3 |
+
+The UK targets are adjacent (`+442080890189`, `+442080890190`) and the Israel
+targets are near-adjacent (`+97233751349`, `+97233751351`). That looks more like
+owned / allocated endpoints than random victims. Random victims are a poor fit
+for a sustainable campaign: a pump wants endpoints that answer predictably, hold
+predictably, and avoid human complaints or unpredictable call behavior.
+
+## B2BUA lifecycle
+
+Trace-confirmed bridges from `77.42.86.8`:
+
+| Metric | Count |
+|---|---:|
+| Confirmed B2BUA bridges | 50 |
+| `attacker_ack` | 50 |
+| `attacker_bye` | 0 |
+| `attacker_no_ack` | 0 |
+| `b2bua_timeout` | 50 |
+| Peak confirmed concurrency | 50 |
+| Cap | 1200 seconds |
+
+Every trace-confirmed call sent `ACK`, never sent `BYE`, and ended only when the
+B2BUA hit the `1200s` cap. That is the critical distinction from
+answer-supervision probes: these calls committed the dialog and held it as long
+as allowed.
+
+## Rate / destination economics
+
+The four destinations are **not high-cost according to `rates.csv`** under the
+default / non-surcharged matches:
+
+| Destination | Default rate |
+|---|---:|
+| `+442080890190` | `$0.0042/min` |
+| `+442080890189` | `$0.0042/min` |
+| `+97233751351` | `$0.0292/min` |
+| `+97233751349` | `$0.0292/min` |
+
+That does not make the behavior benign. The economics may be based on settlement
+asymmetry, revenue-share endpoints, controlled destination allocation, or
+downstream accounting not visible in our sheet. Low per-minute value also scales
+with concurrency: many simultaneous long calls can still be useful.
+
+## Interpretation
+
+Best current label: **monetization-shaped concurrency pump against controlled or
+semi-controlled endpoints**.
+
+Possible readings:
+
+- It was a direct monetization pass: the calls themselves were the pump.
+- It was a concurrency qualification run before larger-scale monetization.
+- Both are true: the campaign both earns and measures capacity in the same pass.
+
+What it does **not** look like: broad route discovery. The run used few targets,
+few dial strings, high `ACK` rate, high concurrency, no `BYE`, and cap-riding
+duration.
+
+## Follow-up
+
+- Watch whether `77.42.86.8` returns after the cap or no-ACK window changes.
+- Add a per-source active bridge cap before long-term exposure to this behavior.
+- Temporarily set `PBX_ABANDON_SECONDS=60` for one day to detect late `ACK`s in
+  no-ACK populations; this will not change the `77.42.86.8` holder behavior, but
+  it helps distinguish answer-supervision probes from slow committers.
+- On the Asterisk server, record split receive/transmit legs (`rx` / `tx`) for
+  bridged calls and run automated silence / energy checks on the far-end audio
+  leg. Goal: determine whether the recipient endpoints send non-silence audio
+  during these cap-riding holds. Prefer automated analysis over manual listening,
+  and compress retained files after call close if storage becomes a problem.

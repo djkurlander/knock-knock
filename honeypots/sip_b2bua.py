@@ -5,6 +5,7 @@ This module deliberately implements a narrow bridge: UDP only, one PBX upstream,
 and PCMU/PCMA SDP. It keeps Asterisk/PBX details out of sip_honeypot.py.
 """
 
+import ipaddress
 import os
 import random
 import re
@@ -39,6 +40,11 @@ PBX_TRACE_FILE = os.environ.get('PBX_TRACE_FILE', '').strip()
 # but grabbed before any jitter buffer / transcode). PBX side is never dumped.
 PBX_RTP_DUMP_DIR = os.environ.get('PBX_RTP_DUMP_DIR', '').strip()
 PBX_RTP_DUMP_MAX_PACKETS = int(os.environ.get('PBX_RTP_DUMP_MAX_PACKETS', '12000'))
+# Live (permit) calls inject silence to the PBX to latch symmetric RTP and make
+# Asterisk pump the callee leg. 0 = stream silence for the whole call (proven).
+# >0 = experimental: stop once this many callee packets have arrived (latch + audio
+# confirmed), so nothing lands in the callee's voicemail record phase.
+PBX_SILENCE_STOP_AFTER_CALLEE = int(os.environ.get('PBX_SILENCE_STOP_AFTER_CALLEE', '0'))
 SOURCE_ID = ''
 
 _RTP_DUMP_MAGIC = b'KKRTP1\n'
@@ -64,9 +70,10 @@ def reload_config():
     PBX_ABANDON_SECONDS = float(os.environ.get('PBX_ABANDON_SECONDS', '4'))
     PBX_TRACE = os.environ.get('PBX_TRACE', '0').strip().lower() not in ('', '0', 'false', 'no')
     PBX_TRACE_FILE = os.environ.get('PBX_TRACE_FILE', '').strip()
-    global PBX_RTP_DUMP_DIR, PBX_RTP_DUMP_MAX_PACKETS
+    global PBX_RTP_DUMP_DIR, PBX_RTP_DUMP_MAX_PACKETS, PBX_SILENCE_STOP_AFTER_CALLEE
     PBX_RTP_DUMP_DIR = os.environ.get('PBX_RTP_DUMP_DIR', '').strip()
     PBX_RTP_DUMP_MAX_PACKETS = int(os.environ.get('PBX_RTP_DUMP_MAX_PACKETS', '12000'))
+    PBX_SILENCE_STOP_AFTER_CALLEE = int(os.environ.get('PBX_SILENCE_STOP_AFTER_CALLEE', '0'))
     SOURCE_ID = _safe_source_id(os.environ.get('SOURCE_ID', ''))
 
 
@@ -97,6 +104,42 @@ def _trace_to_file(line):
             _trace_fh.write(f"{time.strftime('%Y-%m-%dT%H:%M:%S+00:00', time.gmtime())} {line}\n")
     except Exception:
         pass
+
+
+# Linux error-queue support for catching ICMP port-unreachable on relayed RTP.
+# MSG_ERRQUEUE is the Linux indicator; IP_RECVERR is often not exported as a Python
+# socket attribute even on Linux, so we fall back to its fixed numeric value (11) for
+# the setsockopt. Absent on non-Linux → detection silently disabled, relay unaffected.
+_IP_RECVERR = getattr(socket, 'IP_RECVERR', 11)
+_ERRQ_OK = hasattr(socket, 'MSG_ERRQUEUE')
+
+
+def _classify_media_ip(ip):
+    """One-word reachability class for the RTP address a bot put in its INVITE SDP.
+    'global' = a routable public address that could host a real listener; everything
+    else means the callee/bait audio we relay there cannot reach a listener as-is
+    (private = needs NAT we don't see; unspecified = 0.0.0.0/:: hold; etc.). This is
+    the a-priori half of the 'is anyone listening?' question — the live half is the
+    IP_RECVERR 'rtp_unreachable' signal on the bridge."""
+    if not ip:
+        return 'absent'
+    try:
+        a = ipaddress.ip_address(ip)
+    except ValueError:
+        return 'malformed'
+    if a.is_unspecified:
+        return 'unspecified'
+    if a.is_loopback:
+        return 'loopback'
+    if a.is_link_local:
+        return 'linklocal'
+    if a.is_private:
+        return 'private'
+    if a.is_multicast or a.is_reserved:
+        return 'reserved'
+    if a.is_global:
+        return 'global'
+    return 'other'
 
 
 def trace(bridge_id, stage, **fields):
@@ -414,6 +457,8 @@ class Bridge:
         self.rtp_dump = None           # attacker->callee (bot audio)
         self.pbx_rtp_dump = None       # callee->attacker (ringback/voicemail — the billed audio)
         self.last_attacker_rtp = 0.0   # last time the bot sent us RTP (silence gen yields to it)
+        self.pbx_rtp_count = 0         # callee RTP packets received (silence-gen stop trigger)
+        self.rtp_unreachable_seen = False  # ICMP port-unreachable seen for our relay
 
     def _initial_attacker_rtp_addr(self):
         port = self.attacker_media.get('audio_port')
@@ -425,11 +470,35 @@ class Bridge:
         return (ip, port)
 
     def start(self):
-        self.attacker_rtp_sock, self.attacker_rtp_port = _alloc_udp_socket()
-        self.pbx_rtp_sock, self.pbx_rtp_port = _alloc_udp_socket()
-        self.pbx_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self.pbx_sock.bind(('0.0.0.0', 0))
-        self.pbx_sock.settimeout(0.5)
+        try:
+            self.attacker_rtp_sock, self.attacker_rtp_port = _alloc_udp_socket()
+            if _ERRQ_OK:
+                try:
+                    self.attacker_rtp_sock.setsockopt(socket.IPPROTO_IP, _IP_RECVERR, 1)
+                except OSError:
+                    pass
+            self.pbx_rtp_sock, self.pbx_rtp_port = _alloc_udp_socket()
+            self.pbx_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            self.pbx_sock.bind(('0.0.0.0', 0))
+            self.pbx_sock.settimeout(0.5)
+        except Exception:
+            # If a later allocation fails (e.g. the RTP pool is exhausted on the 2nd
+            # port), do NOT leak the ports/sockets already grabbed — close them and
+            # return them to _used_ports, then re-raise so maybe_start_bridge still
+            # reports the setup failure. Without this, every exhaustion partial-alloc
+            # permanently leaked a port from the in-memory pool, so once a flood
+            # saturated it the pool stayed stuck-full (every later bridge failing)
+            # until a restart, even after the OS sockets had all closed.
+            for s in (self.pbx_sock, self.attacker_rtp_sock, self.pbx_rtp_sock):
+                if s:
+                    try:
+                        s.close()
+                    except Exception:
+                        pass
+            for p in (self.attacker_rtp_port, self.pbx_rtp_port):
+                if p:
+                    _release_port(p)
+            raise
         self.rtp_dump = self._open_rtp_dump('attacker')
         # Callee->attacker (ringback/voicemail) is only worth recording on a real
         # permitted dialout. On non-permit bridges (e.g. PBX_DIAL_POLICY=all) the PBX
@@ -444,6 +513,16 @@ class Bridge:
         threading.Thread(target=self._timeout_loop, daemon=True).start()
         self._send_invite_to_pbx()
         trace(self.id, 'started', attacker_rtp=self.attacker_rtp_port, pbx_rtp=self.pbx_rtp_port)
+        # Record where the bot says it wants media. We never persisted this, so we
+        # could not distinguish a real reachable listener from a bot advertising a
+        # private/zero/unroutable port it isn't receiving on. sig_match flags whether
+        # the media IP even equals the signaling source (mismatch ⇒ NAT or spoof).
+        _adv_ip = self.attacker_media.get('connection_ip')
+        trace(self.id, 'sdp_media',
+              c_ip=_adv_ip or '-',
+              port=self.attacker_media.get('audio_port') or 0,
+              cls=_classify_media_ip(_adv_ip),
+              sig_match=(_adv_ip == self.client_ip))
         return self
 
     def _open_rtp_dump(self, side='attacker'):
@@ -540,11 +619,40 @@ class Bridge:
                 return
             time.sleep(0.5)
 
+    def _drain_rtp_errq(self):
+        """Non-blocking read of the attacker socket's error queue. When we relay a
+        callee/bait packet to a port the bot isn't listening on, its host returns an
+        ICMP port-unreachable that the kernel queues here (IP_RECVERR). The first one
+        means our audio is landing on a closed port — the bot is NOT receiving it.
+        Logged once per bridge; the relay path is never connected, so normal RTP recv
+        and symmetric-RTP latching are unaffected."""
+        if self.rtp_unreachable_seen or not _ERRQ_OK:
+            return
+        try:
+            _data, anc, _flags, _addr = self.attacker_rtp_sock.recvmsg(
+                0, 512, socket.MSG_ERRQUEUE | socket.MSG_DONTWAIT)
+        except (BlockingIOError, InterruptedError):
+            return
+        except OSError:
+            return
+        for lvl, typ, cdata in anc:
+            if lvl == socket.IPPROTO_IP and typ == _IP_RECVERR and len(cdata) >= 8:
+                # struct sock_extended_err: ee_errno(u32) ee_origin/type/code(u8)...
+                ee_errno, ee_origin, ee_type, ee_code = struct.unpack_from('=IBBB', cdata, 0)
+                self.rtp_unreachable_seen = True
+                dest = (f'{self.attacker_rtp_addr[0]}:{self.attacker_rtp_addr[1]}'
+                        if self.attacker_rtp_addr else '-')
+                trace(self.id, 'rtp_unreachable', dest=dest,
+                      errno=ee_errno, icmp=f'{ee_type}/{ee_code}', origin=ee_origin)
+                return
+
     def _rtp_loop(self, sock, side):
         while not self.closed:
             try:
                 data, addr = sock.recvfrom(4096)
             except socket.timeout:
+                if side == 'attacker':
+                    self._drain_rtp_errq()
                 continue
             except Exception:
                 if not self.closed:
@@ -565,6 +673,7 @@ class Bridge:
                         pass
             else:
                 self.pbx_rtp_addr = addr
+                self.pbx_rtp_count += 1
                 if self.pbx_rtp_dump is not None:
                     try:
                         self.pbx_rtp_dump.write(data)
@@ -592,7 +701,15 @@ class Bridge:
         ssrc = random.getrandbits(32)
         seq = random.getrandbits(16)
         ts = random.getrandbits(32)
+        stop_after = PBX_SILENCE_STOP_AFTER_CALLEE
         while not self.closed:
+            # Experimental footprint reduction: once the callee leg is confirmed
+            # flowing (latch took + Asterisk is pumping it to us), stop injecting
+            # silence so nothing carries into the callee's voicemail record phase.
+            # 0 = never stop (proven continuous mode).
+            if stop_after > 0 and self.pbx_rtp_count >= stop_after:
+                trace(self.id, 'silence_stop', after_callee_pkts=self.pbx_rtp_count)
+                return
             if (self.pbx_rtp_addr and self.pbx_answered
                     and time.time() - self.last_attacker_rtp > 0.12):
                 pkt = struct.pack('>BBHII', 0x80, pt & 0x7F, seq & 0xFFFF,

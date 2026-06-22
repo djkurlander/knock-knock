@@ -60,6 +60,81 @@ unavoidably in the path — the design just keeps its role to mechanical relay.
 
 ---
 
+## Deferred: per-number / per-block answer-characteristic replay ("dial profiling")
+
+**Status:** Deferred 2026-06-22 (design agreed; schema fields TBD)
+
+**Goal.** Make the honeypot's *answer* for a target number indistinguishable from the
+*real* number's, by **measuring the real call profile once and replaying it** thereafter.
+Defeats the hardest honeypot/FAS check — *call the number directly, call it through the
+suspected route, and compare*: generic realism fails the compare; a per-number replay
+(same ring time, same VM greeting, same disposition) matches. Cheap because few new target
+numbers appear per day (~≤5), and cheaper with block-dedup. **Supersedes** the earlier
+"answer-realism hardening" idea — replay beats synthesized realism.
+
+**Reference call (corrected cost model).**
+- On first sight of a new, unprofiled, *resolvable-E.164* number: if it's a member of a
+  **known cohesive block**, reuse that block's profile (no call); else place **one**
+  live-permit reference call (existing live dial-out + raw callee-RTP capture) from a
+  **burner DID**.
+- Billing starts at **answer (`200`)**; Telnyx bills a 60s minimum (rounds up), so there's
+  no sub-minute saving — **use the minute**: cap *connected/post-answer* time at ~**55s**
+  (margin below 60s so teardown jitter doesn't roll into a 2nd billed minute). Ring (~30s)
+  is pre-answer = free.
+- **No free pre-answer shortcut.** You can't `CANCEL` at/after the `200` (answered = billed;
+  `CANCEL` is invalid post-final-response); cancelling *during* ringing is free but loses
+  the answer time + VM — too weak. So per (premium) block it's binary: **pay one minute**
+  (everything; ~$0.24 once even at Palestine rates) **or skip** it and serve generic.
+
+**Capture: raw callee RTP, not MixMonitor.**
+- Use the **raw callee-leg RTP** (`pbx_rtp_dump`, already taken on live-permit calls) —
+  byte-stable G.711 → **consistent hash** (the 666.7 Hz fingerprint method) **and**
+  re-streamable for replay. One primitive serves both fingerprint-matching and playback.
+  MixMonitor (decode→mix→resample→WAV) perturbs the bytes; keep it only for human audit.
+- Caveat: byte-hash assumes a consistent codec path; for cross-path matching the robust
+  upgrade is an **acoustic/perceptual fingerprint** (transcode-tolerant). Byte-hash = fine
+  first cut.
+- Per call capture: ring/answer **timing**, **provisional sequence + gaps**, **disposition**
+  (answered→VM / reject code `603`/`486`/busy), **raw RTP greeting** (+ its hash).
+
+**Block identification & cohesion (this is the throttle).**
+- Detect blocks by leading-digit adjacency (+ carrier / rate-center). Targets come in
+  sequential leased blocks on a shared platform/VM ([sip-nanp-line-types-whois.md](sip-nanp-line-types-whois.md),
+  [sip-operator-attribution.md](sip-operator-attribution.md) dest-block signal), so the
+  profile is usually identical across a block.
+- **Profile a representative; validate cohesion** by comparing the VM-audio hash (+
+  disposition) of 1–2 more members. Match → mark block cohesive, reuse profile, stop
+  profiling new members. Divergence → split out, profile individually. The audio hash does
+  double duty (cohesion + matching). Collapses a 200-number block into ~1–2 calls →
+  **removes the need for cost rate-gating** (a big new-block sweep = a couple of calls).
+
+**Replay path.**
+- Bot dials a profiled number (or a cohesive-block member) → reproduce the **timing** (wait
+  the captured ring, emit captured provisionals at captured gaps, then `200`), then play the
+  **captured raw RTP greeting** as hold audio — or **mimic the captured reject** (`603`/
+  `486`/…). Disposition-mimic also implements the negative-control reject from
+  [sip-negative-control-probes.md](sip-negative-control-probes.md).
+- **Cold start:** first-ever dial of a brand-new number gets the generic answer (one call)
+  while it's profiled in the background for later dials.
+
+**Storage / schema — TBD (review each field: meaning + how determined).**
+- `dial_intel` (or a new `dial_profile`) keyed by number, with a **block reference** so
+  members share one profile.
+- Candidate fields (all **TBD**): ring/answer timing (*which* interval — INVITE→200 vs
+  180→200?), provisional sequence + inter-response gaps, disposition taxonomy, codec/SDP
+  shape, raw-RTP greeting path + audio hash, block key, cohesion status, `profiled_at`,
+  source (burner) DID, rate/cost class. **Walk each field before implementing.**
+
+**Guards / caveats.**
+- **Burner DID** (OPSEC / PAI — we leak our number to the endpoint).
+- **Don't mimic headers** — Telnyx topology-hides the endpoint's, and we control our own
+  responses anyway. Replay **timing + audio + disposition** only.
+- **Connected-time cap is post-answer** — the B2BUA's existing cap is start-based; profiling
+  calls need an "answer + ~55s → BYE" timer.
+- **Staleness:** re-profile occasionally; skip garbage / unresolvable dial strings.
+
+---
+
 ## Other deferred items (this session)
 
 - **INVITE retransmission (B2BUA→Asterisk, Timer A/B).** Makes a dropped INVITE on the

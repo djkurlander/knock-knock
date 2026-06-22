@@ -117,6 +117,35 @@ numbers appear per day (~≤5), and cheaper with block-dedup. **Supersedes** the
 - **Cold start:** first-ever dial of a brand-new number gets the generic answer (one call)
   while it's profiled in the background for later dials.
 
+**Multi-server deployment — Phase 1 (aggregator-only) vs Phase 2 (fleet sync).**
+Fleet context: 8 geo-distributed servers; intel currently aggregates **one-way** (spokes →
+aggregator). Profiling wants fleet-global state (de-dup, profiles, claim-lock) that the
+1-way design doesn't push back down.
+- **Phase 1 — aggregator-only (recommended start).** Run B2BUA + profiling + replay only on
+  the aggregator (it already holds the fleet-global `dial_intel`). It profiles *every* new
+  number from the combined view — the reference call is outbound, independent of which
+  server saw the dial — but **replay runs only on the aggregator**; the other 7 servers
+  don't bridge (they **deny**, preferred, or keep their current generic answer). Properties:
+  - No 2-way sync, no distributed cache/lock — all profiling state is local to the aggregator.
+  - **No load concentration:** deny ≠ forward, so the aggregator bridges only its own traffic.
+  - Knock/target/IP intel preserved on all 8 (the knock lands at the INVITE, *before*
+    answer/deny); only **post-answer/bridging** behavior is lost on the 7 — which matches how
+    we already deep-dive a single server's trace.
+  - **Deny is realism-*improving*** on a non-replaying server: a deny looks like a plausible
+    non-completing route (real routes vary across IPs), whereas a *mismatching* generic
+    answer is exactly the compare-to-real FAS tell. Open knob: **deny** (better FAS-evasion,
+    simpler; may earn fewer repeat dials) vs **leave-as-is** generic answer (max engagement,
+    keeps the existing tell). The 7 are primarily knock collectors, so either is defensible.
+- **Phase 2 — fleet-global intel + hub→spoke push (only if Phase 1 proves out).** Make the
+  aggregator the authoritative global `ip_intel`/`dial_intel`/profiles and add a **downward**
+  channel pushing distilled, inline-needed state (profiles, profiled-set, bans) to each
+  spoke's **local cache**; inline reads stay local (fast, geo-friendly, resilient), eventual
+  consistency (cold-start already tolerates propagation lag). Enables **fleet-wide replay**
+  plus immediate side-benefits: **global bans** (a flooder on one server blocked everywhere)
+  and **combined-threshold auto-ban** (catch distributed low-and-slow that stays under each
+  server's per-server `--max-knocks`). The downward channel basically doesn't exist today
+  (bans are per-server), so this is real new work — deferred until replay proves worth it.
+
 **Storage / schema — TBD (review each field: meaning + how determined).**
 - `dial_intel` (or a new `dial_profile`) keyed by number, with a **block reference** so
   members share one profile.

@@ -122,6 +122,20 @@ The hit distribution is bimodal, and the split is the tell:
   (see [sip-negative-control-probes.md](sip-negative-control-probes.md)): "will
   this PBX route out, and to where?" *before* burning the money numbers.
 
+## Update — 2026-06-23: authoritative line-type (Telnyx) confirms the VoIP signature
+
+The original ~83% VoIP figure came from **sipstack WHOIS**, which we later found can be
+**stale** — it mislabeled a *current-Bandwidth VoIP* number as "USA Mobility Wireless" (a
+recycled-paging block owner); see [sip-operator-attribution.md](sip-operator-attribution.md).
+A full authoritative re-pass via **Telnyx number-lookup** (LRN-current;
+`../sip-number-exploration/telnyx_number_lookup_cache.py`) **confirms** the finding:
+**US-only line type = 76% VoIP + 6% toll-free** (94+7 of 124 valid US numbers). The small
+gap vs sipstack's ~83% is Telnyx correctly splitting out toll-free — the rural-VoIP
+access-stim conclusion **survives the better data**. Method note: prefer the **Telnyx LRN
+dip** over static line-type sites for carrier/line-type ground truth; carrier-of-record
+sites lag porting/reassignment (and the carrier *name* is itself low-signal when it's a
+universal wholesaler like Bandwidth — which underlies Google Voice, Twilio, etc.).
+
 ## Caveats
 
 - **Topology:** the honeypot *is* the would-be victim PBX and never completes a

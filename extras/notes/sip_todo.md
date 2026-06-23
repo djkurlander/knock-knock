@@ -86,6 +86,23 @@ numbers appear per day (~≤5), and cheaper with block-dedup. **Supersedes** the
   the answer time + VM — too weak. So per (premium) block it's binary: **pay one minute**
   (everything; ~$0.24 once even at Palestine rates) **or skip** it and serve generic.
 
+**Rate gating vs. cost recording (two separate sources — don't conflate).**
+- **Pre-call gate (decide profile / skip):** needs a rate *before* dialing → the **prefix
+  rate deck** (`extras/sip-number-exploration/rates.csv`: canonicalize → longest-prefix
+  match). Rates are per-destination-prefix, not per-number, so this is the right shape;
+  keep the deck fresh (re-download periodically), or use a Telnyx **rate-deck / outbound-
+  voice-profile pricing API** if one exists (programmatic + always-current; *unconfirmed* —
+  check docs). The **CDR/webhook cost cannot gate** — it only exists post-call.
+- **Post-call record (store actual spend):** the **`call.hangup` webhook** is the clean
+  mechanism — with **"Enable call cost"** set on the Programmable Voice Application, each
+  hangup payload carries the exact per-call charge (`cost`, `currency`, `duration`,
+  `billing_id`) pushed in real time — better than polling CDRs. Store it in `dial_intel`
+  per profiled number, and it doubles as **live cost tracking** of the whole live-permit/
+  bait spend (per number/actor/experiment). *Prereq:* a webhook endpoint the honeypot
+  exposes for Telnyx to POST to (inbound HTTP; the Telnyx side currently sits behind
+  Asterisk). The CDR `Rate`/`Cost` fields are the pull-based equivalent if webhooks aren't
+  wired.
+
 **Capture: raw callee RTP, not MixMonitor.**
 - Use the **raw callee-leg RTP** (`pbx_rtp_dump`, already taken on live-permit calls) —
   byte-stable G.711 → **consistent hash** (the 666.7 Hz fingerprint method) **and**

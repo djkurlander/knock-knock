@@ -110,6 +110,20 @@ Reading it through the framework:
   between *operators*. To strengthen either way we'd need a hard-to-share signal —
   coordinated cross-ASN timing, a bespoke shared target, or hosting/registration overlap.
 
+## Worked example — DIDWW as the UK target supplier (carrier *can* be a real signal)
+
+Authoritative Telnyx carrier lookups over the whole dial-target set (538 numbers;
+`../sip-number-exploration/telnyx_number_lookup_cache.py`) show the **single most common
+carrier is DIDWW** (`DIDWW Ireland`, **143 of 527** valid — all "fixed line", **123 GB +
+19 SE + 1 FR**). This is the inverse-ubiquity rule in action: unlike Bandwidth (a universal
+substrate under Google Voice / Twilio / etc. → ~noise), **DIDWW is a *specialized*
+wholesale-DID provider**, so a 123-number UK cluster on it is a **real sourcing signal** —
+the UK route-test/monetization pool is supplied through DIDWW DIDs the way the US rural pool
+is supplied through Bandwidth, but DIDWW is specific enough to *cluster on* and Bandwidth is
+not. Same "shared carrier" observation, opposite weight — purely because of the carrier's
+ubiquity. (Note the data also confirmed the static-site staleness lesson: sipstack mislabeled
+a current-Bandwidth VoIP number as "USA Mobility Wireless"; the Telnyx LRN dip got it right.)
+
 ## Practical pivots (from honeypot data)
 
 - Dial-form set per IP: `knocks_sip` `sip_dial_string` grouped by `ip_address`.

@@ -1,7 +1,7 @@
 # SIP `77.42.86.8` concurrency pump — settled targets, cap-riding holds
 
-**Date:** 2026-06-18  
-**Status:** Open / watch for recurrence
+**Date:** 2026-06-18 (updated 2026-06-21)  
+**Status:** Open — recurred 2026-06-21 (ban-reprieved), retargeted; re-banned
 
 ## Summary
 
@@ -13,6 +13,27 @@ voluntary `BYE`, and every confirmed call riding the B2BUA cap.
 This is not shaped like ordinary phone-route discovery. Discovery usually spreads
 across many dial strings, many prefixes, and often abandons after answer
 supervision. This run optimized for completed call duration and concurrency.
+
+## Update — 2026-06-21 (banned → ban-reprieved → resumed, retargeted)
+
+This answers the "watch for recurrence" follow-up — but the gap was **our ban, not the
+actor pausing.** `77.42.86.8` had been auto-banned (lifetime `ban_count=4`); a manual
+`sip_ban_reprieve` (~2026-06-20, to gather more data) re-permitted it, and on resumption
+**2026-06-21** (250 INVITEs on LA1) it ran the same signature — `ACK` + hold to the 1200 s
+cap — against a **retargeted** destination set:
+
+| Destination | Held-to-cap bridges | Note |
+|---|---:|---|
+| `+97233751353` | 74 | **continuing** the Israel `+9723375135x` block (after `…349/351`) |
+| `+254208780226` | 107 | Kenya (`+254`) — new |
+| `+12098941013` | 36 | US — new |
+| `+3545395213` | 33 | Iceland (`+354`) — new |
+
+So it **kept the Israel `+9723375135x` allocation** and **swapped the UK `+44208089019x`
+pair for Kenya/US/Iceland** — same monetization-shaped concurrency, fresh targets. Re-banned
+2026-06-21 (`ban_until` 2026-07-21). The reprieve was a deliberate data-gathering move; the
+payoff is the retargeting intel (the actor's target list rotates while its *behaviour*
+— `ACK`+hold-to-cap, controlled/allocated-looking endpoints — stays constant).
 
 ## Window and scope
 

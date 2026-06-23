@@ -6,6 +6,46 @@ field notes — promote anything that grows into a full investigation to its own
 
 ---
 
+## 2026-06-22
+
+### Observations since 2026-06-20 16:46 UTC, LA1
+
+- **Ban-reprieve on the concurrency-pump actor `77.42.86.8` surfaced a retargeted
+  destination set.** This Hetzner (AS24940) actor — the
+  [sip-7742868-concurrency-pump.md](sip-7742868-concurrency-pump.md) pump, lifetime
+  `ban_count` now 4 — was auto-banned over 06-19→20; a manual `sip_ban_reprieve` (~06-20,
+  to gather data) re-permitted it, and on resumption **06-21** (250 INVITEs) it `ACK`+held
+  to the 1200 s cap on a **new 4-destination set**: Israel `+97233751353` (74 — continuing
+  the note's `+9723375135x` block after `…349/351`), Kenya `+254208780226` (107), US
+  `+12098941013` (36), Iceland `+3545395213` (33). Same monetization-shaped concurrency,
+  retargeted (kept Israel, swapped the UK pair for Kenya/US/Iceland). Re-banned 06-21
+  (`ban_until` 07-21). Note updated.
+
+- **New high-volume `ack_then_bye` flood — `185.243.5.71` (ReliableSite, AS23470; sibling
+  /24 of the 06-18 California flooder `.118`) → `+442038078039` (London `44203807xxxx`
+  block).** 1,336 calls, **fixed From `1001`**, lifecycle `100→183→180→200→ACK→~13s→BYE` —
+  *completed and cleanly released*, distinct from the silent no-ACK floods (single CLI +
+  single target + high-volume short completed calls, verification-shaped). Same London
+  block as the `042891e750` modal-frame lead.
+
+- **First `reachable AND engaged` actors — the 666.7 Hz media probes are now confirmed
+  two-way.** 75 bridges advertise a **real public media endpoint *and* stream to us**:
+  `51.38.52.76 → +12132610503` (`both=64`, `addr 51.38.52.76:10740`) and ab00day
+  `172.110.223.203 → +442039960320` (`both=11`). The first bots that could genuinely *hear*
+  our callee audio *and* send their own — the FAS/media-validation actors the model
+  predicted would be the real listeners. [sip-media-presence-probes.md](sip-media-presence-probes.md).
+
+- **Resilience changes validated in production.** Across **6,498 bridges in 2 days**: the
+  no-response **reap fired once** (`stage=pbx_no_response`), with **zero `setup_failed`**
+  (no RTP-pool exhaustion) and **zero per-IP-cap `rejected`** — the 06-20 reap + per-IP cap
+  are live and behaving, no overload events.
+
+- **Transatel `+33756758573` multi-source pumping continues** — new sibling IP
+  `144.172.109.53` (28 holds) alongside `153.75.90.242` (25).
+  [sip-107189-cli-counter.md](sip-107189-cli-counter.md).
+
+---
+
 ## 2026-06-20
 
 ### Observations since 2026-06-20 05:42 UTC, LA1

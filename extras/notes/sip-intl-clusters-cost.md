@@ -113,6 +113,39 @@ available, or prospectively route a sample of the ~48 Palestine-mobile destinati
 through `sip_live_permit` and log hold-times — i.e. the
 [sip-phase2-bait-experiment.md](sip-phase2-bait-experiment.md).
 
+## Update — 2026-06-23: authoritative carrier / line-type (Telnyx LRN lookup)
+
+The original classification used `phonenumbers` (sipstack is US/Canada-only). A full
+authoritative pass via **Telnyx number-lookup** (`../sip-number-exploration/telnyx_number_lookup_cache.py`,
+538 numbers cached) sharpens it:
+
+- **The UK cluster is sourced through DIDWW.** `DIDWW Ireland` is the **#1 carrier across
+  the entire target set** — 143/527 valid, **all fixed-line**, **123 GB + 19 SE**. DIDWW is
+  a specialized wholesale-DID provider (not a universal substrate), so this is a real
+  *sourcing fingerprint* for the UK pool — see
+  [sip-operator-attribution.md](sip-operator-attribution.md).
+- **Held-to-cap targets resolve to controlled small/niche carriers — the "allocated
+  endpoint" pattern, not random victims:**
+
+  | target | country | line type | carrier |
+  |---|---|---|---|
+  | `+34902561521` | ES | **shared cost** | PEOPLETEL — *explicit revenue-share* (`902`) |
+  | `+97233751349/351/353` | IL | fixed | **Hallo 015** (the `77.42.86.8` block — one carrier) |
+  | `+970567209720` | PS | mobile | Wataniya/Ooredoo |
+  | `+33756758573` | FR | mobile | **Transatel** (confirms [sip-107189-cli-counter.md](sip-107189-cli-counter.md)) |
+  | `+254208780226` | KE | fixed | Iristel Kenya |
+  | `+3545395213` | IS | fixed | Tismi BV |
+  | `+541139876436` | AR | fixed | NSS S.A. |
+
+  The Spanish `+34902561521` being a **`902` "shared cost"** number is the first *explicit*
+  revenue-share line-type in the dataset — a smoking-gun IRSF payout type, not inference.
+- **Mobile networks resolve to exact MCC/MNC:** Jawwal (425-05, 34) + Ooredoo Palestine
+  (425-06, 14) = 48 Palestine-mobile targets (the high-cost core); plus Vodafone/Orange
+  Egypt and Orange Tunisie — **Egypt/Tunisia mobile** is a target geography not previously
+  flagged.
+- **Caveats:** Telnyx `type=carrier` returns blank `ported_status` and null `fraud`, so
+  neither is testable here; 11 `dial_intel` numbers are invalid (`is_possible` artifacts).
+
 ## Caveats
 
 - Cost-weight assumes completion; the honeypot never completes — these are

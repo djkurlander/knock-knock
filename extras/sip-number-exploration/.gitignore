@@ -7,3 +7,6 @@ rates.csv
 # dial target), grows over time. Kept out of git like the geocode cache; re-fetch
 # with telnyx_number_lookup_cache.py (needs TELNYX_API_KEY in .env).
 telnyx_number_lookup_cache.json
+
+# Auto-built compact SQLite index of rates.csv used by telnyx_rate.
+rates.sqlite

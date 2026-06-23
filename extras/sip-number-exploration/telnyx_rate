@@ -1,0 +1,254 @@
+#!/usr/bin/env python3
+"""Print the Telnyx outbound rate for one E.164 number.
+
+Usage:
+    telnyx_rate +441904911049
+    telnyx_rate +441904911049 +449007891234
+    telnyx_rate --json +441904911049
+
+The rate sheet is read from rates.csv in this directory. Matching follows the
+same rules used by classify_intl_targets.py: exact-match rows apply only to the
+full number; otherwise the longest destination-prefix match wins. When multiple
+rows share a prefix, generic rows are preferred over origination-specific rows,
+then the highest available rate is reported.
+"""
+
+import csv
+import json
+import os
+import re
+import sqlite3
+import sys
+import tempfile
+
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+RATES_PATH = os.path.join(HERE, "rates.csv")
+INDEX_PATH = os.path.join(HERE, "rates.sqlite")
+
+
+def row_record(row):
+    dest = (row.get("Destination Prefixes") or "").strip()
+    if not dest:
+        return None
+    rate_text = (row.get("Rate") or "").strip()
+    try:
+        rate = float(rate_text) if rate_text else None
+    except ValueError:
+        rate = None
+    price_per_call_text = (row.get("Price Per Call") or "").strip()
+    try:
+        price_per_call = float(price_per_call_text) if price_per_call_text else 0.0
+    except ValueError:
+        price_per_call = 0.0
+    return {
+        "rate": rate,
+        "country": (row.get("Country") or "").strip(),
+        "iso": (row.get("ISO") or "").strip(),
+        "description": (row.get("Description") or "").strip(),
+        "origination": (row.get("Origination Prefixes") or "").strip(),
+        "interval_1": (row.get("Interval 1") or "").strip(),
+        "interval_n": (row.get("Interval N") or "").strip(),
+        "price_per_call": price_per_call,
+        "exact_match": (row.get("Exact Match") or "").strip(),
+        "prefix": dest,
+    }
+
+
+def choose(existing, candidate):
+    """Return the representative row for a duplicate prefix group.
+
+    This preserves the old behavior: prefer generic rows over origination-specific
+    rows, then choose the highest numeric rate among the remaining candidates.
+    """
+    if existing is None:
+        return candidate
+    existing_generic = not existing["origination"]
+    candidate_generic = not candidate["origination"]
+    if candidate_generic != existing_generic:
+        return candidate if candidate_generic else existing
+    existing_rate = existing["rate"]
+    candidate_rate = candidate["rate"]
+    if existing_rate is None:
+        return candidate
+    if candidate_rate is None:
+        return existing
+    return candidate if candidate_rate > existing_rate else existing
+
+
+def selected_rates(path):
+    selected = {}
+    with open(path, newline="") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            rec = row_record(row)
+            if not rec:
+                continue
+            kind = "exact" if rec["exact_match"] else "prefix"
+            key = (kind, rec["prefix"])
+            selected[key] = choose(selected.get(key), rec)
+    return selected
+
+
+def build_index(csv_path, index_path):
+    fd, tmp_path = tempfile.mkstemp(prefix="rates.", suffix=".sqlite", dir=HERE)
+    os.close(fd)
+    try:
+        con = sqlite3.connect(tmp_path)
+        con.execute("""
+            CREATE TABLE rates (
+                kind TEXT NOT NULL,
+                prefix TEXT NOT NULL,
+                prefix_len INTEGER NOT NULL,
+                rate REAL,
+                iso TEXT NOT NULL,
+                country TEXT NOT NULL,
+                description TEXT NOT NULL,
+                origination TEXT NOT NULL,
+                interval_1 TEXT NOT NULL,
+                interval_n TEXT NOT NULL,
+                price_per_call REAL NOT NULL,
+                PRIMARY KEY (kind, prefix)
+            )
+        """)
+        rows = []
+        for (kind, prefix), rec in selected_rates(csv_path).items():
+            rows.append((
+                kind, prefix, len(prefix), rec["rate"],
+                rec["iso"], rec["country"], rec["description"], rec["origination"],
+                rec["interval_1"], rec["interval_n"], rec["price_per_call"],
+            ))
+        con.executemany("""
+            INSERT INTO rates (
+                kind, prefix, prefix_len, rate, iso, country,
+                description, origination, interval_1, interval_n, price_per_call
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, rows)
+        con.execute("CREATE INDEX rates_prefix_lookup ON rates(kind, prefix_len DESC, prefix)")
+        con.execute("""
+            CREATE TABLE meta (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL
+            )
+        """)
+        con.executemany("INSERT INTO meta VALUES (?, ?)", [
+            ("csv_path", os.path.abspath(csv_path)),
+            ("csv_mtime_ns", str(os.stat(csv_path).st_mtime_ns)),
+            ("rows", str(len(rows))),
+        ])
+        con.commit()
+        con.close()
+        os.replace(tmp_path, index_path)
+    except Exception:
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+        raise
+
+
+def index_current(csv_path, index_path):
+    if not os.path.exists(index_path):
+        return False
+    try:
+        con = sqlite3.connect(index_path)
+        row = con.execute("SELECT value FROM meta WHERE key='csv_mtime_ns'").fetchone()
+        con.close()
+        return row is not None and row[0] == str(os.stat(csv_path).st_mtime_ns)
+    except sqlite3.Error:
+        return False
+
+
+def ensure_index(csv_path, index_path):
+    if not index_current(csv_path, index_path):
+        build_index(csv_path, index_path)
+
+
+def row_to_match(row):
+    if row is None:
+        return None
+    keys = [
+        "kind", "prefix", "prefix_len", "rate", "iso", "country",
+        "description", "origination", "interval_1", "interval_n", "price_per_call",
+    ]
+    rec = dict(zip(keys, row))
+    rec["exact_match"] = rec["kind"] == "exact"
+    return rec
+
+
+def rate_for(number, con):
+    digits = number[1:]
+    row = con.execute("SELECT * FROM rates WHERE kind='exact' AND prefix=?", (digits,)).fetchone()
+    if row:
+        return row_to_match(row)
+    candidates = [digits[:length] for length in range(len(digits), 0, -1)]
+    placeholders = ",".join("?" for _ in candidates)
+    row = con.execute(
+        f"SELECT * FROM rates WHERE kind='prefix' AND prefix IN ({placeholders}) "
+        "ORDER BY prefix_len DESC LIMIT 1",
+        candidates,
+    ).fetchone()
+    return row_to_match(row)
+
+
+def main(argv=None):
+    argv = list(sys.argv[1:] if argv is None else argv)
+    json_output = False
+    if "--json" in argv:
+        json_output = True
+        argv.remove("--json")
+    if not argv:
+        print("usage: telnyx_rate [--json] +E164 [+E164 ...]", file=sys.stderr)
+        return 2
+    numbers = [arg.strip() for arg in argv]
+    for number in numbers:
+        if not re.fullmatch(r"\+[1-9][0-9]{1,14}", number):
+            print(f"error: expected E.164 number with leading '+': {number}", file=sys.stderr)
+            return 2
+    if not os.path.exists(RATES_PATH):
+        print(f"error: rates.csv not found: {RATES_PATH}", file=sys.stderr)
+        return 1
+
+    ensure_index(RATES_PATH, INDEX_PATH)
+    con = sqlite3.connect(INDEX_PATH)
+    results = []
+    exit_code = 0
+    try:
+        for number in numbers:
+            match = rate_for(number, con)
+            if not match:
+                exit_code = 1
+                results.append({
+                    "number": number,
+                    "rate_per_minute": None,
+                    "matched": False,
+                })
+                continue
+            results.append({
+                "number": number,
+                "rate_per_minute": match["rate"],
+                "iso": match["iso"],
+                "country": match["country"],
+                "matched_prefix": match["prefix"],
+                "description": match["description"],
+                "interval_1": match["interval_1"],
+                "interval_n": match["interval_n"],
+                "price_per_call": match["price_per_call"],
+                "match_type": "exact" if match["exact_match"] else "prefix",
+                "origination_prefixes": match["origination"],
+                "matched": True,
+            })
+    finally:
+        con.close()
+
+    if json_output:
+        print(json.dumps(results, sort_keys=True))
+    else:
+        for result in results:
+            rate = result.get("rate_per_minute")
+            print("" if rate is None else f"{rate:g}")
+    return exit_code
+
+
+if __name__ == "__main__":
+    sys.exit(main())

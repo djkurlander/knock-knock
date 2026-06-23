@@ -2,3 +2,8 @@
 # Co-located here so classify_intl_targets.py finds it by default, but NOT
 # committed (size + redistribution). Drop your own export in as rates.csv.
 rates.csv
+
+# Telnyx number-lookup cache — regenerable derived data (carrier/line-type per
+# dial target), grows over time. Kept out of git like the geocode cache; re-fetch
+# with telnyx_number_lookup_cache.py (needs TELNYX_API_KEY in .env).
+telnyx_number_lookup_cache.json

@@ -46,6 +46,26 @@ from sip_rtp_to_wav import read_dump, _ulaw_decode, _alaw_decode  # noqa: E402
 DECODE = {0: _ulaw_decode, 8: _alaw_decode}
 WIN = 160  # 20 ms at 8 kHz, for windowed silence fraction
 
+# RFC 4733 / 2833 in-band DTMF (telephone-event). 101 is the conventional dynamic
+# payload type (the real value is SDP-negotiated, but 101 is near-universal). Each
+# keypress is a burst of packets sharing one RTP timestamp; events 0-15 map below.
+TELEPHONE_EVENT_PT = 101
+_DTMF_EVENTS = {i: ch for i, ch in enumerate('0123456789*#ABCD')}
+
+
+def decode_dtmf(pkts):
+    """Extract the DTMF digit string from telephone-event (pt 101) packets, or ''.
+
+    One digit per distinct RTP timestamp (a keypress burst shares a timestamp), in
+    arrival order — so end-bit retransmits of the same digit collapse to one char."""
+    digits, seen_ts = [], set()
+    for _t, _seq, ts, pt, payload in pkts:
+        if pt != TELEPHONE_EVENT_PT or not payload or ts in seen_ts:
+            continue
+        seen_ts.add(ts)
+        digits.append(_DTMF_EVENTS.get(payload[0], '?'))
+    return ''.join(digits)
+
 
 def _src_from_name(path):
     """Pull (source_ip, dialed_number) from a dump filename, handling both the
@@ -97,6 +117,7 @@ def analyze(path, silent_rms):
                 'dur': 0.0, 'pts': []}
     pts = sorted({p[3] for p in pkts})
     distinct = len({p[4] for p in pkts})
+    dtmf = decode_dtmf(pkts)
     frames = [DECODE[pt](payload).astype(np.float64)
               for _t, _seq, _ts, pt, payload in pkts if pt in DECODE and payload]
     if frames:
@@ -111,11 +132,13 @@ def analyze(path, silent_rms):
         else:
             silent_frac = float(rms < silent_rms)
         label = 'silent' if rms < silent_rms else ('TONE(1-frame)' if distinct == 1 else 'AUDIO')
+        if dtmf:
+            label += f'+DTMF({dtmf})'
     else:
         rms = peak = silent_frac = None
-        label = 'NO-G711'
+        label = f'DTMF({dtmf})' if dtmf else 'NO-G711'
     return {'path': path, 'n': len(pkts), 'label': label, 'rms': rms, 'peak': peak,
-            'silent_frac': silent_frac, 'distinct': distinct,
+            'silent_frac': silent_frac, 'distinct': distinct, 'dtmf': dtmf,
             'dur': pkts[-1][0], 'pts': pts}
 
 

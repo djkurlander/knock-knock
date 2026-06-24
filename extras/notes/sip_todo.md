@@ -207,3 +207,12 @@ aggregator). Profiling wants fleet-global state (de-dup, profiles, claim-lock) t
   redial — the media-channel counterpart to the re-INVITE probe.
 - **Analyzer/skill stage lists:** add the new `pbx_no_response` and `rejected` (per_ip_cap)
   stages to `b2bua_trace.py` / the `sip-daily-review` skill stage docs.
+- **Source-side RTP-dump capture cap (B2BUA).** `data/rtp_dumps/` grows unbounded from beacon
+  IPs that re-stream the same steady tone hundreds of times (one actor was 93% of the dir;
+  150 files in a day). Today this is handled *offline* by `extras/sip-number-exploration/prune_rtp_dumps.py`
+  (frame-set-hash dedup of stationary tones, keep 2 per (frame-set, IP); guards: pbx, decoded
+  RFC2833 DTMF, non-stationary content, review cutoff — 32 MB → 3.3 MB). The cleaner fix is to
+  **bound it at capture**: in `sip_b2bua.py`, cap dumps per `(source-IP, modal-frame fingerprint)`
+  — stop writing once K byte-identical-fingerprint copies from an IP exist. Keyed on the exact
+  fingerprint, so it's classification-free and never risks content; would make the offline prune
+  a rare cleanup rather than a recurring need. (Fingerprint = `sip_rtp_triage.fingerprint()` md5.)

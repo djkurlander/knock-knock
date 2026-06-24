@@ -29,6 +29,8 @@ import sys
 import phonenumbers
 from phonenumbers import PhoneNumberType, carrier, geocoder
 
+import telnyx_rates
+
 FIELDS = ["number", "hits", "country", "type", "carrier", "geo",
           "rate", "rate_desc", "error"]
 
@@ -36,63 +38,9 @@ _TYPE_NAME = {getattr(PhoneNumberType, k): k
               for k in dir(PhoneNumberType) if k.isupper()}
 
 
-def load_rates(path):
-    """Build (exact_map, prefix_map) from a Telnyx rate CSV.
-
-    Columns: ISO, Country, Origination Prefixes, Destination Prefixes,
-    Description, Interval 1, Interval N, Rate, Price Per Call, Exact Match.
-    Rows flagged Exact Match only apply to the full number; everything else is a
-    longest-destination-prefix match. Origination-specific ('Local') variants are
-    de-prioritized in favor of generic rows."""
-    exact, prefix = {}, {}
-    if not path or not os.path.exists(path):
-        return exact, prefix
-    with open(path, newline="") as f:
-        r = csv.reader(f)
-        next(r, None)  # header
-        for row in r:
-            if len(row) < 8:
-                continue
-            dest = (row[3] or "").strip()
-            if not dest:
-                continue
-            try:
-                rate = float(row[7]) if row[7] else None
-            except ValueError:
-                rate = None
-            rec = {"rate": rate, "desc": (row[4] or "").strip().strip('"'),
-                   "orig": (row[2] or "").strip()}
-            if len(row) >= 10 and row[9].strip():      # Exact Match flagged
-                exact.setdefault(dest, []).append(rec)
-            else:
-                prefix.setdefault(dest, []).append(rec)
-    return exact, prefix
-
-
-def _choose(rows):
-    """Worst-case representative rate among matches: prefer generic (no
-    origination prefix) rows, then take the max rate. Returns (rate, desc)."""
-    generic = [x for x in rows if not x["orig"]] or rows
-    rated = [x for x in generic if x["rate"] is not None]
-    if not rated:
-        return None, (generic[0]["desc"] if generic else "")
-    best = max(rated, key=lambda x: x["rate"])
-    return best["rate"], best["desc"]
-
-
-def rate_for(digits, exact, prefix):
-    if digits in exact:
-        return _choose(exact[digits])
-    for L in range(len(digits), 0, -1):
-        if digits[:L] in prefix:
-            return _choose(prefix[digits[:L]])
-    return None, ""
-
-
-def classify(number, exact, prefix):
+def classify(number, rate_conn):
     out = {k: "" for k in FIELDS}
     out["number"] = number
-    digits = "".join(ch for ch in number if ch.isdigit())
     try:
         p = phonenumbers.parse(number, None)
     except phonenumbers.NumberParseException as e:
@@ -104,9 +52,11 @@ def classify(number, exact, prefix):
     out["geo"] = geocoder.description_for_number(p, "en") or ""
     if not phonenumbers.is_valid_number(p):
         out["error"] = "invalid"
-    rate, desc = rate_for(digits, exact, prefix)
-    out["rate"] = "" if rate is None else f"{rate:.4f}"
-    out["rate_desc"] = desc
+    if rate_conn is not None:
+        rate_rec = telnyx_rates.lookup(number, con=rate_conn)
+        rate = rate_rec.get("rate_per_minute")
+        out["rate"] = "" if rate is None else f"{rate:.4f}"
+        out["rate_desc"] = rate_rec.get("description") or ""
     return out
 
 
@@ -141,8 +91,10 @@ def main(argv=None):
     ap.add_argument("--out", default="-")
     args = ap.parse_args(argv)
 
-    exact, prefix = load_rates(args.rates)
-    if not prefix:
+    rate_conn = None
+    try:
+        rate_conn = telnyx_rates.connect(csv_path=args.rates)
+    except FileNotFoundError:
         print(f"WARNING: no rates loaded from {args.rates}; cost columns blank",
               file=sys.stderr)
 
@@ -157,9 +109,11 @@ def main(argv=None):
     w = csv.DictWriter(out, fieldnames=FIELDS, delimiter="\t")
     w.writeheader()
     for number, hits in src:
-        rec = classify(number, exact, prefix)
+        rec = classify(number, rate_conn)
         rec["hits"] = hits
         w.writerow(rec)
+    if rate_conn is not None:
+        rate_conn.close()
     if out is not sys.stdout:
         out.close()
     print(f"classified {len(src)} numbers -> {args.out}", file=sys.stderr)

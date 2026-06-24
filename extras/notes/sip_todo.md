@@ -216,3 +216,15 @@ aggregator). Profiling wants fleet-global state (de-dup, profiles, claim-lock) t
   — stop writing once K byte-identical-fingerprint copies from an IP exist. Keyed on the exact
   fingerprint, so it's classification-free and never risks content; would make the offline prune
   a rare cleanup rather than a recurring need. (Fingerprint = `sip_rtp_triage.fingerprint()` md5.)
+- **Durable RTP *timing* capture (prune is timing-blind).** `prune_rtp_dumps.py` dedups by
+  audio frame-set, which preserves content but **discards per-packet timing**. Today that's safe
+  (held-to-cap holders send no RTP; our dumps are continuous tone beacons — zero keepalives). But
+  the day a bot **keepalives a held call** (a repeated token frame sent every N s over a long
+  hold — `distinct≈1`, stationary → would be deduped), the keepalive *cadence* — often the whole
+  fingerprint — lives only in the `.rtp` timestamps and would be lost on dedup. Fix: capture a
+  per-call **RTP timing summary** (packet count, duration, cadence, max inter-packet gap) into the
+  durable trace log, so timing survives independent of dump pruning. Pairs with the
+  `media-inactivity challenge mode` / keepalive-RTP items above (that's when cadence becomes the
+  signal). Optional cheap interim guard: exempt **sparse** files (`fill<0.5` / max-gap >1 s) from
+  dedup — the timing-bearing analog of the stationarity gate that already exempts order-bearing
+  (DTMF/speech) files.

@@ -121,6 +121,19 @@ at ~32 s of post-answer audio. (The older velia.net profile above logged
 behaves identically; extending it would require self-`ACK`ing the non-live leg, which
 would itself be an unrealistic tell.
 
+## 2026-06-24: the beacons went silent — and the dominant actor pivoted
+
+In the 06-22 17:50 → 06-24 20:07 UTC window the four embassy DIDs took **0** calls on LA1,
+versus **1,651** in the prior 7 days — a clean stop, not a taper. Last hits: Britain 06-21,
+Albania 06-20, Saudi 06-17, France all the way back to 05-29. Over the same window the
+dominant embassy actor — **ReliableSite AS23470** — kept dialing from `209.222.98.2` but to a
+**different target entirely**: an Australian mobile `+61480802881` (Pivotel, 189 calls), not
+any embassy. So this reads as a **campaign rotation** (the toolkit/operator moved its
+route-reachability anchor off the embassy set), not the actor disappearing. Whether the
+embassy beacons resume is the thing to watch; the pivot target (AU mobile) is a new anchor to
+track. The historical RTP fingerprints to embassy DIDs (e.g. `209.222.101.54 → +12022234942`)
+are pre-window and unchanged.
+
 ## Prior mention
 
 `docs/SIP_HONEYPOT_ASTERISK_SUPPORT.md` used two of these numbers

@@ -6,6 +6,47 @@ field notes — promote anything that grows into a full investigation to its own
 
 ---
 
+## 2026-06-24
+
+### Observations since 2026-06-22 17:50 UTC, LA1
+
+- **New held-to-cap monetization actor `144.172.109.53` (RouterHosting LLC, AS14956),
+  with a fresh high-rate Estonia target.** First seen 06-21; rides the 1200 s cap across a
+  4-number set — **Estonia Tele2 mobile `+37258459825` @ `$0.4825/min` (×30, new 06-23 — the
+  standout, highest per-minute payout this window)**, Transatel France `+33756758573` @
+  `$0.0624` (×18, caller-ID literally **`FIFA`**), UK mobile `+447723178236` (×14), Poland
+  `+48767500342` (×6). Silent, partly reachable; From-users mix numeric counters + `FIFA`.
+  Carrier/rate from the Telnyx cache. Shares the Transatel dest with
+  [sip-107189-cli-counter.md](sip-107189-cli-counter.md) (different actor). Monetization-shaped
+  concurrency/hold; promote to a note if it recurs.
+
+- **The embassy beacon campaign went silent.** **0** embassy calls in-window vs **1,651**
+  in the prior 7 days (last hits Britain 06-21, Albania 06-20, Saudi 06-17). The dominant
+  actor — ReliableSite AS23470 (`209.222.98.2`) — **pivoted to an Australian mobile**
+  (`+61480802881` Pivotel, 189 calls) instead of the four DC DIDs. Phase shift for
+  [sip-embassy-beacons.md](sip-embassy-beacons.md).
+
+- **The two-way media actor `51.38.52.76 → +12132610503` grew and shares byte-identical RTP
+  frames with ab00day.** Now **`both=114`** reachable-AND-engaged (was 64), 115 in-window RTP
+  dumps. Fingerprint scan shows **444.4 Hz** frames (`md5 216b9b0398` et al.) **byte-shared
+  across `51.38.52.76` and ab00day `172.110.223.203`** (→ `+12132610503` and `+442039960320`)
+  — a new shared-tooling frequency alongside the known 666.7 Hz.
+  [sip-media-presence-probes.md](sip-media-presence-probes.md).
+
+- **Full From-enumeration flood — `85.215.249.162` (IONOS, AS8560) → Manchester landline
+  `+441613940899`.** 250 calls with **250 distinct `sip_from_user` values** (one-per-call CLI
+  enumeration), all `recv=unreachable` + silent — answer-supervision / route-discovery, not
+  payout.
+
+- **Answer-supervision flood — `108.181.56.189` (Psychz, AS40676) → UK mobile
+  `+447454746354`.** 334 calls, 43 rotating Froms, `recv reach=164` but `sent=silent`
+  (reachable downlink, no uplink) — route-reachability probing of a single UK-mobile anchor.
+
+- **Resilience still clean.** 0 `setup_failed` across 1,157 bridges (no RTP-pool exhaustion);
+  the reap + per-IP cap continue to hold under flood load.
+
+---
+
 ## 2026-06-22
 
 ### Observations since 2026-06-20 16:46 UTC, LA1

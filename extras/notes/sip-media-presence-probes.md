@@ -111,3 +111,19 @@ the RTP payload level) the `51.38.52.76` caveat left open in
 [sip-ab00day-audio-beacon.md](sip-ab00day-audio-beacon.md). Note the dump corpus
 only contains *media-sending* bots (silent probers leave no file), so "137/143"
 means the beacon dominates the audio-sending population — not all SIP traffic.
+
+## 2026-06-24: a second byte-identical frequency (444.4 Hz) across the same two IPs
+
+The same two IPs that share the 666.7 Hz frame — ab00day `172.110.223.203`
+(→ `+442039960320`) and `51.38.52.76` (→ `+12132610503`) — now also emit a **444.4 Hz**
+single-frame beacon whose payload is **byte-identical across both source IPs**
+(`md5 216b9b0398`, plus sibling frames `585313179f` / `9222dc2a92`). So the shared-toolkit
+link is reinforced at a *second* tone frequency: same exact bytes, two networks, two targets.
+A media-presence prober should therefore be fingerprinted by **any** of the toolkit's frame
+hashes, not just `980b7e2c90` — the tool evidently ships more than one fixed tone.
+
+Concurrently, `51.38.52.76 → +12132610503` is now the dominant **two-way** actor: in the
+06-22→24 window it logged **`both=114`** bridges that were *both* `recv=reachable` (our callee
+audio could land) *and* `sent=engaged` (it streamed to us), up from 64. It remains the
+strongest "could genuinely hear our bait *and* talk back" candidate — i.e. the FAS /
+media-validation profile, now sustained and at scale.

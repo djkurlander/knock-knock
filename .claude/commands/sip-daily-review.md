@@ -19,9 +19,13 @@ It proposes **two kinds of artifact**:
    self-contained write-up (Step 8b). You won't have one every window — only propose
    it when the finding clears the bar below.
 
-The output is a **proposal**, not an auto-commit. Identify patterns, draft the bullets
-and any note, show them, and only write/commit after the user confirms (and picks which
-to keep).
+The output is a **proposal**. Identify patterns, draft the bullets and any note, show
+them, and write nothing until the user confirms (and picks which to keep). But that
+**single approval authorizes the whole downstream**: once the user says which artifacts
+to keep, write *and* commit them in one go — do **not** re-prompt with "want me to
+commit?". The one gate is the Step 9 approval of *what* to write; execution (write +
+`git commit`) follows from it automatically. **Push is the exception** — it is
+outward-facing and stays a separate, explicit user request; never push unprompted.
 
 ## Honeypot data safety
 
@@ -97,16 +101,26 @@ RTP (silent). The filename is the join key from a `bridgeid` back to `srcip`/`de
 
 ## Running this review (execution flow)
 
-Steps 0–7 are **read-only analysis** (cache refresh, SQL SELECTs, trace/RTP scans).
-Run them **straight through as one batch** — do not stop to ask "shall I continue?"
-between steps; just gather all the evidence, then present findings. The
-**propose-then-confirm gate is only at Step 9** (writing/committing the diary entry
-or a note). So: auto-run the analysis, pause once at the proposal, write only what
-the user approves.
+Steps 0–7 are **read-only analysis** (cache refresh, SQL SELECTs, trace/RTP scans),
+bundled into one auditable script so the whole batch runs under a single allowlisted
+command (no per-command prompts):
 
-(If per-command permission prompts are interrupting the batch, that's a harness
-setting, not this skill — allowlist the read-only commands or use a non-interactive
-permission mode; see the note the user keeps in their Claude Code config.)
+```bash
+# Default cutoff = diary mtime; or pass an explicit "YYYY-MM-DD HH:MM:SS":
+extras/sip-number-exploration/sip_daily_scan.sh
+extras/sip-number-exploration/sip_daily_scan.sh "2026-06-22 17:50:54"
+extras/sip-number-exploration/sip_daily_scan.sh --no-cache-refresh "2026-06-22 17:50:54"
+```
+
+**Run the script once, read its full output, then go to Step 8.** The script prints
+every section (Step 0 cache refresh → Step 7 embassy check) in order; the per-step
+blocks documented below explain *what each section computes* and *how to read it* —
+they are the reference, the script is the execution. Drop to the individual queries
+only to drill into something the script surfaced (e.g. a hot actor's From pattern).
+
+Do not stop to ask "shall I continue?" mid-scan. The **propose-then-confirm gate is
+only at Step 9** (the diary/notes write+commit). So: run the scan, present findings,
+pause once at the proposal, then write+commit what the user approves.
 
 ## Step 0 — Refresh the carrier/rate cache for dial targets
 
@@ -120,8 +134,10 @@ It reads `TELNYX_API_KEY` from `.env`; the per-number cost is a fraction of a ce
 ```bash
 # Dry-run first to see how many new targets would be queried (no API spend):
 python3 extras/sip-number-exploration/telnyx_number_lookup_cache.py --dry-run | head
-# Then refresh for real (skip 1-hit noise; the cache .json is gitignored — local only):
-python3 extras/sip-number-exploration/telnyx_number_lookup_cache.py --min-hits 2
+# Then refresh for real — query EVERY dial_intel target (default --min-hits 1; the
+# cache .json is gitignored, local only). Each number is cached after one lookup, so
+# only genuinely-new targets cost anything (a fraction of a cent each):
+python3 extras/sip-number-exploration/telnyx_number_lookup_cache.py
 ```
 
 Look up an individual target's carrier + rate during analysis with:
@@ -209,11 +225,29 @@ grep 'stage=attacker_ack' /tmp/tr.log | grep -oE 'id=[0-9a-f]+' | sed 's/id=//' 
 
 For each held destination, classify it as a payout target with the **passive** signals
 (never by dialing it):
-- per-minute **rate** (high vs geographic norm — Israel/Palestine mobile, Transatel, etc.),
+- **carrier, line-type, per-minute rate, and call-setup fee** — already in the Step 0
+  cache (`extras/sip-number-exploration/telnyx_number_lookup_cache.json`); **read it
+  there, don't re-derive.** Each entry has authoritative `carrier`/line-type (Telnyx) and
+  a `rate` object (`rate_per_minute`, `call_setup_fee`, `rate_description`). High rate vs
+  geographic norm (Israel/Palestine mobile, Transatel, African mobile, premium/shared-cost
+  bands) = payout-shaped.
 - membership in a **sequential leased block** (`data/iprn_harvested_targets.csv`, `block_size`),
-- carrier / line-type (see `sip-nanp-line-types-whois.md`, `sip-intl-clusters-cost.md`).
+- cross-reference the cluster notes (`sip-nanp-line-types-whois.md`, `sip-intl-clusters-cost.md`).
 
 ```bash
+# Carrier + line-type + rate for one or more held destinations (from the Step 0 cache):
+python3 - <<'PY'
+import json
+c = json.load(open("extras/sip-number-exploration/telnyx_number_lookup_cache.json"))
+for num in ["+37258459825", "+33756758573"]:          # <-- held destinations
+    e = c.get(num, {}); da = (e.get("response") or {}).get("data") or {}
+    car = da.get("carrier") or {}; port = da.get("portability") or {}; rate = e.get("rate") or {}
+    print(f"{num}: {da.get('country_code')} {car.get('type')} "
+          f"{port.get('spid_carrier_name') or car.get('name')}  "
+          f"rate/min={rate.get('rate_per_minute')} setup={rate.get('call_setup_fee')}  "
+          f"{rate.get('rate_description')}")
+PY
+
 grep -F '<destnum>' data/iprn_harvested_targets.csv   # block membership / prior harvest
 ```
 
@@ -341,10 +375,13 @@ When you propose a note, also propose the **one-line diary bullet that points to
 (the diary references the note; the note holds the deep dive — same pattern as the
 existing `sip-7742868-concurrency-pump.md` ↔ its diary bullet).
 
-## Step 9 — Propose, then (on confirmation) write + index
+## Step 9 — Propose, then (on the single approval) write + index + commit
 
 Show the drafted **diary bullets and any proposed campaign note(s)/update(s)** and ask
-which to keep. **Do not write anything unprompted.** On confirmation:
+which to keep. **Do not write anything unprompted.** The user's choice of which artifacts
+to keep is the **one and only approval gate** — it authorizes the full write + commit
+below. Once given, execute all of it straight through; do **not** re-ask "want me to
+commit?". Then:
 - Insert the new dated entry at the top of `extras/notes/sip_daily_observations.md`
   (newest first), with a `---` separator before the previous entry.
 - For a **new** campaign note: create `extras/notes/sip-<topic>.md` and add a row to the
@@ -353,12 +390,16 @@ which to keep. **Do not write anything unprompted.** On confirmation:
   Status/Dates and the README row if needed.
 - Refresh the `sip_daily_observations.md` row's one-line summary + date in
   `extras/notes/README.md`.
-- Commit only when the user asks (no Claude co-author trailer; see `CLAUDE.md`).
+- **Commit** the written files (no Claude co-author trailer; see `CLAUDE.md`) — the Step 9
+  approval *is* the authorization, so commit as part of executing it. **Do not push** —
+  pushing is outward-facing and remains a separate, explicit user request.
 
 ## Step 10 — Report
 
 Summarize: the window reviewed, headline counts (bridges, outcomes, holds, floods,
 listener tally), the candidate **diary bullets** proposed, any proposed **campaign
 note(s)/update(s)** and why they cleared the bar, and which artifacts the user accepted
-(diary entry / new note / note update). If nothing rose above noise, say so — a quiet
-window with no diary entry and no note is a valid, expected result.
+and were **written + committed** (diary entry / new note / note update + the commit hash).
+If nothing rose above noise, say so — a quiet window with no diary entry and no note is a
+valid, expected result. Note the commit is **not pushed** — offer push as a separate step
+if the user wants it.

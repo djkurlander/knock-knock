@@ -26,6 +26,8 @@ import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 
+import telnyx_rates  # sibling module: local rate-sheet lookup (rates.csv -> rates.sqlite)
+
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 HERE = Path(__file__).resolve().parent
 DEFAULT_CACHE = HERE / "telnyx_number_lookup_cache.json"
@@ -135,6 +137,35 @@ def telnyx_lookup(api_key, number, timeout):
         }
 
 
+def cache_country_code(entry):
+    """The carrier-lookup country_code for an entry, or None."""
+    data = (entry.get("response") or {}).get("data") or {}
+    return data.get("country_code")
+
+
+def build_rate(number, rates_con, country_code=None):
+    """Snapshot the rate-deck entry for a number into the trimmed ``rate`` dict.
+
+    The presence of the returned object marks the entry as rate-enriched; an
+    unmatched number yields ``{"rate_per_minute": None}``. ``iso`` is checked
+    against the carrier-lookup ``country_code`` and warned on — never stored.
+    ``match_type`` and ``origination_prefixes`` are intentionally dropped.
+    """
+    rec = telnyx_rates.lookup(number, con=rates_con)
+    if not rec.get("matched"):
+        return {"rate_per_minute": None}
+    iso = rec.get("iso")
+    if iso and country_code and iso != country_code:
+        print(f"  ! iso mismatch {number}: rate.iso={iso} country_code={country_code}",
+              file=sys.stderr)
+    return {
+        "rate_per_minute": rec.get("rate_per_minute"),
+        "call_setup_fee": rec.get("price_per_call"),
+        "matched_prefix": rec.get("matched_prefix"),
+        "rate_description": rec.get("description"),
+    }
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -197,6 +228,29 @@ def main(argv=None):
               file=sys.stderr)
 
     print(f"done: {ok} ok, {failed} failed, cache={cache_path}", file=sys.stderr)
+
+    # Rate-deck enrichment: snapshot a `rate` object into every entry lacking one
+    # (the new lookups above + a backfill of existing entries). The deck is stable,
+    # so one pass prices all entries correctly; presence of `rate` = enriched.
+    try:
+        rates_con = telnyx_rates.connect()
+    except FileNotFoundError as e:
+        print(f"rate enrichment skipped (no rate sheet): {e}", file=sys.stderr)
+        rates_con = None
+    if rates_con is not None:
+        enriched = 0
+        try:
+            for number, entry in cache.items():
+                if not isinstance(entry, dict) or "rate" in entry:
+                    continue
+                entry["rate"] = build_rate(number, rates_con, cache_country_code(entry))
+                enriched += 1
+        finally:
+            rates_con.close()
+        if enriched:
+            save_cache(cache_path, cache)
+        print(f"rate enrichment: {enriched} entries updated", file=sys.stderr)
+
     return 0
 
 

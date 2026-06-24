@@ -8,7 +8,8 @@ Scans everything the SIP honeypot recorded since the most recent entry in
 `extras/notes/sip_daily_observations.md`, classifies the notable behaviour, and
 drafts candidates for you to approve before anything is written. It pulls from
 **all** the SIP evidence sources: the durable B2BUA trace log, the `knocks_sip`
-table, the RTP dumps, and the listener-reachability instrumentation.
+table, the RTP dumps, the listener-reachability instrumentation, and the
+authoritative Telnyx carrier/rate cache for dial targets.
 
 It proposes **two kinds of artifact**:
 1. **Daily diary bullets** — the running log, most windows (Step 8).
@@ -93,6 +94,38 @@ RTP (silent). The filename is the join key from a `bridgeid` back to `srcip`/`de
 `extras/notes/README.md` (index), `sip-embassy-beacons.md`, `sip-107189-cli-counter.md`,
 `sip-intl-clusters-cost.md`, `sip-nanp-line-types-whois.md`, `sip-media-presence-probes.md`,
 `sip-ab00day-audio-beacon.md`, `sip-7742868-concurrency-pump.md`, `sip-phase2-bait-experiment.md`.
+
+## Running this review (execution flow)
+
+Steps 0–7 are **read-only analysis** (cache refresh, SQL SELECTs, trace/RTP scans).
+Run them **straight through as one batch** — do not stop to ask "shall I continue?"
+between steps; just gather all the evidence, then present findings. The
+**propose-then-confirm gate is only at Step 9** (writing/committing the diary entry
+or a note). So: auto-run the analysis, pause once at the proposal, write only what
+the user approves.
+
+(If per-command permission prompts are interrupting the batch, that's a harness
+setting, not this skill — allowlist the read-only commands or use a non-interactive
+permission mode; see the note the user keeps in their Claude Code config.)
+
+## Step 0 — Refresh the carrier/rate cache for dial targets
+
+Bring the Telnyx number-lookup cache up to date with `dial_intel` *first*, so any
+new monetization targets in this window already have authoritative carrier,
+line-type, and per-minute rate when you classify them in Steps 3–4. The tool is
+idempotent — it only queries genuinely-new numbers (each cached forever after one
+lookup) and re-runs the local rate-deck enrichment over anything lacking a `rate`.
+It reads `TELNYX_API_KEY` from `.env`; the per-number cost is a fraction of a cent.
+
+```bash
+# Dry-run first to see how many new targets would be queried (no API spend):
+python3 extras/sip-number-exploration/telnyx_number_lookup_cache.py --dry-run | head
+# Then refresh for real (skip 1-hit noise; the cache .json is gitignored — local only):
+python3 extras/sip-number-exploration/telnyx_number_lookup_cache.py --min-hits 2
+```
+
+Look up an individual target's carrier + rate during analysis with:
+`python3 extras/sip-number-exploration/telnyx_rate <+E164>`.
 
 ## Step 1 — Establish the review window
 

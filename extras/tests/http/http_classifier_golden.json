@@ -2186,8 +2186,8 @@
     "path": "/sitecore/shell/sitecore.version.xml",
     "ua": "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.6312.86 Safari/537.36",
     "body": "",
-    "expected_purpose": "rce",
-    "expected_name": null
+    "expected_purpose": "config_exposure",
+    "expected_name": "Sitecore Version Disclosure"
   },
   {
     "type": "heuristic",
@@ -2458,5 +2458,85 @@
     "body": "{{7*7}}",
     "expected_purpose": "mass_scanner",
     "expected_name": "Mozlila Source Map Scanner"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/@fs/../../../../../proc/self/environ?raw??",
+    "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    "body": "",
+    "expected_purpose": "path_traversal",
+    "expected_name": "Vite @fs Arbitrary File Read"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "POST",
+    "path": "/goform/formJsonAjaxReq",
+    "ua": "Mozilla/5.0 (X11; Linux x86_64; rv:128.0) Gecko/20100101 Firefox/128.0",
+    "body": "{\"action\":\"do_login\",\"data\":{\"username\":\"admin\",\"password\":\"admin\"}}",
+    "expected_purpose": "device_infiltration",
+    "expected_name": "Tenda goform Admin Probe"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "POST",
+    "path": "/graphql",
+    "ua": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    "body": "{\"query\":\"{__schema{queryType{name} mutationType{name} subscriptionType{name} types{name}}}\"}",
+    "expected_purpose": "api_probe",
+    "expected_name": "GraphQL Introspection Probe"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/MagicInfo/config.js",
+    "ua": "Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML",
+    "body": "",
+    "expected_purpose": "app_discovery",
+    "expected_name": "Samsung MagicINFO Probe"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/xxl-job-admin/",
+    "ua": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_14_3) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/12.0.3 Safari/605.1.15",
+    "body": "",
+    "expected_purpose": "app_discovery",
+    "expected_name": "XXL-JOB Admin Probe"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/backend_dev.php/missing",
+    "ua": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    "body": "",
+    "expected_purpose": "app_discovery",
+    "expected_name": "Symfony Dev Front Controller Exposure"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/webroot/decision/",
+    "ua": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_14_3) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/12.0.3 Safari/605.1.15",
+    "body": "",
+    "expected_purpose": "app_discovery",
+    "expected_name": "FanRuan FineReport Decision Probe"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/__debug__/render_panel/?panel_id=djdt.panels.settings.SettingsPanel",
+    "ua": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    "body": "",
+    "expected_purpose": "config_exposure",
+    "expected_name": "Django Debug Toolbar Panel Exposure"
   }
 ]

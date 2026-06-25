@@ -245,7 +245,7 @@ def test_sip_live_permit_releases_lock_on_bad_json():
 
         def eval(self, _script, numkeys, *args):
             if numkeys == 3:
-                exact_key, wildcard_key, active_key, bridge_id, ttl = args
+                exact_key, wildcard_key, active_key, bridge_id, ttl, dialplan_ok = args
                 permit_key = exact_key if exact_key in self.values else wildcard_key
                 value = self.values.get(permit_key)
                 if not value or active_key in self.values:
@@ -284,7 +284,7 @@ def test_sip_live_permit_uses_wildcard_after_exact():
 
         def eval(self, _script, numkeys, *args):
             assert numkeys == 3
-            exact_key, wildcard_key, active_key, bridge_id, ttl = args
+            exact_key, wildcard_key, active_key, bridge_id, ttl, dialplan_ok = args
             permit_key = exact_key if exact_key in self.values else wildcard_key
             value = self.values.get(permit_key)
             if not value or active_key in self.values:
@@ -324,7 +324,7 @@ def test_sip_live_permit_prefers_exact_over_wildcard():
 
         def eval(self, _script, numkeys, *args):
             assert numkeys == 3
-            exact_key, wildcard_key, active_key, bridge_id, ttl = args
+            exact_key, wildcard_key, active_key, bridge_id, ttl, dialplan_ok = args
             permit_key = exact_key if exact_key in self.values else wildcard_key
             value = self.values.get(permit_key)
             if not value:
@@ -350,6 +350,55 @@ def test_sip_live_permit_prefers_exact_over_wildcard():
     assert sip_live_permit.permit_key('*', '+12025550123') in fake.values
 
 
+def test_sip_live_permit_obeys_dialplan_unless_bypass():
+    import json as _json
+
+    def fake_redis(permit_dict):
+        # Models the gate: a non-bypass permit is left untouched (not consumed) when
+        # the dialed prefix is rejected (dialplan_ok != '1').
+        class FakeRedis:
+            def __init__(self):
+                self.values = {
+                    sip_live_permit.permit_key('203.0.113.8', '+12025550123'): _json.dumps(permit_dict),
+                }
+
+            def eval(self, _script, numkeys, *args):
+                exact_key, wildcard_key, active_key, bridge_id, ttl, dialplan_ok = args
+                key = exact_key if exact_key in self.values else wildcard_key
+                value = self.values.get(key)
+                if not value or active_key in self.values:
+                    return None
+                if (not _json.loads(value).get('bypass_dialplan')) and dialplan_ok != '1':
+                    return None
+                del self.values[key]
+                self.values[active_key] = bridge_id
+                return [value, key]
+
+            def expire(self, *_a):
+                pass
+
+        return FakeRedis()
+
+    pk = sip_live_permit.permit_key('203.0.113.8', '+12025550123')
+
+    # Default permit + rejected prefix -> no live call, permit preserved (not wasted).
+    fake = fake_redis(sip_live_permit.make_permit('203.0.113.8', '+12025550123', permit_id='p'))
+    assert sip_live_permit.consume_permit_and_acquire_live(
+        fake, '203.0.113.8', '+12025550123', 'b1', dialplan_ok=False) is None
+    assert pk in fake.values
+
+    # Default permit + accepted prefix -> live call.
+    fake = fake_redis(sip_live_permit.make_permit('203.0.113.8', '+12025550123', permit_id='p'))
+    assert sip_live_permit.consume_permit_and_acquire_live(
+        fake, '203.0.113.8', '+12025550123', 'b1', dialplan_ok=True) is not None
+
+    # bypass_dialplan permit + rejected prefix -> still goes live (override).
+    fake = fake_redis(sip_live_permit.make_permit(
+        '203.0.113.8', '+12025550123', permit_id='p', bypass_dialplan=True))
+    assert sip_live_permit.consume_permit_and_acquire_live(
+        fake, '203.0.113.8', '+12025550123', 'b1', dialplan_ok=False) is not None
+
+
 def test_sip_live_permit_invite_overrides_bridge_policy(monkeypatch):
     emitted = []
 
@@ -363,7 +412,7 @@ def test_sip_live_permit_invite_overrides_bridge_policy(monkeypatch):
     monkeypatch.setattr(
         sip_honeypot.sip_live_permit,
         'consume_permit_and_acquire_live',
-        lambda *_args: {'permit_id': 'manual-test', 'max_seconds': 45},
+        lambda *_args, **_kwargs: {'permit_id': 'manual-test', 'max_seconds': 45},
     )
     req = sip_honeypot.parse_sip_message(
         (

@@ -6,6 +6,22 @@ field notes — promote anything that grows into a full investigation to its own
 
 ---
 
+## 2026-06-25
+
+### Observations since 2026-06-24 20:27 UTC, LA1
+
+- **No notable observations.** Quiet window — **211 bridges** (vs 1,157 prior), all
+  answer-supervision (no-ACK, ~32 s Timer H); **0** `setup_failed`, **0** reachable-AND-
+  engaged, 211/211 silent (no inbound media). One incidental hold — `+13045052403`
+  (US, Telnyx fixed-line, `$0.005/min`, recurring) — too low-rate/one-off to be
+  monetization. Most active was Psychz `108.181.63.2` (AS40676, sibling of last window's
+  `.56.189`) → Italy `+390662290961` ×126, silent answer-supervision — same actor class as
+  before. Embassy beacons **remain silent** (0 vs 1,648 prior-7d), continuing the 06-24
+  finding ([sip-embassy-beacons.md](sip-embassy-beacons.md)). No new floods, holds, media-
+  reachability, or RTP fingerprints.
+
+---
+
 ## 2026-06-24
 
 ### Observations since 2026-06-22 17:50 UTC, LA1

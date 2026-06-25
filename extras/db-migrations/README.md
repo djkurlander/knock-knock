@@ -46,6 +46,15 @@ Current scripts:
   - Restart the honeypot with the Telnet gate live first (freezes the count).
     `--apply` to write; `--purge-knocks` also clears matching `knocks_tnet` rows.
 
+- `fix_tollfree_labels.py`
+  - Dry-run-first backfill of NANP toll-free `dial_intel` rows from the old generic
+    `International Network` label to `North American Toll-Free` (the honeypot now
+    labels them that way, but existing rows — and the dial cache they seed at startup —
+    kept the old label, so already-seen numbers never updated on their own).
+  - Parser-validated: recomputes each candidate via `sip_honeypot.parse_dial_country()`
+    and relabels only true NANP toll-free; genuine `+800`/malformed rows are left alone.
+  - After `--apply`, restart the honeypot so the dial cache re-seeds.
+
 Examples:
 
 ```bash

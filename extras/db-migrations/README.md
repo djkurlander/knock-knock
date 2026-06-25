@@ -35,6 +35,17 @@ Current scripts:
     exists
   - Only touches `dial_intel`; historical `knocks_sip` rows are preserved
 
+- `fix_cryptic_tnet.py`
+  - Dry-run-first cleanup of the Telnet `<cryptic binary>` credential noise that
+    topped the password leaderboard (non-Telnet protocol probes on port 23,
+    decoded into bogus creds). The honeypot now gates these at capture; this
+    removes the already-accumulated rows.
+  - Surgical: removes only the Telnet (`proto=TNET`) contribution, subtracting it
+    from the ALL aggregates and dropping the Telnet `_proto` rows. The same
+    placeholder for SMTP (real bots) and RDP (binary NLA usernames) is preserved.
+  - Restart the honeypot with the Telnet gate live first (freezes the count).
+    `--apply` to write; `--purge-knocks` also clears matching `knocks_tnet` rows.
+
 Examples:
 
 ```bash

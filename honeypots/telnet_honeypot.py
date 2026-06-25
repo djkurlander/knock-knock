@@ -12,6 +12,19 @@ _dedup_lock = threading.Lock()
 _dedup_seen: dict = {}
 
 
+def _looks_binary(s):
+    """True if a credential is protocol-flail noise rather than a real Telnet login —
+    i.e. it failed UTF-8 decoding (replacement char) or carries non-printable bytes,
+    the same test that would otherwise render it as '<cryptic binary>' downstream.
+
+    Telnet is a raw line protocol with no command/handshake gate, so non-Telnet traffic
+    on port 23 (TLS ClientHellos, port scanners, other-protocol probes) otherwise lands
+    as bogus knocks. The structured protocols (SSH/FTP/RDP/SMB) reject such traffic
+    before it becomes a knock; this gives Telnet the equivalent gate. Empty/blank
+    credentials are printable and still emit (a blank password is a real attempt)."""
+    return bool(s) and ('�' in s or not s.isprintable())
+
+
 def should_emit(ip, user, password):
     if TNET_DEDUP_WINDOW_SEC <= 0:
         return _throttle.allow(ip)
@@ -109,7 +122,10 @@ def handle_connection(client_sock, client_ip):
         client_sock.sendall(b"\r\nPassword: ")
         password = recv_line(client_sock, echo=False)  # no echo for password
 
-        if should_emit(client_ip, username, password):
+        # Drop non-Telnet protocol flails (binary creds) before they become knocks,
+        # matching the structural gating SSH/FTP/RDP/SMB get for free.
+        is_noise = _looks_binary(username) or _looks_binary(password)
+        if not is_noise and should_emit(client_ip, username, password):
             print(json.dumps({"type": "KNOCK", "proto": "TNET",
                               "ip": client_ip, "user": username, "pass": password}), flush=True)
 

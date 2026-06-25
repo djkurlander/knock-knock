@@ -488,7 +488,15 @@ def parse_dial_country(dial_string):
         iso = phonenumbers.region_code_for_number(pn)
         if not iso or len(iso) != 2 or not iso.isalpha():
             iso = 'XX'
-        country = pn_geocoder.country_name_for_number(pn, 'en') or 'International Network'
+        country = pn_geocoder.country_name_for_number(pn, 'en')
+        if not country:
+            # Non-geographic: +1 toll-free (libphonenumber guesses region 'US') or genuine
+            # international networks like +800/+870 (region '001'). country_name is empty for
+            # both because no single country owns the range. Label the toll-free subtype
+            # honestly — it's NANP-wide (US/Canada/Caribbean), not necessarily US.
+            is_nanp_tollfree = (pn.country_code == 1
+                                and phonenumbers.number_type(pn) == phonenumbers.PhoneNumberType.TOLL_FREE)
+            country = 'North American Toll-Free' if is_nanp_tollfree else 'International Network'
         desc = pn_geocoder.description_for_number(pn, 'en')
         name = f'{desc}, {country}' if desc and desc != country else country
         e164 = phonenumbers.format_number(pn, phonenumbers.PhoneNumberFormat.E164)

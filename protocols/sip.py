@@ -53,6 +53,7 @@ DEFINITION = ProtocolDefinition(
         Column("sip_pbx_state",         "INTEGER"),
         Column("sip_pbx_bridge_id",     "TEXT"),
         Column("sip_pbx_live_permit_id", "TEXT"),
+        Column("sip_result",            "INTEGER"),  # SIP status returned: 200 (answer/bridge) vs 404 (reject)
     ],
     passthrough_prefixes=["sip_"],
     after_save="protocols.sip:after_save",

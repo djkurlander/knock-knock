@@ -4,6 +4,7 @@ import threading
 import time
 import json
 import os
+import re
 from common import PerIpTokenBucket, create_dualstack_tcp_listener, is_blocked, normalize_ip
 
 TNET_DEDUP_WINDOW_SEC = int(os.environ.get('TNET_DEDUP_WINDOW_SEC', '0'))
@@ -12,17 +13,36 @@ _dedup_lock = threading.Lock()
 _dedup_seen: dict = {}
 
 
-def _looks_binary(s):
-    """True if a credential is protocol-flail noise rather than a real Telnet login —
-    i.e. it failed UTF-8 decoding (replacement char) or carries non-printable bytes,
-    the same test that would otherwise render it as '<cryptic binary>' downstream.
+# Other-protocol scanners that hit port 23 send a protocol greeting (an HTTP request
+# line, SSH/SIP/RTSP banner, or the MGLNDD mass-scan probe) which the raw Telnet reader
+# captures as a "credential". Match the structural protocol *token* (not individual scan
+# strings) so one pattern covers every method/path/version variant + future ones. None of
+# these tokens occur in a real Telnet credential, so false-positive risk is ~nil.
+_PROTO_GREETING_RE = re.compile(
+    r' HTTP/[0-9]'      # HTTP request line (any method/path/version)
+    r'|^SSH-[0-9]'      # SSH version banner
+    r'|\bSIP/2\.0\b'    # SIP (e.g. sipvicious OPTIONS sip:nm SIP/2.0)
+    r'|\bRTSP/[0-9]'    # RTSP (IoT camera / stream scanners)
+    r'|^MGLNDD_',       # MGLNDD mass-scanner connectivity probe
+    re.IGNORECASE,
+)
 
-    Telnet is a raw line protocol with no command/handshake gate, so non-Telnet traffic
-    on port 23 (TLS ClientHellos, port scanners, other-protocol probes) otherwise lands
-    as bogus knocks. The structured protocols (SSH/FTP/RDP/SMB) reject such traffic
-    before it becomes a knock; this gives Telnet the equivalent gate. Empty/blank
-    credentials are printable and still emit (a blank password is a real attempt)."""
+
+def _looks_binary(s):
+    """A credential that failed UTF-8 decoding (replacement char) or carries non-printable
+    bytes — i.e. the same input that would render as '<cryptic binary>' downstream."""
     return bool(s) and ('�' in s or not s.isprintable())
+
+
+def _is_noise(user, password):
+    """True if this isn't a real Telnet login but non-Telnet traffic on port 23 — binary
+    protocol flails (TLS, scanners) or another protocol's greeting (HTTP/SSH/SIP/RTSP/
+    MGLNDD). Telnet is a raw line protocol with no command/handshake gate, so it otherwise
+    captures such traffic as bogus knocks; the structured protocols (SSH/FTP/RDP/SMB)
+    reject it before it becomes a knock, and this gives Telnet the equivalent gate. Blank
+    credentials are printable, tokenless, and still emit (a blank password is a real try)."""
+    return any(_looks_binary(s) or (s and _PROTO_GREETING_RE.search(s))
+               for s in (user, password))
 
 
 def should_emit(ip, user, password):
@@ -122,10 +142,10 @@ def handle_connection(client_sock, client_ip):
         client_sock.sendall(b"\r\nPassword: ")
         password = recv_line(client_sock, echo=False)  # no echo for password
 
-        # Drop non-Telnet protocol flails (binary creds) before they become knocks,
-        # matching the structural gating SSH/FTP/RDP/SMB get for free.
-        is_noise = _looks_binary(username) or _looks_binary(password)
-        if not is_noise and should_emit(client_ip, username, password):
+        # Drop non-Telnet traffic (binary flails + other-protocol scanner greetings)
+        # before it becomes a knock, matching the structural gating SSH/FTP/RDP/SMB get
+        # for free.
+        if not _is_noise(username, password) and should_emit(client_ip, username, password):
             print(json.dumps({"type": "KNOCK", "proto": "TNET",
                               "ip": client_ip, "user": username, "pass": password}), flush=True)
 

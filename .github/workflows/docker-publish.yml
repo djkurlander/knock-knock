@@ -17,6 +17,12 @@ env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
 
+# Don't let overlapping pushes race (also avoids the binfmt cache-reserve warning and
+# saves CI minutes): a newer run cancels an in-progress one for the same ref.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
@@ -41,6 +47,8 @@ jobs:
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v4
+        with:
+          cache-image: false   # skip binfmt GHA cache (avoids the cache-reserve warning)
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4

@@ -242,4 +242,8 @@ aggregator). Profiling wants fleet-global state (de-dup, profiles, claim-lock) t
   the control servers; if not, weird-prefix volume persists unchanged). **Why it matters:**
   distinguishes **closed-loop probers** (react to `404`s — sophisticated) from **dumb replay bots**
   (fixed dial list) — informs bait strategy and operator attribution. Run after the bots have had a
-  few days to react (≥ ~1 week post-changepoint, so ~2026-07-02+).
+  few days to react (≥ ~1 week post-changepoint, so ~2026-07-02+). **Data note:** `sip_result`
+  (200/404) is **not** stored in `knocks_sip` (it's a runtime/feed-only field) — but `sip_dial_string`
+  *is*, so recompute acceptance per row by running it through `sip_honeypot._dialplan_accepts()`
+  (deterministic, works on any server / any historical row). Don't go looking for a `sip_result`
+  column.

@@ -33,6 +33,7 @@ from LERG / ported-number data. Stdlib only — no third-party deps.
 | `baseline_sample.py` | Random-NANP control sample → same TSV schema → feed to the analyzer to get the population base rate. |
 | `classify_intl_targets.py` | Non-NANP clusters (+44/+972/+39/+970…): classify by type/carrier/geo via `phonenumbers` + per-minute outbound cost via a Telnyx rate CSV → TSV. (sipstack is US/Canada only.) |
 | `analyze_intl_targets.py` | Read that TSV → type mix, cost-weighted ranking (hits × $/min), concentration, sequential blocks; `--by-country`. |
+| `sip_ban_reprieve.py` | *Operational (not classification):* bounded ban reprieve — un-ban currently-blocked, SIP-dominant IPs for a *bounded* census window, then let them auto-re-ban after their remaining knock budget. Dry-run by default; `--apply`, `--hits`. |
 
 ## Usage
 

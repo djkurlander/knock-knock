@@ -20,7 +20,7 @@ import sys
 import time
 import sqlite3
 
-_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, _ROOT)
 from constants import PROTO  # noqa: E402
 

@@ -228,3 +228,18 @@ aggregator). Profiling wants fleet-global state (de-dup, profiles, claim-lock) t
   signal). Optional cheap interim guard: exempt **sparse** files (`fill<0.5` / max-gap >1 s) from
   dedup — the timing-bearing analog of the stationarity gate that already exempts order-bearing
   (DTMF/speech) files.
+- **Analysis: are the bots adaptive? (dialplan-restriction natural experiment).** LA1's
+  `SIP_OK_DIALPLAN` was changed **`all` → default (`+,bare,00,011,9`)** at the monitor restart
+  **2026-06-25 18:57:32 UTC** — a clean before/after **changepoint** on one server. The **other
+  servers were already restricted** (no `SIP_OK_DIALPLAN` env = default), so they're a built-in
+  control. Under `all`, weird dial-out prefixes all got `200`; now they `404`. Question: **do the
+  flooders adapt** — after their non-standard prefixes start failing, do they shift toward the
+  accepted set (`+/bare/00/011/9`), or replay the same fixed prefix list regardless? E.g.
+  `108.181.63.2` was flooding `[39xxx-counter]0016823074942` (all `404` now); `144.172.109.53` runs
+  a fixed `0/00/9/810/011/012/015/…` sweep. **Method:** per-actor accepted-prefix *share* of dial
+  strings, LA1 **before vs after 18:57 UTC 06-25**, cross-checked against the **always-restricted
+  servers** (if bots adapt, accepted-share rises post-changepoint on LA1 and is already higher on
+  the control servers; if not, weird-prefix volume persists unchanged). **Why it matters:**
+  distinguishes **closed-loop probers** (react to `404`s — sophisticated) from **dumb replay bots**
+  (fixed dial list) — informs bait strategy and operator attribution. Run after the bots have had a
+  few days to react (≥ ~1 week post-changepoint, so ~2026-07-02+).

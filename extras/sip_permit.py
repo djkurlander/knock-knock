@@ -42,6 +42,7 @@ def cmd_create(args):
         max_seconds=args.max_seconds,
         max_calls=args.max_calls,
         note=args.note,
+        bypass_dialplan=args.bypass_dialplan,
     )
     key, actual_ttl = sip_live_permit.create_permit(client, permit, ttl)
     print(f'created {key}')
@@ -94,6 +95,11 @@ def main(argv=None):
                         help='number of real completions this permit authorizes before it is '
                              'exhausted (default 1). Keeps the route blessed across the '
                              'validation call and the elicited test monetization call(s).')
+    create.add_argument('--bypass-dialplan', action='store_true',
+                        help='complete the live call regardless of SIP_OK_DIALPLAN (any dialed '
+                             'prefix). Default off: the live call obeys the dialplan like every '
+                             'other number, so the permitted number is not a prefix-response '
+                             'anomaly. Turn on only when connecting matters more than that realism.')
     create.add_argument('--note', default='')
     create.set_defaults(func=cmd_create)
 

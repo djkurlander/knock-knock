@@ -840,6 +840,7 @@ def process_sip_request(req, client_ip, allow_b2bua=False):
                     client_ip,
                     common.get('sip_dial_number'),
                     live_bridge_id,
+                    dialplan_ok=dialplan_ok,
                 )
             except Exception as e:
                 if TRACE_ENABLED:

@@ -70,7 +70,8 @@ def clamp_max_calls(max_calls):
     return min(calls, MAX_CALLS_CAP)
 
 
-def make_permit(source_ip, dial_number, *, permit_id, max_seconds=None, max_calls=None, note=''):
+def make_permit(source_ip, dial_number, *, permit_id, max_seconds=None, max_calls=None,
+                note='', bypass_dialplan=False):
     if not permit_id:
         raise ValueError('permit_id is required')
     dial_number = require_e164(dial_number)
@@ -82,6 +83,11 @@ def make_permit(source_ip, dial_number, *, permit_id, max_seconds=None, max_call
         'max_seconds': clamp_max_seconds(max_seconds),
         'max_calls': calls,
         'uses_remaining': calls,
+        # When false (default), a live call only completes if the dialed prefix is
+        # accepted by SIP_OK_DIALPLAN — so the permitted number behaves like every
+        # other number and isn't a prefix-response anomaly. Set true to connect
+        # regardless of prefix (the old override), accepting that realism trade-off.
+        'bypass_dialplan': bool(bypass_dialplan),
         'note': str(note or ''),
     }
 
@@ -119,12 +125,17 @@ return 0
     return bool(client.eval(script, 1, ACTIVE_KEY, bridge_id))
 
 
-def consume_permit_and_acquire_live(client, source_ip, dial_number, bridge_id):
+def consume_permit_and_acquire_live(client, source_ip, dial_number, bridge_id, dialplan_ok=True):
     """Atomically consume one use of an exact or wildcard permit and acquire the
     live-call lock. A multi-use permit is decremented and kept (preserving its
     TTL) until its last use, then deleted. Legacy permits with no use counter are
     treated as single-use. The returned permit is the pre-decrement snapshot, so
-    use_index reflects which completion this is (1-based)."""
+    use_index reflects which completion this is (1-based).
+
+    ``dialplan_ok`` reflects whether the dialed prefix is accepted by SIP_OK_DIALPLAN.
+    Unless the permit sets ``bypass_dialplan``, a permit is NOT consumed when the
+    prefix is rejected — so the permitted number answers the same prefixes as every
+    other number (no anomaly), and the permit isn't wasted on a call that would 404."""
     exact_key = permit_key(source_ip, dial_number)
     wildcard_key = permit_key('*', dial_number)
     script = """
@@ -141,6 +152,16 @@ if redis.call('EXISTS', KEYS[3]) == 1 then
   return false
 end
 local ok, decoded = pcall(cjson.decode, permit)
+-- Honor SIP_OK_DIALPLAN unless this permit opts out. ARGV[3]=='1' when the dialed
+-- prefix is accepted. A non-bypass permit on a rejected prefix is left untouched
+-- (not consumed, no lock) so the number 404s like any other.
+local bypass = false
+if ok and type(decoded) == 'table' and decoded.bypass_dialplan then
+  bypass = true
+end
+if (not bypass) and ARGV[3] ~= '1' then
+  return nil
+end
 local uses = nil
 if ok and type(decoded) == 'table' and decoded.uses_remaining ~= nil then
   uses = tonumber(decoded.uses_remaining)
@@ -157,7 +178,8 @@ return {permit, permit_key}
     # Use the configured cap for the provisional lock. The exact call duration
     # from the permit is parsed below, but this keeps the consume path atomic.
     lock_ttl = max(5, MAX_CALL_SECONDS_CAP + 10)
-    result = client.eval(script, 3, exact_key, wildcard_key, ACTIVE_KEY, bridge_id, lock_ttl)
+    result = client.eval(script, 3, exact_key, wildcard_key, ACTIVE_KEY, bridge_id, lock_ttl,
+                         '1' if dialplan_ok else '0')
     if not result:
         return None
     value, consumed_key = result

@@ -113,6 +113,20 @@ numbers appear per day (~≤5), and cheaper with block-dedup. **Supersedes** the
   first cut.
 - Per call capture: ring/answer **timing**, **provisional sequence + gaps**, **disposition**
   (answered→VM / reject code `603`/`486`/busy), **raw RTP greeting** (+ its hash).
+- **Where these come from — two layers, split by the false ACK.** On a live bridge,
+  `sip_b2bua._handle_pbx_response` **relays** the real target's responses to the bot
+  (`180/183/200/486/404/603`; only `100` is suppressed), so:
+  1. **Bot-facing `sip_result` = the relayed final response** — *not* the synchronous `200`
+     placeholder set at INVITE time (`sip_honeypot.py:859`, which just means "decided to
+     bridge"). For live calls record the **real relayed final code** (busy/declined/answered)
+     as `sip_result`, **async-UPDATEd** when the call resolves, sourced from `_handle_pbx_response`'s
+     `code` on the `≥200` final. (Non-live calls: the local `200` placeholder is already correct.)
+  2. **Callee-leg capture — decoupled by the false ACK.** On a `2xx`, for `live_permit` calls the
+     B2BUA self-ACKs the PBX leg *regardless of whether the bot ACKs* (`pbx_early_ack`), so that
+     leg stays up and we record the callee's RTP/VM + answer timing **even after the bot's silent
+     abandon**. This is the profiling payload (above), captured on our schedule and aggregated into
+     per-number `dial_intel` — a layer the bot's behavior can't deny us. **Only exists on `2xx`**
+     (answered); `4xx`/`6xx` close the bridge → signaling-only, no callee leg to keep alive.
 
 **Block identification & cohesion (this is the throttle).**
 - Detect blocks by leading-digit adjacency (+ carrier / rate-center). Targets come in

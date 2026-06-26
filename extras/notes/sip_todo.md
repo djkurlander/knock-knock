@@ -148,6 +148,51 @@ numbers appear per day (~≤5), and cheaper with block-dedup. **Supersedes** the
 - **Cold start:** first-ever dial of a brand-new number gets the generic answer (one call)
   while it's profiled in the background for later dials.
 
+**Replay engine design (`b2bua_playback.py`) — 2026-06-26 design pass.**
+- **Per-number state machine:** `UNPROFILED → PROFILING → PROFILED`. Gated by
+  `SIP_DIAL_PROFILE`. First bot dial of an `UNPROFILED` number → issue a one-time
+  `sip_live_permit` (`max_calls=1`, burner DID) and **live-bridge that call** to capture (the
+  permit system *is* the bounded-completion control — don't bypass it). Subsequent dials of a
+  `PROFILED` number (or cohesive-block member) → **playback**.
+- **Where playback runs — B2BUA-native; bypass Asterisk on replay (no real call).** The B2BUA
+  already builds SIP responses and does RTP relay/silence-gen, so it plays the **fake callee**
+  itself. New third branch in the INVITE handler: `profiled → b2bua_playback`; `unprofiled +
+  SIP_DIAL_PROFILE → live-bridge (capture)`; else → today's generic answer. Asterisk-driven
+  replay (dialplan `Wait`/`Answer`/`Playback`) is rejected: coarse SIP timing + re-encoded WAV
+  (not byte-exact). B2BUA-native = precise timing + byte-exact RTP + zero real call.
+- **`b2bua_playback.py` = a timed UAS state machine.** Reads the profile (below) + the raw
+  `.rtp` dump; emits each recorded response at its `t_ms` offset from the bot's INVITE; on
+  answer, streams the recorded RTP — **subject to the bot's protocol participation**: bot
+  `CANCEL` before our `200` → stop; bot `ACK`s → proceed with RTP; bot never ACKs (silent
+  abandon) → hold/teardown per the recorded window. For a non-`2xx` disposition, just emit the
+  recorded reject (`486`/`404`/`603`) at its captured timing (this also subsumes the
+  [sip-negative-control-probes.md](sip-negative-control-probes.md) reject).
+- **Profile schema (the "textual description") — JSON per number + the raw `.rtp`:**
+  `{ disposition, events:[{t_ms, code}], final_code, ring_ms, rtp_file, rtp_codec }`. The
+  `events` array is the timed signaling re-enactment; `rtp_file` is the ~minute of callee audio.
+  Timing is the point — capture *when* each step happened, not just *that* it did.
+- **Gotchas (where naïve "replay the recording verbatim" breaks):**
+  - **SDP is localized, not replayed** — regenerate the B2BUA's own SDP (its RTP port) so the
+    bot streams to/from us; replay the *timing*, not the callee's endpoint. (Same as the bridge's
+    `build_sdp` today.)
+  - **RTP headers regenerate; only payloads replay** — fresh seq/timestamp/SSRC (a continuous
+    stream from us), recorded *payloads* inside. Same machinery that mints relay/silence RTP.
+  - **Codec must match** for byte-exact audio (bots ~always offer PCMU/PCMA → fine; else
+    transcode and lose byte-exactness, or decline).
+- **Detectability (verified 2026-06-26): there is NO in-band header tell.** `_build_inbound_response`
+  already regenerates the bot-facing response entirely — `Via/From/To/Call-ID/CSeq` echoed from
+  the bot's request, `Server: Asterisk PBX 18.0.0` hardcoded, SDP localized. The bot's dialog
+  terminates at *our* stack (back-to-back UA) on a real bridge **and** on replay, so the only
+  downstream-derived signals are **status code/reason, timing, and RTP** — exactly the three the
+  profile reproduces. So replay is **header-identical to a real bridge.** Residual tells are NOT
+  headers: (1) **media too-consistent** — byte-identical VM every call (a real VM varies per call);
+  mitigate with slight per-call variation / a couple of samples; (2) **timing too-consistent** —
+  add small jitter around the recorded offsets; (3) **out-of-band:** the *target operator's own
+  inbound records* (for revenue-share numbers they control) — "I dialed through the PBX, did my
+  number actually ring?" never true on replay. There's no bot-side carrier CDR (it connects direct
+  to :5060), so the upstream-CDR concern doesn't apply; the operator-inbound check is the one
+  unbeatable-in-band detection.
+
 **Multi-server deployment — Phase 1 (aggregator-only) vs Phase 2 (fleet sync).**
 Fleet context: 8 geo-distributed servers; intel currently aggregates **one-way** (spokes →
 aggregator). Profiling wants fleet-global state (de-dup, profiles, claim-lock) that the

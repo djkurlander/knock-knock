@@ -68,9 +68,30 @@ unavoidably in the path — the design just keeps its role to mechanical relay.
 *real* number's, by **measuring the real call profile once and replaying it** thereafter.
 Defeats the hardest honeypot/FAS check — *call the number directly, call it through the
 suspected route, and compare*: generic realism fails the compare; a per-number replay
-(same ring time, same VM greeting, same disposition) matches. Cheap because few new target
-numbers appear per day (~≤5), and cheaper with block-dedup. **Supersedes** the earlier
+(same ring time, same VM greeting, same disposition) matches. **Supersedes** the earlier
 "answer-realism hardening" idea — replay beats synthesized realism.
+
+**Feature tiers — build the cheap 80% first; treat blocks as a *deferred* optimization.**
+The block-cohesion machinery (prefix `dial_block`, predict/confirm, the cohesion state machine)
+is a lot of code for a small, bounded payoff: only 16–31% of targets are in blocks, and the thing
+it saves — profiling-call cost — is already cheap (~$0.50 × ~555 numbers ≈ ~$275 total, one-time;
+blocks save maybe ~$125). The *real* win is exact-number replay (a held-to-cap target dialed 100×
+→ profiled once, replayed 99×), which needs **no** block logic. So:
+- **Tier 1 (MVP): exact-number profile + replay.** `dial_profile(profile_id, …)` + a `number →
+  profile_id` mapping (1:1). Captures ~80% of the value (all the repeat-dial volume). No blocks,
+  no prefix matching, no cohesion machine.
+- **Tier 2 (cheap block reuse — tiny add, optional).** Because numbers and profiles are *already
+  separated* (the `profile_id` indirection), block reuse is just: on a new number adjacent to a
+  known one, **create its row pointing at the neighbor's `profile_id`** (N:1) instead of profiling
+  it — saves the call. Every member keeps its own exact-number row; **no prefix table, no
+  longest-prefix, no cohesion state machine.** The only added logic is a simple "is there a
+  profiled number near this one?" check on a cache miss. (Optionally confirm the carrier async and
+  un-point on mismatch — but even that is optional.)
+- **Tier 3 (deferred — the fancier block optimization, build only if it proves useful).** Collapse
+  block members to **one** `dial_block` prefix row (instead of one row per member), with
+  longest-prefix resolution, the predict/confirm cohesion machine, carrier-confirm, and divergent-
+  member splits. This trades real code for fewer rows + auto-covering never-seen members — worth it
+  only if per-row volume or profiling cost actually becomes a problem (it likely won't).
 
 **Reference call (corrected cost model).**
 - On first sight of a new, unprofiled, *resolvable-E.164* number: if it's a member of a
@@ -128,7 +149,21 @@ numbers appear per day (~≤5), and cheaper with block-dedup. **Supersedes** the
      per-number `dial_intel` — a layer the bot's behavior can't deny us. **Only exists on `2xx`**
      (answered); `4xx`/`6xx` close the bridge → signaling-only, no callee leg to keep alive.
 
-**Block identification & cohesion (this is the throttle) — split "predict" from "confirm".**
+**[TIER 3 — DEFERRED] Block identification & cohesion (the *fancier* optimization).** Skip for the
+MVP; this is the prefix-collapse/cohesion machinery from the Feature-tiers note. The cheap Tier-2
+alternative — point a new adjacent number's row at an existing `profile_id` — needs none of the
+below (no synchronous predictor, no carrier in real time, no cohesion state machine).
+
+Note on the carrier signal (applies to *any* tier that uses it): the **synchronous decision is
+number adjacency/proximity only** — at INVITE time we don't yet have the *new* number's carrier,
+and knowing the block's carrier doesn't qualify the new number (a match needs *both*). Carrier is a
+**confirmer**: either (a) look it up quickly in the `100 Trying` window (~185 ms, timeout +
+fallback) to confirm before reuse, or (b) **punt** — reuse on adjacency, look the carrier up async,
+and un-point/split on mismatch (preferred: keeps the SIP hot path clean). Use the **dialed-number
+carrier/OCN (+ rate-center), NOT source ASN** — ASN is the attacker's hosting (operator
+attribution), the wrong axis for target-block cohesion.
+
+The full predict/confirm machinery, if Tier 3 is ever built:
 The trap: confirming a block truly needs ≥2 members' data (post-hoc), but the **throttle
 decision** (call this new number, or reuse a profile?) must be made *synchronously at first
 sight* — else you've already called everything and the throttle failed. The fix is that the
@@ -275,25 +310,23 @@ aggregator). Profiling wants fleet-global state (de-dup, profiles, claim-lock) t
   (bans are per-server), so this is real new work — deferred until replay proves worth it.
 
 **Storage & delivery — 2026-06-26 design pass.**
-- **Two tables; the number→profile mapping is *one* prefix map (don't model "number" and "block"
-  as different things).**
+- **[TIER 1/2] Separate numbers from profiles — that indirection is the whole game.**
   - **`dial_profile(profile_id PK, events_json TEXT, rtp_ref, codec, disposition, captured_at,
-    block_ref, audio_hash, cohesion_status, …)`** — the actual profiles. Block cohesion means a
-    200-number block shares **one** `dial_profile` row; inlining the profile per-number on
-    `dial_intel` would duplicate the JSON + RTP ref across all 200 members. Don't.
-  - **`dial_block(prefix PK, profile_id, cohesion_status, member_count, …)`** — the mapping,
-    keyed by a **digit prefix**. A **full-E.164** prefix = an individual number / a divergent-
-    member **override**; a **shorter** prefix (e.g. `+183360402` for the `…0–…9` /10) = a
-    **shared block**. A dialed number resolves by **longest-prefix match** (most specific wins),
-    so a `/1` override beats its block automatically — **no number-vs-block branching**.
-- **Resolution = the longest-prefix machinery already in `telnyx_rates.lookup()`** (`[digits[:n]
-  for n in range(len,0,-1)]` → `WHERE prefix IN (…) ORDER BY len DESC LIMIT 1`); amortize with the
-  honeypot's in-memory dial cache (resolve `number → profile_id` once on a miss, then cache).
-  Four cases fall out of one rule: individual = full-E.164 entry; shared block = short prefix
-  (covers even never-individually-dialed members → the throttle); divergent member = full-E.164
-  override; brand-new = no match → `UNPROFILED` → profile. **Caveat:** prefix entries model
-  power-of-10-aligned blocks (how DIDs are usually leased — `+9723375135x`, `+44203807xxxx`);
-  start prefix-based, add `(low,high)` range entries only if a non-aligned lease actually appears.
+    audio_hash, …)`** — the actual profiles. **Never inline the profile per-number** (would
+    duplicate the JSON + RTP ref across members).
+  - **`number → profile_id` mapping** — an exact-number map (its own table, or a `profile_id`
+    column on `dial_intel`). **Tier 1:** each number → its own `profile_id` (1:1). **Tier 2 (cheap
+    block reuse):** a new adjacent number's row just **points at an existing `profile_id`** (N:1) —
+    multiple exact-number rows, one shared profile, no extra schema. Lookup is a plain **exact-
+    number** read (fast, no prefix matching).
+- **[TIER 3 — DEFERRED] `dial_block(prefix PK, profile_id, cohesion_status, member_count, …)`** —
+  *only* if you later want to collapse a block to one row instead of one-per-member. Keyed by a
+  **digit prefix** (full-E.164 = individual/override; shorter prefix = shared block), resolved by
+  **longest-prefix match** (reusing `telnyx_rates.lookup()`'s `[digits[:n] for n in …]` → `WHERE
+  prefix IN (…) ORDER BY len DESC LIMIT 1`). Lets a short prefix cover never-individually-dialed
+  members. **Caveat:** prefix entries model power-of-10-aligned blocks (how DIDs lease —
+  `+9723375135x`, `+44203807xxxx`); add `(low,high)` ranges only if a non-aligned lease appears.
+  Tier 1/2 don't need any of this — exact-number rows suffice.
 - **Event list = JSON `TEXT`** (small, structured, travels with the DB). **RTP = a referenced
   *file*** (the `-pbx.rtp` dump), not an inline `BLOB`/base64 — hundreds of KB shouldn't ride
   every profile query. Tradeoff for later: **Phase 2** fleet-sync then needs a small file-push

@@ -184,10 +184,28 @@ numbers appear per day (~≤5), and cheaper with block-dedup. **Supersedes** the
   `pbx_response code=X` with a timestamp): append `(t_ms_since_invite, code)` to the profile's
   event list, plus the `-pbx.rtp` dump already written for live calls. No new subsystem — the
   `LiveSource` path *is* the recorder.
-- **Profile schema (the "textual description") — JSON per number + the raw `.rtp`:**
-  `{ disposition, events:[{t_ms, code}], final_code, ring_ms, rtp_file, rtp_codec }`. The
-  `events` array is the timed signaling re-enactment; `rtp_file` is the ~minute of callee audio.
-  Timing is the point — capture *when* each step happened, not just *that* it did.
+- **The "op recording" — what the captured profile actually is.** Almost exactly your
+  `[(delay, code), …]` intuition, because on replay the engine *regenerates* the response (see
+  "no header tell" above): Via/From/To/Call-ID/CSeq are echoed from the **live** bot INVITE,
+  `Server` is hardcoded, the SDP ip/port are **localized** — so none of those are recorded. You
+  record only what **varies and can't be reconstructed**: the **timing**, the **status code**
+  (the "op": 100/180/183/200/486/404/603), and on a media-bearing response the **codec** + an
+  **early-media marker** (a `183` *with* SDP means RTP starts there, not at `200`). The reason
+  phrase is derivable from the code (capture the literal only for byte-fidelity on a custom
+  carrier reason). The bot's own messages (INVITE/ACK/CANCEL/BYE) are **not** recorded — they
+  arrive live and are handled reactively; the recorded timeline is **responses only**, anchored
+  at the live INVITE.
+- **Profile schema** — small timed-event JSON + the separate raw `.rtp`:
+  ```json
+  { "disposition": "answered|busy|invalid|ring_no_answer",
+    "events": [ {"ms":0,"code":100}, {"ms":1200,"code":180},
+                {"ms":4800,"code":200,"media":{"codecs":["PCMU"]}} ],
+    "final_code": 200,
+    "rtp": { "ref": "…-pbx.rtp", "payload_type": 0, "starts_at": "code:200" } }
+  ```
+  The `events` array is the timed signaling re-enactment; `rtp.ref` points at the ~minute of
+  callee audio (stored as a **file**, not inline — see storage below). Timing is the point —
+  capture *when* each step happened, not just *that* it did.
 - **Gotchas (where naïve "replay the recording verbatim" breaks):**
   - **SDP is localized, not replayed** — regenerate the B2BUA's own SDP (its RTP port) so the
     bot streams to/from us; replay the *timing*, not the callee's endpoint. (Same as the bridge's
@@ -239,13 +257,39 @@ aggregator). Profiling wants fleet-global state (de-dup, profiles, claim-lock) t
   server's per-server `--max-knocks`). The downward channel basically doesn't exist today
   (bans are per-server), so this is real new work — deferred until replay proves worth it.
 
-**Storage / schema — TBD (review each field: meaning + how determined).**
-- `dial_intel` (or a new `dial_profile`) keyed by number, with a **block reference** so
-  members share one profile.
-- Candidate fields (all **TBD**): ring/answer timing (*which* interval — INVITE→200 vs
-  180→200?), provisional sequence + inter-response gaps, disposition taxonomy, codec/SDP
-  shape, raw-RTP greeting path + audio hash, block key, cohesion status, `profiled_at`,
-  source (burner) DID, rate/cost class. **Walk each field before implementing.**
+**Storage & delivery — 2026-06-26 design pass.**
+- **Separate `dial_profile` table, keyed by `profile_id` — NOT the profile inline per-number on
+  `dial_intel`.** Block cohesion means a 200-number block shares **one** profile; inlining would
+  duplicate the JSON + RTP ref across all 200 members. So: `dial_profile(profile_id, events_json
+  TEXT, rtp_ref, codec, disposition, captured_at, block_ref, audio_hash, …)`, and each number
+  references a `profile_id` (a `dial_block` map, or a `profile_id` column on `dial_intel`).
+  Cohesion check writes one row, points the block at it; a divergent member gets its own row.
+- **Event list = JSON `TEXT`** (small, structured, travels with the DB). **RTP = a referenced
+  *file*** (the `-pbx.rtp` dump), not an inline `BLOB`/base64 — hundreds of KB shouldn't ride
+  every profile query. Tradeoff for later: **Phase 2** fleet-sync then needs a small file-push
+  channel for the audio (vs. a blob that rides DB sync); start file-ref, revisit if Phase 2
+  makes blob-for-sync worth it.
+- **Delivery is an *in-process lazy-load*, not a wire send.** The B2BUA is the `PlaybackBridge`
+  *class inside the SIP honeypot process* (which already opens the DB to seed the dial cache).
+  On a `PROFILED` INVITE: look up `profile_id` → `json.loads(events_json)` + open the `rtp_ref`
+  file → construct `PlaybackBridge(source=RecordedSource(...))`. Lazy-load + LRU-cache recent
+  profiles (don't preload all — the RTP makes that heavy). The JSON-ify ↔ parse happens only at
+  the **storage boundary**, not as a message to a separate process. The only place a profile is
+  genuinely *shipped* is Phase-2 fleet replay (aggregator → spokes), which is the deferred
+  hub→spoke push.
+- Candidate `dial_profile` fields (walk each before implementing): ring/answer timing (*which*
+  interval — INVITE→200 vs 180→200?), the timed `events` (provisional sequence + inter-response
+  gaps), disposition taxonomy, codec + early-media shape, `rtp_ref` + audio hash, `block_ref`,
+  cohesion status, `captured_at`, source (burner) DID, rate/cost class.
+
+**Build order — hub-first (this server is the aggregator).**
+- **v1: single-server, on the aggregator only** (= this box). Capture + `dial_profile` + replay
+  all local; this is exactly **Phase 1 (aggregator-only)** above, so no fleet sync, no hub→spoke
+  push, RTP stays a local file. Prove capture fidelity + replay indistinguishability + block
+  cohesion here first.
+- **v2: extend to spokes/feeders** — only after v1 proves out, add the **Phase 2** hub→spoke push
+  (distill `dial_profile` rows + ship the RTP files to spoke local caches) so replay runs fleet-wide.
+  That's the real new work (the downward channel doesn't exist today); defer until v1 earns it.
 
 **Guards / caveats.**
 - **Burner DID** (OPSEC / PAI — we leak our number to the endpoint).

@@ -148,25 +148,42 @@ numbers appear per day (~≤5), and cheaper with block-dedup. **Supersedes** the
 - **Cold start:** first-ever dial of a brand-new number gets the generic answer (one call)
   while it's profiled in the background for later dials.
 
-**Replay engine design (`b2bua_playback.py`) — 2026-06-26 design pass.**
+**Replay engine design — one dialog engine, two back-ends — 2026-06-26 design pass.**
 - **Per-number state machine:** `UNPROFILED → PROFILING → PROFILED`. Gated by
   `SIP_DIAL_PROFILE`. First bot dial of an `UNPROFILED` number → issue a one-time
   `sip_live_permit` (`max_calls=1`, burner DID) and **live-bridge that call** to capture (the
   permit system *is* the bounded-completion control — don't bypass it). Subsequent dials of a
   `PROFILED` number (or cohesive-block member) → **playback**.
-- **Where playback runs — B2BUA-native; bypass Asterisk on replay (no real call).** The B2BUA
-  already builds SIP responses and does RTP relay/silence-gen, so it plays the **fake callee**
-  itself. New third branch in the INVITE handler: `profiled → b2bua_playback`; `unprofiled +
-  SIP_DIAL_PROFILE → live-bridge (capture)`; else → today's generic answer. Asterisk-driven
-  replay (dialplan `Wait`/`Answer`/`Playback`) is rejected: coarse SIP timing + re-encoded WAV
-  (not byte-exact). B2BUA-native = precise timing + byte-exact RTP + zero real call.
-- **`b2bua_playback.py` = a timed UAS state machine.** Reads the profile (below) + the raw
-  `.rtp` dump; emits each recorded response at its `t_ms` offset from the bot's INVITE; on
-  answer, streams the recorded RTP — **subject to the bot's protocol participation**: bot
-  `CANCEL` before our `200` → stop; bot `ACK`s → proceed with RTP; bot never ACKs (silent
-  abandon) → hold/teardown per the recorded window. For a non-`2xx` disposition, just emit the
-  recorded reject (`486`/`404`/`603`) at its captured timing (this also subsumes the
-  [sip-negative-control-probes.md](sip-negative-control-probes.md) reject).
+- **Architecture — reuse the bot-facing engine; *don't* build a standalone playback B2BUA.** The
+  `Bridge` class already separates the two halves cleanly, so playback is a **back-end swap**, not
+  a reimplementation — the elegant framing is *one dialog engine, two sources*:
+  - **Shared bot-facing dialog engine** (reused verbatim): the injected `send_to_attacker`
+    callback, the RTP sender (`_silence_loop` is *already* a generative toward-the-bot media path —
+    playback feeds recorded frames where it feeds silence), `forward_in_dialog` / ACK·CANCEL·BYE
+    handling, `close` / `_timeout_loop`, `_open_rtp_dump`, SDP localization. Bot-facing SIP + RTP +
+    teardown are identical for a live bridge and a replay.
+  - **Pluggable back-end (the *source* of responses + media):** `LiveSource` = today's Asterisk
+    relay (`_sip_loop` / `_handle_pbx_response`); `RecordedSource` = `b2bua_playback` (a timed
+    schedule + RTP-dump reader). Same dialog, same RTP sender, same teardown — only the source
+    varies. Implement as a `PlaybackBridge` (subclass or a `source=` strategy on `Bridge`).
+- **Playback ≈ `Bridge − live-PBX-leg + timeline cursor` — i.e. *simpler* than a real bridge.** It
+  **drops** the hairy parts (live second socket/`_sip_loop`, the glare race, the false-ACK to
+  Asterisk, PBX-BYE handling) and **adds** only a sorted `[(t_ms, code)]` schedule + a timer that
+  calls the existing `send_to_attacker(build_response(code))`, then feeds recorded RTP through the
+  existing sender. Asterisk is bypassed on replay (no real call); Asterisk-dialplan replay is
+  rejected (coarse timing + re-encoded WAV). B2BUA-native `RecordedSource` = precise timing +
+  byte-exact RTP + zero real call.
+- **`b2bua_playback.py` = the `RecordedSource` component** (profile load, event scheduler,
+  RTP-frame reader), *driven by* the Bridge — file-level separation of the playback-specific logic
+  without duplicating the dialog/RTP machinery. It emits each recorded response at its `t_ms`
+  offset, **subject to the bot's protocol participation**: bot `CANCEL` before our `200` → stop;
+  bot `ACK`s → proceed with RTP; bot never ACKs (silent abandon) → hold/teardown per the recorded
+  window. Non-`2xx` disposition → emit the recorded reject (`486`/`404`/`603`) at its captured
+  timing (also subsumes the [sip-negative-control-probes.md](sip-negative-control-probes.md) reject).
+- **Capture side = a few lines in the existing `_handle_pbx_response`** (which already traces
+  `pbx_response code=X` with a timestamp): append `(t_ms_since_invite, code)` to the profile's
+  event list, plus the `-pbx.rtp` dump already written for live calls. No new subsystem — the
+  `LiveSource` path *is* the recorder.
 - **Profile schema (the "textual description") — JSON per number + the raw `.rtp`:**
   `{ disposition, events:[{t_ms, code}], final_code, ring_ms, rtp_file, rtp_codec }`. The
   `events` array is the timed signaling re-enactment; `rtp_file` is the ~minute of callee audio.

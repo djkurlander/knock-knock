@@ -74,9 +74,12 @@ suspected route, and compare*: generic realism fails the compare; a per-number r
 **Feature tiers — build the cheap 80% first; treat blocks as a *deferred* optimization.**
 The block-cohesion machinery (prefix `dial_block`, predict/confirm, the cohesion state machine)
 is a lot of code for a small, bounded payoff: only 16–31% of targets are in blocks, and the thing
-it saves — profiling-call cost — is already cheap (~$0.50 × ~555 numbers ≈ ~$275 total, one-time;
-blocks save maybe ~$125). The *real* win is exact-number replay (a held-to-cap target dialed 100×
-→ profiled once, replayed 99×), which needs **no** block logic. So:
+it saves — profiling-call cost — is already tiny. Pricing the *whole* current corpus from the cache
+rates: **~$37 total** (all 555 numbers, worst-case every one answers for 1 billed minute; really
+less — invalids/ring-no-answer don't connect), one-time. Blocks would save only **~$6–12** (16–31%
+of $37), and a per-call rate cap (see "Wallet & per-call cap" below) takes even that to **~$4**.
+The *real* win is exact-number replay (a held-to-cap target dialed 100× → profiled once, replayed
+99×), which needs **no** block logic. So:
 - **Tier 1 (MVP): exact-number profile + replay.** `dial_profile(profile_id, …)` + a `number →
   profile_id` mapping (1:1). Captures ~80% of the value (all the repeat-dial volume). No blocks,
   no prefix matching, no cohesion machine.
@@ -123,6 +126,33 @@ blocks save maybe ~$125). The *real* win is exact-number replay (a held-to-cap t
   exposes for Telnyx to POST to (inbound HTTP; the Telnyx side currently sits behind
   Asterisk). The CDR `Rate`/`Cost` fields are the pull-based equivalent if webhooks aren't
   wired.
+
+**Wallet & per-call cap (don't profile the monetization tail).** We're *less* interested in
+profiling the high-rate revenue-seeking targets: calling them (a) costs the most, (b) **funds the
+fraud** (the revenue-share completes once), and (c) gains little realism — those bots *hold* to
+bill minutes, they don't do the compare-to-real audio check that route-discovery/FAS probes do. So
+spend the (tiny) profiling budget on the **cheap** targets where realism actually matters, and skip
+the expensive ones.
+- **`SIP_CALL_MAX`** — per-call cost ceiling, computed pre-call from the **local `rates.db`**
+  (`telnyx_rates.lookup` → `rate_per_minute × billed_minutes + price_per_call`; fast, no API).
+  Skip profiling any number whose estimated call cost exceeds it. Use **cost (incl. setup fee)**,
+  not bare per-minute — catches a high *connect-fee* number (e.g. a UK `0900` `$6.84`/call) that a
+  per-minute cap would miss. Measured impact on the current corpus: cap `$0.10` → profile 442, skip
+  111 high-rate, spend **~$4** (vs $37 uncapped); the skipped 111 are exactly the African/Cuba/
+  premium-mobile IRSF tail.
+- **Wallet = a Redis purse balance, topped up by a tool — not an `.env` value.** The remaining
+  balance lives in **Redis** (`knock:sip:wallet`, a float); each outward call gates on
+  `balance ≥ estimated_cost`, then **decrements** it; at ~0, **no outward calls** (so a fresh/empty
+  wallet means profiling is *off* until funded — safe opt-in). Keeping it in Redis means it
+  **persists across `./restart.sh`** — the trap with an `.env` budget is that a restart would refill
+  it; a Redis balance doesn't. (Same Redis-state shape the live-permit active-lock uses.)
+- **`sip_add_funds.py`** (in `extras/`) sets or adds to the purse: `--set 50` / `--add 10`. Manual
+  top-up; no built-in period logic. **Want a daily allowance? Put it in crontab** — e.g.
+  `0 0 * * * sip_add_funds.py --set 5` — so the *policy* (cadence, amount, reset-vs-accumulate) is
+  the operator's, not baked into the honeypot.
+- **Estimate to gate, ground-truth to account:** gate on the `rates.db` estimate (pre-call),
+  then **decrement the wallet by the *actual* cost** from the `call.hangup` webhook when it lands
+  (fall back to the estimate if the webhook isn't wired).
 
 **Capture: raw callee RTP, not MixMonitor.**
 - Use the **raw callee-leg RTP** (`pbx_rtp_dump`, already taken on live-permit calls) —

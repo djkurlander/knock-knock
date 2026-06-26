@@ -128,16 +128,33 @@ numbers appear per day (~≤5), and cheaper with block-dedup. **Supersedes** the
      per-number `dial_intel` — a layer the bot's behavior can't deny us. **Only exists on `2xx`**
      (answered); `4xx`/`6xx` close the bridge → signaling-only, no callee leg to keep alive.
 
-**Block identification & cohesion (this is the throttle).**
-- Detect blocks by leading-digit adjacency (+ carrier / rate-center). Targets come in
-  sequential leased blocks on a shared platform/VM ([sip-nanp-line-types-whois.md](sip-nanp-line-types-whois.md),
-  [sip-operator-attribution.md](sip-operator-attribution.md) dest-block signal), so the
-  profile is usually identical across a block.
-- **Profile a representative; validate cohesion** by comparing the VM-audio hash (+
-  disposition) of 1–2 more members. Match → mark block cohesive, reuse profile, stop
-  profiling new members. Divergence → split out, profile individually. The audio hash does
-  double duty (cohesion + matching). Collapses a 200-number block into ~1–2 calls →
-  **removes the need for cost rate-gating** (a big new-block sweep = a couple of calls).
+**Block identification & cohesion (this is the throttle) — split "predict" from "confirm".**
+The trap: confirming a block truly needs ≥2 members' data (post-hoc), but the **throttle
+decision** (call this new number, or reuse a profile?) must be made *synchronously at first
+sight* — else you've already called everything and the throttle failed. The fix is that the
+*predictor* is cheap and needs **no call**, while the slower *confirmer* runs async and only
+corrects.
+- **Predict (synchronous, at first sight, NO call → drives call-vs-reuse).** Two cheap signals:
+  (1) **digit adjacency** — is the new number within a few of / sharing a prefix with an
+  already-profiled number? Pure arithmetic, instant. (2) **carrier / rate-center match** — from
+  the **Telnyx number-lookup cache** (a hit is free; a miss is one ~fraction-of-a-cent *lookup*,
+  not a call). Match → **eagerly attach to that block's profile and REPLAY — no call** (and
+  promote a `/1`→`/10` `dial_block` entry covering both; that promotion *is* the moment you skip
+  the new member's call). No match → unprofiled → profile it (one call), seed a tentative block.
+- **This is optimistic** (reuse without verifying the new member's VM), justified because the
+  *population* is sequential leased blocks on a shared revenue-share platform — empirically VM/
+  disposition-identical ([sip-nanp-line-types-whois.md](sip-nanp-line-types-whois.md),
+  [sip-operator-attribution.md](sip-operator-attribution.md) dest-block signal). So
+  adjacency+carrier is a *strong* cohesion predictor *for these targets* (weak for random
+  consumer numbers — irrelevant here). Downside of a mispredict is low: per the "no header tell"
+  finding a wrong VM isn't detectable in-band (only via the operator's own out-of-band inbound
+  check).
+- **Confirm (async / sampled — validates, does NOT gate the throttle).** Occasionally re-profile
+  a block member and compare its **VM-audio hash** + disposition to the block profile. Match →
+  mark `cohesive` (keep reusing). Divergence → split the outlier out (a `/1` override at its full
+  number). The audio hash does double duty (cohesion + cross-path matching). Net cost ~**1 seed
+  call + a couple of async confirmation calls per block, regardless of block size** → collapses a
+  200-number block into a handful of calls, **removing the need for cost rate-gating**.
 
 **Replay path.**
 - Bot dials a profiled number (or a cohesive-block member) → reproduce the **timing** (wait
@@ -258,12 +275,25 @@ aggregator). Profiling wants fleet-global state (de-dup, profiles, claim-lock) t
   (bans are per-server), so this is real new work — deferred until replay proves worth it.
 
 **Storage & delivery — 2026-06-26 design pass.**
-- **Separate `dial_profile` table, keyed by `profile_id` — NOT the profile inline per-number on
-  `dial_intel`.** Block cohesion means a 200-number block shares **one** profile; inlining would
-  duplicate the JSON + RTP ref across all 200 members. So: `dial_profile(profile_id, events_json
-  TEXT, rtp_ref, codec, disposition, captured_at, block_ref, audio_hash, …)`, and each number
-  references a `profile_id` (a `dial_block` map, or a `profile_id` column on `dial_intel`).
-  Cohesion check writes one row, points the block at it; a divergent member gets its own row.
+- **Two tables; the number→profile mapping is *one* prefix map (don't model "number" and "block"
+  as different things).**
+  - **`dial_profile(profile_id PK, events_json TEXT, rtp_ref, codec, disposition, captured_at,
+    block_ref, audio_hash, cohesion_status, …)`** — the actual profiles. Block cohesion means a
+    200-number block shares **one** `dial_profile` row; inlining the profile per-number on
+    `dial_intel` would duplicate the JSON + RTP ref across all 200 members. Don't.
+  - **`dial_block(prefix PK, profile_id, cohesion_status, member_count, …)`** — the mapping,
+    keyed by a **digit prefix**. A **full-E.164** prefix = an individual number / a divergent-
+    member **override**; a **shorter** prefix (e.g. `+183360402` for the `…0–…9` /10) = a
+    **shared block**. A dialed number resolves by **longest-prefix match** (most specific wins),
+    so a `/1` override beats its block automatically — **no number-vs-block branching**.
+- **Resolution = the longest-prefix machinery already in `telnyx_rates.lookup()`** (`[digits[:n]
+  for n in range(len,0,-1)]` → `WHERE prefix IN (…) ORDER BY len DESC LIMIT 1`); amortize with the
+  honeypot's in-memory dial cache (resolve `number → profile_id` once on a miss, then cache).
+  Four cases fall out of one rule: individual = full-E.164 entry; shared block = short prefix
+  (covers even never-individually-dialed members → the throttle); divergent member = full-E.164
+  override; brand-new = no match → `UNPROFILED` → profile. **Caveat:** prefix entries model
+  power-of-10-aligned blocks (how DIDs are usually leased — `+9723375135x`, `+44203807xxxx`);
+  start prefix-based, add `(low,high)` range entries only if a non-aligned lease actually appears.
 - **Event list = JSON `TEXT`** (small, structured, travels with the DB). **RTP = a referenced
   *file*** (the `-pbx.rtp` dump), not an inline `BLOB`/base64 — hundreds of KB shouldn't ride
   every profile query. Tradeoff for later: **Phase 2** fleet-sync then needs a small file-push

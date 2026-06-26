@@ -1,7 +1,7 @@
 # SIP `77.42.86.8` concurrency pump — settled targets, cap-riding holds
 
-**Date:** 2026-06-18 (updated 2026-06-21)  
-**Status:** Open — recurred 2026-06-21 (ban-reprieved), retargeted; re-banned
+**Date:** 2026-06-18 (updated 2026-06-26)  
+**Status:** Open — recurring; ban-reprieved again ~06-25 → resumed hard, target set re-expanded
 
 ## Summary
 
@@ -34,6 +34,29 @@ pair for Kenya/US/Iceland** — same monetization-shaped concurrency, fresh targ
 2026-06-21 (`ban_until` 2026-07-21). The reprieve was a deliberate data-gathering move; the
 payoff is the retargeting intel (the actor's target list rotates while its *behaviour*
 — `ACK`+hold-to-cap, controlled/allocated-looking endpoints — stays constant).
+
+## Update — 2026-06-26 (ban-reprieved again → resumed, target set re-expanded)
+
+A second manual `sip_ban_reprieve` (~06-25, data-gathering) re-permitted it, and it resumed
+**immediately and hard**: in the 06-25 17:19 → 06-26 15:26 window, **227 INVITEs across 6
+destinations**, same `ACK` + hold-to-1200 s-cap signature (53 held-to-cap bridges in the window,
+most of them this actor):
+
+| Destination | Held bridges | Carrier / rate | Note |
+|---|---:|---|---|
+| `+97233751353` | 16 | Hallo 015, `$0.0292` | Israel `+9723375135x` block |
+| `+254208780226` | 9 | Iristel Kenya, **`$0.243`** | the priciest hold this window |
+| `+97233751349` | 8 | Hallo 015, `$0.0292` | Israel block |
+| `+3545395213` | (held) | Tismi BV, `$0.009` | Iceland |
+| `+19197508327` | 9 | Peerless NC, `$0.005` | US (shifted from `…336` to `…327`) |
+| `+442080890189` | 9 | DIDWW, `$0.0042` | **re-expanded** onto the original UK pair |
+
+So vs 06-21 it **re-expanded** — kept Israel/Kenya/Iceland/US *and* came back onto the original
+UK `+44208089018x` it had dropped. Notable this run: **heavy dial-string prefix enumeration**
+(e.g. **45 distinct dial-string forms** for `+97233751353` alone) — sweeping trunk/intl prefixes
+against each target (consistent with the 06-25 LA1 dialplan restriction now `404`-ing the
+non-standard forms; the standard-prefix holds still complete). Behaviour constant, target list
+breathes.
 
 ## Window and scope
 

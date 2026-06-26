@@ -1,7 +1,7 @@
 # SIP embassy beacons — bots dialing DC foreign embassies as route-reachability tests
 
-**Date:** 2026-06-14 (updated 2026-06-20)
-**Status:** Observed / ongoing
+**Date:** 2026-06-14 (updated 2026-06-26)
+**Status:** Observed / ongoing — intermittent (silent 06-21→24, resumed 06-25)
 
 ## Summary
 
@@ -133,6 +133,15 @@ route-reachability anchor off the embassy set), not the actor disappearing. Whet
 embassy beacons resume is the thing to watch; the pivot target (AU mobile) is a new anchor to
 track. The historical RTP fingerprints to embassy DIDs (e.g. `209.222.101.54 → +12022234942`)
 are pre-window and unchanged.
+
+## 2026-06-26: the beacons resumed — it was a pause, not cessation
+
+In the 06-25 16:58 → 06-26 15:26 UTC window the embassy DIDs took **121** calls again (vs **0**
+in the 06-24 window). **ReliableSite AS23470 is back on the DC DIDs**: `185.243.5.110 →
++12025886500` (Britain) and `209.222.101.54 → +12022234942` (Albania). So the 06-24 "went silent"
+was a **~5-day pause, not the campaign ending** — the dominant actor cycled back to the embassy
+anchor after its AU-mobile detour. Confirms the "watch for resumption" call; the beacon campaign
+is intermittent (pause/resume), not one-and-done.
 
 ## Prior mention
 

@@ -6,6 +6,34 @@ field notes — promote anything that grows into a full investigation to its own
 
 ---
 
+## 2026-06-26
+
+### Observations since 2026-06-25 16:58 UTC, LA1
+
+- **`77.42.86.8` resumed pumping hard after the 06-25 ban-reprieve.** 227 INVITEs / 6
+  destinations, the same `ACK` + hold-to-1200 s-cap signature, on its **known monetization
+  set**: Israel Hallo-015 `+97233751349/353`, **Kenya Iristel `+254208780226` (`$0.243/min` —
+  the priciest hold this window)**, Iceland `+3545395213`, US `+19197508327`, UK DIDWW
+  `+442080890189`. Heavy dial-string **prefix enumeration** (e.g. 45 distinct forms for
+  `+97233751353`). Re-expanded back onto the original UK pair alongside the 06-21 Kenya/Iceland
+  retargeting. [sip-7742868-concurrency-pump.md](sip-7742868-concurrency-pump.md).
+
+- **Embassy beacons resumed — the 06-24 "went silent" was a *pause*, not cessation.** **121**
+  embassy calls in-window (vs **0** in the 06-24 window); ReliableSite AS23470 back on the DC
+  DIDs (`185.243.5.110 → +12025886500` Britain, `209.222.101.54 → +12022234942` Albania).
+  [sip-embassy-beacons.md](sip-embassy-beacons.md).
+
+- **`144.172.109.53` (the 06-24 RouterHosting monetization actor) held a new AU target** —
+  `+61494333543` (Telstra mobile, `$0.0362`), a fresh Australia target alongside its
+  Estonia/Transatel set.
+
+- **Resilience clean under the resumed load** — 0 `setup_failed` across **1,283 bridges**;
+  the no-response reap fired twice (`pbx_no_response`). The 06-25 18:57 UTC dialplan changepoint
+  is live: held-to-cap monetization (standard prefixes) is unaffected; prefix-fuzz floods now
+  `404`. Bot-adaptability analysis still premature (~1 week out, ≥ ~07-02).
+
+---
+
 ## 2026-06-25
 
 ### Observations since 2026-06-24 20:27 UTC, LA1

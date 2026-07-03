@@ -18,8 +18,20 @@ import uuid
 import phonenumbers
 from phonenumbers import geocoder as pn_geocoder
 
-import sip_b2bua
-import sip_live_permit
+# Advanced SIP investigation modules (B2BUA bridging, dial-profiling capture,
+# replay/playback, wallet). Optional: a basic honeypot deployment — e.g. a
+# feeder server — ships without them and runs as a pure capture-only honeypot
+# that fake-answers per SIP_OK_DIALPLAN. When absent, every INVITE takes the
+# INVITE_FAKE / 404 path and no bridging or recording occurs.
+try:
+    import sip_b2bua
+    import sip_dial_profile
+    HAVE_B2BUA = True
+except ImportError:
+    sip_b2bua = None
+    sip_dial_profile = None
+    HAVE_B2BUA = False
+
 from common import (
     PerIpTokenBucket,
     create_dualstack_tcp_listener,
@@ -50,7 +62,6 @@ _dial_cache = []  # list of (digits_str, iso, name, lat, lng)
 _DIAL_CACHE_MAX = 500
 _DIAL_CACHE_MIN_HITS = 2
 _DIAL_INTEL_DB = os.path.join(os.environ.get('DB_DIR', 'data'), 'knock_knock.db')
-_live_permit_redis = sip_live_permit.redis_client()
 
 # ---------------------------------------------------------------------------
 # Nominatim geocoding cache — city-level coordinates for SIP dial descriptions
@@ -107,7 +118,7 @@ def _seed_dial_cache_from_db(db_path=None):
                  AND hits >= ?
                  AND country IS NOT NULL
                  AND country != 'XX'
-               ORDER BY last_seen DESC, hits DESC
+               ORDER BY hits DESC, last_seen DESC
                LIMIT ?""",
             (_DIAL_CACHE_MIN_HITS, _DIAL_CACHE_MAX),
         )
@@ -455,6 +466,102 @@ COUNTRY_COORDS = {
     'ZM': (-15.39, 28.32), 'ZW': (-17.83, 31.05),
 }
 
+# ISO-3166 alpha-2 → display name, 1:1 with COUNTRY_COORDS keys. Used to expand a
+# dialed number's region code into a country name when libphonenumber's geocoder
+# returns no geographic description (non-geographic ranges: toll-free / premium /
+# shared-cost). Names match the MaxMind country names already used for source IPs
+# where seen (dashboard consistency); the rest are standard short forms.
+COUNTRY_NAMES = {
+    'AC': 'Ascension Island', 'AD': 'Andorra', 'AE': 'United Arab Emirates',
+    'AF': 'Afghanistan', 'AG': 'Antigua and Barbuda', 'AI': 'Anguilla', 'AL': 'Albania',
+    'AM': 'Armenia', 'AO': 'Angola', 'AR': 'Argentina', 'AS': 'American Samoa',
+    'AT': 'Austria', 'AU': 'Australia', 'AW': 'Aruba', 'AX': 'Åland Islands',
+    'AZ': 'Azerbaijan', 'BA': 'Bosnia and Herzegovina', 'BB': 'Barbados', 'BD': 'Bangladesh',
+    'BE': 'Belgium', 'BF': 'Burkina Faso', 'BG': 'Bulgaria', 'BH': 'Bahrain', 'BI': 'Burundi',
+    'BJ': 'Benin', 'BL': 'Saint Barthélemy', 'BM': 'Bermuda', 'BN': 'Brunei', 'BO': 'Bolivia',
+    'BQ': 'Bonaire, Sint Eustatius and Saba', 'BR': 'Brazil', 'BS': 'Bahamas', 'BT': 'Bhutan',
+    'BW': 'Botswana', 'BY': 'Belarus', 'BZ': 'Belize', 'CA': 'Canada',
+    'CC': 'Cocos (Keeling) Islands', 'CD': 'Congo (DRC)', 'CF': 'Central African Republic',
+    'CG': 'Congo Republic', 'CH': 'Switzerland', 'CI': 'Ivory Coast', 'CK': 'Cook Islands',
+    'CL': 'Chile', 'CM': 'Cameroon', 'CN': 'China', 'CO': 'Colombia', 'CR': 'Costa Rica',
+    'CU': 'Cuba', 'CV': 'Cabo Verde', 'CW': 'Curaçao', 'CX': 'Christmas Island',
+    'CY': 'Cyprus', 'CZ': 'Czechia', 'DE': 'Germany', 'DJ': 'Djibouti', 'DK': 'Denmark',
+    'DM': 'Dominica', 'DO': 'Dominican Republic', 'DZ': 'Algeria', 'EC': 'Ecuador',
+    'EE': 'Estonia', 'EG': 'Egypt', 'EH': 'Western Sahara', 'ER': 'Eritrea', 'ES': 'Spain',
+    'ET': 'Ethiopia', 'FI': 'Finland', 'FJ': 'Fiji', 'FK': 'Falkland Islands',
+    'FM': 'Micronesia', 'FO': 'Faroe Islands', 'FR': 'France', 'GA': 'Gabon',
+    'GB': 'United Kingdom', 'GD': 'Grenada', 'GE': 'Georgia', 'GF': 'French Guiana',
+    'GG': 'Guernsey', 'GH': 'Ghana', 'GI': 'Gibraltar', 'GL': 'Greenland', 'GM': 'Gambia',
+    'GN': 'Guinea', 'GP': 'Guadeloupe', 'GQ': 'Equatorial Guinea', 'GR': 'Greece',
+    'GT': 'Guatemala', 'GU': 'Guam', 'GW': 'Guinea-Bissau', 'GY': 'Guyana', 'HK': 'Hong Kong',
+    'HN': 'Honduras', 'HR': 'Croatia', 'HT': 'Haiti', 'HU': 'Hungary', 'ID': 'Indonesia',
+    'IE': 'Ireland', 'IL': 'Israel', 'IM': 'Isle of Man', 'IN': 'India',
+    'IO': 'British Indian Ocean Territory', 'IQ': 'Iraq', 'IR': 'Iran', 'IS': 'Iceland',
+    'IT': 'Italy', 'JE': 'Jersey', 'JM': 'Jamaica', 'JO': 'Jordan', 'JP': 'Japan',
+    'KE': 'Kenya', 'KG': 'Kyrgyzstan', 'KH': 'Cambodia', 'KI': 'Kiribati', 'KM': 'Comoros',
+    'KN': 'Saint Kitts and Nevis', 'KP': 'North Korea', 'KR': 'South Korea', 'KW': 'Kuwait',
+    'KY': 'Cayman Islands', 'KZ': 'Kazakhstan', 'LA': 'Laos', 'LB': 'Lebanon',
+    'LC': 'Saint Lucia', 'LI': 'Liechtenstein', 'LK': 'Sri Lanka', 'LR': 'Liberia',
+    'LS': 'Lesotho', 'LT': 'Lithuania', 'LU': 'Luxembourg', 'LV': 'Latvia', 'LY': 'Libya',
+    'MA': 'Morocco', 'MC': 'Monaco', 'MD': 'Moldova', 'ME': 'Montenegro', 'MF': 'Saint Martin',
+    'MG': 'Madagascar', 'MH': 'Marshall Islands', 'MK': 'North Macedonia', 'ML': 'Mali',
+    'MM': 'Myanmar', 'MN': 'Mongolia', 'MO': 'Macao', 'MP': 'Northern Mariana Islands',
+    'MQ': 'Martinique', 'MR': 'Mauritania', 'MS': 'Montserrat', 'MT': 'Malta',
+    'MU': 'Mauritius', 'MV': 'Maldives', 'MW': 'Malawi', 'MX': 'Mexico', 'MY': 'Malaysia',
+    'MZ': 'Mozambique', 'NA': 'Namibia', 'NC': 'New Caledonia', 'NE': 'Niger',
+    'NF': 'Norfolk Island', 'NG': 'Nigeria', 'NI': 'Nicaragua', 'NL': 'The Netherlands',
+    'NO': 'Norway', 'NP': 'Nepal', 'NR': 'Nauru', 'NU': 'Niue', 'NZ': 'New Zealand',
+    'OM': 'Oman', 'PA': 'Panama', 'PE': 'Peru', 'PF': 'French Polynesia',
+    'PG': 'Papua New Guinea', 'PH': 'Philippines', 'PK': 'Pakistan', 'PL': 'Poland',
+    'PM': 'Saint Pierre and Miquelon', 'PR': 'Puerto Rico', 'PS': 'Palestine',
+    'PT': 'Portugal', 'PW': 'Palau', 'PY': 'Paraguay', 'QA': 'Qatar', 'RE': 'Réunion',
+    'RO': 'Romania', 'RS': 'Serbia', 'RU': 'Russia', 'RW': 'Rwanda', 'SA': 'Saudi Arabia',
+    'SB': 'Solomon Islands', 'SC': 'Seychelles', 'SD': 'Sudan', 'SE': 'Sweden',
+    'SG': 'Singapore', 'SH': 'Saint Helena', 'SI': 'Slovenia', 'SJ': 'Svalbard and Jan Mayen',
+    'SK': 'Slovakia', 'SL': 'Sierra Leone', 'SM': 'San Marino', 'SN': 'Senegal',
+    'SO': 'Somalia', 'SR': 'Suriname', 'SS': 'South Sudan', 'ST': 'São Tomé and Príncipe',
+    'SV': 'El Salvador', 'SX': 'Sint Maarten', 'SY': 'Syria', 'SZ': 'Eswatini',
+    'TA': 'Tristan da Cunha', 'TC': 'Turks and Caicos Islands', 'TD': 'Chad', 'TG': 'Togo',
+    'TH': 'Thailand', 'TJ': 'Tajikistan', 'TK': 'Tokelau', 'TL': 'Timor-Leste',
+    'TM': 'Turkmenistan', 'TN': 'Tunisia', 'TO': 'Tonga', 'TR': 'Türkiye',
+    'TT': 'Trinidad and Tobago', 'TV': 'Tuvalu', 'TW': 'Taiwan', 'TZ': 'Tanzania',
+    'UA': 'Ukraine', 'UG': 'Uganda', 'US': 'United States', 'UY': 'Uruguay',
+    'UZ': 'Uzbekistan', 'VA': 'Vatican City', 'VC': 'Saint Vincent and the Grenadines',
+    'VE': 'Venezuela', 'VG': 'British Virgin Islands', 'VI': 'U.S. Virgin Islands',
+    'VN': 'Vietnam', 'VU': 'Vanuatu', 'WF': 'Wallis and Futuna', 'WS': 'Samoa', 'XK': 'Kosovo',
+    'YE': 'Yemen', 'YT': 'Mayotte', 'ZA': 'South Africa', 'ZM': 'Zambia', 'ZW': 'Zimbabwe'
+}
+
+# libphonenumber number types we tag onto non-geographic dial targets — only the
+# range-based, porting-immutable types it detects reliably (the IRSF-relevant ones).
+# VoIP / mobile-vs-fixed are unreliable from number metadata; leave those to the
+# Telnyx carrier lookup.
+_TYPE_LABEL = {
+    phonenumbers.PhoneNumberType.TOLL_FREE: 'toll-free',
+    phonenumbers.PhoneNumberType.PREMIUM_RATE: 'premium rate',
+    phonenumbers.PhoneNumberType.SHARED_COST: 'shared cost',
+}
+
+
+_region_cc_cache = {}  # iso -> country calling code string ('' when unknown)
+
+
+def _cache_national_digits(digits, iso):
+    """National-number part of a cached E.164 digit string ('12022234942', 'US' →
+    '2022234942'). Returns None when the region's calling code can't be derived or
+    the national part is under 9 digits (too short to be a safe suffix key)."""
+    cc = _region_cc_cache.get(iso)
+    if cc is None:
+        try:
+            cc = str(phonenumbers.country_code_for_region(iso) or '')
+        except Exception:
+            cc = ''
+        _region_cc_cache[iso] = cc
+    if not cc or not digits.startswith(cc):
+        return None
+    national = digits[len(cc):]
+    return national if len(national) >= 9 else None
+
 
 def parse_dial_country(dial_string):
     """Extract target country (iso, name, e164, lat, lng) from a SIP INVITE dial string."""
@@ -484,21 +591,26 @@ def parse_dial_country(dial_string):
             # Original logic: strip prefix before + even if short
             s = s[sep:]
 
-    def _result(pn):
+    def _result(pn, explicit=False):
         iso = phonenumbers.region_code_for_number(pn)
         if not iso or len(iso) != 2 or not iso.isalpha():
             iso = 'XX'
-        country = pn_geocoder.country_name_for_number(pn, 'en')
-        if not country:
-            # Non-geographic: +1 toll-free (libphonenumber guesses region 'US') or genuine
-            # international networks like +800/+870 (region '001'). country_name is empty for
-            # both because no single country owns the range. Label the toll-free subtype
-            # honestly — it's NANP-wide (US/Canada/Caribbean), not necessarily US.
-            is_nanp_tollfree = (pn.country_code == 1
-                                and phonenumbers.number_type(pn) == phonenumbers.PhoneNumberType.TOLL_FREE)
-            country = 'North American Toll-Free' if is_nanp_tollfree else 'International Network'
         desc = pn_geocoder.description_for_number(pn, 'en')
-        name = f'{desc}, {country}' if desc and desc != country else country
+        country = pn_geocoder.country_name_for_number(pn, 'en')
+        if desc:
+            # Geographic number: keep the city/area description (e.g. "California").
+            ctry = country or COUNTRY_NAMES.get(iso, iso)
+            name = f'{desc}, {ctry}' if desc != ctry else ctry
+        elif iso != 'XX':
+            # Non-geographic but the region maps to a real country (e.g. GB premium-rate,
+            # US toll-free): expand the country and tag the line type when reliably known.
+            base = country or COUNTRY_NAMES.get(iso, iso)
+            suffix = _TYPE_LABEL.get(phonenumbers.number_type(pn))
+            name = f'{base} ({suffix})' if suffix else base
+        else:
+            # Genuine international ranges (+800 UIFN, +870 Inmarsat, …): region '001',
+            # no owning country to expand.
+            name = 'International Network'
         e164 = phonenumbers.format_number(pn, phonenumbers.PhoneNumberFormat.E164)
         # Geocode description to city-level coordinates
         lat, lng = geocode_description(name, iso)
@@ -508,38 +620,51 @@ def parse_dial_country(dial_string):
                 lat, lng = coords
         digits = e164.lstrip('+')
         with _dial_cache_lock:
-            # Evict exact match and longer entries that end with this number (misdials)
+            # Evict exact match and longer entries that end with this number (misdials).
+            # For an explicit '+'E.164 also evict shorter entries that are a proper
+            # suffix of it — a poisoned short entry (e.g. '508601846' from a bad strip
+            # of '6508601846') must not keep shadowing the real number's other forms.
             _dial_cache[:] = [(d, i, n, la, ln) for d, i, n, la, ln in _dial_cache
-                              if d != digits and not d.endswith(digits)]
+                              if d != digits and not d.endswith(digits)
+                              and not (explicit and digits.endswith(d))]
             _dial_cache.append((digits, iso, name, lat, lng))
             if len(_dial_cache) > _DIAL_CACHE_MAX:
                 _dial_cache.pop(0)
         if TRACE_ENABLED: print(f'SIP CACHE: stored +{digits} -> {iso} ({name})', file=sys.stderr)
         return iso, name, e164, lat, lng
 
-    # Check suffix against recently seen valid numbers (catches arbitrary PBX prefixes)
-    digits_only = s.lstrip('+')
-    if re.match(r'^\d{7,}$', digits_only):
-        with _dial_cache_lock:
-            for cached_digits, cached_iso, cached_name, cached_lat, cached_lng in _dial_cache:
-                nanp_alias = (
-                    len(cached_digits) == 11
-                    and cached_digits.startswith('1')
-                    and digits_only.endswith(cached_digits[1:])
-                )
-                if digits_only.endswith(cached_digits) or nanp_alias:
-                    if TRACE_ENABLED: print(f'SIP CACHE: hit {digits_only} matched +{cached_digits} -> {cached_iso} ({cached_name})', file=sys.stderr)
-                    return cached_iso, cached_name, f'+{cached_digits}', cached_lat, cached_lng
-
+    # Explicit E.164: a '+' number that validates outright is the one unambiguous
+    # form we ever receive — trust it over the suffix cache (a poisoned shorter
+    # entry must not shadow it; _result repairs the cache).
     if s.startswith('+'):
         try:
             pn = phonenumbers.parse(s, None)
-            if phonenumbers.is_valid_number(pn) or phonenumbers.is_possible_number(pn):
-                return _result(pn)
+            if phonenumbers.is_valid_number(pn):
+                return _result(pn, explicit=True)
         except Exception:
             pass
-        # Failed as E.164 — strip + and try as digits (e.g. ++011972... → 011972...)
+        # Not a valid E.164 — strip + and treat like any other digit string
+        # (e.g. ++011972... → 011972...)
         s = s.lstrip('+')
+
+    # Check suffix against recently seen valid numbers (catches arbitrary PBX prefixes)
+    digits_only = s
+    if re.match(r'^\d{7,}$', digits_only):
+        with _dial_cache_lock:
+            for cached_digits, cached_iso, cached_name, cached_lat, cached_lng in _dial_cache:
+                # National alias: the cached number dialed without its country code,
+                # bare or behind a short PBX/trunk prefix — '2092977081' or
+                # '92092977081' for +12092977081, '988123746728' (9 + RU trunk 8 +
+                # national) for +78123746728.
+                national = _cache_national_digits(cached_digits, cached_iso)
+                national_alias = (
+                    national is not None
+                    and digits_only.endswith(national)
+                    and len(digits_only) - len(national) <= 6
+                )
+                if digits_only.endswith(cached_digits) or national_alias:
+                    if TRACE_ENABLED: print(f'SIP CACHE: hit {digits_only} matched +{cached_digits} -> {cached_iso} ({cached_name})', file=sys.stderr)
+                    return cached_iso, cached_name, f'+{cached_digits}', cached_lat, cached_lng
     if not re.match(r'^\d+$', s):
         return None, None, None, None, None
     if len(s) < 7:
@@ -560,7 +685,7 @@ def parse_dial_country(dial_string):
             if len(remainder) >= 7:
                 try:
                     pn = phonenumbers.parse('+' + remainder, None)
-                    if phonenumbers.is_valid_number(pn) or phonenumbers.is_possible_number(pn):
+                    if phonenumbers.is_valid_number(pn):
                         return _result(pn)
                 except Exception:
                     pass
@@ -571,6 +696,15 @@ def parse_dial_country(dial_string):
             return _result(pn)
     except Exception:
         pass
+    # Bare NANP 10-digit (no trunk '1'): far likelier on this honeypot than
+    # whatever the digit-stripping loop below might salvage
+    if len(s) == 10:
+        try:
+            pn = phonenumbers.parse('+1' + s, None)
+            if phonenumbers.is_valid_number(pn):
+                return _result(pn)
+        except Exception:
+            pass
     max_strip = min(10, len(s) - 7)
     for i in range(1, max_strip + 1):
         try:
@@ -819,53 +953,36 @@ def process_sip_request(req, client_ip, allow_b2bua=False):
         digits_only = re.sub(r'\D', '', dial_user)
         if len(digits_only) < 7:
             return 404, 'Not Found', None
+        if not should_emit_dedup(dedup_key, mark=True):
+            return 404, 'Not Found', None
         with _reg_lock:
             reg_ext = _registered_extensions.get(client_ip)
         if reg_ext:
             common['sip_extension'] = reg_ext
         dialplan_ok = _dialplan_accepts(dial_string, common.get('sip_dial_number'))
-        bridge_candidate = (
-            allow_b2bua
-            and dialplan_ok
-            and sip_b2bua.should_bridge(common.get('sip_dial_number'), common.get('sip_dial_country'))
-        )
         common['sip_pbx_state'] = 0
-        bridge_id = None
-        live_permit = None
-        if allow_b2bua and common.get('sip_dial_number') and sip_b2bua.enabled():
-            live_bridge_id = sip_b2bua.new_bridge_id()
-            try:
-                live_permit = sip_live_permit.consume_permit_and_acquire_live(
-                    _live_permit_redis,
-                    client_ip,
-                    common.get('sip_dial_number'),
-                    live_bridge_id,
-                    dialplan_ok=dialplan_ok,
-                )
-            except Exception as e:
-                if TRACE_ENABLED:
-                    print(f'SIP LIVE PERMIT: check failed for {client_ip}: {e}', file=sys.stderr)
-                live_permit = None
-            if live_permit:
-                bridge_id = live_bridge_id
-                common['sip_pbx_live_permit_id'] = live_permit.get('permit_id') or ''
-        live_candidate = live_permit is not None
-        if bridge_candidate or live_candidate:
+        # All bridging/permit/dial-profiling logic lives in sip_b2bua: one call decides
+        # the backend (manual permit, auto-profiling capture, replay playback, or policy
+        # bridge) and performs any side effects (permit consume, wallet reserve, locks).
+        # The honeypot stays out of the investigation path. Retransmission safety on the
+        # paid path is the should_emit_dedup() guard above (same Call-ID → 404 before we
+        # get here) plus the active-call lock inside b2bua.
+        bridge_plan = sip_b2bua.plan_invite(
+            client_ip,
+            dial_number=common.get('sip_dial_number'),
+            dial_country=common.get('sip_dial_country'),
+            dialplan_ok=dialplan_ok,
+        ) if (allow_b2bua and HAVE_B2BUA) else None
+        if bridge_plan:
             common['sip_pbx_state'] = 1
-            if not bridge_id:
-                bridge_id = sip_b2bua.new_bridge_id()
-            common['sip_pbx_bridge_id'] = bridge_id
+            common['sip_pbx_bridge_id'] = bridge_plan.bridge_id
+            if bridge_plan.live_permit:
+                common['sip_pbx_live_permit_id'] = bridge_plan.live_permit.get('permit_id') or ''
         # SIP status we hand back to the caller: 200 if we answer/bridge, else 404.
-        common['sip_result'] = 200 if (live_candidate or bridge_candidate or dialplan_ok) else 404
-        emit_knock(client_ip, extra=common, dedup_key=dedup_key)
-        if live_candidate or bridge_candidate:
-            return 'INVITE_B2BUA', req, {
-                'dial_number': common.get('sip_dial_number'),
-                'dial_country': common.get('sip_dial_country'),
-                'bridge_id': bridge_id,
-                'force': live_candidate,
-                'live_permit': live_permit if live_candidate else None,
-            }
+        common['sip_result'] = bridge_plan.result_code if bridge_plan else (200 if dialplan_ok else 404)
+        emit_knock(client_ip, extra=common)
+        if bridge_plan:
+            return 'INVITE_B2BUA', req, bridge_plan
         if dialplan_ok:
             return 'INVITE_FAKE', req, None
         return 404, 'Not Found', None
@@ -892,23 +1009,14 @@ def _send_invite_sequence(req, send_fn, send_trying=True):
     send_fn(build_response(req, 200, 'OK', body=sdp))
 
 
-def _start_b2bua_or_fake(req, client_ip, addr, sock, bridge_info):
+def _start_b2bua_or_fake(req, client_ip, addr, sock, bridge_plan):
     def udp_send(resp, _addr=addr):
         sock.sendto(resp, _addr)
-    udp_send(build_response(req, 100, 'Trying'))
-    bridge = sip_b2bua.maybe_start_bridge(
-        req=req,
-        client_ip=client_ip,
-        client_addr=addr,
-        send_to_attacker=udp_send,
-        dial_number=(bridge_info or {}).get('dial_number'),
-        dial_country=(bridge_info or {}).get('dial_country'),
-        bridge_id=(bridge_info or {}).get('bridge_id'),
-        force=bool((bridge_info or {}).get('force')),
-        live_permit=(bridge_info or {}).get('live_permit'),
-    )
+    if getattr(bridge_plan, 'kind', None) == 'live':
+        udp_send(build_response(req, 100, 'Trying'))
+    bridge = sip_b2bua.maybe_start_plan(bridge_plan, req, client_ip, addr, udp_send)
     if not bridge:
-        _send_invite_sequence(req, udp_send, send_trying=False)
+        _send_invite_sequence(req, udp_send, send_trying=(getattr(bridge_plan, 'kind', None) != 'live'))
 
 
 def udp_loop(sock):
@@ -927,7 +1035,7 @@ def udp_loop(sock):
                 continue
             trace(session_id, client_ip, 'udp_parsed', method=req.get('method'), uri=req.get('uri'))
             def udp_send(resp, _addr=addr): sock.sendto(resp, _addr)
-            if sip_b2bua.handle_in_dialog(req, client_ip, udp_send):
+            if HAVE_B2BUA and sip_b2bua.handle_in_dialog(req, client_ip, udp_send):
                 trace(session_id, client_ip, 'udp_b2bua_in_dialog', method=req.get('method'))
                 continue
             result = process_sip_request(req, client_ip, allow_b2bua=True)
@@ -1077,6 +1185,8 @@ def tcp_loop(sock):
 
 def start_honeypot():
     _seed_dial_cache_from_db()
+    if HAVE_B2BUA and sip_b2bua.capturing():
+        sip_dial_profile.ensure_table()
     udp_sock = create_dualstack_udp_listener(SIP_PORT)
 
     tcp_sock = create_dualstack_tcp_listener(SIP_PORT, backlog=200)

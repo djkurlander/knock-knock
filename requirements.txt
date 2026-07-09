@@ -1,4 +1,4 @@
-asyncssh==2.23.1
+asyncssh==2.24.0
 impacket==0.13.1
 geoip2==5.2.0
 redis==8.0.1

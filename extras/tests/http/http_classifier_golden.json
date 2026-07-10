@@ -2538,5 +2538,55 @@
     "body": "",
     "expected_purpose": "config_exposure",
     "expected_name": "Django Debug Toolbar Panel Exposure"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/libs/gui.class.php?file=..%2F..%2F..%2F..%2Fetc%2Fasterisk%2Fsip.conf",
+    "ua": "",
+    "body": "",
+    "expected_purpose": "config_exposure",
+    "expected_name": "Asterisk Config File LFI"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/digium_phones/ajax.php?cmd=cat ajax.php&",
+    "ua": "",
+    "body": "",
+    "expected_purpose": "rce",
+    "expected_name": "Asterisk Digium Phones RCE"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/public/plugins/alertlist/..%2F..%2F..%2F..%2F..%2F..%2Fconf/defaults.ini",
+    "ua": "",
+    "body": "",
+    "expected_purpose": "config_exposure",
+    "expected_name": "Grafana Plugin Path Traversal"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/fetch?target=http://169.254.169.254/latest/meta-data/iam/security-credentials",
+    "ua": "",
+    "body": "",
+    "expected_purpose": "credential_theft",
+    "expected_name": "AWS IMDS SSRF Fetch"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "POST",
+    "path": "/rest/workflow/run",
+    "ua": "",
+    "body": "{\"workflowData\":{\"nodes\":[{\"parameters\":{\"command\":\"id\"}}]}}",
+    "expected_purpose": "rce",
+    "expected_name": "n8n Workflow Execution RCE"
   }
 ]

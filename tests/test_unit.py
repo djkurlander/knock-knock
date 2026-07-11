@@ -300,48 +300,48 @@ def test_sip_dial_cache_matches_nanp_national_alias():
 
 
 def test_sip_dial_explicit_e164_beats_poisoned_cache(monkeypatch):
-    """Observed 2026-04-28: '6508601846' was mis-stripped to +508601846 (Saint Pierre
-    & Miquelon) and the poisoned suffix entry then swallowed every later form of the
-    real number — including the literal '+16508601846'. An explicit valid E.164 must
-    bypass the cache and evict the poisoned proper-suffix entry."""
+    """An explicit valid '+'E.164 resolves DIRECTLY (bypassing the suffix cache), so a
+    poisoned shorter suffix entry can't shadow it. (Originally observed 2026-04-28:
+    '6508601846' mis-stripped to +508601846. The old shorter-suffix eviction that 'repaired'
+    the poison was removed — it evicted real bases 7× vs helped 1× over full history, and the
+    is_valid parser no longer creates such poison-strips. The explicit-E.164 guarantee below
+    is what actually protects the real number.)"""
     monkeypatch.setattr(sip_honeypot, 'geocode_description', lambda *a, **k: (None, None))
     with sip_honeypot._dial_cache_lock:
         sip_honeypot._dial_cache[:] = [('508601846', 'PM', 'Saint Pierre And Miquelon', None, None)]
     iso, _, e164, _, _ = sip_honeypot.parse_dial_country('+16508601846')
-    assert (iso, e164) == ('US', '+16508601846')
-    with sip_honeypot._dial_cache_lock:
-        cached = [d for d, *_ in sip_honeypot._dial_cache]
-    assert '508601846' not in cached and '16508601846' in cached
-    # prefixed forms of the same number now resolve via the repaired cache
-    assert sip_honeypot.parse_dial_country('9916508601846')[2] == '+16508601846'
+    assert (iso, e164) == ('US', '+16508601846')           # explicit form is never shadowed
 
 
 def test_e164_subsumes_cached():
-    """A longer valid E.164 that is (dial-out prefix + a known base) is flagged as
+    """A longer valid E.164 that is (dial-out prefix + a cached base) is flagged as
     subsuming, so auto-profiling skips it and we never ring the innocent third party
     whose number is just the tail. Same-length dual-CC twins are NOT subsumed."""
-    sip_honeypot._known_e164_digits.clear()
-    sip_honeypot._known_e164_digits.update({'15154890969', '447723178236', '972567004550'})
+    with sip_honeypot._dial_cache_lock:
+        sip_honeypot._dial_cache[:] = [
+            ('15154890969', 'US', 'Iowa', None, None),
+            ('447723178236', 'GB', 'United Kingdom', None, None),
+            ('972567004550', 'IL', 'Israel', None, None),
+        ]
     assert sip_honeypot._e164_subsumes_cached('+915154890969') is True    # 9 + US base
     assert sip_honeypot._e164_subsumes_cached('+115154890969') is True    # 1 + US base
     assert sip_honeypot._e164_subsumes_cached('+15154890969') is False    # the base itself
-    assert sip_honeypot._e164_subsumes_cached('+447723178236') is False   # known, no shorter base
+    assert sip_honeypot._e164_subsumes_cached('+447723178236') is False   # cached, no shorter base
     assert sip_honeypot._e164_subsumes_cached('+970567004550') is False   # dual-CC twin (same length)
     assert sip_honeypot._e164_subsumes_cached('+13125550123') is False    # unrelated
 
 
-def test_dial_cache_keeps_explicit_base_against_prefix_twin(monkeypatch):
-    """A real base (its own +E.164 dialed, so it's a known number) must survive when a
-    longer explicit prefix-twin arrives — unlike a poisoned strip, which is evicted."""
+def test_dial_cache_keeps_shorter_base_against_prefix_twin(monkeypatch):
+    """A real base must survive when a longer explicit prefix-twin arrives — the eviction
+    no longer removes shorter proper-suffix entries, so 9+<US number> can't evict the base."""
     monkeypatch.setattr(sip_honeypot, 'geocode_description', lambda *a, **k: (None, None))
     with sip_honeypot._dial_cache_lock:
         sip_honeypot._dial_cache[:] = []
-        sip_honeypot._known_e164_digits.clear()
     sip_honeypot.parse_dial_country('+15154890969')        # establish the real US base
     sip_honeypot.parse_dial_country('+915154890969')       # the 9+ artifact (explicit +91)
     with sip_honeypot._dial_cache_lock:
         cached = [d for d, *_ in sip_honeypot._dial_cache]
-    assert '15154890969' in cached                         # base preserved (was evicted before the gate)
+    assert '15154890969' in cached                         # base preserved
 
 
 def test_sip_dial_bare_nanp_ten_digit(monkeypatch):

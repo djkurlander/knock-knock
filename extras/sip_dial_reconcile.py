@@ -179,6 +179,45 @@ def best_candidate(digits, suffix_index, weight, explicit_knocks, min_explicit, 
     return best, best_exact, best_strip
 
 
+def load_ip_maps(conn):
+    """Per-IP dialed-number maps for the same-IP prefix-twin check.
+    number_ips: E.164 -> set of source IPs that dialed it.
+    ip_digits:  source IP -> {digit-string: E.164} for every number that IP dialed."""
+    number_ips = defaultdict(set)
+    ip_digits = defaultdict(dict)
+    for ip, num in conn.execute(
+        "SELECT DISTINCT ip_address, sip_dial_number FROM knocks_sip"
+        " WHERE sip_dial_number IS NOT NULL AND sip_dial_number != ''"
+        "   AND ip_address IS NOT NULL AND ip_address != ''"
+    ):
+        number_ips[num].add(ip)
+        ip_digits[ip][num.lstrip("+")] = num
+    return number_ips, ip_digits
+
+
+def same_ip_subset(e164, number_ips, ip_digits):
+    """Prefix-enumeration collapse: if some IP that dialed `e164` ALSO dialed a
+    shorter valid E.164 `M` whose digits are a full (>=9-digit) suffix of `e164`'s
+    digits, return the closest such `M` (longest suffix). One IP dialing both a
+    number and (prefix + that number) is dial-out-prefix enumeration, so the longer
+    form is an artifact (e.g. `+15154890969` and `9`+it => `+915154890969`). Same-IP
+    + suffix is conclusive (a chance suffix collision within one IP's dial set is ~0),
+    so no trunk-prefix guard is needed. Returns `M` or None."""
+    digits = e164.lstrip("+")
+    best, best_cut = None, None
+    for ip in number_ips.get(e164, ()):
+        dmap = ip_digits.get(ip)
+        if not dmap:
+            continue
+        for cut in range(1, len(digits) - 8):       # keep the matched suffix >= 9 digits
+            m = dmap.get(digits[cut:])
+            if m and m != e164 and _valid_e164(m):
+                if best_cut is None or cut < best_cut:
+                    best, best_cut = m, cut
+                break                               # longest suffix for this IP
+    return best
+
+
 def plan(conn, args):
     dial_intel = {
         row["number"]: dict(row)
@@ -190,18 +229,25 @@ def plan(conn, args):
     pairs = load_pairs(conn)
     weight, explicit_knocks = build_canonicals(pairs, dial_intel)
     suffix_index = build_suffix_index(weight)
+    number_ips, ip_digits = load_ip_maps(conn)
 
     moves = []  # (pair_row, target_e164, reason)
     for row in pairs:
         explicit, digits = _forms(row["ds"])
         cur = row["cur"]
 
-        # 1. A literal valid '+'E.164 is unconditional
+        # 1. A literal valid '+'E.164 is unconditional — UNLESS the same source IP
+        #    also probed a shorter valid number that is a full suffix of this one.
+        #    That's dial-out-prefix enumeration (one IP dials both +15154890969 and
+        #    9+it => +915154890969); the longer +91 form is an artifact, not a real
+        #    India number, so collapse it to the subset.
         if explicit:
             e164 = _valid_e164(explicit)
             if e164:
-                if e164 != cur:
-                    moves.append((row, e164, "explicit"))
+                twin = same_ip_subset(e164, number_ips, ip_digits)
+                target = twin or e164
+                if target != cur:
+                    moves.append((row, target, "prefix-twin" if twin else "explicit"))
                 continue
         if not digits:
             continue

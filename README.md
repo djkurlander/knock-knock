@@ -56,6 +56,7 @@ Check it out at https://knock-knock.net, or install it on your own server. Don't
 - Listens on the protocol ports and captures all uninvited traffic
 - Enriches attacker IPs with GeoIP (city, country, ISP, ASN)
 - Streams live events to the dashboard via WebSockets
+- Optionally forwards knocks from multiple honeypot servers to one aggregating dashboard
 - Maintains leaderboards and stats (top countries, users, passwords, ISPs)
 - Works well on desktop and mobile with a swipeable carousel
 

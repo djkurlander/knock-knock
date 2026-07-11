@@ -157,6 +157,24 @@ SMTP Attacker   → honeypots/smtp_honeypot.py           (ports 25,587)┘      
 | `docs/HOW_TO_ADD_A_PROTOCOL.md` | Practical guide for adding a local/private protocol |
 | `extras/` | Optional utilities (Cloudflare UFW rules, texture generation, visitor reports) |
 
+## Agent Skills & Instruction Files
+
+**`AGENTS.md` is a symlink to this file (`CLAUDE.md`).** `CLAUDE.md` is the single source of
+truth; the symlink lets tools that read `AGENTS.md` (Codex, Cursor, Gemini CLI, etc.) share the
+same content, while Claude Code keeps reading/writing `CLAUDE.md` directly (its memory additions
+land here and flow to `AGENTS.md` automatically, since it's one physical file). Relative symlink,
+committed. Claude Code does **not** auto-read `AGENTS.md` on its own — hence the symlink, not a rename.
+
+Slash-command skills live in `.claude/commands/`:
+
+| Skill | Location | Public/Private | Purpose |
+|-------|----------|----------------|---------|
+| `/check-http-knocks` | `.claude/commands/check-http-knocks.md` | **Public** (real file in this repo) | Audit new HTTP honeypot knocks and extend the exploit classifier (`honeypots/http_exploits.json` + `http_honeypot.py` heuristics); checkpoint at `extras/tests/http/last_checked_id.txt`, regression at `extras/tests/http/test_http_classifier.py`. |
+| `/sip-daily-review` | `.claude/commands/sip-daily-review.md` | **Private overlay** — a **symlink** to `knock-knock-private/.claude/commands/sip-daily-review.md`, only present when the private overlay is composed in via `link-private.sh` (SIP/B2BUA investigation stays out of the public repo) | Review B2BUA + SIP activity since the last diary entry and propose diary/note candidates. Bundled read-only scan: `extras/sip-number-exploration/sip_daily_scan.sh` (also private). |
+
+So on a public-only checkout `/sip-daily-review` is absent (the symlink dangles until the private
+overlay is linked); `/check-http-knocks` is always present.
+
 ## Data Directory
 
 All persistent data lives in `data/`:

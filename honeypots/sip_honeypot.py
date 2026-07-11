@@ -59,6 +59,8 @@ _reg_lock = threading.Lock()
 _registered_extensions = {}
 _dial_cache_lock = threading.Lock()
 _dial_cache = []  # list of (digits_str, iso, name, lat, lng)
+_known_e164_digits = set()  # non-evicting set of known dialed E.164 digit-strings (bases),
+                            # used by _e164_subsumes_cached() for prefix-subsumption detection
 _DIAL_CACHE_MAX = 500
 _DIAL_CACHE_MIN_HITS = 2
 _DIAL_INTEL_DB = os.path.join(os.environ.get('DB_DIR', 'data'), 'knock_knock.db')
@@ -150,6 +152,8 @@ def _seed_dial_cache_from_db(db_path=None):
 
     with _dial_cache_lock:
         _dial_cache[:] = [entry[:5] for entry in seeded]
+        _known_e164_digits.clear()
+        _known_e164_digits.update(re.sub(r'\D', '', r[0] or '') for r in rows if r[0])
     if TRACE_ENABLED and seeded:
         print(f'SIP CACHE: seeded {len(seeded)} dial targets from {path}', file=sys.stderr)
     return len(seeded)
@@ -563,6 +567,22 @@ def _cache_national_digits(digits, iso):
     return national if len(national) >= 9 else None
 
 
+def _e164_subsumes_cached(e164):
+    """True if a >=9-digit *proper suffix* of this valid E.164's digits is itself a known
+    dialed base — i.e. this number looks like a dial-out-prefix extension of a real number
+    we already know (9+<US number> -> a real +91 India number). Used to skip auto-profiling
+    so we never place a real outbound call to an innocent third party. Cheap: a few set
+    lookups against the non-evicting known-base set."""
+    digits = (e164 or '').lstrip('+')
+    if len(digits) < 10:            # need a >=9-digit proper suffix => digits must be >=10
+        return False
+    with _dial_cache_lock:
+        for cut in range(1, len(digits) - 8):   # suffix length 9 .. len-1 (strictly shorter)
+            if digits[cut:] in _known_e164_digits:
+                return True
+    return False
+
+
 def parse_dial_country(dial_string):
     """Extract target country (iso, name, e164, lat, lng) from a SIP INVITE dial string."""
     if not dial_string:
@@ -621,15 +641,22 @@ def parse_dial_country(dial_string):
         digits = e164.lstrip('+')
         with _dial_cache_lock:
             # Evict exact match and longer entries that end with this number (misdials).
-            # For an explicit '+'E.164 also evict shorter entries that are a proper
-            # suffix of it — a poisoned short entry (e.g. '508601846' from a bad strip
-            # of '6508601846') must not keep shadowing the real number's other forms.
+            # For an explicit '+'E.164 also evict shorter *proper-suffix* entries — BUT only
+            # ones that are NOT a known dialed base. A poisoned short entry (e.g. '508601846'
+            # mis-stripped from '6508601846') was never resolved as its own number, so it's
+            # absent from _known_e164_digits and gets cleaned; a real base (its own +E.164 has
+            # been dialed) is in the set and is spared. This blocks dial-out-prefix enumeration
+            # (explicit 9+<US number> -> a real +91) from evicting the genuine base. (Sim over
+            # full history: the old ungated eviction hurt 7×, helped 1×; this keeps the 1, drops
+            # the 7.)
             _dial_cache[:] = [(d, i, n, la, ln) for d, i, n, la, ln in _dial_cache
                               if d != digits and not d.endswith(digits)
-                              and not (explicit and digits.endswith(d))]
+                              and not (explicit and digits.endswith(d)
+                                       and d not in _known_e164_digits)]
             _dial_cache.append((digits, iso, name, lat, lng))
             if len(_dial_cache) > _DIAL_CACHE_MAX:
                 _dial_cache.pop(0)
+            _known_e164_digits.add(digits)   # non-evicting: bases persist for subsumption + this gate
         if TRACE_ENABLED: print(f'SIP CACHE: stored +{digits} -> {iso} ({name})', file=sys.stderr)
         return iso, name, e164, lat, lng
 
@@ -916,6 +943,8 @@ def process_sip_request(req, client_ip, allow_b2bua=False):
         if dial_iso:
             if TRACE_ENABLED: print(f'SIP DIAL: {dial_string} → {dial_e164} → {dial_iso} ({dial_name})', file=sys.stderr)
             common['sip_dial_number'] = dial_e164
+            if _e164_subsumes_cached(dial_e164):
+                common['sip_e164_subsumes'] = 1
             common['sip_dial_country'] = dial_iso
             common['sip_dial_country_name'] = dial_name
             if dial_lat is not None:
@@ -972,6 +1001,7 @@ def process_sip_request(req, client_ip, allow_b2bua=False):
             dial_number=common.get('sip_dial_number'),
             dial_country=common.get('sip_dial_country'),
             dialplan_ok=dialplan_ok,
+            e164_subsumes=bool(common.get('sip_e164_subsumes')),
         ) if (allow_b2bua and HAVE_B2BUA) else None
         if bridge_plan:
             common['sip_pbx_state'] = 1

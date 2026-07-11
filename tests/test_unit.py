@@ -316,6 +316,34 @@ def test_sip_dial_explicit_e164_beats_poisoned_cache(monkeypatch):
     assert sip_honeypot.parse_dial_country('9916508601846')[2] == '+16508601846'
 
 
+def test_e164_subsumes_cached():
+    """A longer valid E.164 that is (dial-out prefix + a known base) is flagged as
+    subsuming, so auto-profiling skips it and we never ring the innocent third party
+    whose number is just the tail. Same-length dual-CC twins are NOT subsumed."""
+    sip_honeypot._known_e164_digits.clear()
+    sip_honeypot._known_e164_digits.update({'15154890969', '447723178236', '972567004550'})
+    assert sip_honeypot._e164_subsumes_cached('+915154890969') is True    # 9 + US base
+    assert sip_honeypot._e164_subsumes_cached('+115154890969') is True    # 1 + US base
+    assert sip_honeypot._e164_subsumes_cached('+15154890969') is False    # the base itself
+    assert sip_honeypot._e164_subsumes_cached('+447723178236') is False   # known, no shorter base
+    assert sip_honeypot._e164_subsumes_cached('+970567004550') is False   # dual-CC twin (same length)
+    assert sip_honeypot._e164_subsumes_cached('+13125550123') is False    # unrelated
+
+
+def test_dial_cache_keeps_explicit_base_against_prefix_twin(monkeypatch):
+    """A real base (its own +E.164 dialed, so it's a known number) must survive when a
+    longer explicit prefix-twin arrives — unlike a poisoned strip, which is evicted."""
+    monkeypatch.setattr(sip_honeypot, 'geocode_description', lambda *a, **k: (None, None))
+    with sip_honeypot._dial_cache_lock:
+        sip_honeypot._dial_cache[:] = []
+        sip_honeypot._known_e164_digits.clear()
+    sip_honeypot.parse_dial_country('+15154890969')        # establish the real US base
+    sip_honeypot.parse_dial_country('+915154890969')       # the 9+ artifact (explicit +91)
+    with sip_honeypot._dial_cache_lock:
+        cached = [d for d, *_ in sip_honeypot._dial_cache]
+    assert '15154890969' in cached                         # base preserved (was evicted before the gate)
+
+
 def test_sip_dial_bare_nanp_ten_digit(monkeypatch):
     """A bare 10-digit NANP dial ('6508601846') must resolve as +1..., not have its
     first digit stripped into an exotic country code."""

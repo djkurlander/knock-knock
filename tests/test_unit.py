@@ -299,6 +299,60 @@ def test_sip_dial_cache_matches_nanp_national_alias():
     )
 
 
+def test_sip_dial_full_e164_beats_national_alias():
+    """A full cached E.164 present as a suffix of the dialed digits beats a national-alias
+    (CC-stripped) match of a *different* cached number — order-independent. India's national
+    number ('4570209303') is byte-identical to Denmark's whole E.164, so once a +91 poison
+    entry exists the old first-either match resolved '00'+Denmark to India by cache order;
+    the full-beats-alias precedence always returns Denmark."""
+    for order in (
+        [('914570209303', 'IN', 'India', None, None), ('4570209303', 'DK', 'Denmark', None, None)],
+        [('4570209303', 'DK', 'Denmark', None, None), ('914570209303', 'IN', 'India', None, None)],
+    ):
+        with sip_honeypot._dial_cache_lock:
+            sip_honeypot._dial_cache[:] = list(order)
+        for ds in ('004570209303', '9004570209303', '0004570209303'):
+            iso, _, e164, *_ = sip_honeypot.parse_dial_country(ds)
+            assert (iso, e164) == ('DK', '+4570209303'), (order, ds)
+
+
+def test_sip_dial_shortest_full_suffix_wins():
+    """When the dialed digits contain both a longer nested full E.164 (a dial-out-prefix
+    artifact) and the shorter real base, the shorter base wins."""
+    with sip_honeypot._dial_cache_lock:
+        sip_honeypot._dial_cache[:] = [
+            ('915154890969', 'IN', 'India', None, None),      # the 9+US artifact (longer)
+            ('15154890969', 'US', 'Iowa', None, None),        # the real base (shorter)
+        ]
+    iso, _, e164, *_ = sip_honeypot.parse_dial_country('00915154890969')
+    assert (iso, e164) == ('US', '+15154890969')
+
+
+def test_sip_dial_dual_cc_twin_resolves_dialed_cc():
+    """+970/+972 (Palestine/Israel) share a national number; each dialed full form resolves
+    to the country code actually dialed, not a cache-order guess (both are legit, not merged)."""
+    with sip_honeypot._dial_cache_lock:
+        sip_honeypot._dial_cache[:] = [
+            ('970592698190', 'PS', 'West Bank', None, None),
+            ('972592698190', 'IL', 'Israel', None, None),
+        ]
+    assert sip_honeypot.parse_dial_country('972592698190')[0] == 'IL'
+    assert sip_honeypot.parse_dial_country('00970592698190')[0] == 'PS'
+
+
+def test_sip_dial_national_alias_fallback(monkeypatch):
+    """The national-alias fallback still catches CC-less trunk-prefixed dials that the greedy
+    branches can't ('9'+national) — regression guard for keeping the alias as the fallback."""
+    monkeypatch.setattr(sip_honeypot, 'geocode_description', lambda *a, **k: (None, None))
+    with sip_honeypot._dial_cache_lock:
+        sip_honeypot._dial_cache[:] = [
+            ('12092977081', 'US', 'California', None, None),
+            ('78123746728', 'RU', 'St Petersburg', None, None),
+        ]
+    assert sip_honeypot.parse_dial_country('92092977081')[0] == 'US'
+    assert sip_honeypot.parse_dial_country('988123746728')[0] == 'RU'
+
+
 def test_sip_dial_explicit_e164_beats_poisoned_cache(monkeypatch):
     """An explicit valid '+'E.164 resolves DIRECTLY (bypassing the suffix cache), so a
     poisoned shorter suffix entry can't shadow it. (Originally observed 2026-04-28:

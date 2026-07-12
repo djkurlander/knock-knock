@@ -671,20 +671,34 @@ def parse_dial_country(dial_string):
     digits_only = s
     if re.match(r'^\d{7,}$', digits_only):
         with _dial_cache_lock:
-            for cached_digits, cached_iso, cached_name, cached_lat, cached_lng in _dial_cache:
-                # National alias: the cached number dialed without its country code,
-                # bare or behind a short PBX/trunk prefix — '2092977081' or
-                # '92092977081' for +12092977081, '988123746728' (9 + RU trunk 8 +
-                # national) for +78123746728.
-                national = _cache_national_digits(cached_digits, cached_iso)
-                national_alias = (
-                    national is not None
-                    and digits_only.endswith(national)
-                    and len(digits_only) - len(national) <= 6
-                )
-                if digits_only.endswith(cached_digits) or national_alias:
-                    if TRACE_ENABLED: print(f'SIP CACHE: hit {digits_only} matched +{cached_digits} -> {cached_iso} ({cached_name})', file=sys.stderr)
-                    return cached_iso, cached_name, f'+{cached_digits}', cached_lat, cached_lng
+            # Precedence (see comments): a *full* cached E.164 present as a suffix of the
+            # dialed digits beats a *national-alias* (CC-stripped) match of a different
+            # cached number — a complete number is unambiguous, a fragment is a heuristic.
+            #   * full match  → prefer the SHORTEST (a longer nested full is a dial-out-prefix
+            #                   artifact, e.g. +91|<US> over the real <US> base).
+            #   * national alias (fallback, only when no full match) → the cached number dialed
+            #                   without its country code, bare or behind a short (≤6) PBX/trunk
+            #                   prefix ('92092977081' for +12092977081, '988123746728' = 9 + RU
+            #                   trunk 8 + national for +78123746728); prefer the LONGEST national
+            #                   (most specific).
+            best_full = None    # (len(digits), entry) — prefer the SHORTEST full E.164 suffix
+            best_alias = None   # (len(national), entry) — prefer the LONGEST national alias
+            for cached in _dial_cache:
+                cd, ci = cached[0], cached[1]
+                if digits_only.endswith(cd):
+                    if best_full is None or len(cd) < best_full[0]:
+                        best_full = (len(cd), cached)
+                else:
+                    national = _cache_national_digits(cd, ci)
+                    if (national is not None and digits_only.endswith(national)
+                            and len(digits_only) - len(national) <= 6):
+                        if best_alias is None or len(national) > best_alias[0]:
+                            best_alias = (len(national), cached)
+            chosen = best_full or best_alias   # a full E.164 always beats a national alias
+            if chosen is not None:
+                cd, ci, cn, cla, cln = chosen[1]
+                if TRACE_ENABLED: print(f'SIP CACHE: hit {digits_only} matched +{cd} -> {ci} ({cn})', file=sys.stderr)
+                return ci, cn, f'+{cd}', cla, cln
     if not re.match(r'^\d+$', s):
         return None, None, None, None, None
     if len(s) < 7:

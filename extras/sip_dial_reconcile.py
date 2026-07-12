@@ -218,6 +218,19 @@ def same_ip_subset(e164, number_ips, ip_digits):
     return best
 
 
+def subsumes_current(e164, cur):
+    """True when `cur` is a valid E.164 whose digits are a proper >=9-digit suffix of
+    `e164`'s digits — i.e. the explicit `e164` is a dial-out-prefix extension of the
+    shorter real number the live parser already resolved (`9`+`+1 919...` => `+91 9197...`).
+    Same idea as the honeypot's _e164_subsumes_cached, but the evidence is the current
+    reading itself: proof only counts if the explicit form isn't a prefixed artifact of a
+    valid shorter number. (>=9-digit suffix => a chance collision is ~0 at our scale.)"""
+    if not cur or not _valid_e164(cur):
+        return False
+    ed, cd = e164.lstrip("+"), cur.lstrip("+")
+    return len(cd) >= 9 and len(cd) < len(ed) and ed.endswith(cd)
+
+
 def plan(conn, args):
     dial_intel = {
         row["number"]: dict(row)
@@ -245,7 +258,13 @@ def plan(conn, args):
             e164 = _valid_e164(explicit)
             if e164:
                 twin = same_ip_subset(e164, number_ips, ip_digits)
-                target = twin or e164
+                # An explicit dial-out-prefix form must not override a shorter valid reading
+                # the live parser already resolved: if cur is a valid >=9-digit suffix of the
+                # explicit e164, the explicit form is the artifact — keep cur, don't mint a
+                # bogus +91/+81 row. (same_ip_subset covers the case where the same IP also
+                # dialed the bare number; this covers the bots that only ever dial the prefixed
+                # form, which the global suffix cache still resolved correctly at ingest.)
+                target = twin or (cur if subsumes_current(e164, cur) else e164)
                 if target != cur:
                     moves.append((row, target, "prefix-twin" if twin else "explicit"))
                 continue

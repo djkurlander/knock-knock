@@ -98,7 +98,7 @@ def get_visitors(days):
                MAX(referrer) as referrer, MAX(user_agent) as user_agent,
                SUM(visit_count) as visit_count
         FROM visitors
-        WHERE date >= ?
+        WHERE date >= ? AND page NOT LIKE '/static/ip-blocklist-%'
         GROUP BY ip
         ORDER BY MAX(last_seen) DESC
     """, (since,))
@@ -169,6 +169,26 @@ def get_top_referrers(days, limit=40):
     return rows
 
 
+def get_feed_consumers(days, limit=40):
+    """Who downloaded the ip-blocklist data feeds — a separate population from the dashboard
+    viewers above (these are scripts/SOCs pulling the threat list, not eyeballs on the globe)."""
+    since = (datetime.now() - timedelta(days=days)).strftime('%Y-%m-%d')
+    conn = sqlite3.connect(VISITORS_DB)
+    conn.row_factory = sqlite3.Row
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT ip, MAX(country) country, MAX(isp) isp,
+               GROUP_CONCAT(DISTINCT REPLACE(REPLACE(page, '/static/ip-blocklist-', ''), '.txt', '')) files,
+               SUM(visit_count) grabs, MAX(last_seen) last_seen
+        FROM visitors
+        WHERE date >= ? AND page LIKE '/static/ip-blocklist-%'
+        GROUP BY ip ORDER BY grabs DESC LIMIT ?
+    """, (since, limit))
+    rows = [dict(r) for r in cur.fetchall() if not is_excluded(r['ip'])]
+    conn.close()
+    return rows
+
+
 def format_report(period_name, days):
     """Format the visitor report."""
     visitors = get_visitors(days)
@@ -198,6 +218,15 @@ def format_report(period_name, days):
         report.append("TOP REFERRERS:")
         for ref, cnt in top_referrers:
             report.append(f"  {ref}: {cnt}")
+        report.append("")
+
+    feed_consumers = get_feed_consumers(days)
+    if feed_consumers:
+        report.append("BLOCKLIST FEED CONSUMERS (ip-blocklist downloads, not dashboard views):")
+        for f in feed_consumers:
+            loc = f['country'] or 'Unknown'
+            report.append(f"  {f['ip']} — {f['isp'] or 'Unknown'} ({loc}): "
+                          f"{f['grabs']} grab{'s' if f['grabs'] != 1 else ''} [{f['files']}]")
         report.append("")
 
     report.append("=" * 50)

@@ -48,7 +48,14 @@ async def http_middleware(request: Request, call_next):
             request.headers.get('host', ''),
             request.headers.get('user-agent', ''),
         )
-    if LOG_VISITORS and response.headers.get('content-type', '').startswith('text/html'):
+    # Log dashboard page views (text/html) plus deliberate downloads of the ip-blocklist
+    # data feeds served from /static (StaticFiles serves them as text/plain, so they'd
+    # otherwise dodge logging). Both land in visitors.db keyed by request.url.path, so the
+    # feed grabs ('/static/ip-blocklist-*.txt') stay distinguishable from human page views.
+    _path = request.url.path
+    _is_feed = (response.status_code == 200
+                and _path.startswith('/static/ip-blocklist-') and _path.endswith('.txt'))
+    if LOG_VISITORS and (response.headers.get('content-type', '').startswith('text/html') or _is_feed):
         ip = get_request_client_ip(request)
         if ip:
             referrer = request.headers.get('referer') or request.headers.get('referrer')

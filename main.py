@@ -521,6 +521,12 @@ async def get():
 async def get_ibr():
     return HTMLResponse(content=_read_file("internet-background-radiation.html"), headers={"Cache-Control": "no-cache"})
 
+
+@app.head("/blocklist")
+@app.get("/blocklist")
+async def get_blocklist_page():
+    return HTMLResponse(content=_read_file("blocklist.html"), headers={"Cache-Control": "no-cache"})
+
 @app.head("/summary")
 @app.get("/summary")
 async def get_summary():

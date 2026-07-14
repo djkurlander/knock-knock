@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Knock-Knock.net | Free Attacker IP Blocklists (CSF, CrowdSec, ipset, fail2ban)</title>
+    <link rel="icon" type="image/png" href="static/robot1.png">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="Free, hourly-updated IP blocklists of real attackers caught by the Knock-Knock honeypot across SSH, Telnet, FTP, RDP, SMB, SIP, HTTP and SMTP. Plug them straight into CSF, CrowdSec, ipset, nftables or pfSense/OPNsense.">
+    <link rel="canonical" href="https://knock-knock.net/blocklist">
+    <meta property="og:title" content="Knock-Knock.net | Free Attacker IP Blocklists">
+    <meta property="og:description" content="Live honeypot blocklists — every attacker IP we log, refreshed hourly. Copy-paste setup for CSF, CrowdSec, ipset, nftables & pfSense.">
+    <meta property="og:image" content="https://knock-knock.net/static/og-image.jpg">
+    <meta property="og:url" content="https://knock-knock.net/blocklist">
+    <meta property="og:type" content="website">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:image" content="https://knock-knock.net/static/og-image.jpg">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --neon-green: #00ff41; --warning-yellow: #ffcc00; --hazard-red: #ff1a1a;
+            --data-blue: #00fbff; --ip-purple: #9d00ff; --bg-dark: #0a0a0a;
+            --ui-label: #ffcc00; --ui-grey-dim: #707070;
+        }
+        html, body { background: var(--bg-dark); color: var(--neon-green); font-family: 'Inter', sans-serif;
+            margin: 0; padding: 0; font-size: 16px; line-height: 1.6; -webkit-text-size-adjust: 100%; }
+        .wrap { max-width: 820px; margin: 0 auto; padding: 28px 20px 60px; }
+        h1 { color: var(--neon-green); font-size: 1.8em; letter-spacing: 2px; text-transform: uppercase; margin: 0 0 6px; }
+        h2 { color: var(--neon-green); border-bottom: 2px solid #333; font-size: 1.25em; text-transform: uppercase;
+            letter-spacing: 2px; margin: 38px 0 14px; padding-bottom: 4px; }
+        h3 { color: var(--data-blue); font-size: 1.05em; margin: 22px 0 8px; letter-spacing: 1px; }
+        p { margin: 10px 0; }
+        a { color: var(--data-blue); text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        .tagline { color: var(--ui-grey-dim); font-size: 0.95em; margin-bottom: 4px; }
+        .robot { height: 1.3em; vertical-align: -0.25em; margin-right: 6px; }
+        code { color: var(--warning-yellow); font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 0.92em; }
+        pre { background: #060606; border: 1px solid #2a2a2a; border-left: 3px solid var(--data-blue);
+            border-radius: 6px; padding: 14px 16px; overflow-x: auto; font-size: 0.86em; line-height: 1.5;
+            color: #d6ffe0; -webkit-user-select: text; user-select: text; box-shadow: 0 0 10px rgba(0,251,255,0.08); }
+        pre code { color: inherit; }
+        .feeds { display: flex; flex-wrap: wrap; gap: 16px; margin: 16px 0; }
+        .feed { flex: 1 1 340px; background: #0f0f0f; border: 1px solid #3d3d3d; border-radius: 8px; padding: 16px 18px; }
+        .feed .name { color: var(--warning-yellow); font-weight: 700; letter-spacing: 1px; }
+        .feed .url { display: inline-block; margin-top: 8px; font-family: ui-monospace, monospace; font-size: 0.86em;
+            word-break: break-all; }
+        .feed .meta { color: var(--ui-grey-dim); font-size: 0.85em; margin-top: 8px; }
+        .back { display: inline-block; margin-top: 30px; padding: 10px 18px; border: 1px solid var(--data-blue);
+            border-radius: 6px; color: var(--data-blue); }
+        .back:hover { background: rgba(0,251,255,0.08); text-decoration: none; }
+        footer { color: var(--ui-grey-dim); font-size: 0.85em; margin-top: 44px; border-top: 1px solid #222; padding-top: 16px; }
+    </style>
+</head>
+<body>
+<div class="wrap">
+    <p class="tagline">knock-knock.net</p>
+    <h1><img class="robot" src="static/robot1.png" alt="">Attacker IP Blocklists</h1>
+    <p>Every IP that touches this honeypot is, by definition, scanning or attacking servers on the open internet —
+    across SSH, Telnet, FTP, RDP, SMB, SIP, HTTP and SMTP. We publish them as two free, plain-text blocklists you can
+    drop straight into your firewall.</p>
+
+    <h2>The feeds</h2>
+    <div class="feeds">
+        <div class="feed">
+            <span class="name">365-DAY LIST</span> — recommended
+            <a class="url" href="/static/ip-blocklist-year.txt">knock-knock.net/static/ip-blocklist-year.txt</a>
+            <div class="meta">Every attacker seen in the last year (100k+ IPs). Use a finite ban time so entries age out
+            as they drop off the list.</div>
+        </div>
+        <div class="feed">
+            <span class="name">30-DAY LIST</span> — conservative
+            <a class="url" href="/static/ip-blocklist-month.txt">knock-knock.net/static/ip-blocklist-month.txt</a>
+            <div class="meta">Only the last 30 days (~tens of thousands). Freshest, fewest false positives — the pick
+            for public, user-facing services.</div>
+        </div>
+    </div>
+    <p>Format: <strong>one IPv4 address per line</strong>, no comments or headers — the lowest-common-denominator every
+    firewall ingests. Regenerated <strong>hourly</strong> — fetch up to hourly.</p>
+
+    <h2>Plug it into your firewall</h2>
+    <p>Examples use the 365-day list (swap <code>-year</code> → <code>-month</code> for the conservative one). CSF and
+    pfSense self-refresh once configured; the CrowdSec / ipset / nftables snippets fetch the list from cron (or a systemd timer), up to hourly.</p>
+
+    <h3>CSF (ConfigServer Security &amp; Firewall)</h3>
+    <p>Add one line to <code>/etc/csf/csf.blocklists</code> (format is <code>NAME|refresh_secs|max_ips(0=all)|URL</code>),
+    then reload. Set <code>LF_IPSET = "1"</code> in <code>csf.conf</code> so the list lands in ipset, not raw iptables.</p>
+    <pre><code># /etc/csf/csf.blocklists
+KNOCKKNOCK|3600|0|https://knock-knock.net/static/ip-blocklist-year.txt
+
+csf -ra</code></pre>
+
+    <h3>CrowdSec</h3>
+    <p>Import as decisions from cron; match the duration to your fetch interval.</p>
+    <pre><code>curl -sf https://knock-knock.net/static/ip-blocklist-year.txt \
+  | cscli decisions import -i - --format values --duration 25h --reason "knock-knock-honeypot"</code></pre>
+
+    <h3>ipset + iptables (works anywhere)</h3>
+    <p>The universal recipe — atomic swap, no gap. Safe to run whole from cron: the set is refreshed each time, and
+    the DROP rule is added only if it isn't already there.</p>
+    <pre><code>URL=https://knock-knock.net/static/ip-blocklist-year.txt
+ipset create knockknock hash:ip -exist
+ipset create knockknock_tmp hash:ip -exist; ipset flush knockknock_tmp
+curl -sf "$URL" | sed 's/^/add knockknock_tmp /' | ipset restore -exist
+ipset swap knockknock_tmp knockknock
+ipset destroy knockknock_tmp
+
+# add the DROP rule only if it's not already present (so re-running is harmless):
+iptables -C INPUT -m set --match-set knockknock src -j DROP 2>/dev/null \
+  || iptables -I INPUT -m set --match-set knockknock src -j DROP</code></pre>
+
+    <h3>nftables</h3>
+    <p>Create the table/set/rule once (or keep them in <code>nftables.conf</code>); only the refresh block at the
+    bottom runs from cron.</p>
+    <pre><code>nft add table inet filter
+nft add set inet filter knockknock '{ type ipv4_addr; flags interval; }'
+nft add rule inet filter input ip saddr @knockknock drop
+
+# refresh (hourly): build one bulk element line
+IPS=$(curl -sf https://knock-knock.net/static/ip-blocklist-year.txt | paste -sd,)
+nft flush set inet filter knockknock
+nft add element inet filter knockknock "{ $IPS }"</code></pre>
+
+    <h3>pfSense / OPNsense</h3>
+    <p>No shell needed: <em>Firewall → Aliases → add a "URL Table (IPs)" alias</em> pointing at the list URL with a
+    1-day refresh, then add a WAN/floating rule that blocks traffic from the alias. Done in the GUI.</p>
+
+    <h3>fail2ban?</h3>
+    <p>fail2ban is built for parsing <em>your</em> logs, not importing a static list — it's the wrong tool here. Use the
+    <strong>ipset</strong> recipe above (fail2ban itself sits on top of iptables/nftables anyway).</p>
+
+    <h2>Keep in mind</h2>
+    <p>This list captures IP addresses of bad actors in the recent past. Use a finite ban time, and keep an allowlist
+    for anything user-facing.</p>
+    <p>The lists are generated from the same data behind the <a href="/">live dashboard</a> and rebuilt hourly.
+    Feedback, or using them somewhere interesting? <a class="cmail" href="#">We'd love to hear about it</a>.</p>
+
+    <a class="back" href="/">View live attack dashboard</a>
+
+    <footer>
+        knock-knock.net — a multi-protocol honeypot. We also report attackers to
+        <a href="https://www.abuseipdb.com/user/270949" target="_blank" rel="noopener">AbuseIPDB</a>.
+    </footer>
+</div>
+<script>
+    // Obfuscated email assembly (anti-harvester), matching the dashboard's About box.
+    (function () {
+        var u = 'support', d = 'knock-knock', t = 'net';
+        document.querySelectorAll('.cmail').forEach(function (el) {
+            el.href = 'mai' + 'lto:' + u + '@' + d + '.' + t;
+        });
+    })();
+</script>
+</body>
+</html>

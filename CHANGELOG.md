@@ -2,9 +2,6 @@
 
 All notable changes to Knock-Knock, newest first. Dates are UTC.
 
-Pre-3.0 entries are reconstructed from git history and the original GitHub release
-notes; from 3.0 onward each release has a hand-written entry here.
-
 ## [3.0.0-beta.1] — unreleased (current beta)
 
 The heart of 3.0 is a **protocol extensibility framework**. Adding a honeypot protocol
@@ -25,10 +22,13 @@ and the framework wires up the rest (`protocol_api.py`, `protocols/registry.py`,
   Modbus, S7, SNMP (8 → 13 protocols). These run on a dedicated node (ash1) to keep the
   flagship dashboard focused on the protocols most visitors recognize; they are a
   proof-of-extensibility, not a main-dashboard centerpiece.
-- **Per-protocol display customization** — each protocol declares its own feed columns,
-  detail fields, and named display formats (e.g. surfacing user-agent strings; HTTP
-  switching between scanner / exploit / probe layouts).
-- **Per-knock detail view** — click any live-feed entry to see the full captured record.
+- **Per-protocol display customization — user-overridable.** The framework ships sensible
+  defaults, but you can **override how any protocol renders** — which feed columns and
+  detail fields appear, and which named display format is used (e.g. surface user-agent
+  strings, or switch HTTP between scanner / exploit / probe layouts). Works for the
+  built-in protocols as well as any you add.
+- **Per-knock detail view** — right-click (or long-press on touch) any live-feed entry
+  to see the full captured record.
 - **"Internet Background Radiation"** explainer article/page.
 
 ### Changed
@@ -38,16 +38,18 @@ and the framework wires up the rest (`protocol_api.py`, `protocols/registry.py`,
   consumer guide (CSF / CrowdSec / ipset / nftables / pfSense recipes), an About-box
   call-to-action, hourly regeneration, 365-day + 30-day feeds, and feed-download analytics
   (logged separately from dashboard viewers).
-- **HTTP exploit classifier** expanded (~183 → 238+ named entries), with a regression
+- **HTTP exploit classifier** expanded (~183 → 240+ named entries), with a regression
   test suite.
 
 ### Infrastructure
 
+- The marquee 3.0 change is itself infrastructural: the **protocol extensibility framework**
+  (see Added) rewires how every protocol plugs into the monitor, web layer, storage, and
+  dashboard — turning protocol support into drop-in modules you can experiment with in
+  isolation.
 - Shared per-IP knock throttling across all protocols.
 - Unit + integration test suites and CI; Dependabot + pinned dependencies + security
   (CVE) bumps.
-- Repository reorganized into a public core (advanced/experimental tooling kept out of
-  the public tree).
 
 ## [2.0.1] — 2026-05-07
 
@@ -57,13 +59,13 @@ model with minor cleanup.
 
 ## [2.0.0] — 2026-04-26
 
-Consolidated the multi-protocol honeypot with the **multi-server aggregation** model
-(feeder nodes forwarding knocks to a central aggregator dashboard), plus dashboard and
-protocol-metadata refinements.
+**Went multi-protocol** — added Telnet, FTP, RDP, SMB, SIP, HTTP, and SMTP honeypots
+alongside SSH (8 total), and introduced the **multi-server aggregation** model (feeder
+nodes forwarding knocks to a central aggregator dashboard). Also added the alternate
+compact dashboard (`summary.html`) and protocol-metadata refinements.
 
 ## [1.0.x] — early 2026
 
-Initial public releases: a multi-protocol honeypot (SSH, Telnet, FTP, RDP, SMB, SIP,
-HTTP, SMTP) with a live WebSocket dashboard (real-time feed, leaderboards, 3D attack
-globe), Docker + systemd deployment, timed IP banning, and a public-download IP
-blocklist generator.
+Initial public releases: an **SSH-only** honeypot with a live WebSocket dashboard
+(real-time feed, leaderboards, 3D attack globe), Docker + systemd deployment, timed IP
+banning, and a public-download IP blocklist. (Multi-protocol support arrived in 2.0.)

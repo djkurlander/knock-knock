@@ -70,7 +70,8 @@ Current scripts:
     [Upgrading a multi-server aggregator](#upgrading-a-multi-server-aggregator).
   - `--print-identity` prints this server's resolved identifiers (env `REDACT_SELF_*` plus
     runtime discovery) as `--fleet` file lines; `--fleet FILE` supplies the other servers'
-    identifiers on an aggregator. Idempotent; `--drop-body-column` drops the emptied column.
+    identifiers on an aggregator. Idempotent; once all rows are backfilled it drops the
+    now-empty `knocks_smtp.body` column by default (`--keep-body-column` to keep it).
 
 Examples:
 
@@ -130,7 +131,9 @@ To finish, give the migration each feeder's identity:
    ```
 
 Listing an address that never appears in a body does nothing, so the combined `fleet.txt`
-is safe to run over everything. It's idempotent — safe to re-run — and once every body is
-migrated you can add `--drop-body-column` to remove the now-empty `knocks_smtp.body`
-column. Going forward, each feeder redacts its own mail before forwarding, so this is a
-one-time catch-up for history captured before the upgrade.
+is safe to run over everything. It's idempotent — safe to re-run. Once **every** body is
+migrated (global count of un-backfilled rows hits zero — i.e. after this fleet pass on an
+aggregator), the run **drops the now-empty `knocks_smtp.body` column** automatically (pass
+`--keep-body-column` to keep it; on SQLite < 3.35 it just stays). Going forward, each feeder
+redacts its own mail before forwarding, so this is a one-time catch-up for history captured
+before the upgrade.

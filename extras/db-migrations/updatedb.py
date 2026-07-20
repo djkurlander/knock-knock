@@ -341,12 +341,13 @@ def update_db(db_path):
         conn.close()
 
 
-def backfill_smtp_bodies(db_path):
+def backfill_smtp_bodies(db_path, keep_body_column=False):
     """Move inline knocks_smtp bodies into the deduped smtp_body_intel table (v3), self-
     redacting this server's OWN (source=0) mail with its live identity (env + discovery).
     Feeder-sourced rows (source!=0) need other servers' identifiers this box can't discover,
     so they are deferred to the fleet-aware standalone script. Batched + idempotent, so this
-    is safe to run on every update."""
+    is safe to run on every update. Drops the now-empty knocks_smtp.body column once ALL rows
+    are backfilled (single-server: here; aggregator: after the fleet backfill)."""
     import smtp_body_backfill as bf
     conn = sqlite3.connect(db_path, timeout=60)
     try:
@@ -369,6 +370,8 @@ def backfill_smtp_bodies(db_path):
                   "    then, on this aggregator:\n"
                   "      python extras/db-migrations/smtp_body_backfill.py --apply --fleet fleet.txt\n"
                   '    (details: extras/db-migrations/README.md, "Upgrading a multi-server aggregator")')
+        if bf.maybe_drop_body_column(conn, keep=keep_body_column):
+            print("  smtp bodies: dropped now-empty knocks_smtp.body column")
     finally:
         conn.close()
 
@@ -385,6 +388,9 @@ def main():
     parser.add_argument("--no-smtp-backfill", action="store_true",
                         help="schema only: skip the one-time SMTP body backfill into smtp_body_intel "
                              "(run it later via extras/db-migrations/smtp_body_backfill.py)")
+    parser.add_argument("--keep-body-column", action="store_true",
+                        help="keep the now-empty knocks_smtp.body column (default: drop it once all "
+                             "SMTP bodies are backfilled; on an aggregator that's after the fleet backfill)")
     args = parser.parse_args()
 
     if not os.path.exists(args.db_path):
@@ -403,7 +409,7 @@ def main():
 
     update_db(args.db_path)
     if not args.no_smtp_backfill:
-        backfill_smtp_bodies(args.db_path)
+        backfill_smtp_bodies(args.db_path, keep_body_column=args.keep_body_column)
     visitors_db_path = os.path.join(os.path.dirname(args.db_path), "visitors.db")
     if os.path.exists(visitors_db_path):
         conn = sqlite3.connect(visitors_db_path, timeout=30)

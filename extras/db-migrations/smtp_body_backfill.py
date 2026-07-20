@@ -29,7 +29,7 @@ Identity — this is the important part (see self_redaction.py):
     python extras/db-migrations/smtp_body_backfill.py                       # dry-run, local identity
     python extras/db-migrations/smtp_body_backfill.py --apply
     python extras/db-migrations/smtp_body_backfill.py --apply --source 3 --fleet fleet.txt
-    python extras/db-migrations/smtp_body_backfill.py --apply --drop-body-column
+    python extras/db-migrations/smtp_body_backfill.py --apply --keep-body-column   # keep the emptied column
 """
 import argparse
 import base64
@@ -120,6 +120,23 @@ def pending(conn, where_extra=""):
         + where_extra).fetchone()[0]
 
 
+def maybe_drop_body_column(conn, keep=False):
+    """Drop the now-empty knocks_smtp.body column once EVERY row is backfilled — gated on
+    GLOBAL pending == 0 (all sources), so on an aggregator it only fires after the fleet
+    backfill has swept the feeder rows too. No-op if keep=True, if any rows still need
+    backfilling, if the column is already gone, or on SQLite < 3.35 (graceful — the empty
+    column just stays). Returns True iff it dropped."""
+    if keep or pending(conn) != 0 or "body" not in _columns(conn, "knocks_smtp"):
+        return False
+    try:
+        conn.execute("ALTER TABLE knocks_smtp DROP COLUMN body")
+        conn.commit()
+        return True
+    except sqlite3.OperationalError as e:
+        print(f"  kept knocks_smtp.body (DROP COLUMN needs SQLite >= 3.35: {e})")
+        return False
+
+
 def backfill(conn, redact, where_extra="", batch=2000, b64_scan=True, progress=None):
     """Backfill rows matching (body set, body_id NULL) [+ where_extra]. Commits per batch;
     idempotent. `redact` is a cached str->str function. Returns rows backfilled."""
@@ -181,8 +198,9 @@ def main(argv=None):
                     help="print this server's resolved self-identifiers (discovery + .env) as "
                          "--fleet file lines and exit; run on each feeder to build the aggregator fleet file")
     ap.add_argument("--no-base64-scan", action="store_true", help="skip the base64-run redaction scan")
-    ap.add_argument("--drop-body-column", action="store_true",
-                    help="after backfill, DROP the now-empty knocks_smtp.body column (SQLite >= 3.35)")
+    ap.add_argument("--keep-body-column", action="store_true",
+                    help="keep the now-empty knocks_smtp.body column (default: drop it once ALL "
+                         "rows are backfilled; needs SQLite >= 3.35, graceful no-op otherwise)")
     ap.add_argument("--batch", type=int, default=2000)
     args = ap.parse_args(argv)
 
@@ -228,7 +246,8 @@ def main(argv=None):
         return 0
 
     if not args.apply:
-        print("DRY-RUN — re-run with --apply. (--drop-body-column also drops the dead column.)")
+        print("DRY-RUN — re-run with --apply. (once ALL rows are backfilled it drops the now-empty "
+              "knocks_smtp.body column; --keep-body-column to keep it.)")
         conn.close()
         return 0
 
@@ -237,13 +256,8 @@ def main(argv=None):
     distinct = conn.execute("SELECT COUNT(*) FROM smtp_body_intel").fetchone()[0]
     print(f"\nAPPLIED: backfilled {done} rows into {distinct} distinct smtp_body_intel rows; "
           f"inline bodies scrubbed (body=NULL).")
-    if args.drop_body_column and pending(conn) == 0 and "body" in _columns(conn, "knocks_smtp"):
-        try:
-            conn.execute("ALTER TABLE knocks_smtp DROP COLUMN body")
-            conn.commit()
-            print("Dropped knocks_smtp.body column.")
-        except sqlite3.OperationalError as e:
-            print(f"Could not DROP COLUMN (needs SQLite >= 3.35): {e}. Left in place (all NULL).")
+    if maybe_drop_body_column(conn, keep=args.keep_body_column):
+        print("Dropped now-empty knocks_smtp.body column.")
     conn.close()
     print("Run `VACUUM` or `dbtool.py --backup` to reclaim space from the cleared bodies.")
     return 0

@@ -536,6 +536,7 @@ docker compose restart
 python extras/db-migrations/updatedb.py --no-backup          # skip backup
 python extras/db-migrations/updatedb.py --backup mybackup.db # custom backup name
 python extras/db-migrations/updatedb.py --no-smtp-backfill   # schema only, skip the SMTP body backfill
+python extras/db-migrations/updatedb.py --keep-body-column   # keep the now-empty knocks_smtp.body column
 ```
 
 It is safe to run multiple times — all operations are idempotent.

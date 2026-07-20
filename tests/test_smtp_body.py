@@ -205,3 +205,31 @@ def test_backfill_base64_and_scoping_and_idempotent():
         assert IP not in b and IP not in dec
     assert bf.backfill(con, redact, where_extra="AND source=0") == 0    # idempotent
     assert bf.pending(con, "AND source!=0") == 1                         # feeder still deferred
+
+
+def test_maybe_drop_body_column_gated_on_global_pending():
+    con = sqlite3.connect(":memory:")
+    con.execute("""CREATE TABLE knocks_smtp (id INTEGER PRIMARY KEY AUTOINCREMENT, timestamp TEXT,
+                   source INTEGER DEFAULT 0, body TEXT, body_id INTEGER)""")
+    for src, body in [(0, f"local {IP}"), (0, f"local {IP} two"), (3, f"feeder {IP}")]:
+        con.execute("INSERT INTO knocks_smtp (timestamp, source, body) VALUES ('t',?,?)", (src, body))
+    con.commit()
+
+    # local backfilled, feeder still pending → must NOT drop (aggregator safety)
+    bf.backfill(con, redact, where_extra="AND source=0")
+    assert bf.pending(con) == 1
+    assert bf.maybe_drop_body_column(con) is False
+    assert "body" in bf._columns(con, "knocks_smtp")
+
+    # all backfilled → pending 0, but keep=True must still NOT drop
+    bf.backfill(con, redact)
+    assert bf.pending(con) == 0
+    assert bf.maybe_drop_body_column(con, keep=True) is False
+    assert "body" in bf._columns(con, "knocks_smtp")
+
+    if sqlite3.sqlite_version_info < (3, 35, 0):
+        pytest.skip("DROP COLUMN needs SQLite >= 3.35")
+    # default → drops now that global pending is 0
+    assert bf.maybe_drop_body_column(con) is True
+    assert "body" not in bf._columns(con, "knocks_smtp")
+    assert "body_id" in bf._columns(con, "knocks_smtp")

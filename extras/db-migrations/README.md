@@ -118,10 +118,12 @@ To finish, give the migration each feeder's identity:
 2. Paste every feeder's output into one file, e.g. `fleet.txt` (comment lines are ignored):
    ```
    # feeder ny3
+   source=ny3
    ip=203.0.113.9
    host=mail.ny3.example.net
    domain=example.net
    # feeder lon1
+   source=lon1
    ip=198.51.100.7
    ```
 3. On the **aggregator**, run it — dry-run first, then `--apply`:

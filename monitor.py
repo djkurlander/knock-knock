@@ -16,7 +16,7 @@ import socket
 import importlib
 from datetime import datetime, timezone
 from dataclasses import dataclass
-from self_redaction import build_self_redaction_patterns, apply_redaction
+from self_redaction import discover_self_identifiers, _patterns_from, apply_redaction
 
 # --- Configuration ---
 GEOIP_CITY_PATH = '/usr/share/GeoIP/GeoLite2-City.mmdb'
@@ -219,7 +219,15 @@ def publish_protocol_config(redis_conn, enabled_protocols):
 # Self-identity redaction lives in self_redaction.py (stdlib-only, reused by the DB
 # backfill / updatedb without importing the monitor runtime). Discovery is expensive, so
 # the pattern list is built ONCE here at import; redact_self is a cheap per-call regex pass.
-SELF_REDACTION_PATTERNS = build_self_redaction_patterns()
+_self_ips, _self_hosts, _self_suffixes = discover_self_identifiers()
+SELF_REDACTION_PATTERNS = _patterns_from(_self_ips, _self_hosts, _self_suffixes)
+
+# Docker tripwire: bridge networking hides the public IP/PTR from discovery, so if no
+# routable IP turned up and none was configured, self-redaction can't scrub our real IP.
+if not _self_ips and not os.environ.get('REDACT_SELF_IPS', '').strip():
+    print("WARN: self-redaction discovered no public IP (Docker bridge network?). "
+          "Set REDACT_SELF_IPS and DEFAULT_HOSTNAME so captured data can't leak this "
+          "server's identity.", file=sys.stderr, flush=True)
 
 
 def redact_self(s):

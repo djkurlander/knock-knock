@@ -8,6 +8,10 @@ Current scripts:
   - Updates an existing `knock_knock.db` to the current schema
   - Creates a timestamped backup in the database directory by default
   - Also updates `visitors.db` if it exists and needs the current visitor schema
+  - Runs the one-time v3 SMTP body migration automatically. This is the **complete**
+    upgrade path for a **single-server** honeypot (skip with `--no-smtp-backfill`). A
+    **multi-server aggregator** running SMTP needs one additional step — see
+    [Upgrading a multi-server aggregator](#upgrading-a-multi-server-aggregator)
   - Moves the historical schema transformations out of `monitor.py`
 
 - `migrate_mail_to_smtp.py`
@@ -55,6 +59,19 @@ Current scripts:
     and relabels only true NANP toll-free; genuine `+800`/malformed rows are left alone.
   - After `--apply`, restart the honeypot so the dial cache re-seeds.
 
+- `smtp_body_backfill.py`
+  - Dry-run-first backfill for the v3 SMTP change: moves each inline `knocks_smtp.body`
+    into the deduped `smtp_body_intel` table (one row per distinct body, keyed by
+    `sha256`), links the knock via `body_id`, self-redacts the stored body (your own
+    IP/host/domain → `<target-*>`, including inside base64/quoted-printable content), and
+    clears the original inline body.
+  - `updatedb.py` calls this automatically for a single-server honeypot, so you normally
+    don't run it by hand. It's used directly only on a **multi-server aggregator** — see
+    [Upgrading a multi-server aggregator](#upgrading-a-multi-server-aggregator).
+  - `--print-identity` prints this server's resolved identifiers (env `REDACT_SELF_*` plus
+    runtime discovery) as `--fleet` file lines; `--fleet FILE` supplies the other servers'
+    identifiers on an aggregator. Idempotent; `--drop-body-column` drops the emptied column.
+
 Examples:
 
 ```bash
@@ -69,6 +86,51 @@ python extras/db-migrations/prune_dial_intel_suffix_artifacts.py --db data/knock
 python extras/db-migrations/prune_dial_intel_suffix_artifacts.py --db data/knock_knock.db --max-suspect-hits 50 --with-knock-samples
 python extras/db-migrations/prune_dial_intel_suffix_artifacts.py --db data/knock_knock.db --mode nanp-alias --with-knock-samples
 python extras/db-migrations/prune_dial_intel_suffix_artifacts.py --db data/knock_knock.db --apply
+python extras/db-migrations/smtp_body_backfill.py --print-identity
+python extras/db-migrations/smtp_body_backfill.py --db data/knock_knock.db --fleet fleet.txt --apply
 ```
 
 These scripts are intended to be safe to run multiple times.
+
+## Upgrading a multi-server aggregator
+
+This step is **only** for a multi-server setup where feeder honeypots forward their
+knocks to a central aggregator dashboard **and** SMTP is enabled. A single-server
+honeypot needs nothing here — `updatedb.py` already did everything.
+
+v3 stores each SMTP message body once, in a deduped `smtp_body_intel` table, with your
+own IP/host/domain redacted out. `updatedb.py` does this
+automatically — but **only for the mail this server captured itself**, because it redacts
+using *this machine's* identity (its IPs, hostnames, domains, discovered at runtime).
+
+On an aggregator, most SMTP was captured by the **feeders**, and those bodies contain the
+*feeders'* addresses — which the aggregator can't discover on its own. So `updatedb.py`
+**skips** them and prints how many it left. Until you run the step below, those bodies stay
+stored un-redacted on the aggregator.
+
+To finish, give the migration each feeder's identity:
+
+1. On **each feeder**, print its identity as ready-to-use lines:
+   ```bash
+   python extras/db-migrations/smtp_body_backfill.py --print-identity
+   ```
+2. Paste every feeder's output into one file, e.g. `fleet.txt` (comment lines are ignored):
+   ```
+   # feeder ny3
+   ip=203.0.113.9
+   host=mail.ny3.example.net
+   domain=example.net
+   # feeder lon1
+   ip=198.51.100.7
+   ```
+3. On the **aggregator**, run it — dry-run first, then `--apply`:
+   ```bash
+   python extras/db-migrations/smtp_body_backfill.py --db data/knock_knock.db --fleet fleet.txt
+   python extras/db-migrations/smtp_body_backfill.py --db data/knock_knock.db --fleet fleet.txt --apply
+   ```
+
+Listing an address that never appears in a body does nothing, so the combined `fleet.txt`
+is safe to run over everything. It's idempotent — safe to re-run — and once every body is
+migrated you can add `--drop-body-column` to remove the now-empty `knocks_smtp.body`
+column. Going forward, each feeder redacts its own mail before forwarding, so this is a
+one-time catch-up for history captured before the upgrade.

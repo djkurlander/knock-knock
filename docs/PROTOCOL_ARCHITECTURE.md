@@ -192,6 +192,28 @@ monitor fields such as `ip`, `proto`, location/ISP data, source data, supported
 Avoid large passthrough fields unless they are intentionally capped. Redis
 payloads are live UI data, not unlimited forensic storage.
 
+## DB-Only Fields
+
+`db_only_fields` is the inverse of passthrough: fields made available to the
+DB-writer stage — declared columns and the `db_update` hook — but **withheld from
+the live feed**.
+
+It exists because the DB writer consumes the *same package* that is published to
+Redis, so a value can normally only reach the writer by also being sent to every
+browser. A `db_only_fields` entry is copied into the package **after**
+`process_knock` (so hook-produced values are included, unlike passthrough fields
+which are gathered before the hook), handed to the DB writer and to the aggregator
+forward, then stripped just before the Redis publish.
+
+```python
+db_only_fields=["body_full"]
+```
+
+SMTP uses this for the full message body: `process_knock` redacts it and sets
+`body_full`, `db_update` dedups it into `smtp_body_intel` and links `body_id`, and
+only a short preview (the passthrough `body`) reaches the feed. Because it also rides
+the feeder→aggregator forward, an aggregator stores the full body, not the preview.
+
 ## Browser Display
 
 The web app receives protocol metadata from the merged registry. It uses that

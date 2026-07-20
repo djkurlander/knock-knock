@@ -11,10 +11,12 @@ import threading
 import time
 import argparse
 import re
+import base64
 import socket
 import importlib
 from datetime import datetime, timezone
 from dataclasses import dataclass
+from self_redaction import build_self_redaction_patterns, apply_redaction
 
 # --- Configuration ---
 GEOIP_CITY_PATH = '/usr/share/GeoIP/GeoLite2-City.mmdb'
@@ -214,122 +216,18 @@ def publish_protocol_config(redis_conn, enabled_protocols):
     redis_conn.set("knock:config:enabled_protocols", json.dumps(enabled))
     redis_conn.set("knock:config:protocol_meta", json.dumps(meta))
 
-def _registrable_domain(host):
-    host = (host or '').strip().lower().rstrip('.')
-    if not host or '.' not in host:
-        return None
-    labels = [part for part in host.split('.') if part]
-    if len(labels) < 2:
-        return None
-    # Heuristic for common ccTLD second-level patterns (e.g. example.co.uk).
-    if len(labels) >= 3 and len(labels[-1]) == 2 and labels[-2] in {'co', 'com', 'net', 'org', 'gov', 'edu', 'ac'}:
-        return '.'.join(labels[-3:])
-    return '.'.join(labels[-2:])
+# Self-identity redaction lives in self_redaction.py (stdlib-only, reused by the DB
+# backfill / updatedb without importing the monitor runtime). Discovery is expensive, so
+# the pattern list is built ONCE here at import; redact_self is a cheap per-call regex pass.
+SELF_REDACTION_PATTERNS = build_self_redaction_patterns()
 
-def _discover_self_identifiers():
-    ips = set()
-    hosts = set()
-    host_suffixes = set()
 
-    # Explicit operator-provided redaction inputs.
-    for v in os.environ.get('REDACT_SELF_IPS', '').split(','):
-        v = v.strip()
-        if v:
-            ips.add(v)
-    for v in os.environ.get('REDACT_SELF_HOSTS', '').split(','):
-        v = v.strip().lower()
-        if v:
-            hosts.add(v)
-    for key in ('REDACT_SELF_DOMAINS', 'REDACT_SELF_HOST_SUFFIXES'):
-        for v in os.environ.get(key, '').split(','):
-            v = v.strip().lower().lstrip('.')
-            if v:
-                host_suffixes.add(v)
+def redact_self(s):
+    """Replace this server's own identifiers (IP / host / domain) with stable
+    ``<target-*>`` markers. Self-protection is a cross-protocol concern, so protocols call
+    this shared primitive (via the hook context) rather than reimplementing redaction."""
+    return apply_redaction(s, SELF_REDACTION_PATTERNS)
 
-    # Auto-discover local hostnames.
-    try:
-        hn = socket.gethostname().strip().lower()
-        if hn:
-            hosts.add(hn)
-    except Exception:
-        pass
-    try:
-        fqn = socket.getfqdn().strip().lower()
-        if fqn:
-            hosts.add(fqn)
-    except Exception:
-        pass
-
-    # Auto-discover primary outbound IPv4 used by this host.
-    try:
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.connect(("8.8.8.8", 80))
-        ip = s.getsockname()[0]
-        s.close()
-        if ip:
-            ips.add(ip)
-    except Exception:
-        pass
-
-    # Auto-discover IPv4s bound/resolved to this hostname.
-    try:
-        for family, _, _, _, sockaddr in socket.getaddrinfo(socket.gethostname(), None):
-            if family == socket.AF_INET and sockaddr and sockaddr[0]:
-                ips.add(sockaddr[0])
-    except Exception:
-        pass
-    try:
-        for family, _, _, _, sockaddr in socket.getaddrinfo(socket.getfqdn(), None):
-            if family == socket.AF_INET and sockaddr and sockaddr[0]:
-                ips.add(sockaddr[0])
-    except Exception:
-        pass
-    try:
-        out = subprocess.check_output(["hostname", "-I"], text=True, stderr=subprocess.DEVNULL).strip()
-        for tok in out.split():
-            if re.fullmatch(r"(?:\d{1,3}\.){3}\d{1,3}", tok):
-                ips.add(tok)
-    except Exception:
-        pass
-
-    # Reverse lookup discovered IPs for host aliases.
-    for ip in list(ips):
-        try:
-            ptr = socket.gethostbyaddr(ip)[0].strip().lower()
-            if ptr:
-                hosts.add(ptr)
-        except Exception:
-            pass
-
-    # Derive registrable domains from discovered hostnames/PTRs by default.
-    for host in list(hosts):
-        domain = _registrable_domain(host)
-        if domain:
-            host_suffixes.add(domain)
-
-    return ips, hosts, host_suffixes
-
-def _build_self_redaction_patterns():
-    ips, hosts, host_suffixes = _discover_self_identifiers()
-    pats = []
-    # Hostnames first, then domains, then IPs to avoid partial overlap artifacts.
-    for host in sorted(hosts, key=len, reverse=True):
-        pats.append((re.compile(re.escape(host), re.IGNORECASE), "<target-host>"))
-    for suffix in sorted(host_suffixes, key=len, reverse=True):
-        pats.append((
-            re.compile(rf"(?<![A-Za-z0-9_-])(?:[A-Za-z0-9_-]+\.)*{re.escape(suffix)}(?![A-Za-z0-9_-])", re.IGNORECASE),
-            "<target-domain>",
-        ))
-    # Longest-first replacement avoids partial overlap artifacts.
-    for ip in sorted(ips, key=len, reverse=True):
-        pats.append((re.compile(re.escape(ip)), "<target-ip>"))
-        # Common dash-notation seen in hostnames (e.g. 1-2-3-4.example.tld).
-        dashed = ip.replace('.', '-')
-        if dashed != ip:
-            pats.append((re.compile(re.escape(dashed), re.IGNORECASE), "<target-ip>"))
-    return pats
-
-SELF_REDACTION_PATTERNS = _build_self_redaction_patterns()
 
 # Common columns for all knock tables (after id and timestamp)
 _COMMON_KNOCK_COLS = [
@@ -402,6 +300,27 @@ def _build_passthrough_policies():
 _PASSTHROUGH_POLICIES = _build_passthrough_policies()
 
 
+def _build_db_only_policies():
+    out = {}
+    for proto, meta in PROTOCOL_META.items():
+        definition = meta.get('definition')
+        if not definition:
+            continue
+        fields = tuple(getattr(definition, 'db_only_fields', ()) or ())
+        if fields:
+            out[proto] = fields
+    return out
+
+
+_DB_ONLY_POLICIES = _build_db_only_policies()
+
+
+def _db_only_fields(proto):
+    """Fields the protocol persists / feeds to the db_update hook but withholds from the
+    Redis/WebSocket feed — copied into the package post-hook, stripped before publish."""
+    return _DB_ONLY_POLICIES.get(str(proto or '').upper(), ())
+
+
 def _resolve_hook(path):
     if not path:
         return None
@@ -432,7 +351,8 @@ _PROTOCOL_HOOKS = _build_hooks()
 
 
 def _hook_context(proto):
-    return {'proto': proto, 'db_path': DB_PATH, 'source_id': SOURCE_ID}
+    return {'proto': proto, 'db_path': DB_PATH, 'source_id': SOURCE_ID,
+            'redact_self': redact_self}
 
 
 def _process_knock_hook(proto, knock):
@@ -456,12 +376,13 @@ def _after_save_hook(proto, knock, package):
         print(f"⚠️ after_save hook failed for {proto}: {e}", flush=True)
 
 
-def _db_update_hook(proto, data, cur, now):
+def _db_update_hook(proto, data, cur, now, knock_rowid=None):
     hook = (_PROTOCOL_HOOKS.get(proto) or {}).get('db_update')
     if not hook:
         return
     ctx = _hook_context(proto)
     ctx['now'] = now
+    ctx['knock_rowid'] = knock_rowid  # rowid of the just-inserted knock row (None if not saved)
     try:
         hook(data, cur, ctx)
     except Exception as e:
@@ -690,6 +611,7 @@ def log_to_enriched_db(data, cur, save_protos=None):
     registered_mapping = _registered_knock_mapping(proto_name)
     event_t = int(data.get('t') or time.time())
     event_ts = datetime.fromtimestamp(event_t, timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
+    knock_rowid = None
     if should_save and registered_mapping:
         table, proto_key_map = registered_mapping
         table = _sql_ident(table)
@@ -701,6 +623,7 @@ def log_to_enriched_db(data, cur, save_protos=None):
         placeholders = ', '.join(['?'] * len(col_names))
         col_sql = ', '.join(_sql_ident(col) for col in col_names)
         cur.execute(f"INSERT INTO {table} ({col_sql}) VALUES ({placeholders})", values)
+        knock_rowid = cur.lastrowid  # capture NOW — later intel upserts move cur.lastrowid
     now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     proto_int = PROTO.get(data.get('proto') or '', 0)
     if data.get('user') is not None:
@@ -720,7 +643,7 @@ def log_to_enriched_db(data, cur, save_protos=None):
     cur.execute("INSERT INTO isp_intel_proto VALUES (?, ?, 1, ?, ?) ON CONFLICT(isp, proto) DO UPDATE SET hits=hits+1, last_seen=?, asn=?", (data['isp'], proto_int, now, data.get('asn'), now, data.get('asn')))
     cur.execute("INSERT INTO ip_intel_proto VALUES (?, ?, 1, ?, ?, ?) ON CONFLICT(ip, proto) DO UPDATE SET hits=hits+1, last_seen=?, lat=?, lng=?",
                 (data['ip'], proto_int, now, data.get('lat'), data.get('lng'), now, data.get('lat'), data.get('lng')))
-    _db_update_hook(proto_name, data, cur, now)
+    _db_update_hook(proto_name, data, cur, now, knock_rowid)
     src_id = data.get('source', SOURCE_ID)
     cur.execute("""INSERT INTO sources (source_id, hits, first_seen, last_seen)
                    VALUES (?, 1, ?, ?)
@@ -810,9 +733,7 @@ def sanitize_credential(s):
         return s
     if '\ufffd' in s or not s.isprintable():
         return '<cryptic binary>'
-    for pat, replacement in SELF_REDACTION_PATTERNS:
-        s = pat.sub(replacement, s)
-    return s
+    return redact_self(s)
 
 def sanitize_body(s, max_len=2000):
     """Preserve readable multiline text while stripping non-printable control chars."""
@@ -822,9 +743,7 @@ def sanitize_body(s, max_len=2000):
     for ch in s:
         if ch in ('\n', '\r', '\t') or ch.isprintable():
             out.append(ch)
-    clean = ''.join(out)
-    for pat, replacement in SELF_REDACTION_PATTERNS:
-        clean = pat.sub(replacement, clean)
+    clean = redact_self(''.join(out))
     return clean[:max_len]
 
 _SANITIZE_SIMPLE_FIELDS = ('user', 'pass')
@@ -1120,6 +1039,12 @@ def monitor(save_knocks=None, max_knocks=None, ban_duration_days=30):
                 # This is intentionally not persisted in SQLite.
                 for k in passthrough_keys:
                     package[k] = knock.get(k)
+                # DB-only fields (declared in the ProtocolDefinition): copied post-hook so
+                # hook-produced values are included, made available to the DB writer + the
+                # aggregator forward, then stripped before any Redis publish/feed below.
+                for k in _db_only_fields(proto):
+                    if k in knock:
+                        package[k] = knock[k]
                 package.update(get_intel_stats_before_update(package))
                 hits_since_cleared = int(package.get('ip_hits_since_cleared', 0) or 0)
                 if is_over_limit_and_block(r, ip, hits_since_cleared, proto, max_knocks, ban_duration_days):
@@ -1130,6 +1055,8 @@ def monitor(save_knocks=None, max_knocks=None, ban_duration_days=30):
                     except queue.Full:
                         pass
                 _db_write_queue.put(package.copy())
+                for k in _db_only_fields(proto):  # never publish DB-only fields to Redis/feed
+                    package.pop(k, None)
             except Exception as e:
                 print(f"⚠️ Knock processing error (knock dropped): {e}", flush=True)
                 continue

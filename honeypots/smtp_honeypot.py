@@ -77,6 +77,7 @@ _EHLO_RESP = build_ehlo_response(_SMTP_HOSTNAME, _FP['ehlo_plain'])
 _EHLO_RESP_TLS = build_ehlo_response(_SMTP_HOSTNAME, _FP['ehlo_tls'])
 
 MAX_MESSAGES_PER_SESSION = 10
+SMTP_MAX_BODY = int(os.environ.get('SMTP_MAX_BODY', '65536'))
 SMTP587_REQUIRE_AUTH = os.environ.get('SMTP587_REQUIRE_AUTH', '0').lower() in ('1', 'true', 'yes', 'on')
 SMTP_TRACE_ENABLED = os.environ.get('SMTP_TRACE', '0').lower() not in ('0', 'false', 'no')
 SMTP_TRACE_IP = os.environ.get('SMTP_TRACE_IP', '').strip()
@@ -127,6 +128,8 @@ def emit_smtp_knock(
     rcpt_to=None,
     subject=None,
     body=None,
+    content_type=None,
+    transfer_encoding=None,
 ):
     knock = {"type": "KNOCK", "proto": _PROTO_LABEL, "ip": client_ip,
              "smtp_port": _SMTP_PORT, "smtp_stage": stage}
@@ -145,6 +148,10 @@ def emit_smtp_knock(
         knock["subject"] = subject
     if body:
         knock["body"] = body
+    if content_type:
+        knock["smtp_content_type"] = content_type
+    if transfer_encoding:
+        knock["smtp_transfer_encoding"] = transfer_encoding
     if not _throttle.allow(client_ip):
         return
     print(json.dumps(knock), flush=True)
@@ -338,21 +345,38 @@ def handle_connection(client_sock, client_ip):
                 else:
                     client_sock.sendall(b"354 End data with <CR><LF>.<CR><LF>\r\n")
 
-                    # Read headers, capture Subject
+                    # Read headers: capture Subject plus Content-Type / Content-Transfer-
+                    # Encoding (unfolding continuation lines). The latter two are invariant
+                    # per body and let the monitor decode base64/quoted-printable parts for
+                    # self-IP redaction; headers themselves are not stored (they vary per msg).
                     client_sock.settimeout(15)
-                    for _ in range(200):
+                    header_lines = []
+                    for _ in range(400):
                         hdr, hdr_status = recv_line(client_sock, timeout=15)
                         if hdr_status != 'ok':
                             trace(session_id, client_ip, 'data_header_recv_end', status=hdr_status)
                             break
                         if not hdr or hdr == '.':
                             break
-                        if hdr.upper().startswith('SUBJECT:'):
-                            subject = hdr[8:].strip()[:200]
+                        if hdr[:1] in (' ', '\t') and header_lines:
+                            header_lines[-1] += ' ' + hdr.strip()   # unfold continuation
+                        else:
+                            header_lines.append(hdr)
+                    content_type = None
+                    transfer_encoding = None
+                    for hdr in header_lines:
+                        hu = hdr.upper()
+                        if hu.startswith('SUBJECT:'):
+                            subject = hdr.split(':', 1)[1].strip()[:200]
+                        elif hu.startswith('CONTENT-TYPE:'):
+                            content_type = hdr.split(':', 1)[1].strip()[:300]
+                        elif hu.startswith('CONTENT-TRANSFER-ENCODING:'):
+                            transfer_encoding = hdr.split(':', 1)[1].strip()[:60]
 
-                    # Capture message body (up to 2000 chars)
+                    # Capture message body (body-only, up to SMTP_MAX_BODY bytes)
                     body_lines = []
-                    for _ in range(500):
+                    body_bytes = 0
+                    for _ in range(SMTP_MAX_BODY):
                         body_line, body_status = recv_line(client_sock, timeout=10)
                         if body_status != 'ok':
                             trace(session_id, client_ip, 'data_body_recv_end', status=body_status, lines=len(body_lines))
@@ -360,7 +384,10 @@ def handle_connection(client_sock, client_ip):
                         if body_line == '.':
                             break
                         body_lines.append(body_line)
-                    body = '\n'.join(body_lines)[:2000] or None
+                        body_bytes += len(body_line) + 1
+                        if body_bytes >= SMTP_MAX_BODY:
+                            break
+                    body = '\n'.join(body_lines)[:SMTP_MAX_BODY] or None
 
                     queue_id = ''.join(random.choices(string.ascii_uppercase + string.digits, k=10))
                     client_sock.sendall(queue_ok_reply(queue_id).encode())
@@ -372,6 +399,8 @@ def handle_connection(client_sock, client_ip):
                         rcpt_to=rcpt_to,
                         subject=subject,
                         body=body,
+                        content_type=content_type,
+                        transfer_encoding=transfer_encoding,
                     )
 
                     # Reset for next message in same session

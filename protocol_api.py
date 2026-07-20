@@ -68,6 +68,7 @@ class ProtocolDefinition:
     field_map: list[FieldMap] = field(default_factory=list)
     passthrough_fields: list[str | PassthroughField] = field(default_factory=list)
     passthrough_prefixes: list[str] = field(default_factory=list)
+    db_only_fields: list[str] = field(default_factory=list)
     display_fields: list[DisplayField] = field(default_factory=list)
     display_formats: dict[str, list[list[dict]]] = field(default_factory=dict)
     display_format_field: str | None = None
@@ -197,6 +198,8 @@ def validate_protocol_definition(definition: ProtocolDefinition, *, built_in: bo
         _check_ident(proto, key, "passthrough field")
         if not isinstance(item, str) and item.sanitizer not in ("credential", "body"):
             _fail(proto, f"unsupported passthrough sanitizer for {item.key}: {item.sanitizer!r}")
+    for key in definition.db_only_fields:
+        _check_ident(proto, key, "db_only field")
 
     for field in definition.display_fields:
         _check_ident(proto, field.key, "display field key")

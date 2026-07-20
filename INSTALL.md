@@ -535,9 +535,12 @@ docker compose restart
 ```bash
 python extras/db-migrations/updatedb.py --no-backup          # skip backup
 python extras/db-migrations/updatedb.py --backup mybackup.db # custom backup name
+python extras/db-migrations/updatedb.py --no-smtp-backfill   # schema only, skip the SMTP body backfill
 ```
 
 It is safe to run multiple times — all operations are idempotent.
+
+**Multi-server aggregators running SMTP** need one additional one-time step after `updatedb.py` — see [Upgrading a multi-server aggregator](extras/db-migrations/README.md#upgrading-a-multi-server-aggregator). A single-server honeypot needs nothing extra.
 
 ## Testing
 

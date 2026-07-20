@@ -29,6 +29,14 @@ and the framework wires up the rest (`protocol_api.py`, `protocols/registry.py`,
   built-in protocols as well as any you add.
 - **Per-knock detail view** — right-click (or long-press on touch) any live-feed entry
   to see the full captured record.
+- **SMTP body capture, dedup & self-redaction.** SMTP message bodies are captured in full
+  (up to 64 KB via `SMTP_MAX_BODY`, previously clipped at 2 KB) and stored **deduplicated**
+  in a new `smtp_body_intel` table (one row per distinct body, keyed by SHA-256), linked
+  from each knock by `body_id`. Stored bodies are **self-redacted** — the server's own
+  IP/host/domain are removed even when hidden inside base64 / quoted-printable / MIME parts
+  — and the live feed shows a short **decoded** preview instead of raw encoded text. Built on
+  a new declarative `db_only_fields` protocol-API mechanism: a protocol can persist and
+  process a field (here the full body) without publishing it to the live feed.
 - **"Internet Background Radiation"** explainer article/page.
 
 ### Changed
@@ -48,6 +56,11 @@ and the framework wires up the rest (`protocol_api.py`, `protocols/registry.py`,
   dashboard — turning protocol support into drop-in modules you can experiment with in
   isolation.
 - Shared per-IP knock throttling across all protocols.
+- Self-identity redaction extracted to `self_redaction.py`, shared by the monitor and the
+  DB backfill so live and historical bodies redact identically.
+- SMTP body storage migrates via `updatedb.py` (automatic on a single-server honeypot);
+  multi-server aggregators run `extras/db-migrations/smtp_body_backfill.py` with a fleet
+  identity file (see `extras/db-migrations/README.md`).
 - Unit + integration test suites and CI; Dependabot + pinned dependencies + security
   (CVE) bumps.
 

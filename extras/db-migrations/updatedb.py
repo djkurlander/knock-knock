@@ -9,8 +9,10 @@ import sqlite3
 import sys
 
 ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-if ROOT_DIR not in sys.path:
-    sys.path.insert(0, ROOT_DIR)
+_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+for _p in (ROOT_DIR, _SCRIPT_DIR):
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
 
 from constants import PROTO, PROTOCOL_META
 
@@ -339,6 +341,38 @@ def update_db(db_path):
         conn.close()
 
 
+def backfill_smtp_bodies(db_path):
+    """Move inline knocks_smtp bodies into the deduped smtp_body_intel table (v3), self-
+    redacting this server's OWN (source=0) mail with its live identity (env + discovery).
+    Feeder-sourced rows (source!=0) need other servers' identifiers this box can't discover,
+    so they are deferred to the fleet-aware standalone script. Batched + idempotent, so this
+    is safe to run on every update."""
+    import smtp_body_backfill as bf
+    conn = sqlite3.connect(db_path, timeout=60)
+    try:
+        if bf.pending(conn) == 0:
+            return
+        bf.load_dotenv()
+        patterns = bf.build_self_redaction_patterns()
+        redact = lambda s: bf.apply_redaction(s, patterns)  # noqa: E731 — cached, cheap
+        if bf.pending(conn, "AND source=0"):
+            if not patterns:
+                print("  smtp bodies: WARNING — no REDACT_SELF_* identity resolved; backfilling "
+                      "WITHOUT self-redaction (set REDACT_SELF_* if this server appears in mail)")
+            done = bf.backfill(conn, redact, where_extra="AND source=0")
+            print(f"  smtp bodies: backfilled {done} local (source=0) rows into smtp_body_intel")
+        feeders = bf.pending(conn, "AND source!=0")
+        if feeders:
+            print(f"  smtp bodies: {feeders} rows captured by OTHER servers still need a one-time\n"
+                  "    fleet backfill. Build fleet.txt by running this on each feeder:\n"
+                  "      python extras/db-migrations/smtp_body_backfill.py --print-identity\n"
+                  "    then, on this aggregator:\n"
+                  "      python extras/db-migrations/smtp_body_backfill.py --apply --fleet fleet.txt\n"
+                  '    (details: extras/db-migrations/README.md, "Upgrading a multi-server aggregator")')
+    finally:
+        conn.close()
+
+
 def main():
     parser = argparse.ArgumentParser(description="Update a knock-knock SQLite database schema.")
     parser.add_argument("db_path", nargs="?", default=DB_PATH, help="database path")
@@ -348,6 +382,9 @@ def main():
         help="backup name/path before updating; default is timestamped in the DB directory",
     )
     parser.add_argument("--no-backup", action="store_true", help="skip the default pre-update backup")
+    parser.add_argument("--no-smtp-backfill", action="store_true",
+                        help="schema only: skip the one-time SMTP body backfill into smtp_body_intel "
+                             "(run it later via extras/db-migrations/smtp_body_backfill.py)")
     args = parser.parse_args()
 
     if not os.path.exists(args.db_path):
@@ -365,6 +402,8 @@ def main():
         backup_db(args.db_path, backup_name)
 
     update_db(args.db_path)
+    if not args.no_smtp_backfill:
+        backfill_smtp_bodies(args.db_path)
     visitors_db_path = os.path.join(os.path.dirname(args.db_path), "visitors.db")
     if os.path.exists(visitors_db_path):
         conn = sqlite3.connect(visitors_db_path, timeout=30)

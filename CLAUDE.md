@@ -146,6 +146,7 @@ SMTP Attacker   → honeypots/smtp_honeypot.py           (ports 25,587)┘      
 | `monitor.py` | Spawns honeypots, GeoIP enrichment, DB writes, Redis publish |
 | `main.py` | FastAPI server, `ConnectionManager`, `GlobalStatsCache`, WebSocket |
 | `constants.py` | Shared protocol enum, UI order, metadata, and `DEFAULT_ENABLED_PROTOCOLS` |
+| `self_redaction.py` | Self-identity redaction (env `REDACT_SELF_*` + runtime discovery) → stable `<target-*>` markers; shared by the monitor and the DB backfill so both redact identically |
 | `index.html` | Single-page dashboard with WebSocket client |
 | `summary.html` | Alternate compact dashboard view (kept in sync with index.html) |
 | `restart.sh` | Service orchestration (systemd and Docker) |
@@ -153,6 +154,7 @@ SMTP Attacker   → honeypots/smtp_honeypot.py           (ports 25,587)┘      
 | `docker-compose.yml` | Docker deployment (Redis, honeypot+monitor, web) |
 | `stats.py` | CLI utility for printing database statistics |
 | `dbtool.py` | DB management: `--list-tables`, `--backup`, `--remove-knocks` |
+| `extras/db-migrations/smtp_body_backfill.py` | v3 SMTP body migration into the deduped `smtp_body_intel` table (self-redacted); `--print-identity`/`--fleet` for aggregators (see `extras/db-migrations/README.md`) |
 | `docs/PROTOCOL_ARCHITECTURE.md` | Current protocol registry, extension, persistence, and display architecture |
 | `docs/HOW_TO_ADD_A_PROTOCOL.md` | Practical guide for adding a local/private protocol |
 | `extras/` | Optional utilities (Cloudflare UFW rules, texture generation, visitor reports) |
@@ -291,6 +293,7 @@ Port 80 is open to all — it's a honeypot port. Port 443 can also be mapped to 
 | `SMTP587_REQUIRE_AUTH` | `false` | Require AUTH on port 587 before accepting mail |
 | `SMTP_TLS_CERT_PATH` | `data/smtp.crt` | TLS certificate path (auto-generated if missing) |
 | `SMTP_TLS_KEY_PATH` | `data/smtp.key` | TLS key path |
+| `SMTP_MAX_BODY` | `65536` | Max message body bytes captured (body-only). Deliberately generous (64 KB): capture is one-shot, so over-capturing is cheap and reversible while clipping loses data permanently. Storage is dedup-bounded (`smtp_body_intel`, one row per distinct body) and only a 140-char preview reaches the live feed, so the cap mainly governs feeder→aggregator forward size on rare large bodies. |
 | `SMTP_TRACE` | unset | Set to `true` to trace all SMTP sessions to stdout |
 | `SMTP_TRACE_IP` | unset | Trace only sessions from this specific IP |
 | `SMTP_THROTTLE_PER_SEC` | `0` (off) | Per-IP knock emission throttle, currently token-bucket average per second |
@@ -396,7 +399,7 @@ DEFAULT_ENABLED_PROTOCOLS = list(PROTOCOL_UI_ORDER)
 knocks_ssh(... username, password)
 knocks_tnet(... username, password)
 knocks_ftp(... username, password)
-knocks_smtp(... username, password, smtp_stage, smtp_mail_from, smtp_rcpt_to, subject, body)
+knocks_smtp(... username, password, smtp_stage, smtp_mail_from, smtp_rcpt_to, subject, body_id)  -- body_id → smtp_body_intel.id (full body stored deduped there, not inline)
 knocks_sip(... sip_method, sip_dial_string, sip_dial_number, sip_call_id, sip_cseq,
            sip_extension, sip_dial_country, sip_dial_country_name, sip_dial_lat, sip_dial_lng)
 knocks_smb(... username, smb_action, smb_share, smb_file, smb_version, smb_domain, smb_host)
@@ -421,6 +424,11 @@ ip_intel_proto(ip, proto INTEGER, hits, last_seen, lat, lng)
 -- SIP toll fraud destination tracking (only created when SIP is enabled)
 dial_intel(number TEXT PRIMARY KEY, hits, first_seen, last_seen, country, country_name, lat, lng)
 
+-- SMTP deduped message bodies (only created when SMTP is enabled); knocks_smtp.body_id → id.
+-- Full body stored once per distinct body, self-redacted (<target-*> placeholders), keyed by sha256.
+smtp_body_intel(id INTEGER PRIMARY KEY AUTOINCREMENT, sha256 TEXT UNIQUE, body,
+                content_type, transfer_encoding, hits, first_seen, last_seen)
+
 -- Multi-server source tracking
 sources(id INTEGER PRIMARY KEY, source_id TEXT UNIQUE, display_name, hits, first_seen, last_seen, active)
 
@@ -428,7 +436,7 @@ sources(id INTEGER PRIMARY KEY, source_id TEXT UNIQUE, display_name, hits, first
 monitor_heartbeats(id INTEGER PRIMARY KEY, uptime_minutes INTEGER)
 ```
 
-Each knock writes 10 upserts: 5 to ALL tables + 5 to `_proto` tables. ALL tables serve as fast rollup for the ALL leaderboard; `_proto` tables serve per-protocol leaderboards.
+Each knock writes 10 upserts: 5 to ALL tables + 5 to `_proto` tables. ALL tables serve as fast rollup for the ALL leaderboard; `_proto` tables serve per-protocol leaderboards. Protocols with a `db_update` hook write extra rows too: SIP upserts `dial_intel`, and SMTP dedups the full body into `smtp_body_intel` (via the `body_full` `db_only_fields` payload) and back-fills `knocks_smtp.body_id`.
 
 `ip_intel.hits_since_cleared` resets to 0 when an IP is banned (used with `--max-knocks` auto-ban). `ban_until` is a Unix timestamp (nullable); `ban_count` is the lifetime ban counter.
 

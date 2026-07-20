@@ -85,3 +85,34 @@ def test_discover_excludes_default_hostname_when_unset(monkeypatch):
     monkeypatch.delenv('DEFAULT_HOSTNAME', raising=False)
     _ips, hosts, _suffixes = self_redaction.discover_self_identifiers()
     assert 'mail.testcorp.example' not in hosts
+
+
+# --------------------------------------------------------------- discovery hygiene
+
+def test_is_non_routable_ipv4():
+    nr = self_redaction._is_non_routable_ipv4
+    for ip in ('127.0.0.1', '127.0.1.1', '10.1.2.3', '172.16.0.1', '172.17.0.1',
+               '172.31.255.255', '192.168.1.1', '169.254.1.1', '0.0.0.0'):
+        assert nr(ip) is True, ip
+    for ip in ('8.8.8.8', '107.173.37.88', '172.32.0.1', '172.15.0.1', '203.0.113.5'):
+        assert nr(ip) is False, ip
+    for junk in ('not-an-ip', '::1', '1.2.3', '1.2.3.4.5', '1.2.3.999'):
+        assert nr(junk) is False                              # not a plain IPv4 → passthrough
+
+
+def test_internal_hostname_excluded_from_identity(monkeypatch):
+    # gethostname/getfqdn are internal names no honeypot advertises → never in the identity
+    monkeypatch.setattr(self_redaction.socket, 'gethostname', lambda: 'internalbox-xyz')
+    monkeypatch.setattr(self_redaction.socket, 'getfqdn', lambda: 'internalbox-xyz.local')
+    monkeypatch.delenv('DEFAULT_HOSTNAME', raising=False)
+    _ips, hosts, _suf = self_redaction.discover_self_identifiers()
+    assert 'internalbox-xyz' not in hosts
+    assert 'internalbox-xyz.local' not in hosts
+    assert 'localhost' not in hosts
+
+
+def test_explicit_private_ip_kept_nonroutable_discovered_dropped(monkeypatch):
+    monkeypatch.setenv('REDACT_SELF_IPS', '192.168.5.5')      # explicit private → kept
+    ips, _hosts, _suf = self_redaction.discover_self_identifiers()
+    assert '192.168.5.5' in ips
+    assert not any(ip.startswith('127.') for ip in ips)      # auto-discovered loopback dropped

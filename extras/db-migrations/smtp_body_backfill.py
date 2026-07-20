@@ -208,7 +208,7 @@ def main(argv=None):
         load_dotenv()
         source_id = os.environ.get("SOURCE_ID", socket.gethostname().split(".")[0])
         ips, hosts, suffixes = discover_self_identifiers()
-        print(f"# identity for source '{source_id}' (host {socket.gethostname()}) — discovery + .env")
+        print(f"# identity for source '{source_id}' — discovery + .env")
         print("# paste each feeder's block into the aggregator --fleet file: redaction unions all")
         print("# identifiers; the 'source=' line keys the block to knocks_smtp.source so a knock's")
         print("# body can later be reconstructed by reversing <target-*> to THAT source's identity.")

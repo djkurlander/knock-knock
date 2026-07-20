@@ -34,19 +34,39 @@ def _registrable_domain(host):
     return '.'.join(labels[-2:])
 
 
+def _is_non_routable_ipv4(ip):
+    """True for an IPv4 loopback / RFC1918 / link-local / unspecified address — never a
+    self-reference. False for public IPv4, and for anything that isn't a plain IPv4 (IPv6,
+    etc.), which passes through unfiltered."""
+    parts = ip.split('.')
+    if len(parts) != 4:
+        return False
+    try:
+        a, b, c, d = (int(p) for p in parts)
+    except ValueError:
+        return False
+    if not all(0 <= x <= 255 for x in (a, b, c, d)):
+        return False
+    return (a in (0, 127) or a == 10 or (a == 172 and 16 <= b <= 31)
+            or (a == 192 and b == 168) or (a == 169 and b == 254))
+
+
 def discover_self_identifiers():
-    """Return (ips, hosts, host_suffixes) for THIS machine — env ``REDACT_SELF_*`` inputs
-    plus runtime discovery (local hostnames, outbound IP, resolved/bound IPs, PTR aliases,
-    and registrable domains derived from those)."""
+    """Return (ips, hosts, host_suffixes) for THIS machine — env ``REDACT_SELF_*`` /
+    ``DEFAULT_HOSTNAME`` inputs plus runtime discovery (public outbound/bound IPv4s, their
+    reverse-DNS PTR aliases, and registrable domains derived from those). The *internal* local
+    hostname (gethostname/getfqdn) and non-routable IPs are deliberately excluded."""
     ips = set()
     hosts = set()
     host_suffixes = set()
 
     # Explicit operator-provided redaction inputs.
+    explicit_ips = set()
     for v in os.environ.get('REDACT_SELF_IPS', '').split(','):
         v = v.strip()
         if v:
             ips.add(v)
+            explicit_ips.add(v)
     for v in os.environ.get('REDACT_SELF_HOSTS', '').split(','):
         v = v.strip().lower()
         if v:
@@ -62,19 +82,10 @@ def discover_self_identifiers():
     if dh:
         hosts.add(dh)
 
-    # Auto-discover local hostnames.
-    try:
-        hn = socket.gethostname().strip().lower()
-        if hn:
-            hosts.add(hn)
-    except Exception:
-        pass
-    try:
-        fqn = socket.getfqdn().strip().lower()
-        if fqn:
-            hosts.add(fqn)
-    except Exception:
-        pass
+    # The local hostname (gethostname/getfqdn) is deliberately NOT added: it's an *internal*
+    # name no honeypot advertises, so it never lands in captured data, and a short one (e.g.
+    # 'la1') would substring-match unrelated text ('formula1'). The advertised name comes from
+    # the reverse-DNS PTR of the public IP (below) + REDACT_SELF_* / DEFAULT_HOSTNAME.
 
     # Auto-discover primary outbound IPv4 used by this host.
     try:
@@ -108,6 +119,10 @@ def discover_self_identifiers():
     except Exception:
         pass
 
+    # Drop auto-discovered non-routable IPv4 (loopback / RFC1918 / link-local / docker bridge) —
+    # never a self-reference. Explicit REDACT_SELF_IPS are kept even if private.
+    ips = {ip for ip in ips if ip in explicit_ips or not _is_non_routable_ipv4(ip)}
+
     # Reverse lookup discovered IPs for host aliases.
     for ip in list(ips):
         try:
@@ -116,6 +131,7 @@ def discover_self_identifiers():
                 hosts.add(ptr)
         except Exception:
             pass
+    hosts.discard('localhost')
 
     # Derive registrable domains from discovered hostnames/PTRs by default.
     for host in list(hosts):

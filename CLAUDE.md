@@ -230,6 +230,7 @@ Port 80 is open to all — it's a honeypot port. Port 443 can also be mapped to 
 | `REDIS_DB` | `0` | Redis database index |
 | `DB_DIR` | `data` | Directory for SQLite databases and caches |
 | `ENABLED_PROTOCOLS` | all protocols | Comma-separated list of active protocols with optional port overrides, e.g. `SSH,SMTP:25,SMTP:587,HTTP:80,HTTP:443`. Empty string = ingest-only mode (no local honeypots). |
+| `DEFAULT_HOSTNAME` | unset | Canonical hostname all protocols advertise by default (an FQDN, e.g. `mail.corp.example`); each renders its own form (SMTP uses it as-is, SMB derives the short NetBIOS name). Per-protocol vars (`SMTP_HOSTNAME`, `SMB_SERVER_NAME`) override it; `PROTOCOL_VAR=auto` forces that protocol's built-in default instead. Also added to the self-redaction identity so it's scrubbed from captured fields. **Unset = each protocol's prior default** (SMTP reverse-DNS, SMB `WIN-SRV####`). **Docker:** set this — in-container discovery can't recover the advertised hostname — and also set `REDACT_SELF_IPS` (it can't see the public IP either). |
 
 ### Web Server (`main.py`)
 
@@ -288,7 +289,7 @@ Port 80 is open to all — it's a honeypot port. Port 443 can also be mapped to 
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `SMTP_HOSTNAME` | reverse DNS | Override SMTP banner and certificate hostname |
+| `SMTP_HOSTNAME` | reverse DNS | SMTP banner + certificate hostname. Precedence: this → `DEFAULT_HOSTNAME` → reverse DNS. `=auto` forces reverse DNS even when `DEFAULT_HOSTNAME` is set. |
 | `SMTP_FINGERPRINT` | `postfix` | MTA fingerprint to emulate |
 | `SMTP587_REQUIRE_AUTH` | `false` | Require AUTH on port 587 before accepting mail |
 | `SMTP_TLS_CERT_PATH` | `data/smtp.crt` | TLS certificate path (auto-generated if missing) |
@@ -304,7 +305,7 @@ Port 80 is open to all — it's a honeypot port. Port 443 can also be mapped to 
 |----------|---------|---------|
 | `SMB_PORT` | `445` | Listening port |
 | `SMB_DECOY_DIR` | `honeypots/decoys` | Directory of decoy share folders. Loaded at startup; zero FS access after that. Falls back to hardcoded `PUBLIC/passwords.txt` if missing or empty. |
-| `SMB_SERVER_NAME` | hostname | NetBIOS server name advertised |
+| `SMB_SERVER_NAME` | `WIN-SRV####` | NetBIOS server name advertised (short, ≤15 chars, upper-cased). Precedence: this → short form of `DEFAULT_HOSTNAME` → a stable fake `WIN-SRV####` (hashed from the hostname; hides the real name, looks like a fresh Windows box). `=auto` forces the fake even when `DEFAULT_HOSTNAME` is set. |
 | `SMB_SERVER_DOMAIN` | unset | Domain name advertised in SMB negotiation |
 | `SMB_QUARANTINE_DIR` | unset | Directory to save uploaded files from attackers |
 | `SMB_DEDUP_WINDOW_SEC` | `60` | Seconds to suppress duplicate knocks from the same IP |

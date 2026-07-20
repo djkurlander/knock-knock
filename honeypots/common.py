@@ -113,11 +113,24 @@ def smtp_recv_line(sock, timeout=30):
         buf += ch
 
 
-def get_smtp_hostname():
-    """Return SMTP_HOSTNAME env var if set, otherwise resolve reverse DNS; fall back to IP."""
-    override = os.environ.get('SMTP_HOSTNAME', '').strip()
-    if override:
-        return override
+def advertised_host(protocol_env):
+    """Resolve the *configured* advertised hostname for a protocol, or '' if none.
+    Precedence: PROTOCOL_VAR (exact) -> '' when PROTOCOL_VAR == 'auto' -> DEFAULT_HOSTNAME -> ''.
+    The caller appends ``or <fallback>()`` for the protocol-specific default. '' is a clean
+    'nothing configured' signal (never a valid hostname), and lets ``or`` keep the fallback lazy."""
+    v = os.environ.get(protocol_env, '').strip()
+    if v.lower() == 'auto':
+        return ''                       # force the caller's fallback, ignoring DEFAULT_HOSTNAME
+    return v or os.environ.get('DEFAULT_HOSTNAME', '').strip()
+
+
+def netbios_name(name):
+    """NetBIOS short name from an FQDN: first DNS label, <=15 chars, upper-cased."""
+    return name.split('.')[0][:15].upper()
+
+
+def _smtp_reverse_dns():
+    """SMTP banner fallback (unchanged): the host's reverse-DNS name, else its IP, else 'localhost'."""
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         s.connect(('8.8.8.8', 80))
@@ -129,6 +142,12 @@ def get_smtp_hostname():
             return ip
     except Exception:
         return 'localhost'
+
+
+def get_smtp_hostname():
+    """SMTP banner/cert hostname: SMTP_HOSTNAME -> DEFAULT_HOSTNAME -> reverse DNS.
+    With no host env vars set this is byte-identical to the previous reverse-DNS behavior."""
+    return advertised_host('SMTP_HOSTNAME') or _smtp_reverse_dns()
 
 
 def smtp_tls_cert_subject(hostname):

@@ -56,6 +56,11 @@ def discover_self_identifiers():
             v = v.strip().lower().lstrip('.')
             if v:
                 host_suffixes.add(v)
+    # The canonical advertised hostname (DEFAULT_HOSTNAME) — what the protocol banners present
+    # and bots reflect back — is a self-identifier too; its registrable domain is derived below.
+    dh = os.environ.get('DEFAULT_HOSTNAME', '').strip().lower()
+    if dh:
+        hosts.add(dh)
 
     # Auto-discover local hostnames.
     try:

@@ -18,7 +18,8 @@ import threading
 import time
 
 from impacket import ntlm, smb
-from common import PerIpTokenBucket, create_dualstack_tcp_listener, is_blocked, normalize_ip
+from common import (PerIpTokenBucket, advertised_host, create_dualstack_tcp_listener,
+                    is_blocked, netbios_name, normalize_ip)
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -45,8 +46,12 @@ def _default_smb_server_name() -> str:
     return f'WIN-SRV{suffix:04d}'
 
 
-SMB_SERVER_NAME       = (os.environ.get('SMB_SERVER_NAME', '').strip()
-                         or _default_smb_server_name())
+# SMB_SERVER_NAME (exact) -> DEFAULT_HOSTNAME (rendered as a short NetBIOS name) -> the
+# WIN-SRV fake. 'SMB_SERVER_NAME=auto' forces the fake even when DEFAULT_HOSTNAME is set.
+# netbios_name is a no-op on the fake (already <=15, upper-case, no dot), so with no host
+# env vars set this is byte-identical to the previous default.
+SMB_SERVER_NAME       = netbios_name(advertised_host('SMB_SERVER_NAME')
+                                     or _default_smb_server_name())
 
 # Decoy shares: loaded at startup from SMB_DECOY_DIR folder (or hardcoded default).
 # Structure: dict[share_name_upper -> dict[filename -> bytes]]

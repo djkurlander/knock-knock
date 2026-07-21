@@ -48,6 +48,17 @@ and the framework wires up the rest (`protocol_api.py`, `protocols/registry.py`,
   (logged separately from dashboard viewers).
 - **HTTP exploit classifier** expanded (~183 → 240+ named entries), with a regression
   test suite.
+- **Host-networking Docker deployment** (`docker-compose.host.yml`) — the default for new
+  Linux installs (selected by `COMPOSE_FILE` in `.env`). Honeypots see the **real attacker
+  source IP** (including UDP/SIP, where bridge NAT is unreliable), self-redaction discovers
+  the host's own identity automatically, and there's no port-publish list to keep in sync
+  (`ENABLED_PROTOCOLS` + the per-protocol `*_PORT` vars govern it). Bridge networking remains
+  the portable fallback for Docker Desktop / macOS / Windows.
+- **`DEFAULT_HOSTNAME`** — one canonical hostname every protocol advertises, rendered per its
+  own convention (SMTP banner as an FQDN, SMB as a short NetBIOS name), and folded into the
+  self-redaction identity so it's scrubbed from captured data. Per-protocol overrides
+  (`SMTP_HOSTNAME`, `SMB_SERVER_NAME`) plus an `auto` opt-out keep a protocol's built-in
+  default when you want it.
 
 ### Infrastructure
 
@@ -63,6 +74,10 @@ and the framework wires up the rest (`protocol_api.py`, `protocols/registry.py`,
   identity file (see `extras/db-migrations/README.md`).
 - Unit + integration test suites and CI; Dependabot + pinned dependencies + security
   (CVE) bumps.
+- Docker image hardening: the published image ships `self_redaction.py` and the management
+  CLIs, guarded by a CI test that fails the build if the Dockerfile's selective `COPY` ever
+  omits a root module the container imports — so a missing module can't ship a crash-looping
+  image.
 
 ## [2.0.1] — 2026-05-07
 

@@ -151,7 +151,11 @@ def db_update(data, cur, ctx):
         """INSERT INTO smtp_body_intel (sha256, body, content_type, transfer_encoding,
                                         hits, first_seen, last_seen)
            VALUES (?, ?, ?, ?, 1, ?, ?)
-           ON CONFLICT(sha256) DO UPDATE SET hits=hits+1, last_seen=excluded.last_seen""",
+           ON CONFLICT(sha256) DO UPDATE SET
+               hits=hits+1,
+               last_seen=excluded.last_seen,
+               content_type=COALESCE(content_type, excluded.content_type),
+               transfer_encoding=COALESCE(transfer_encoding, excluded.transfer_encoding)""",
         (sha, body_full, data.get('smtp_content_type'), data.get('smtp_transfer_encoding'),
          now, now),
     )

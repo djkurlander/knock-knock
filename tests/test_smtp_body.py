@@ -168,6 +168,22 @@ def test_db_update_skips_without_rowid():
     assert con.execute("SELECT COUNT(*) FROM smtp_body_intel").fetchone()[0] == 0   # no orphan body row
 
 
+def test_db_update_coalesces_null_content_type_but_never_overwrites():
+    con = _db()
+    body = 'open relay probe'
+    # 1. body first seen WITHOUT headers (backfill-style NULLs)
+    _save(con, {'proto': 'SMTP', 'ip': '9.9.9.9', 'body': body})
+    assert con.execute("SELECT content_type, transfer_encoding, hits FROM smtp_body_intel").fetchone() == (None, None, 1)
+    # 2. matching knock WITH headers → COALESCE heals the NULLs, hits bumped
+    _save(con, {'proto': 'SMTP', 'ip': '9.9.9.9', 'body': body,
+                'smtp_content_type': 'text/plain', 'smtp_transfer_encoding': '7bit'})
+    assert con.execute("SELECT content_type, transfer_encoding, hits FROM smtp_body_intel").fetchone() == ('text/plain', '7bit', 2)
+    # 3. matching knock with DIFFERENT headers must NOT overwrite the set values
+    _save(con, {'proto': 'SMTP', 'ip': '9.9.9.9', 'body': body,
+                'smtp_content_type': 'text/html', 'smtp_transfer_encoding': '8bit'})
+    assert con.execute("SELECT content_type, transfer_encoding, hits FROM smtp_body_intel").fetchone() == ('text/plain', '7bit', 3)
+
+
 # --------------------------------------------------------------------------- db_only_fields
 
 def test_body_full_is_db_only_not_passthrough():

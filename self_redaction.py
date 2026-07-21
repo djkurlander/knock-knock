@@ -127,7 +127,11 @@ def discover_self_identifiers():
     for ip in list(ips):
         try:
             ptr = socket.gethostbyaddr(ip)[0].strip().lower()
-            if ptr:
+            # Only keep a PTR that is a real FQDN (has a dot). A bare single-label PTR (e.g.
+            # 'ams2') is the same substring hazard as gethostname/getfqdn (excluded above) —
+            # it would match inside unrelated words in captured data. Explicit REDACT_SELF_HOSTS
+            # is still honored as-is; this only filters auto-discovered reverse-DNS names.
+            if ptr and '.' in ptr:
                 hosts.add(ptr)
         except Exception:
             pass

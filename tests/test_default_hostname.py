@@ -111,6 +111,20 @@ def test_internal_hostname_excluded_from_identity(monkeypatch):
     assert 'localhost' not in hosts
 
 
+def test_dotless_ptr_excluded_fqdn_ptr_kept(monkeypatch):
+    # A bare single-label reverse-DNS name (e.g. a VPS whose PTR is just 'ams2') is a
+    # substring hazard and must NOT enter the identity; a real FQDN PTR is kept + its domain.
+    for k in ('DEFAULT_HOSTNAME', 'REDACT_SELF_HOSTS'):
+        monkeypatch.delenv(k, raising=False)
+    monkeypatch.setenv('REDACT_SELF_IPS', '203.0.113.9')   # public IP → guarantees a PTR lookup
+    monkeypatch.setattr(self_redaction.socket, 'gethostbyaddr', lambda ip: ('ams2', [], [ip]))
+    _ips, hosts, _suf = self_redaction.discover_self_identifiers()
+    assert 'ams2' not in hosts
+    monkeypatch.setattr(self_redaction.socket, 'gethostbyaddr', lambda ip: ('box.example.com', [], [ip]))
+    _ips2, hosts2, suf2 = self_redaction.discover_self_identifiers()
+    assert 'box.example.com' in hosts2 and 'example.com' in suf2
+
+
 def test_explicit_private_ip_kept_nonroutable_discovered_dropped(monkeypatch):
     monkeypatch.setenv('REDACT_SELF_IPS', '192.168.5.5')      # explicit private → kept
     ips, _hosts, _suf = self_redaction.discover_self_identifiers()

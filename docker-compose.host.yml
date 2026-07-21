@@ -1,0 +1,105 @@
+# Host-networking Docker deployment (Linux only) — recommended for production.
+#
+# Why host networking for a honeypot:
+#   - Honeypots see the REAL attacker source IP (bridge NAT can mask it, and UDP/SIP
+#     return paths are fragile through DNAT).
+#   - Self-identity discovery/redaction works like a bare-metal install (the container
+#     sees the host's public IP + PTR), so DEFAULT_HOSTNAME / REDACT_SELF_IPS are optional.
+#   - No port-publish list to maintain: ENABLED_PROTOCOLS + the per-protocol *_PORT vars
+#     are the only control surface. Every enabled honeypot binds its host port directly.
+#
+# Selected via COMPOSE_FILE=docker-compose.host.yml in .env (active by default in
+# .env.example). Comment that line out to fall back to the bridge-networking
+# docker-compose.yml (required on Docker Desktop / macOS / Windows — host networking is
+# Linux-only there).
+#
+# Standalone, NOT an override of docker-compose.yml: 'ports:' is incompatible with
+# network_mode: host and Compose overrides cannot delete keys, so the services are
+# defined in full here. Configure everything else from .env.
+#
+# PORT CONFLICTS: with host networking each enabled honeypot binds the host port directly,
+# so make sure the host isn't already using it — in particular, move real sshd off :22
+# (see INSTALL.md). To leave a port free for the host, drop that protocol from
+# ENABLED_PROTOCOLS (it won't be spawned and won't bind).
+
+services:
+  redis:
+    image: redis:7-alpine
+    # Bind loopback only: under host networking the container shares the host's network
+    # stack, so an unbound Redis would be reachable on the public :6379. 127.0.0.1 keeps
+    # it host-local (only the monitor/web, also host-networked, reach it via localhost).
+    command: redis-server --bind 127.0.0.1 --protected-mode yes
+    network_mode: host
+    volumes:
+      - redis-data:/data
+    restart: unless-stopped
+
+  geoipupdate:
+    image: ghcr.io/maxmind/geoipupdate
+    # No inbound ports and no internal peers (outbound HTTPS only) — leave it on the
+    # default bridge network; it shares the GeoIP DB with the monitor via a named volume.
+    environment:
+      - GEOIPUPDATE_ACCOUNT_ID=${MAXMIND_ACCOUNT_ID}
+      - GEOIPUPDATE_LICENSE_KEY=${MAXMIND_LICENSE_KEY}
+      - 'GEOIPUPDATE_EDITION_IDS=GeoLite2-ASN GeoLite2-City'
+      - GEOIPUPDATE_FREQUENCY=168
+    volumes:
+      - geoip-data:/usr/share/GeoIP
+    restart: unless-stopped
+
+  honeypot-monitor:
+    image: ghcr.io/djkurlander/knock-knock:latest
+    build: .  # Used when running: docker compose up --build
+    command: python -u monitor.py
+    network_mode: host
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      - REDIS_HOST=localhost   # host-networked Redis on 127.0.0.1
+    volumes:
+      - ./data:/app/data
+      - geoip-data:/usr/share/GeoIP:ro
+    depends_on:
+      - redis
+      - geoipupdate
+    restart: unless-stopped
+
+  web:
+    image: ghcr.io/djkurlander/knock-knock:latest
+    build: .  # Used when running: docker compose up --build
+    network_mode: host
+    command:
+      - sh
+      - -c
+      - |
+        if [ "$$ENABLE_SSL" = 'true' ]; then
+          exec python -m uvicorn main:app \
+            --host $${WEB_LISTEN:-0.0.0.0} \
+            --port $${WEB_PORT:-8080} \
+            --ssl-keyfile $${KNOCK_KEYFILE:-certs/key.pem} \
+            --ssl-certfile $${KNOCK_CERTFILE:-certs/cert.pem} \
+            --proxy-headers --forwarded-allow-ips='*' \
+            --workers 2 --timeout-keep-alive 30 --log-level warning;
+        else
+          exec python -m uvicorn main:app \
+            --host $${WEB_LISTEN:-0.0.0.0} \
+            --port $${WEB_PORT:-8080} \
+            --proxy-headers --forwarded-allow-ips='*' \
+            --workers 2 --timeout-keep-alive 30 --log-level warning;
+        fi
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      - REDIS_HOST=localhost   # host-networked Redis on 127.0.0.1
+    volumes:
+      - ./data:/app/data
+      - ./certs:/app/certs:ro  # HTTPS certs (used only when ENABLE_SSL=true; dir auto-created if absent)
+    depends_on:
+      - redis
+    restart: unless-stopped
+
+volumes:
+  redis-data:
+  geoip-data:

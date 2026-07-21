@@ -126,7 +126,7 @@ SMTP Attacker   → honeypots/smtp_honeypot.py           (ports 25,587)┘      
 - `SOURCE_ID` identifies each feeder server in the dashboard
 
 **Deployment modes:**
-- **Docker:** `docker compose up -d` — monitor spawns all honeypots internally
+- **Docker:** `docker compose up -d` — monitor spawns all honeypots internally. Defaults to **host networking** (`docker-compose.host.yml`, selected by `COMPOSE_FILE` in `.env.example`) on Linux — real source IPs, no port-publish list, redaction discovers the host IP; comment `COMPOSE_FILE` out for **bridge** networking (`docker-compose.yml` + `docker-compose.override.yml` port list, required on Docker Desktop/macOS/Windows)
 - **Systemd:** Two unit files in `systemd/` — monitor spawns all honeypots internally
 
 ## Key Files
@@ -151,7 +151,8 @@ SMTP Attacker   → honeypots/smtp_honeypot.py           (ports 25,587)┘      
 | `summary.html` | Alternate compact dashboard view (kept in sync with index.html) |
 | `restart.sh` | Service orchestration (systemd and Docker) |
 | `Dockerfile` | Single image for honeypot-monitor and web containers |
-| `docker-compose.yml` | Docker deployment (Redis, honeypot+monitor, web) |
+| `docker-compose.yml` | Docker deployment, **bridge** networking (Redis, honeypot+monitor, web); needs `docker-compose.override.yml` for the honeypot port list |
+| `docker-compose.host.yml` | Docker deployment, **host** networking (Linux; default via `COMPOSE_FILE` in `.env.example`) — real source IPs, no port list, loopback-bound Redis |
 | `stats.py` | CLI utility for printing database statistics |
 | `dbtool.py` | DB management: `--list-tables`, `--backup`, `--remove-knocks` |
 | `extras/db-migrations/smtp_body_backfill.py` | v3 SMTP body migration into the deduped `smtp_body_intel` table (self-redacted); `--print-identity`/`--fleet` for aggregators (see `extras/db-migrations/README.md`) |
@@ -230,7 +231,7 @@ Port 80 is open to all — it's a honeypot port. Port 443 can also be mapped to 
 | `REDIS_DB` | `0` | Redis database index |
 | `DB_DIR` | `data` | Directory for SQLite databases and caches |
 | `ENABLED_PROTOCOLS` | all protocols | Comma-separated list of active protocols with optional port overrides, e.g. `SSH,SMTP:25,SMTP:587,HTTP:80,HTTP:443`. Empty string = ingest-only mode (no local honeypots). |
-| `DEFAULT_HOSTNAME` | unset | Canonical hostname all protocols advertise by default (an FQDN, e.g. `mail.corp.example`); each renders its own form (SMTP uses it as-is, SMB derives the short NetBIOS name). Per-protocol vars (`SMTP_HOSTNAME`, `SMB_SERVER_NAME`) override it; `PROTOCOL_VAR=auto` forces that protocol's built-in default instead. Also added to the self-redaction identity so it's scrubbed from captured fields. **Unset = each protocol's prior default** (SMTP reverse-DNS, SMB `WIN-SRV####`). **Docker:** set this — in-container discovery can't recover the advertised hostname — and also set `REDACT_SELF_IPS` (it can't see the public IP either). |
+| `DEFAULT_HOSTNAME` | unset | Canonical hostname all protocols advertise by default (an FQDN, e.g. `mail.corp.example`); each renders its own form (SMTP uses it as-is, SMB derives the short NetBIOS name). Per-protocol vars (`SMTP_HOSTNAME`, `SMB_SERVER_NAME`) override it; `PROTOCOL_VAR=auto` forces that protocol's built-in default instead. Also added to the self-redaction identity so it's scrubbed from captured fields. **Unset = each protocol's prior default** (SMTP reverse-DNS, SMB `WIN-SRV####`). **Docker (bridge networking only):** set this — bridge in-container discovery can't recover the advertised hostname — and also set `REDACT_SELF_IPS` (it can't see the public IP either). Under **host networking** (`docker-compose.host.yml`, the default in `.env.example`) the container sees the host's real IP/PTR, so discovery works like a bare-metal install and both are optional. |
 
 ### Web Server (`main.py`)
 

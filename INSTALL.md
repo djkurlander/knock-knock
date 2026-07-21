@@ -96,16 +96,34 @@ cp .env.example .env
 nano .env   # Fill in your Account ID and License Key
 ```
 
-### Configure Ports
+### Networking: host (default, Linux) vs bridge
 
-Port bindings are managed in `docker-compose.override.yml`. Copy the example and remove any ports you don't want exposed (e.g. if the host already uses port 22 for SSH, or you don't want a particular honeypot):
+`.env.example` ships with `COMPOSE_FILE=docker-compose.host.yml` active, so a fresh install
+uses **host networking** — recommended on a Linux server:
+
+- Honeypots see the **real attacker source IP** (bridge NAT can mask it, and UDP/SIP return
+  paths are fragile through DNAT).
+- Self-identity **redaction works automatically** (the container sees the host's public IP/PTR).
+- **No port list to maintain** — only the honeypots in `ENABLED_PROTOCOLS` bind their host
+  ports, via the per-protocol `*_PORT` vars. Nothing else to configure; no override file.
+
+Because each enabled honeypot binds the host port directly, **move real sshd off :22 first**
+(see [Move Real SSH to a Different Port](#move-real-ssh-to-a-different-port)). To leave a port
+free for the host, drop that protocol from `ENABLED_PROTOCOLS` — it won't be spawned and won't bind.
+
+**Bridge networking (Docker Desktop / macOS / Windows, or if you prefer container isolation):**
+host networking is Linux-only, so on other platforms comment out `COMPOSE_FILE` in `.env` to fall
+back to `docker-compose.yml`. Bridge publishes ports via an override file — copy the example and
+remove any ports you don't want exposed:
 
 ```bash
+# In .env, comment out:  # COMPOSE_FILE=docker-compose.host.yml
 cp docker-compose.override.yml.example docker-compose.override.yml
 nano docker-compose.override.yml   # Remove ports you don't need
 ```
 
-Also set `ENABLED_PROTOCOLS` in `.env` to match — Docker binds ports independently of which honeypots are running, so the two should stay in sync.
+With bridge, keep the `ports:` list and `ENABLED_PROTOCOLS` in sync — Docker binds ports
+independently of which honeypots are running. (Host networking has no such list, so nothing to sync.)
 
 ### Start
 

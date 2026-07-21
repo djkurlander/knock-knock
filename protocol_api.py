@@ -46,6 +46,10 @@ class PassthroughField:
 class TableDefinition:
     name: str
     columns: list[Column] = field(default_factory=list)
+    # True = a dependent side-table of the knock table (e.g. smtp_body_intel, linked via a
+    # body_id FK) — created only when the knock table is saved. False = a standalone rollup
+    # (e.g. dial_intel), like the *_intel tables — created whenever the protocol is enabled.
+    knock_linked: bool = False
 
 
 @dataclass(frozen=True)

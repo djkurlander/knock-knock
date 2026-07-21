@@ -121,6 +121,8 @@ def test_process_knock_no_body_is_noop():
 # --------------------------------------------------------------------------- db_update / schema
 
 def _db():
+    # knocks_smtp + its knock-linked side-table smtp_body_intel — the pair the live monitor
+    # provisions together when SMTP is saved (init_db, gated on TableDefinition.knock_linked).
     con = sqlite3.connect(":memory:")
     con.execute("""CREATE TABLE knocks_smtp (id INTEGER PRIMARY KEY AUTOINCREMENT, timestamp TEXT,
                    ip_address TEXT, source INTEGER DEFAULT 0, smtp_rcpt_to TEXT, body_id INTEGER)""")
@@ -178,6 +180,13 @@ def test_smtp_definition_has_body_id_not_body():
     cols = {c.name for c in smtp.DEFINITION.columns}
     assert "body_id" in cols and "body" not in cols
     assert any(t.name == "smtp_body_intel" for t in smtp.DEFINITION.extra_tables)
+
+
+def test_smtp_body_intel_is_knock_linked():
+    # smtp_body_intel is a dependent side-table of knocks_smtp (body_id FK), so it must be
+    # marked knock_linked → init_db/updatedb create it only when SMTP is saved.
+    body_tbl = next(t for t in smtp.DEFINITION.extra_tables if t.name == "smtp_body_intel")
+    assert body_tbl.knock_linked is True
 
 
 # --------------------------------------------------------------------------- backfill

@@ -270,6 +270,11 @@ def _column_sql(column):
     return f"{_sql_ident(column.name)} {column.type}"
 
 
+def _create_extra_table(cur, extra):
+    extra_cols = [_column_sql(column) for column in extra.columns]
+    cur.execute(f"CREATE TABLE IF NOT EXISTS {_sql_ident(extra.name)} ({', '.join(extra_cols)})")
+
+
 # Conventional DB column names that differ from their knock field names.
 # Extension authors define Column("username") and get knock["user"] automatically.
 _COLUMN_SOURCE_ALIASES = {
@@ -455,14 +460,20 @@ def init_db(save_protos=None, enabled_protocols=None):
         # Add any columns declared by the protocol definition but missing from
         # the existing table — handles protocol schema additions without migration.
         _ensure_columns(cur, definition.knock_table, definition.columns)
+        # Knock-linked side-tables (e.g. smtp_body_intel) are created WITH the knock table —
+        # only when the protocol is saved, since they hold nothing without it.
+        for extra in definition.extra_tables:
+            if extra.knock_linked:
+                _create_extra_table(cur, extra)
+    # Standalone rollup extra tables (e.g. dial_intel) — created whenever the protocol is
+    # enabled, like the *_intel rollups below (populated regardless of --save-knocks).
     for proto in (enabled_protocols or []):
         definition = (PROTOCOL_META.get(proto) or {}).get('definition')
         if not definition:
             continue
         for extra in definition.extra_tables:
-            extra_table = _sql_ident(extra.name)
-            extra_cols = [_column_sql(column) for column in extra.columns]
-            cur.execute(f"CREATE TABLE IF NOT EXISTS {extra_table} ({', '.join(extra_cols)})")
+            if not extra.knock_linked:
+                _create_extra_table(cur, extra)
     cur.execute("CREATE TABLE IF NOT EXISTS user_intel (username TEXT PRIMARY KEY, hits INTEGER, last_seen DATETIME)")
     cur.execute("CREATE TABLE IF NOT EXISTS pass_intel (password TEXT PRIMARY KEY, hits INTEGER, last_seen DATETIME)")
     cur.execute("CREATE TABLE IF NOT EXISTS country_intel (iso_code TEXT PRIMARY KEY, country TEXT, hits INTEGER, last_seen DATETIME)")

@@ -193,6 +193,7 @@ DEFINITION = ProtocolDefinition(
     extra_tables=[
         TableDefinition(
             name="smtp_body_intel",
+            knock_linked=True,   # dependent side-table of knocks_smtp (via body_id); create only when SMTP is saved
             columns=[
                 Column("id",                "INTEGER PRIMARY KEY AUTOINCREMENT"),
                 Column("sha256",            "TEXT UNIQUE"),

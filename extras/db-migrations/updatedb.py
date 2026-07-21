@@ -27,10 +27,6 @@ COMMON_KNOCK_COLS = [
 USER_PASS_PROTOS = {k: PROTO[k] for k in ("SSH", "TNET", "FTP")}
 
 
-def column_sql(column):
-    return f"{column.name} {column.type}"
-
-
 def table_exists(cur, table):
     return cur.execute(
         "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",
@@ -65,7 +61,12 @@ def create_current_schema(cur):
         if not definition:
             continue
         for extra in definition.extra_tables:
-            extra_cols = [column_sql(column) for column in extra.columns]
+            # Knock-linked side-tables (e.g. smtp_body_intel) only when their knock table is
+            # present — no knocks_smtp means an empty smtp_body_intel would be meaningless.
+            # Standalone rollups (e.g. dial_intel) are created uniformly, like the *_intel tables.
+            if extra.knock_linked and not table_exists(cur, definition.knock_table):
+                continue
+            extra_cols = [f"{column.name} {column.type}" for column in extra.columns]
             cur.execute(f"CREATE TABLE IF NOT EXISTS {quote_ident(extra.name)} ({', '.join(extra_cols)})")
 
     cur.execute("CREATE TABLE IF NOT EXISTS user_intel (username TEXT PRIMARY KEY, hits INTEGER, last_seen DATETIME)")

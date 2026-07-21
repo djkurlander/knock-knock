@@ -36,5 +36,9 @@ __pycache__/
 # Per-server deployment scripts (contain server IPs)
 allow-feeders.sh
 
+# Aggregator SMTP-body-backfill fleet identity file (contains every server's IP/host/domain)
+fleet.txt
+fleet*.txt
+
 # Local protocol customizations (never tracked upstream)
 extensions.py

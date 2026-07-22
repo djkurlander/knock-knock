@@ -12,6 +12,8 @@ from protocol_api import Column, PassthroughField, ProtocolDefinition, TableDefi
 
 # Max body bytes retained (must match the honeypot's SMTP_MAX_BODY). 64 KB default.
 SMTP_MAX_BODY = int(os.environ.get('SMTP_MAX_BODY', '65536'))
+SMTP_SAVE_HEADERS = os.environ.get('SMTP_SAVE_HEADERS', '0').lower() in ('1', 'true', 'yes', 'on')
+SMTP_MAX_HEADERS_CAPTURE = int(os.environ.get('SMTP_MAX_HEADERS_CAPTURE', '32768'))
 PREVIEW_LEN = 140   # readable feed preview length (matches the display truncate below)
 
 
@@ -126,6 +128,9 @@ def process_knock(knock, ctx):
     # aggregator re-runs process_knock, but knock['body'] is now the 140-char preview —
     # re-deriving from it would clobber the full body with the preview. If body_full is
     # already present the feeder did the work, so leave both fields untouched.
+    headers = knock.get('smtp_headers')
+    if headers:
+        knock['smtp_headers'] = ctx['redact_self'](headers)[:SMTP_MAX_HEADERS_CAPTURE]
     if knock.get('body_full') is not None:
         return knock
     body = knock.get('body')
@@ -140,10 +145,19 @@ def process_knock(knock, ctx):
 
 
 def db_update(data, cur, ctx):
-    """Dedup the full redacted body into smtp_body_intel and link the knock via body_id."""
+    """Persist SMTP side-channel evidence tied to a saved knock row."""
     rowid = ctx.get('knock_rowid')
+    if not rowid:
+        return
+    headers = data.get('smtp_headers')
+    if SMTP_SAVE_HEADERS and headers:
+        cur.execute(
+            """INSERT OR REPLACE INTO smtp_header_capture (knock_id, headers, captured_at)
+               VALUES (?, ?, ?)""",
+            (rowid, headers[:SMTP_MAX_HEADERS_CAPTURE], ctx['now']),
+        )
     body_full = data.get('body_full')
-    if not rowid or body_full is None:
+    if body_full is None:
         return
     now = ctx['now']
     sha = hashlib.sha256(body_full.encode('utf-8', 'replace')).hexdigest()
@@ -191,7 +205,7 @@ DEFINITION = ProtocolDefinition(
         "subject",
         PassthroughField("body", sanitizer="body", max_len=SMTP_MAX_BODY),
     ],
-    db_only_fields=["body_full"],
+    db_only_fields=["body_full", "smtp_headers"],
     process_knock="protocols.smtp:process_knock",
     db_update="protocols.smtp:db_update",
     extra_tables=[
@@ -207,6 +221,15 @@ DEFINITION = ProtocolDefinition(
                 Column("hits",              "INTEGER"),
                 Column("first_seen",        "DATETIME"),
                 Column("last_seen",         "DATETIME"),
+            ],
+        ),
+        TableDefinition(
+            name="smtp_header_capture",
+            knock_linked=True,   # raw/redacted header corpus for designing future normalized header intel
+            columns=[
+                Column("knock_id",    "INTEGER PRIMARY KEY"),
+                Column("headers",     "TEXT NOT NULL"),
+                Column("captured_at", "DATETIME NOT NULL"),
             ],
         ),
     ],

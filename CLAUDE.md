@@ -296,6 +296,8 @@ Port 80 is open to all — it's a honeypot port. Port 443 can also be mapped to 
 | `SMTP_TLS_CERT_PATH` | `data/smtp.crt` | TLS certificate path (auto-generated if missing) |
 | `SMTP_TLS_KEY_PATH` | `data/smtp.key` | TLS key path |
 | `SMTP_MAX_BODY` | `65536` | Max message body bytes captured (body-only). Deliberately generous (64 KB): capture is one-shot, so over-capturing is cheap and reversible while clipping loses data permanently. Storage is dedup-bounded (`smtp_body_intel`, one row per distinct body) and only a 140-char preview reaches the live feed, so the cap mainly governs feeder→aggregator forward size on rare large bodies. |
+| `SMTP_SAVE_HEADERS` | unset | Set to `true` to capture self-redacted SMTP DATA headers in the knock-linked `smtp_header_capture` side table (DB-only, never live feed). Both feeder and aggregator can gate this independently; aggregator storage requires this enabled there too. |
+| `SMTP_MAX_HEADERS_CAPTURE` | `32768` | Max raw header characters captured when `SMTP_SAVE_HEADERS=true` (32 KB default, used to study truncation before designing normalized header intel). |
 | `SMTP_TRACE` | unset | Set to `true` to trace all SMTP sessions to stdout |
 | `SMTP_TRACE_IP` | unset | Trace only sessions from this specific IP |
 | `SMTP_THROTTLE_PER_SEC` | `0` (off) | Per-IP knock emission throttle, currently token-bucket average per second |

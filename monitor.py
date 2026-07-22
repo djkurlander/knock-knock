@@ -403,12 +403,16 @@ def _db_update_hook(proto, data, cur, now, knock_rowid=None):
 
 
 def _registered_passthrough_items(knock):
-    policy = _PASSTHROUGH_POLICIES.get(str(knock.get('proto', '')).upper())
+    proto = str(knock.get('proto', '')).upper()
+    policy = _PASSTHROUGH_POLICIES.get(proto)
     if not policy:
         return []
     fields, prefixes = policy
+    db_only = set(_db_only_fields(proto))
     items = []
     for key, value in knock.items():
+        if key in db_only:
+            continue
         if key in fields:
             items.append((key, value, fields[key]))
         elif prefixes and isinstance(key, str) and key.startswith(prefixes):

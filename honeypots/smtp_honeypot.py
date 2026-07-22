@@ -78,6 +78,8 @@ _EHLO_RESP_TLS = build_ehlo_response(_SMTP_HOSTNAME, _FP['ehlo_tls'])
 
 MAX_MESSAGES_PER_SESSION = 10
 SMTP_MAX_BODY = int(os.environ.get('SMTP_MAX_BODY', '65536'))
+SMTP_SAVE_HEADERS = os.environ.get('SMTP_SAVE_HEADERS', '0').lower() in ('1', 'true', 'yes', 'on')
+SMTP_MAX_HEADERS_CAPTURE = int(os.environ.get('SMTP_MAX_HEADERS_CAPTURE', '32768'))
 SMTP587_REQUIRE_AUTH = os.environ.get('SMTP587_REQUIRE_AUTH', '0').lower() in ('1', 'true', 'yes', 'on')
 SMTP_TRACE_ENABLED = os.environ.get('SMTP_TRACE', '0').lower() not in ('0', 'false', 'no')
 SMTP_TRACE_IP = os.environ.get('SMTP_TRACE_IP', '').strip()
@@ -127,6 +129,7 @@ def emit_smtp_knock(
     mail_from=None,
     rcpt_to=None,
     subject=None,
+    headers=None,
     body=None,
     content_type=None,
     transfer_encoding=None,
@@ -146,6 +149,8 @@ def emit_smtp_knock(
         knock["smtp_rcpt_to"] = rcpt_to
     if subject:
         knock["subject"] = subject
+    if headers:
+        knock["smtp_headers"] = headers
     if body:
         knock["body"] = body
     if content_type:
@@ -372,6 +377,9 @@ def handle_connection(client_sock, client_ip):
                             content_type = hdr.split(':', 1)[1].strip()[:300]
                         elif hu.startswith('CONTENT-TRANSFER-ENCODING:'):
                             transfer_encoding = hdr.split(':', 1)[1].strip()[:60]
+                    headers = None
+                    if SMTP_SAVE_HEADERS and header_lines:
+                        headers = '\n'.join(header_lines)[:SMTP_MAX_HEADERS_CAPTURE]
 
                     # Capture message body (body-only, up to SMTP_MAX_BODY bytes)
                     body_lines = []
@@ -398,6 +406,7 @@ def handle_connection(client_sock, client_ip):
                         mail_from=mail_from,
                         rcpt_to=rcpt_to,
                         subject=subject,
+                        headers=headers,
                         body=body,
                         content_type=content_type,
                         transfer_encoding=transfer_encoding,

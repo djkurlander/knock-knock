@@ -129,6 +129,8 @@ def _db():
     con.execute("""CREATE TABLE smtp_body_intel (id INTEGER PRIMARY KEY AUTOINCREMENT, sha256 TEXT UNIQUE,
                    body TEXT, content_type TEXT, transfer_encoding TEXT, hits INTEGER,
                    first_seen DATETIME, last_seen DATETIME)""")
+    con.execute("""CREATE TABLE smtp_header_capture (knock_id INTEGER PRIMARY KEY,
+                   headers TEXT NOT NULL, captured_at DATETIME NOT NULL)""")
     return con
 
 
@@ -166,6 +168,27 @@ def test_db_update_skips_without_rowid():
     k = smtp.process_knock({'proto': 'SMTP', 'ip': '9.9.9.9', 'body': f"hi {IP}"}, CTX)
     smtp.db_update(k, con.cursor(), {'now': 'now', 'redact_self': redact, 'knock_rowid': None})
     assert con.execute("SELECT COUNT(*) FROM smtp_body_intel").fetchone()[0] == 0   # no orphan body row
+    assert con.execute("SELECT COUNT(*) FROM smtp_header_capture").fetchone()[0] == 0
+
+
+def test_db_update_header_capture_is_redacted_and_gated(monkeypatch):
+    con = _db()
+    cur = con.cursor()
+    cur.execute("INSERT INTO knocks_smtp (timestamp, ip_address) VALUES ('now','9.9.9.9')")
+    rowid = cur.lastrowid
+    headers = f"Received: from mx.example ({IP})\nSubject: relay probe"
+    k = smtp.process_knock({'proto': 'SMTP', 'ip': '9.9.9.9', 'smtp_headers': headers}, CTX)
+    assert IP not in k['smtp_headers']
+    assert '<target-ip>' in k['smtp_headers']
+
+    monkeypatch.setattr(smtp, 'SMTP_SAVE_HEADERS', False)
+    smtp.db_update(k, cur, {'now': 'now', 'redact_self': redact, 'knock_rowid': rowid})
+    assert con.execute("SELECT COUNT(*) FROM smtp_header_capture").fetchone()[0] == 0
+
+    monkeypatch.setattr(smtp, 'SMTP_SAVE_HEADERS', True)
+    smtp.db_update(k, cur, {'now': 'now', 'redact_self': redact, 'knock_rowid': rowid})
+    stored = con.execute("SELECT headers, captured_at FROM smtp_header_capture WHERE knock_id=?", (rowid,)).fetchone()
+    assert stored == (f"Received: from mx.example (<target-ip>)\nSubject: relay probe", "now")
 
 
 def test_db_update_coalesces_null_content_type_but_never_overwrites():
@@ -187,22 +210,33 @@ def test_db_update_coalesces_null_content_type_but_never_overwrites():
 # --------------------------------------------------------------------------- db_only_fields
 
 def test_body_full_is_db_only_not_passthrough():
-    assert monitor._db_only_fields("SMTP") == ("body_full",)
+    assert monitor._db_only_fields("SMTP") == ("body_full", "smtp_headers")
     fields, _prefixes = monitor._PASSTHROUGH_POLICIES["SMTP"]
     assert "body_full" not in fields            # must NOT be a passthrough (would hit the feed)
+    assert "smtp_headers" not in fields
+    passthrough = monitor._registered_passthrough_items({
+        "proto": "SMTP",
+        "smtp_headers": "Subject: x\nReceived: y",
+        "smtp_mail_from": "a@example.test",
+    })
+    keys = [key for key, _value, _policy in passthrough]
+    assert "smtp_headers" not in keys
+    assert "smtp_mail_from" in keys
 
 
 def test_smtp_definition_has_body_id_not_body():
     cols = {c.name for c in smtp.DEFINITION.columns}
     assert "body_id" in cols and "body" not in cols
     assert any(t.name == "smtp_body_intel" for t in smtp.DEFINITION.extra_tables)
+    assert any(t.name == "smtp_header_capture" for t in smtp.DEFINITION.extra_tables)
 
 
 def test_smtp_body_intel_is_knock_linked():
     # smtp_body_intel is a dependent side-table of knocks_smtp (body_id FK), so it must be
     # marked knock_linked → init_db/updatedb create it only when SMTP is saved.
-    body_tbl = next(t for t in smtp.DEFINITION.extra_tables if t.name == "smtp_body_intel")
-    assert body_tbl.knock_linked is True
+    for table_name in ("smtp_body_intel", "smtp_header_capture"):
+        tbl = next(t for t in smtp.DEFINITION.extra_tables if t.name == table_name)
+        assert tbl.knock_linked is True
 
 
 # --------------------------------------------------------------------------- backfill

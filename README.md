@@ -6,6 +6,8 @@
 
 **Live demo:** https://knock-knock.net &nbsp;|&nbsp; **Live tutorial:** https://knock-knock.net/summary
 
+Knock-Knock is a multi-protocol honeypot with a live, animated attack dashboard, built-in support for the common internet protocols, an extensible architecture for adding your own, and a threat-intelligence database that powers a public IP blocklist feed.
+
 _**Watch** the bots trying to break into unprotected Internet servers, in this information-packed dashboard! **Discover** the most frequent countries of origin! **Be shocked** by the most common usernames and passwords! **Scoff at and ridicule** the worst offending ISPs and IPs! **Find out** why the bots are choosing these usernames and passwords!_
 
 _**Marvel** at the spinning globe visualizations! Wait, is one of those globes a heat map too - how is that even possible? **Click** on the speaker icon to hear a virtual geiger counter measure what has been called **the background radiation of the Internet!**_
@@ -39,6 +41,7 @@ Check it out at https://knock-knock.net, or install it on your own server. Don't
 ## Features
 
 - **Multi-Protocol:** View attacks across all the protocols (SSH, Telnet, FTP, RDP, SMB, SIP, HTTP, SMTP), or select a specific protocol to view.
+- **Extensible:** each protocol is a self-contained module, so new honeypots plug right into the dashboard — MQTT, Node-RED, Modbus, S7, and SNMP already ship beyond the core eight, and you can define and add your own.
 - **Live Feed:** a realtime feed of bots trying to attack the server (knocks). Includes the location, username, password, ISP, IP, and protocol
 - **Globe View:** a 3D globe showing the location of the last knock. Six different globe styles are available, including a cool extruded country heat map of worst offenders
 - **Location:** the countries with the highest knock counts
@@ -50,6 +53,7 @@ Check it out at https://knock-knock.net, or install it on your own server. Don't
 - **Stats:** the relative protocol frequencies, and (if aggregated) the frequency of knocks from the feeder servers
 - **Trivia:** learn why a username or password may have been chosen
 - **Jokes:** some very bad knock-knock jokes
+- **IP Blocklist:** a [public threat feed](https://knock-knock.net/blocklist) of attacker IPs, regenerated hourly, with ready-to-use CSF / CrowdSec / ipset / nftables / pfSense recipes
 
 ## How It Works
 

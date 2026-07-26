@@ -90,11 +90,35 @@ for id_, method, path, ua, body in rows:
                  'purpose': purpose, 'name': name, 'cve': cve, 'count': 1}
 
 print(f"Max ID in batch: {max_id}  |  Distinct tuples: {len(seen)}")
-unmatched = [v for v in seen.values() if v['name'] is None]
-print(f"Unmatched (no classifier hit): {len(unmatched)}\n")
-for v in sorted(unmatched, key=lambda x: -x['count']):
-    print(f"  [{v['count']:4d}x] {v['method']} {v['path']!r}  ua={v['ua']!r}  body={v['body'][:80]!r}  → purpose={v['purpose']}")
+
+# `name is None` is NOT the signal to triage — it's mostly traffic the HEURISTIC layer
+# already classifies correctly (e.g. `/` basic_probe, `/.env` config_exposure) and must NOT
+# be forced into named entries. The REAL gaps are the `purpose == 'unknown'` tuples (nothing
+# recognised it at all), plus anything that's clearly a specific product/CVE but only got a
+# generic heuristic purpose. Split them so you look in the right place.
+unknown = [v for v in seen.values() if v['purpose'] == 'unknown']
+heuristic_only = [v for v in seen.values() if v['name'] is None and v['purpose'] != 'unknown']
+print(f"UNKNOWN purpose (the real gaps — triage these): {len(unknown)}")
+print(f"heuristic-caught (name=None but purpose set — mostly leave alone): {len(heuristic_only)}\n")
+print("=== UNKNOWN-purpose groups (highest-value; look for named CVEs/tools/protocols here) ===")
+for v in sorted(unknown, key=lambda x: -x['count'])[:60]:
+    print(f"  [{v['count']:4d}x] {v['method']} {v['path'][:70]!r}  ua={v['ua'][:32]!r}  body={v['body'][:60]!r}")
+print("\n=== heuristic-caught, non-'/' (scan for a specific product/CVE hiding under a generic purpose) ===")
+import re as _re
+for v in sorted(heuristic_only, key=lambda x: -x['count']):
+    p = v['path']
+    if p in ('', '<cryptic binary>') or _re.match(r'^/($|robots\.txt|sitemap\.xml|favicon|\.well-known)', p, _re.I):
+        continue
+    if v['count'] < 8:
+        continue
+    print(f"  [{v['count']:4d}x] {v['purpose']:16} {v['method']} {p[:64]!r}")
 ```
+
+**Read the UNKNOWN bucket first** — that is where genuinely new named exploits hide (this is
+where Log4Shell-obfuscation, SIP-over-HTTP, and un-widened LLM/Ignition endpoints turned up in
+past runs). The `heuristic-caught` list is a secondary pass: most of it is correctly handled and
+should be left as-is; only pull something out of it if it's a *specific named product/CVE* that
+deserves precise attribution instead of a generic heuristic purpose (see Step 5).
 
 Paths/methods to silently skip (noise with no exploit value):
 - Method `<cryptic binary>` or path `<cryptic binary>`
@@ -127,6 +151,27 @@ For each genuinely unmatched distinct path/method (after grouping):
   entry at priority 185–260.
 - If it's pure noise (generic test paths, favicon variants, scanner bots already
   covered by a broad UA pattern) → skip.
+
+**⚠️ Matcher semantics — fields within one entry are AND-combined.** `_match_exploit`
+requires **every** present field (`method_pattern`/`path_pattern`/`ua_pattern`/`body_pattern`)
+to match. So:
+- An entry describes **one signature** as a conjunction — e.g. "`POST` to `/x` **with** body
+  `cmd=`". Use multiple fields to make a signature *precise*.
+- **Do NOT** express "path OR body" (or any disjunction) by putting both fields on one entry —
+  that makes it require *both*, and will silently BREAK the entry for requests that have only
+  one (e.g. adding a `body_pattern` to a path signature stops it matching path-only requests
+  with an empty body). For a signature that can appear in path **or** body **or** UA (Log4Shell
+  is the classic — URL, body, and headers), write **one entry per location, same `name`/`cve`**,
+  or lean on the heuristic layer. Disjunction lives *across* entries (first match wins), never
+  within one.
+
+**⚠️ Only a NAMED entry carries a `name`/`cve`.** The heuristic layer returns
+`(purpose, None, None)` — it can classify *what kind* of attack (`rce`, etc.) but can never
+attribute a **CVE or tool name**. So if a captured payload maps to a known CVE/product (e.g. an
+obfuscated or URL-encoded variant of a named CVE that the current named regex misses), add or
+**widen the NAMED entry** to catch it — don't just extend a heuristic, or you'll log a marquee
+CVE as anonymous generic `rce`. Widen the named entry *and* (optionally) the heuristic as a
+backstop for locations the named entry can't cover.
 
 **Before adding any entry, verify it isn't already covered** by running the
 candidate path/method/ua/body through `_classify_purpose()`. An unmatched result

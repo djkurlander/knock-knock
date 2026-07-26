@@ -19,9 +19,8 @@ and the framework wires up the rest (`protocol_api.py`, `protocols/registry.py`,
 - **All 8 built-in protocols back-ported** onto the framework (SSH, Telnet, FTP, RDP, SMB,
   SIP, HTTP, SMTP) — proof the model carries the originals, not just new work.
 - **5 new industrial / IoT / OT protocols** built on the framework — MQTT, Node-RED,
-  Modbus, S7, SNMP (8 → 13 protocols). These run on a dedicated node (ash1) to keep the
-  flagship dashboard focused on the protocols most visitors recognize; they are a
-  proof-of-extensibility, not a main-dashboard centerpiece.
+  Modbus, S7, SNMP (8 → 13 protocols) — proof the framework reaches well beyond the classic
+  login-service honeypots. Enable any of them via `ENABLED_PROTOCOLS`.
 - **Per-protocol display customization — user-overridable.** The framework ships sensible
   defaults, but you can **override how any protocol renders** — which feed columns and
   detail fields appear, and which named display format is used (e.g. surface user-agent
@@ -33,8 +32,9 @@ and the framework wires up the rest (`protocol_api.py`, `protocols/registry.py`,
   `DEFAULT_HOSTNAME` so the container could scrub its own identity (bridge NAT hides the host's
   real IP). The new `docker-compose.host.yml` — active by default via a single `COMPOSE_FILE=`
   line in `.env` — removes all of that: honeypots bind host ports directly (**no port list to
-  maintain**), see the **real attacker source IP** including UDP/SIP, and self-redaction
-  **discovers the host's own IP/PTR automatically**. Setup is one line. Bridge networking remains
+  maintain**) and self-redaction **discovers the host's own IP/PTR automatically** (no manual
+  `REDACT_SELF_IPS`/`DEFAULT_HOSTNAME`). Setup is one line. It's also the reliable choice for
+  **UDP/SIP**, where bridge NAT can mask the real attacker source IP. Bridge networking remains
   the portable fallback for Docker Desktop / macOS / Windows.
 - **Per-knock detail view** — right-click (or long-press on touch) any live-feed entry
   to see the full captured record.

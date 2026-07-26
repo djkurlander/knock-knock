@@ -73,7 +73,7 @@ Knock-Knock supports three different installation methods, with docker being the
 ```
 Attacker
   ↓
-protocol-specific honeypots (SSH, Telnet, FTP, RDP, SMB, SIP, HTTP, SMTP)
+protocol-specific honeypots (SSH, Telnet, FTP, RDP, SMB, SIP, HTTP, SMTP, etc...)
   ↓
 monitor.py (GeoIP lookup)
   ↓

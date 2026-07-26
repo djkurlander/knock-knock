@@ -2,14 +2,14 @@
 
 All notable changes to Knock-Knock, newest first. Dates are UTC.
 
-## [3.0.0-beta.1] — unreleased (current beta)
+## [3.0.0] — 2026-07-26
 
 The heart of 3.0 is a **protocol extensibility framework**. Adding a honeypot protocol
 used to mean hand-editing the monitor, the web app, the database layer, and the dashboard.
 Now every protocol is a self-contained module (`protocols/*.py`) that declares everything
 about itself — ports, capture, storage, and display — through a single `ProtocolDefinition`,
 and the framework wires up the rest (`protocol_api.py`, `protocols/registry.py`,
-`EXTENSIBILITY.md`).
+`docs/HOW_TO_ADD_A_PROTOCOL.md`, `docs/PROTOCOL_ARCHITECTURE.md`).
 
 ### Added
 
@@ -37,6 +37,10 @@ and the framework wires up the rest (`protocol_api.py`, `protocols/registry.py`,
   — and the live feed shows a short **decoded** preview instead of raw encoded text. Built on
   a new declarative `db_only_fields` protocol-API mechanism: a protocol can persist and
   process a field (here the full body) without publishing it to the live feed.
+- **Opt-in SMTP header capture for analysis.** `SMTP_SAVE_HEADERS=true` stores self-redacted
+  top-level SMTP DATA headers in a DB-only `smtp_header_capture` side table. It is off by
+  default and intended as an analysis corpus for future normalized header/campaign intel, not
+  as live-feed data.
 - **"Internet Background Radiation"** explainer article/page.
 
 ### Changed

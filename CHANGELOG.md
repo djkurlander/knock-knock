@@ -27,6 +27,15 @@ and the framework wires up the rest (`protocol_api.py`, `protocols/registry.py`,
   detail fields appear, and which named display format is used (e.g. surface user-agent
   strings, or switch HTTP between scanner / exploit / probe layouts). Works for the
   built-in protocols as well as any you add.
+- **One-line Docker setup on Linux — host networking, the new default.** A Docker install
+  used to mean editing `docker-compose.override.yml` to publish every honeypot port and keeping
+  that list in sync with `ENABLED_PROTOCOLS`, *and* hand-setting `REDACT_SELF_IPS` /
+  `DEFAULT_HOSTNAME` so the container could scrub its own identity (bridge NAT hides the host's
+  real IP). The new `docker-compose.host.yml` — active by default via a single `COMPOSE_FILE=`
+  line in `.env` — removes all of that: honeypots bind host ports directly (**no port list to
+  maintain**), see the **real attacker source IP** including UDP/SIP, and self-redaction
+  **discovers the host's own IP/PTR automatically**. Setup is one line. Bridge networking remains
+  the portable fallback for Docker Desktop / macOS / Windows.
 - **Per-knock detail view** — right-click (or long-press on touch) any live-feed entry
   to see the full captured record.
 - **SMTP body capture, dedup & self-redaction.** SMTP message bodies are captured in full
@@ -52,12 +61,6 @@ and the framework wires up the rest (`protocol_api.py`, `protocols/registry.py`,
   (logged separately from dashboard viewers).
 - **HTTP exploit classifier** expanded (~183 → 240+ named entries), with a regression
   test suite.
-- **Host-networking Docker deployment** (`docker-compose.host.yml`) — the default for new
-  Linux installs (selected by `COMPOSE_FILE` in `.env`). Honeypots see the **real attacker
-  source IP** (including UDP/SIP, where bridge NAT is unreliable), self-redaction discovers
-  the host's own identity automatically, and there's no port-publish list to keep in sync
-  (`ENABLED_PROTOCOLS` + the per-protocol `*_PORT` vars govern it). Bridge networking remains
-  the portable fallback for Docker Desktop / macOS / Windows.
 - **`DEFAULT_HOSTNAME`** — one canonical hostname every protocol advertises, rendered per its
   own convention (SMTP banner as an FQDN, SMB as a short NetBIOS name), and folded into the
   self-redaction identity so it's scrubbed from captured data. Per-protocol overrides

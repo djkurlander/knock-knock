@@ -2,6 +2,41 @@
 
 Knock-Knock can be installed most simply and universally using Docker, but also can be configured to run without Docker on Ubuntu/Debian and RHEL/CentOS/Fedora systems. All of these setups require a few prerequisites.
 
+> **Already running an older version?** Don't just `git pull` and restart — see
+> [Upgrading from 1.x or 2.x](#upgrading-from-1x-or-2x) right below. There's a one-time database
+> migration, and **Docker installs must pull the new image** (a `git pull` doesn't update them).
+
+## Upgrading from 1.x or 2.x
+
+Pull the new code, apply any database schema changes, then restart. `updatedb.py` backs up the
+database first (timestamped file in `data/`) and is safe to re-run — every operation is idempotent.
+
+**Systemd:**
+```bash
+cd knock-knock
+git pull
+source .venv/bin/activate
+uv pip install -r requirements.txt
+python extras/db-migrations/updatedb.py
+./restart.sh
+```
+
+**Docker:** a `git pull` alone does **not** update a Docker install — the application is baked into
+the image, so you must pull the new image (plain `docker compose restart` keeps the old one):
+```bash
+cd knock-knock
+git pull                              # updated compose files + migration scripts
+docker compose pull                   # fetch the new application image
+docker compose down                   # stop the old containers before migrating
+docker compose run --rm --no-deps honeypot-monitor \
+    python extras/db-migrations/updatedb.py
+docker compose up -d                  # start on the new image
+```
+
+`updatedb.py` options: `--no-backup`, `--backup NAME`, `--no-smtp-backfill` (schema only),
+`--keep-body-column`. If it detects mail data forwarded from feeder servers (a multi-server
+aggregator), it prints the one extra step you need.
+
 ## Prerequisites
 
 All installation methods require:
@@ -534,32 +569,7 @@ systemctl restart knock-web   # or: docker compose restart web
 
 ### Upgrading
 
-After pulling new code with `git pull`, update dependencies and apply any database schema changes before restarting:
-
-```bash
-# Systemd
-source .venv/bin/activate
-uv pip install -r requirements.txt
-python extras/db-migrations/updatedb.py
-./restart.sh
-
-# Docker
-docker compose exec honeypot-monitor python extras/db-migrations/updatedb.py
-docker compose restart
-```
-
-`updatedb.py` automatically backs up the database before making changes (timestamped file in `data/`). Options:
-
-```bash
-python extras/db-migrations/updatedb.py --no-backup          # skip backup
-python extras/db-migrations/updatedb.py --backup mybackup.db # custom backup name
-python extras/db-migrations/updatedb.py --no-smtp-backfill   # schema only, skip the SMTP body backfill
-python extras/db-migrations/updatedb.py --keep-body-column   # keep the now-empty knocks_smtp.body column
-```
-
-It is safe to run multiple times — all operations are idempotent.
-
-**Multi-server aggregators running SMTP** need one additional one-time step after `updatedb.py` — see [Upgrading a multi-server aggregator](extras/db-migrations/README.md#upgrading-a-multi-server-aggregator). A single-server honeypot needs nothing extra.
+See [Upgrading from 1.x or 2.x](#upgrading-from-1x-or-2x) near the top of this guide.
 
 ## Testing
 

@@ -76,9 +76,10 @@ and the framework wires up the rest (`protocol_api.py`, `protocols/registry.py`,
 - Shared per-IP knock throttling across all protocols.
 - Self-identity redaction extracted to `self_redaction.py`, shared by the monitor and the
   DB backfill so live and historical bodies redact identically.
-- SMTP body storage migrates via `updatedb.py` (automatic on a single-server honeypot);
-  multi-server aggregators run `extras/db-migrations/smtp_body_backfill.py` with a fleet
-  identity file (see `extras/db-migrations/README.md`).
+- SMTP body storage migrates via `updatedb.py` — run once, and it completes the whole migration
+  on a single-server honeypot; multi-server aggregators run one extra step
+  (`extras/db-migrations/smtp_body_backfill.py` with a fleet identity file; see
+  `extras/db-migrations/README.md`).
 - Unit + integration test suites and CI; Dependabot + pinned dependencies + security
   (CVE) bumps.
 - Docker image hardening: the published image ships `self_redaction.py` and the management

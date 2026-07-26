@@ -14,6 +14,7 @@ CI step (`Run unit tests`) that gates the image build, so a missing module fails
 listed *root* .py modules are at risk — which is exactly what this checks.)
 """
 import ast
+import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -65,4 +66,36 @@ def test_dockerfile_ships_all_root_modules_the_container_imports():
         "Dockerfile COPY is missing root module(s) imported by the container entrypoints "
         f"{ENTRYPOINTS}: {sorted(missing)}. Add them to the Dockerfile COPY line, or the built "
         "image will crash-loop with ModuleNotFoundError."
+    )
+
+
+def _dockerfile_copied_html():
+    """Root .html filenames the Dockerfile COPYs (line continuations joined)."""
+    text = (ROOT / "Dockerfile").read_text().replace("\\\n", " ")
+    copied = set()
+    for line in text.splitlines():
+        if line.strip().startswith("COPY "):
+            for tok in line.strip()[len("COPY "):].split():
+                if tok.endswith(".html"):
+                    copied.add(tok)
+    return copied
+
+
+def _served_html():
+    """HTML files main.py serves via _read_file('X.html') — these must be in the image."""
+    served = set()
+    for m in re.finditer(r"""_read_file\(\s*["']([^"']+\.html)["']""", (ROOT / "main.py").read_text()):
+        served.add(m.group(1))
+    return served
+
+
+def test_dockerfile_ships_all_html_the_web_server_serves():
+    served = _served_html()
+    copied = _dockerfile_copied_html()
+    assert served, "sanity: expected main.py to serve at least one .html via _read_file"
+    missing = served - copied
+    assert not missing, (
+        f"Dockerfile COPY is missing HTML page(s) that main.py serves: {sorted(missing)}. "
+        "Add them to the Dockerfile COPY line, or those routes 404/500 on Docker installs "
+        "(systemd serves from the checkout, so it wouldn't notice)."
     )

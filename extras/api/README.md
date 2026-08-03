@@ -5,8 +5,8 @@ the knock-knock attack database. A listed IP means a device in that network has 
 attacking this honeypot — a free compromise-detection signal for the network's owner.
 
 Runs independently of the dashboard (`main.py` is untouched). Default port 8081, fronted by
-`api.knock-knock.net` via a Cloudflare Origin Rule. See [API_DESIGN.md](API_DESIGN.md) for
-the full design rationale.
+`api.knock-knock.net` via a Cloudflare Origin Rule. See [DESIGN.md](DESIGN.md) for the
+design rationale.
 
 ## Endpoints
 

@@ -416,7 +416,12 @@ pass_intel(password PRIMARY KEY, hits, last_seen)               -- INDEX on hits
 country_intel(iso_code PRIMARY KEY, country, hits, last_seen)   -- INDEX on hits DESC
 isp_intel(isp PRIMARY KEY, hits, last_seen, asn)                -- INDEX on hits DESC
 ip_intel(ip PRIMARY KEY, hits, last_seen, lat, lng,
-         hits_since_cleared, ban_until, ban_count)              -- INDEX on hits DESC
+         hits_since_cleared, ban_until, ban_count,
+         first_seen, asn)                                       -- INDEX on hits DESC
+-- first_seen: set on insert (2026-08 +); older rows backfilled from knocks_* where
+-- --save-knocks data exists, else NULL. asn: GeoIP ASN at last observation (ground
+-- truth beats query-time lookup after reallocation); NULL until an IP re-knocks.
+-- Both consumed by the public knock-api (extras/api/).
 
 -- Per-protocol intel tables (same structure, composite PK)
 user_intel_proto(username, proto INTEGER, hits, last_seen)      -- INDEX on (proto, hits DESC)

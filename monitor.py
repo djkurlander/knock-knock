@@ -490,7 +490,9 @@ def init_db(save_protos=None, enabled_protocols=None):
         lng REAL,
         hits_since_cleared INTEGER NOT NULL DEFAULT 0,
         ban_until INTEGER,
-        ban_count INTEGER NOT NULL DEFAULT 0
+        ban_count INTEGER NOT NULL DEFAULT 0,
+        first_seen DATETIME,
+        asn INTEGER
     )""")
     cur.execute("""CREATE TABLE IF NOT EXISTS sources (
         id           INTEGER PRIMARY KEY,
@@ -657,11 +659,12 @@ def log_to_enriched_db(data, cur, save_protos=None):
         cur.execute("INSERT INTO pass_intel_proto VALUES (?, ?, 1, ?) ON CONFLICT(password, proto) DO UPDATE SET hits=hits+1, last_seen=?", (data['pass'], proto_int, now, now))
     cur.execute("INSERT INTO country_intel VALUES (?, ?, 1, ?) ON CONFLICT(iso_code) DO UPDATE SET hits=hits+1, last_seen=?, country=?", (data['iso'], data['country'], now, now, data['country']))
     cur.execute("INSERT INTO isp_intel VALUES (?, 1, ?, ?) ON CONFLICT(isp) DO UPDATE SET hits=hits+1, last_seen=?, asn=?", (data['isp'], now, data.get('asn'), now, data.get('asn')))
-    cur.execute("""INSERT INTO ip_intel (ip, hits, last_seen, lat, lng, hits_since_cleared)
-                   VALUES (?, 1, ?, ?, ?, 1)
+    cur.execute("""INSERT INTO ip_intel (ip, hits, last_seen, lat, lng, hits_since_cleared, first_seen, asn)
+                   VALUES (?, 1, ?, ?, ?, 1, ?, ?)
                    ON CONFLICT(ip) DO UPDATE SET
-                       hits=hits+1, last_seen=?, lat=?, lng=?, hits_since_cleared=hits_since_cleared+1""",
-                (data['ip'], now, data.get('lat'), data.get('lng'), now, data.get('lat'), data.get('lng')))
+                       hits=hits+1, last_seen=?, lat=?, lng=?, hits_since_cleared=hits_since_cleared+1, asn=?""",
+                (data['ip'], now, data.get('lat'), data.get('lng'), now, data.get('asn'),
+                 now, data.get('lat'), data.get('lng'), data.get('asn')))
     cur.execute("INSERT INTO country_intel_proto VALUES (?, ?, ?, 1, ?) ON CONFLICT(iso_code, proto) DO UPDATE SET hits=hits+1, last_seen=?, country=?", (data['iso'], proto_int, data['country'], now, now, data['country']))
     cur.execute("INSERT INTO isp_intel_proto VALUES (?, ?, 1, ?, ?) ON CONFLICT(isp, proto) DO UPDATE SET hits=hits+1, last_seen=?, asn=?", (data['isp'], proto_int, now, data.get('asn'), now, data.get('asn')))
     cur.execute("INSERT INTO ip_intel_proto VALUES (?, ?, 1, ?, ?, ?) ON CONFLICT(ip, proto) DO UPDATE SET hits=hits+1, last_seen=?, lat=?, lng=?",

@@ -156,6 +156,38 @@ def migrate_column_additions(cur):
         ("ban_count", "INTEGER NOT NULL DEFAULT 0"),
     ])
 
+    # Change addressed: knock-api (extras/api) exposes first_seen and ASN per IP.
+    # first_seen is set on insert going forward; for existing rows the true value
+    # is recoverable from knocks_* tables where --save-knocks was enabled, so
+    # backfill from MIN(timestamp) there (once, when the column is first added).
+    # asn is left NULL: it refills organically on each IP's next knock, and the
+    # API falls back to GeoLite2 for rows not yet re-observed.
+    backfill_first_seen = "first_seen" not in table_columns(cur, "ip_intel")
+    ensure_columns(cur, "ip_intel", [
+        ("first_seen", "DATETIME"),
+        ("asn", "INTEGER"),
+    ])
+    if backfill_first_seen:
+        names = [r[0] for r in cur.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'knocks_%'").fetchall()]
+        knocks_tables = [t for t in names if "ip_address" in table_columns(cur, t)]
+        if knocks_tables:
+            # Indexed temp table: the correlated lookup below must not scan an
+            # unindexed CTE per ip_intel row (O(n*m) over millions of knocks).
+            union = " UNION ALL ".join(
+                f"SELECT ip_address, MIN(timestamp) ts FROM {quote_ident(t)} GROUP BY ip_address"
+                for t in knocks_tables)
+            cur.execute("CREATE TEMP TABLE _firsts (ip TEXT PRIMARY KEY, t TEXT)")
+            cur.execute(f"""INSERT INTO _firsts
+                SELECT ip_address, MIN(ts) FROM ({union}) GROUP BY ip_address""")
+            cur.execute("""
+                UPDATE ip_intel SET first_seen = (SELECT t FROM _firsts WHERE ip = ip_intel.ip)
+                WHERE first_seen IS NULL AND ip IN (SELECT ip FROM _firsts)""")
+            cur.execute("DROP TABLE _firsts")
+            filled = cur.execute(
+                "SELECT COUNT(*) FROM ip_intel WHERE first_seen IS NOT NULL").fetchone()[0]
+            print(f"  ip_intel: backfilled first_seen for {filled} IPs from {len(knocks_tables)} knocks tables")
+
     # Change addressed: multi-source ingest added metadata to sources so the UI
     # can show display names, first/last seen times, hit counts, and active state.
     ensure_columns(cur, "sources", [

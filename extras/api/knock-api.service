@@ -1,0 +1,14 @@
+[Unit]
+Description=Knock-Knock Public Query API (knock-api)
+After=network.target redis-server.service
+
+[Service]
+User=root
+WorkingDirectory=/root/knock-knock
+EnvironmentFile=-/root/knock-knock/.env
+ExecStart=/root/knock-knock/.venv/bin/python extras/api/knock_api.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

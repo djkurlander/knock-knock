@@ -31,7 +31,8 @@ AGGREGATOR_HOST = os.environ.get('AGGREGATOR_HOST', '').strip()
 AGGREGATOR_PORT = int(os.environ.get('AGGREGATOR_PORT', '9999'))
 INGEST_PORT     = int(os.environ.get('INGEST_PORT', '0') or '0') or None
 
-from constants import PROTO, PROTO_NAME, PROTOCOL_META, sort_protocols_for_ui
+from constants import (PROTO, PROTO_NAME, PROTOCOL_META, sort_protocols_for_ui,
+                       require_schema_version, stamp_schema_version)
 
 USER_PANEL_PROTOCOLS = {name for name, meta in PROTOCOL_META.items() if meta.get('supports_user_panel')}
 PASS_PANEL_PROTOCOLS = {name for name, meta in PROTOCOL_META.items() if meta.get('supports_pass_panel')}
@@ -531,6 +532,7 @@ def init_db(save_protos=None, enabled_protocols=None):
     cur.execute("CREATE INDEX IF NOT EXISTS idx_country_intel_proto_hits ON country_intel_proto(proto, hits DESC)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_isp_intel_proto_hits ON isp_intel_proto(proto, hits DESC)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_ip_intel_proto_hits ON ip_intel_proto(proto, hits DESC)")
+    stamp_schema_version(conn)   # a freshly-created DB is current; mark it for the startup gate
     conn.commit()
     conn.close()
 
@@ -871,6 +873,7 @@ def monitor(save_knocks=None, max_knocks=None, ban_duration_days=30):
         save_protos = set(enabled_protocols)
     elif save_protos:
         save_protos = save_protos & set(enabled_protocols)
+    require_schema_version(DB_PATH)   # exit early if an existing DB needs updatedb.py
     init_db(save_protos=save_protos, enabled_protocols=enabled_protocols)
     global _read_conn
     _read_conn = sqlite3.connect(DB_PATH, timeout=10)

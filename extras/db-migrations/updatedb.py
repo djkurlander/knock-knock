@@ -14,7 +14,7 @@ for _p in (ROOT_DIR, _SCRIPT_DIR):
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
-from constants import PROTO, PROTOCOL_META
+from constants import PROTO, PROTOCOL_META, stamp_schema_version
 
 
 DB_PATH = os.environ.get("DB_DIR", "data") + "/knock_knock.db"
@@ -406,6 +406,7 @@ def update_db(db_path):
         migrate_column_additions(cur)
         seed_proto_intel(cur)
         migrate_heartbeats(cur)
+        stamp_schema_version(conn)   # mark the DB current for the startup gate
         conn.commit()
     finally:
         conn.close()

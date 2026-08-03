@@ -122,3 +122,65 @@ def sort_protocols_for_ui(protocols):
 # Keep existing default startup behavior for now. New registered protocols are
 # available for explicit configuration, but are not spawned by default yet.
 DEFAULT_ENABLED_PROTOCOLS = list(_BASE_PROTOCOL_UI_ORDER)
+
+
+# --- Database schema version ------------------------------------------------
+# Monotonic integer stamped into the DB's `PRAGMA user_version` by updatedb.py
+# after a successful migration, and checked by the services at startup.
+#
+# BUMP THIS BY 1 IN THE SAME COMMIT whenever you add a migration to
+# extras/db-migrations/updatedb.py. It is a high-water stamp ("this DB has been
+# brought current"), NOT a migration selector — updatedb is idempotent and
+# inspects the schema directly, so the number only tells the app whether
+# updatedb still needs to be run. Decoupled from the app/semver version.
+#   1 — adds ip_intel.first_seen + ip_intel.asn (3.0.1)
+SCHEMA_VERSION = 1
+
+
+def stamp_schema_version(conn):
+    """Raise the DB's `user_version` to SCHEMA_VERSION (never lowers it).
+
+    Called after the schema is brought current: by updatedb.py on upgrade, and by
+    monitor.py's init_db for a freshly-created DB. The never-lower rule keeps an
+    older release from clobbering a newer DB's stamp."""
+    if conn.execute("PRAGMA user_version").fetchone()[0] < SCHEMA_VERSION:
+        conn.execute(f"PRAGMA user_version = {int(SCHEMA_VERSION)}")
+
+
+def require_schema_version(db_path):
+    """Exit with a clear message if `db_path`'s schema predates this code.
+
+    Called by monitor.py / main.py at startup so a forgotten `updatedb.py` fails
+    loudly ("run updatedb") instead of crash-looping on a missing column. A missing
+    or not-yet-created DB (no `ip_intel` table) is treated as a fresh install and
+    passes — its creator stamps the version. A DB newer than the code (downgrade) is
+    warned about but allowed to run."""
+    import os
+    import sqlite3
+    import sys
+    if not os.path.exists(db_path):
+        return
+    try:
+        conn = sqlite3.connect(db_path, timeout=10)
+        try:
+            fresh = conn.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='ip_intel'"
+            ).fetchone() is None
+            db_version = conn.execute("PRAGMA user_version").fetchone()[0]
+        finally:
+            conn.close()
+    except sqlite3.Error as exc:
+        print(f"[schema] could not read {db_path}: {exc}", file=sys.stderr)
+        return
+    if fresh:
+        return
+    if db_version < SCHEMA_VERSION:
+        sys.exit(
+            f"[schema] {db_path} is at schema v{db_version}, but this code needs "
+            f"v{SCHEMA_VERSION}.\n"
+            f"         Run:  python extras/db-migrations/updatedb.py\n"
+            f"         (then restart this service)")
+    if db_version > SCHEMA_VERSION:
+        print(f"[schema] warning: {db_path} is at schema v{db_version}, newer than this "
+              f"code's v{SCHEMA_VERSION} — you may be running an older release.",
+              file=sys.stderr)

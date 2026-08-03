@@ -8,11 +8,13 @@ from fastapi.responses import HTMLResponse, Response
 from fastapi import HTTPException
 from datetime import datetime
 from fastapi.staticfiles import StaticFiles
-from constants import PROTO, PROTO_NAME, PROTOCOL_META, DEFAULT_ENABLED_PROTOCOLS, sort_protocols_for_ui
+from constants import (PROTO, PROTO_NAME, PROTOCOL_META, DEFAULT_ENABLED_PROTOCOLS,
+                       sort_protocols_for_ui, require_schema_version)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     print("🚀 Knock-Knock Web Active...", flush=True)
+    require_schema_version(DB_PATH)   # exit early if an existing DB needs updatedb.py
     asyncio.create_task(redis_listener())
     asyncio.create_task(stats_cache.update_and_broadcast())
     yield

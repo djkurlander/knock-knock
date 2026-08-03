@@ -25,6 +25,13 @@ the dashboard.
 
 ### Changed
 
+- **Database schema-version gate.** The DB now carries a schema version (`PRAGMA
+  user_version`, stamped by `updatedb.py`); the monitor and web server check it at startup
+  and exit with a clear "run `updatedb.py`" message instead of crash-looping on a missing
+  column when an upgrade skips the migration. Fresh installs are detected and pass through.
+  **One-time note:** because existing DBs report version 0, the first start after this
+  release requires an `updatedb.py` run (which you do for the `first_seen`/`asn` columns
+  anyway) to stamp the version — after that the gate is transparent.
 - **`ip_intel` gains `first_seen` and `asn`.** `first_seen` is set on insert going forward
   and back-filled once from `knocks_*` history; `asn` is stored at observation time (ground
   truth that survives IP reallocation, unlike a query-time GeoLite2 lookup). `updatedb.py`

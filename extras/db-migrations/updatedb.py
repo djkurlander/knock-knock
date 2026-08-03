@@ -147,6 +147,56 @@ def migrate_generic_knocks(cur):
     print(f"  knocks: migrated {migrated} rows into per-protocol tables and dropped old table")
 
 
+def _backfill_ip_intel_from_knocks(cur, do_first_seen, do_asn):
+    """One-shot backfill of ip_intel.first_seen / .asn from the per-protocol knocks_*
+    tables (ground truth captured at knock time). Only fills NULLs, so it is safe to
+    invoke standalone. No-op when no knocks_* tables exist (selective/absent
+    --save-knocks) — those rows stay NULL for the API's runtime GeoLite2 fallback."""
+    if not (do_first_seen or do_asn):
+        return
+    names = [r[0] for r in cur.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'knocks_%'").fetchall()]
+    knocks_tables = [t for t in names if "ip_address" in table_columns(cur, t)]
+    if not knocks_tables:
+        return
+
+    if do_first_seen:
+        # Indexed temp table: the correlated lookup below must not scan an unindexed
+        # CTE per ip_intel row (O(n*m) over millions of knocks).
+        union = " UNION ALL ".join(
+            f"SELECT ip_address, MIN(timestamp) ts FROM {quote_ident(t)} GROUP BY ip_address"
+            for t in knocks_tables)
+        cur.execute("CREATE TEMP TABLE _firsts (ip TEXT PRIMARY KEY, t TEXT)")
+        cur.execute(f"INSERT INTO _firsts SELECT ip_address, MIN(ts) FROM ({union}) GROUP BY ip_address")
+        cur.execute("""
+            UPDATE ip_intel SET first_seen = (SELECT t FROM _firsts WHERE ip = ip_intel.ip)
+            WHERE first_seen IS NULL AND ip IN (SELECT ip FROM _firsts)""")
+        cur.execute("DROP TABLE _firsts")
+        filled = cur.execute(
+            "SELECT COUNT(*) FROM ip_intel WHERE first_seen IS NOT NULL").fetchone()[0]
+        print(f"  ip_intel: backfilled first_seen for {filled} IPs from {len(knocks_tables)} knocks tables")
+
+    if do_asn:
+        # asn is TEXT in knocks_* (digits); keep the numeric ones and take the value
+        # from each IP's most recent knock (ROW_NUMBER over the merged stream).
+        union = " UNION ALL ".join(
+            f"SELECT ip_address, timestamp, CAST(asn AS INTEGER) asn FROM {quote_ident(t)} "
+            f"WHERE asn IS NOT NULL AND asn != '' AND asn GLOB '[0-9]*'"
+            for t in knocks_tables)
+        cur.execute("CREATE TEMP TABLE _asns (ip TEXT PRIMARY KEY, asn INTEGER)")
+        cur.execute(f"""INSERT INTO _asns
+            SELECT ip_address, asn FROM (
+                SELECT ip_address, asn,
+                       ROW_NUMBER() OVER (PARTITION BY ip_address ORDER BY timestamp DESC) rn
+                FROM ({union})) WHERE rn = 1""")
+        cur.execute("""
+            UPDATE ip_intel SET asn = (SELECT asn FROM _asns WHERE ip = ip_intel.ip)
+            WHERE asn IS NULL AND ip IN (SELECT ip FROM _asns)""")
+        cur.execute("DROP TABLE _asns")
+        filled = cur.execute("SELECT COUNT(*) FROM ip_intel WHERE asn IS NOT NULL").fetchone()[0]
+        print(f"  ip_intel: backfilled asn for {filled} IPs from {len(knocks_tables)} knocks tables")
+
+
 def migrate_column_additions(cur):
     # Change addressed: the IP blocklist feature stores ban state in ip_intel.
     # Databases created before that feature lack these columns.
@@ -157,36 +207,23 @@ def migrate_column_additions(cur):
     ])
 
     # Change addressed: knock-api (extras/api) exposes first_seen and ASN per IP.
-    # first_seen is set on insert going forward; for existing rows the true value
-    # is recoverable from knocks_* tables where --save-knocks was enabled, so
-    # backfill from MIN(timestamp) there (once, when the column is first added).
-    # asn is left NULL: it refills organically on each IP's next knock, and the
-    # API falls back to GeoLite2 for rows not yet re-observed.
-    backfill_first_seen = "first_seen" not in table_columns(cur, "ip_intel")
+    # Both are written going forward (first_seen on insert, asn on every upsert),
+    # but for existing rows the ground truth lives in the knocks_* tables where
+    # --save-knocks was enabled: first_seen = MIN(timestamp), asn = the asn from
+    # each IP's LATEST knock (matching the live column's "asn at last observation"
+    # semantic). Both are one-shot, gated on the column being newly added, and
+    # skipped entirely when no knocks_* tables exist (the API then falls back to a
+    # runtime GeoLite2 lookup for whatever stays NULL — never backfilled from
+    # *current* GeoLite2, which would misdate reallocated IPs).
+    ip_cols = table_columns(cur, "ip_intel")
+    backfill_first_seen = "first_seen" not in ip_cols
+    backfill_asn = "asn" not in ip_cols
     ensure_columns(cur, "ip_intel", [
         ("first_seen", "DATETIME"),
         ("asn", "INTEGER"),
     ])
-    if backfill_first_seen:
-        names = [r[0] for r in cur.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'knocks_%'").fetchall()]
-        knocks_tables = [t for t in names if "ip_address" in table_columns(cur, t)]
-        if knocks_tables:
-            # Indexed temp table: the correlated lookup below must not scan an
-            # unindexed CTE per ip_intel row (O(n*m) over millions of knocks).
-            union = " UNION ALL ".join(
-                f"SELECT ip_address, MIN(timestamp) ts FROM {quote_ident(t)} GROUP BY ip_address"
-                for t in knocks_tables)
-            cur.execute("CREATE TEMP TABLE _firsts (ip TEXT PRIMARY KEY, t TEXT)")
-            cur.execute(f"""INSERT INTO _firsts
-                SELECT ip_address, MIN(ts) FROM ({union}) GROUP BY ip_address""")
-            cur.execute("""
-                UPDATE ip_intel SET first_seen = (SELECT t FROM _firsts WHERE ip = ip_intel.ip)
-                WHERE first_seen IS NULL AND ip IN (SELECT ip FROM _firsts)""")
-            cur.execute("DROP TABLE _firsts")
-            filled = cur.execute(
-                "SELECT COUNT(*) FROM ip_intel WHERE first_seen IS NOT NULL").fetchone()[0]
-            print(f"  ip_intel: backfilled first_seen for {filled} IPs from {len(knocks_tables)} knocks tables")
+    if backfill_first_seen or backfill_asn:
+        _backfill_ip_intel_from_knocks(cur, backfill_first_seen, backfill_asn)
 
     # Change addressed: multi-source ingest added metadata to sources so the UI
     # can show display names, first/last seen times, hit counts, and active state.

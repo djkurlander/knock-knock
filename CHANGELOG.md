@@ -2,6 +2,35 @@
 
 All notable changes to Knock-Knock, newest first. Dates are UTC.
 
+## [3.0.1] — unreleased
+
+The headline is **knock-api**, a public query API that turns the honeypot's attacker
+data into a compromise-detection service: an organization can check its own address
+space and a *listed* IP means a device inside that network was caught attacking the
+honeypot. Optional, and fully decoupled — it runs as its own service and does not touch
+the dashboard.
+
+### Added
+
+- **knock-api — public IP / range / ASN query API** (`extras/api/`). A standalone FastAPI
+  service (its own port, its own systemd unit; `main.py` untouched) with three endpoints:
+  `/check-ranges` (up to 10 CIDRs), `/check-asn` (a whole ASN, no CIDR inventory needed),
+  and `/ip/<addr>`. Each hit carries the **per-protocol breakdown** (which honeypots the IP
+  hit, with counts and dates) plus `first_seen` / `last_seen`, so a defender learns not just
+  *that* one of their devices is compromised but *what kind* of activity it's generating.
+  Membership is answered from an hourly in-memory snapshot (sorted-int bisect + per-ASN
+  index); only confirmed hits touch the database. Per-IP + global rate limits and request
+  logging to `visitors.db`. Deploy notes and rationale in `extras/api/README.md` /
+  `DESIGN.md`.
+
+### Changed
+
+- **`ip_intel` gains `first_seen` and `asn`.** `first_seen` is set on insert going forward
+  and back-filled once from `knocks_*` history; `asn` is stored at observation time (ground
+  truth that survives IP reallocation, unlike a query-time GeoLite2 lookup). `updatedb.py`
+  adds both columns and performs the one-time back-fill. Powers the knock-api metadata and
+  makes `WHERE asn=…` queries work directly.
+
 ## [3.0.0] — 2026-07-26
 
 The heart of 3.0 is a **protocol extensibility framework**. Adding a honeypot protocol

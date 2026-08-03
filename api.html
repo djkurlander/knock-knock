@@ -61,7 +61,9 @@
     <p>Every IP that touches this honeypot is, by definition, scanning or attacking servers on the open internet.
     This API lets you check your <strong>own</strong> address space against that data. If one of your IPs comes back
     <strong>listed</strong>, a device on your network — a workstation, a VoIP phone, a router, an appliance — was caught
-    attacking us, and is very likely compromised. Each hit includes a <strong>per-protocol breakdown</strong> (which
+    attacking us, and is <strong>almost certainly compromised</strong>. The same foothold that lets it attack strangers
+    sits <em>inside</em> your perimeter, next to your data, your credentials, and everything else it can reach — the last
+    place you want an attacker-controlled machine. Each hit includes a <strong>per-protocol breakdown</strong> (which
     honeypots it hit, how many times, and when), so you learn not just <em>that</em> a device is misbehaving but
     <em>what kind</em> of activity it's generating.</p>
     <p>Free, no API key, JSON over HTTPS. Base URL: <code>https://api.knock-knock.net</code></p>
@@ -139,10 +141,10 @@
     </table>
 
     <h2>What "listed" means for you</h2>
-    <p>A hit is <strong>observed attack traffic</strong> — not a crowdsourced reputation score. It's the strongest kind
-    of signal: a device on your network reached out and attacked a server it had no business touching. The protocol
-    breakdown points you at the compromise — an IP hitting SSH hundreds of times reads very differently from one probing
-    SIP for toll fraud. Pull the device, check it, rotate its credentials.</p>
+    <p>A hit is <strong>observed attack traffic</strong> — the strongest kind of signal: a device on your network
+    reached out and attacked a server it had no business touching. The protocol breakdown points you at the compromise —
+    an IP hitting SSH hundreds of times reads very differently from one probing SIP for toll fraud. Pull the device,
+    check it, rotate its credentials.</p>
     <p>Prefer a static list for your firewall instead of live lookups? See the
     <a href="https://knock-knock.net/blocklist">attacker IP blocklists</a> — the same data as plain-text feeds for CSF,
     CrowdSec, ipset, nftables and pfSense.</p>

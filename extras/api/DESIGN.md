@@ -128,21 +128,13 @@ pfSense) vs. the API's interactive lookups with metadata. The API reads `ip_inte
 on its hourly rebuild rather than the static files, so a missed cron run can't make it serve
 stale data.
 
-## Differentiation from AbuseIPDB CHECK-BLOCK
+## Why the per-protocol breakdown matters
 
-AbuseIPDB offers a CIDR endpoint, but it is a paid subscriber feature returning generic abuse
-categories. The differences that matter for incident response:
-
-| | knock-api | AbuseIPDB |
-|--|-----------|-----------|
-| Cost | Free, no key | Subscriber feature |
-| Data | Single-source honeypot — observed attacks only | Crowdsourced reputation scores |
-| Detail | Exact protocols (SSH/SIP/SMTP…) with hit counts + dates | Generic categories ("Port Scan") |
-| Framing | "Is my network compromised?" | "Should I block this network?" |
-
-The per-protocol breakdown (`ip_intel_proto`) is the key differentiator — "this device hit
-SSH 280× and SIP 28× since January" tells an investigator what *kind* of compromise they're
-chasing, not just a score.
+The response's value beyond a yes/no listing is the `ip_intel_proto` breakdown: "this device
+hit SSH 280× and SIP 28× since January" tells an investigator what *kind* of compromise
+they're chasing (credential brute-forcing vs. toll-fraud probing vs. web-exploit scanning),
+not just that the IP is bad. That, plus the observation-time framing ("a device on your
+network was caught attacking"), is what the endpoint is designed to surface.
 
 ## Scale-out path
 

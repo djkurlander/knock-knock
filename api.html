@@ -89,12 +89,40 @@
         <div><span class="verb">GET</span> <span class="path">/check-ranges?ranges=&lt;cidr&gt;[,&lt;cidr&gt;...]</span></div>
         <div class="what">Check up to 10 CIDR ranges (each /16 or smaller) in one call.</div>
         <pre><code>curl 'https://api.knock-knock.net/check-ranges?ranges=198.51.100.0/24,203.0.113.0/22'</code></pre>
+        <pre><code>{
+  "ranges_checked": [ "198.51.100.0/24", "203.0.113.0/22" ],
+  "total_ips_checked": 1280,
+  "hits": [
+    { "ip": "198.51.100.45", "hits": 312,
+      "first_seen": "2026-01-14 03:22:10", "last_seen": "2026-08-01 07:12:44",
+      "protocols": [
+        { "proto": "SSH", "hits": 280, "last_seen": "2026-08-01 07:12:44" },
+        { "proto": "SIP", "hits": 32,  "last_seen": "2026-07-30 22:01:13" }
+      ] }
+  ],
+  "hit_count": 1, "total_matched": 1, "truncated": false
+}</code></pre>
     </div>
 
     <div class="endpoint">
         <div><span class="verb">GET</span> <span class="path">/ip/&lt;address&gt;</span></div>
         <div class="what">Full detail for a single IP. Returns <code>{"listed": false}</code> if it has never hit us.</div>
         <pre><code>curl 'https://api.knock-knock.net/ip/104.238.197.106'</code></pre>
+        <pre><code>{
+  "ip": "104.238.197.106",
+  "listed": true,
+  "hits": 11,
+  "first_seen": "2026-08-01 21:44:56",
+  "last_seen": "2026-08-03 06:01:49",
+  "country": "United States",
+  "isp": "Build-A-Bear Workshop, Inc.",
+  "asn": 21811,
+  "banned": false,
+  "ban_until": null,
+  "protocols": [
+    { "proto": "SIP", "hits": 11, "last_seen": "2026-08-03 06:01:49" }
+  ]
+}</code></pre>
     </div>
 
     <p>Add <code>&amp;list=month</code> to any check to narrow from the default 365-day window to the last 30 days.

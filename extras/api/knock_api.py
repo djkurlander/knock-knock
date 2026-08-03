@@ -52,7 +52,8 @@ TRUST_PROXY_HEADERS = os.environ.get('TRUST_PROXY_HEADERS', 'true').lower() not 
 WINDOWS = {'year': 365, 'month': 30}
 MAX_RANGES = 10          # CIDRs per check-ranges request
 MIN_PREFIXLEN = 16       # largest range accepted (a /16)
-MAX_HITS = 1000          # hits returned before truncation
+MAX_HITS = 25000         # detail rows returned before truncation (safety ceiling only;
+                         # far above any real ASN/range — total_matched is always exact)
 DAY_CAP = 500            # per-IP requests/day, all endpoints (backstop against abuse)
 CHECK_CAP = 20           # per-IP check-ranges / check-asn requests/hour
 IP_MIN_CAP = 30          # per-IP /ip lookups/minute
@@ -306,22 +307,26 @@ async def check_ranges(request: Request, ranges: str,
     if not 1 <= len(nets) <= MAX_RANGES:
         raise HTTPException(400, detail={'error': f'1-{MAX_RANGES} ranges per request'})
 
-    hit_ints = []
+    # Walk the full match set for an exact count (cheap — bounded by blocklist size),
+    # but only materialize the first MAX_HITS for the metadata fetch / response body.
+    hit_ints, total_matched = [], 0
     for net in nets:
         lo, hi = int(net[0]), int(net[-1])
         i = bisect.bisect_left(snap.ips, lo)
-        while i < len(snap.ips) and snap.ips[i] <= hi and len(hit_ints) <= MAX_HITS:
-            hit_ints.append(snap.ips[i])
+        while i < len(snap.ips) and snap.ips[i] <= hi:
+            total_matched += 1
+            if len(hit_ints) < MAX_HITS:
+                hit_ints.append(snap.ips[i])
             i += 1
-    truncated = len(hit_ints) > MAX_HITS
-    hit_ips = [snap.ip_strs[n] for n in hit_ints[:MAX_HITS]]
+    hit_ips = [snap.ip_strs[n] for n in hit_ints]
 
     hits = await asyncio.to_thread(fetch_meta, hit_ips) if hit_ips else []
     record(request, ip, 'check-ranges', started)
     return {'list': window, 'generated_at': snap.generated_at,
             'ranges_checked': [str(n) for n in nets],
             'total_ips_checked': sum(n.num_addresses for n in nets),
-            'hits': hits, 'hit_count': len(hits), 'truncated': truncated}
+            'hits': hits, 'hit_count': len(hits),
+            'total_matched': total_matched, 'truncated': total_matched > len(hits)}
 
 
 @app.get('/check-asn')
@@ -332,7 +337,7 @@ async def check_asn(request: Request, asn: int,
     snap = get_snapshot(window)
 
     members = snap.asn_map.get(asn, [])
-    truncated = len(members) > MAX_HITS
+    total_matched = len(members)          # exact and free from the in-memory index
     hit_ips = [snap.ip_strs[n] for n in members[:MAX_HITS]]
     org = None
     if hit_ips and asn_reader:
@@ -344,7 +349,8 @@ async def check_asn(request: Request, asn: int,
     hits = await asyncio.to_thread(fetch_meta, hit_ips) if hit_ips else []
     record(request, ip, 'check-asn', started)
     return {'list': window, 'generated_at': snap.generated_at, 'asn': asn, 'isp': org,
-            'hits': hits, 'hit_count': len(hits), 'truncated': truncated}
+            'hits': hits, 'hit_count': len(hits),
+            'total_matched': total_matched, 'truncated': total_matched > len(hits)}
 
 
 @app.get('/ip/{target}')

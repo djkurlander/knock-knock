@@ -54,6 +54,7 @@ Response:
     {
       "ip": "198.51.100.45",
       "hits": 312,
+      "first_seen": "2026-01-14",
       "last_seen": "2026-08-01",
       "protocols": [
         { "proto": "SSH",  "hits": 280, "last_seen": "2026-08-01" },
@@ -63,6 +64,7 @@ Response:
     }
   ],
   "hit_count": 1,
+  "total_matched": 1,
   "truncated": false
 }
 ```
@@ -74,9 +76,10 @@ Response:
 &list=year        # year (default) | month
 ```
 
-Simpler than range-checking — a dict lookup on the in-memory per-ASN index. `ip_intel`
-has no `asn` column, so ASNs are resolved from the GeoLite2-ASN database at snapshot build
-time. Useful for organizations that know their ASN but not their full IP range inventory.
+Simpler than range-checking — a dict lookup on the in-memory per-ASN index. ASN is a stored
+`ip_intel` column (observation-time ground truth), with a GeoLite2 fallback at snapshot-build
+time for rows not yet re-observed. Useful for organizations that know their ASN but not their
+full IP range inventory.
 
 Response: same shape as `check-ranges`.
 
@@ -90,6 +93,7 @@ Response: same shape as `check-ranges`.
     {
       "ip": "198.51.100.45",
       "hits": 312,
+      "first_seen": "2026-01-14",
       "last_seen": "2026-08-01",
       "protocols": [
         { "proto": "SSH",  "hits": 280, "last_seen": "2026-08-01" },
@@ -98,12 +102,14 @@ Response: same shape as `check-ranges`.
     }
   ],
   "hit_count": 1,
+  "total_matched": 1,
   "truncated": false
 }
 ```
 
 Rate limit: same as `check-ranges` (20/hour per client IP). No query size limit needed —
-ASN membership is already indexed; the 1,000-hit cap still applies.
+ASN membership is already indexed. `total_matched` is always the exact count
+(free from the in-memory index); the 25,000-row detail cap is a safety ceiling only.
 
 ---
 
@@ -116,6 +122,7 @@ Single IP detail. Metered by the global 300/min budget (waits briefly when exhau
   "ip": "198.51.100.45",
   "listed": true,
   "hits": 312,
+  "first_seen": "2026-01-14 03:22:10",
   "last_seen": "2026-08-01 07:12:44",
   "country": "United States",
   "isp": "Build-A-Bear Workshop",
@@ -130,8 +137,8 @@ Single IP detail. Metered by the global 300/min budget (waits briefly when exhau
 ```
 
 An IP with no recorded attacks returns `{"ip": "...", "listed": false}` (HTTP 200).
-`ip_intel` stores no `first_seen`, so the response has none. Country/ISP/ASN come from
-GeoLite2 at request time.
+`first_seen` is `null` for IPs whose history predates the column (2026-08). Country/ISP come
+from GeoLite2 at request time; ASN prefers the stored observation-time value.
 
 ---
 
@@ -140,7 +147,7 @@ GeoLite2 at request time.
 ```
 Client curl → api.knock-knock.net (Cloudflare) → port 8081
                                                        │
-                                              blocklist_api.py
+                                              knock_api.py
                                               (standalone FastAPI/uvicorn)
                                                        │
                                     ┌──────────────────┼──────────────────┐
@@ -148,9 +155,9 @@ Client curl → api.knock-knock.net (Cloudflare) → port 8081
                               check-ranges        check-asn          /ip/{ip}
                                     │                  │                  │
                           bisect_left + walk    asn_map lookup     SELECT ip_intel
-                          on sorted_ips         on asn_map         (token bucket,
-                          then IN(...) DB       then IN(...) DB     10/min global,
-                          for metadata          for metadata        Redis-backed)
+                          on sorted_ips         on asn_map         (300/min global
+                          then IN(...) DB       then IN(...) DB      budget, waits
+                          for metadata          for metadata        then 429)
 ```
 
 **In-memory cache (refreshed hourly, single DB pass):**
@@ -175,7 +182,7 @@ not for routing computation or payloads.
 |-------|-------|--------|
 | Max prefix length | /16 (65,536 IPs) | Largest realistic org range |
 | Max ranges per request | 10 | Covers orgs with multiple allocations |
-| Max hits returned | 1,000 | `truncated: true` if exceeded |
+| Max detail rows returned | 25,000 | Safety ceiling only; `total_matched` is always exact, `truncated: true` if the cap is hit |
 
 ---
 

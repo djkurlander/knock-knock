@@ -37,6 +37,7 @@ curl 'https://api.knock-knock.net/check-ranges?ranges=198.51.100.0/24,203.0.113.
     }
   ],
   "hit_count": 1,
+  "total_matched": 1,
   "truncated": false
 }
 ```

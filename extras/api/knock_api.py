@@ -285,6 +285,19 @@ def get_snapshot(window):
 
 # --- Endpoints --------------------------------------------------------------
 
+@app.get('/', include_in_schema=False)
+@app.head('/', include_in_schema=False)
+async def index():
+    """Human-facing docs at the API root — the same page served at
+    knock-knock.net/api, so browsing the bare API domain isn't a dead end."""
+    from fastapi.responses import HTMLResponse
+    try:
+        return HTMLResponse((ROOT / 'api.html').read_text())
+    except OSError:
+        return HTMLResponse('<h1>knock-api</h1><p>See '
+                            '<a href="https://knock-knock.net/api">knock-knock.net/api</a></p>')
+
+
 @app.get('/check-ranges')
 async def check_ranges(request: Request, ranges: str,
                        window: str = Query('year', alias='list')):

@@ -529,6 +529,11 @@ async def get_ibr():
 async def get_blocklist_page():
     return HTMLResponse(content=_read_file("blocklist.html"), headers={"Cache-Control": "no-cache"})
 
+@app.head("/api")
+@app.get("/api")
+async def get_api_page():
+    return HTMLResponse(content=_read_file("api.html"), headers={"Cache-Control": "no-cache"})
+
 @app.head("/summary")
 @app.get("/summary")
 async def get_summary():

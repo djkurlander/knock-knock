@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Knock-Knock.net | Attacker Intelligence API — check your IPs, ranges &amp; ASN</title>
+    <link rel="icon" type="image/png" href="https://knock-knock.net/static/robot1.png">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="Free JSON API over the Knock-Knock honeypot's attacker data. Check any IP, CIDR range, or whole ASN against real attack traffic — a listed IP means a device on that network was caught attacking, with a per-protocol breakdown. No key required.">
+    <link rel="canonical" href="https://knock-knock.net/api">
+    <meta property="og:title" content="Knock-Knock.net | Attacker Intelligence API">
+    <meta property="og:description" content="Check your own IPs, ranges, or ASN against real honeypot attack data. A listed IP means a device on your network got caught — with per-protocol detail. Free, no key.">
+    <meta property="og:image" content="https://knock-knock.net/static/og-image.jpg">
+    <meta property="og:url" content="https://knock-knock.net/api">
+    <meta property="og:type" content="website">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:image" content="https://knock-knock.net/static/og-image.jpg">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --neon-green: #00ff41; --warning-yellow: #ffcc00; --hazard-red: #ff1a1a;
+            --data-blue: #00fbff; --ip-purple: #9d00ff; --bg-dark: #0a0a0a;
+            --ui-label: #ffcc00; --ui-grey-dim: #707070;
+        }
+        html, body { background: var(--bg-dark); color: var(--neon-green); font-family: 'Inter', sans-serif;
+            margin: 0; padding: 0; font-size: 16px; line-height: 1.6; -webkit-text-size-adjust: 100%; }
+        .wrap { max-width: 820px; margin: 0 auto; padding: 28px 20px 60px; }
+        h1 { color: var(--neon-green); font-size: 1.8em; letter-spacing: 2px; text-transform: uppercase; margin: 0 0 6px; }
+        h2 { color: var(--neon-green); border-bottom: 2px solid #333; font-size: 1.25em; text-transform: uppercase;
+            letter-spacing: 2px; margin: 38px 0 14px; padding-bottom: 4px; }
+        h3 { color: var(--data-blue); font-size: 1.05em; margin: 22px 0 8px; letter-spacing: 1px; }
+        p { margin: 10px 0; }
+        a { color: var(--data-blue); text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        .tagline { color: var(--ui-grey-dim); font-size: 0.95em; margin-bottom: 4px; }
+        .robot { height: 1.3em; vertical-align: -0.25em; margin-right: 6px; }
+        code { color: var(--warning-yellow); font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 0.92em; }
+        pre { background: #060606; border: 1px solid #2a2a2a; border-left: 3px solid var(--data-blue);
+            border-radius: 6px; padding: 14px 16px; overflow-x: auto; font-size: 0.86em; line-height: 1.5;
+            color: #d6ffe0; -webkit-user-select: text; user-select: text; box-shadow: 0 0 10px rgba(0,251,255,0.08); }
+        pre code { color: inherit; }
+        .endpoint { background: #0f0f0f; border: 1px solid #3d3d3d; border-radius: 8px; padding: 16px 18px; margin: 16px 0; }
+        .endpoint .verb { color: var(--warning-yellow); font-weight: 700; letter-spacing: 1px;
+            font-family: ui-monospace, monospace; }
+        .endpoint .path { color: var(--neon-green); font-family: ui-monospace, monospace; word-break: break-all; }
+        .endpoint .what { color: var(--ui-grey-dim); font-size: 0.9em; margin: 6px 0 10px; }
+        table { border-collapse: collapse; width: 100%; margin: 14px 0; font-size: 0.9em; }
+        th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid #2a2a2a; }
+        th { color: var(--warning-yellow); letter-spacing: 1px; font-size: 0.85em; text-transform: uppercase; }
+        .back { display: inline-block; margin-top: 30px; padding: 10px 18px; border: 1px solid var(--data-blue);
+            border-radius: 6px; color: var(--data-blue); }
+        .back:hover { background: rgba(0,251,255,0.08); text-decoration: none; }
+        footer { color: var(--ui-grey-dim); font-size: 0.85em; margin-top: 44px; border-top: 1px solid #222; padding-top: 16px; }
+    </style>
+</head>
+<body>
+<div class="wrap">
+    <p class="tagline">api.knock-knock.net</p>
+    <h1><img class="robot" src="https://knock-knock.net/static/robot1.png" alt="">Attacker Intelligence API</h1>
+    <p>Every IP that touches this honeypot is, by definition, scanning or attacking servers on the open internet.
+    This API lets you check your <strong>own</strong> address space against that data. If one of your IPs comes back
+    <strong>listed</strong>, a device on your network — a workstation, a VoIP phone, a router, an appliance — was caught
+    attacking us, and is very likely compromised. Each hit includes a <strong>per-protocol breakdown</strong> (which
+    honeypots it hit, how many times, and when), so you learn not just <em>that</em> a device is misbehaving but
+    <em>what kind</em> of activity it's generating.</p>
+    <p>Free, no API key, JSON over HTTPS. Base URL: <code>https://api.knock-knock.net</code></p>
+
+    <h2>Endpoints</h2>
+
+    <div class="endpoint">
+        <div><span class="verb">GET</span> <span class="path">/check-asn?asn=&lt;number&gt;</span></div>
+        <div class="what">Every listed IP announced by an ASN — the easiest check if you know your ASN but not your
+        full CIDR inventory.</div>
+        <pre><code>curl 'https://api.knock-knock.net/check-asn?asn=21811'</code></pre>
+        <pre><code>{
+  "asn": 21811,
+  "isp": "Build-A-Bear Workshop, Inc.",
+  "hits": [
+    { "ip": "104.238.197.106", "hits": 11,
+      "first_seen": "2026-08-01 21:44:56", "last_seen": "2026-08-03 06:01:49",
+      "protocols": [ { "proto": "SIP", "hits": 11, "last_seen": "2026-08-03 06:01:49" } ] }
+  ],
+  "hit_count": 1, "total_matched": 1, "truncated": false
+}</code></pre>
+    </div>
+
+    <div class="endpoint">
+        <div><span class="verb">GET</span> <span class="path">/check-ranges?ranges=&lt;cidr&gt;[,&lt;cidr&gt;...]</span></div>
+        <div class="what">Check up to 10 CIDR ranges (each /16 or smaller) in one call.</div>
+        <pre><code>curl 'https://api.knock-knock.net/check-ranges?ranges=198.51.100.0/24,203.0.113.0/22'</code></pre>
+    </div>
+
+    <div class="endpoint">
+        <div><span class="verb">GET</span> <span class="path">/ip/&lt;address&gt;</span></div>
+        <div class="what">Full detail for a single IP. Returns <code>{"listed": false}</code> if it has never hit us.</div>
+        <pre><code>curl 'https://api.knock-knock.net/ip/104.238.197.106'</code></pre>
+    </div>
+
+    <p>Add <code>&amp;list=month</code> to any check to narrow from the default 365-day window to the last 30 days.
+    Every response carries <code>generated_at</code> (the snapshot age) and an exact <code>total_matched</code> count.</p>
+
+    <h2>Rate limits</h2>
+    <p>Generous, per source IP — no key needed. A rejected request returns <code>429</code> with a
+    <code>Retry-After</code> header and never counts against your quota.</p>
+    <table>
+        <tr><th>Scope</th><th>Limit</th></tr>
+        <tr><td>All endpoints combined</td><td>500 / day</td></tr>
+        <tr><td><code>check-ranges</code> / <code>check-asn</code></td><td>20 / hour each</td></tr>
+        <tr><td><code>/ip/&lt;address&gt;</code></td><td>30 / minute</td></tr>
+    </table>
+
+    <h2>What "listed" means for you</h2>
+    <p>A hit is <strong>observed attack traffic</strong> — not a crowdsourced reputation score. It's the strongest kind
+    of signal: a device on your network reached out and attacked a server it had no business touching. The protocol
+    breakdown points you at the compromise — an IP hitting SSH hundreds of times reads very differently from one probing
+    SIP for toll fraud. Pull the device, check it, rotate its credentials.</p>
+    <p>Prefer a static list for your firewall instead of live lookups? See the
+    <a href="https://knock-knock.net/blocklist">attacker IP blocklists</a> — the same data as plain-text feeds for CSF,
+    CrowdSec, ipset, nftables and pfSense.</p>
+
+    <a class="back" href="https://knock-knock.net/">View live attack dashboard</a>
+
+    <footer>
+        knock-knock.net — a multi-protocol honeypot. We also report attackers to
+        <a href="https://www.abuseipdb.com/user/270949" target="_blank" rel="noopener">AbuseIPDB</a>.
+        Questions? <a class="cmail" href="#">Get in touch</a>.
+    </footer>
+</div>
+<script>
+    (function () {
+        var u = 'support', d = 'knock-knock', t = 'net';
+        document.querySelectorAll('.cmail').forEach(function (el) {
+            el.href = 'mai' + 'lto:' + u + '@' + d + '.' + t;
+        });
+    })();
+</script>
+</body>
+</html>

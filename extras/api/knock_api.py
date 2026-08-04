@@ -347,8 +347,9 @@ async def check_ranges(request: Request, ranges: str,
     return {'list': window, 'generated_at': snap.generated_at,
             'ranges_checked': [str(n) for n in nets],
             'total_ips_checked': sum(n.num_addresses for n in nets),
-            'hits': hits, 'hit_count': len(hits),
-            'total_matched': total_matched, 'truncated': total_matched > len(hits)}
+            'hit_count': len(hits), 'total_matched': total_matched,
+            'truncated': total_matched > len(hits),
+            'hits': hits}   # long array last, so the summary reads first
 
 
 @app.get('/check-asn')
@@ -371,8 +372,9 @@ async def check_asn(request: Request, asn: int,
     hits = await asyncio.to_thread(fetch_meta, hit_ips) if hit_ips else []
     record(request, ip, 'check-asn', started)
     return {'list': window, 'generated_at': snap.generated_at, 'asn': asn, 'isp': org,
-            'hits': hits, 'hit_count': len(hits),
-            'total_matched': total_matched, 'truncated': total_matched > len(hits)}
+            'hit_count': len(hits), 'total_matched': total_matched,
+            'truncated': total_matched > len(hits),
+            'hits': hits}   # long array last, so the summary reads first
 
 
 @app.get('/ip/{target}')

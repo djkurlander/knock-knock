@@ -153,6 +153,13 @@ if LOG_VISITORS:
 # This ensures /static/robot1.png is available immediately
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
+# Optional blog: serve static HTML posts from BLOG_DIR (typically a directory outside
+# the repo, so content deploys independently of the code). html=True lets /blog/<slug>/
+# resolve to <slug>/index.html. No-op when BLOG_DIR is unset or missing.
+_blog_dir = os.environ.get('BLOG_DIR')
+if _blog_dir and os.path.isdir(_blog_dir):
+    app.mount("/blog", StaticFiles(directory=_blog_dir, html=True), name="blog")
+
 r = redis.from_url(f"redis://{os.environ.get('REDIS_HOST', 'localhost')}/{os.environ.get('REDIS_DB', '0')}", decode_responses=True, socket_timeout=None)
 DB_PATH    = os.environ.get('DB_DIR', 'data') + '/knock_knock.db'
 FEED_SIZE  = int(os.environ.get('FEED_SIZE',  '100'))

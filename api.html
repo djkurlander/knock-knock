@@ -57,7 +57,7 @@
         .run { background: var(--data-blue); color: #04121a; border: 0; border-radius: 5px; font-weight: 700;
             letter-spacing: 1px; padding: 3px 16px; line-height: 1.2; cursor: pointer; font-family: 'Inter', sans-serif; }
         .run:hover { background: #6cf9ff; } .run:disabled { opacity: 0.5; cursor: default; }
-        .resp { margin-top: 10px; transition: opacity 0.12s ease; }
+        .resp { margin-top: 10px; transition: opacity 0.12s ease; max-height: 60vh; overflow: auto; }
         .resp.loading { opacity: 0.35; }
         .resp.err { border-left-color: var(--hazard-red); box-shadow: 0 0 10px rgba(255,26,26,0.12); color: #ffd9d9; }
         table { border-collapse: collapse; width: 100%; margin: 14px 0; font-size: 0.9em; }

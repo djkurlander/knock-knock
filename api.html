@@ -81,8 +81,7 @@
     place you want an attacker-controlled machine. Each hit includes a <strong>per-protocol breakdown</strong> (which
     honeypots it hit, how many times, and when), so you learn not just <em>that</em> a device is misbehaving but
     <em>what kind</em> of activity it's generating.</p>
-    <p>Free, no API key, JSON over HTTPS. Base URL: <code>https://api.knock-knock.net</code> — edit any example below
-    and press <strong>Run</strong> to query it live.</p>
+    <p>Free, no API key, JSON over HTTPS — edit any example below and press <strong>Run</strong> to query it live.</p>
 
     <h2>Endpoints</h2>
 
@@ -92,7 +91,7 @@
         <div class="what"><span class="verb">GET&nbsp;/check-asn</span> — every listed IP announced by an ASN. The
         easiest check if you know your ASN but not your full CIDR inventory.</div>
         <div class="q">
-            <span class="lit">/check-asn?asn=</span><input class="asn" id="asn-in" value="21811">
+            <span class="lit">https://api.knock-knock.net/check-asn?asn=</span><input class="asn" id="asn-in" value="21811">
             <span class="lit">&amp;list=</span><select id="asn-list"><option>year</option><option>month</option></select>
             <button class="run" onclick="runAsn(this)">Run ▶</button>
         </div>
@@ -126,7 +125,7 @@
         <div class="what"><span class="verb">GET&nbsp;/check-ranges</span> — check up to 10 CIDR ranges (each /16 or
         smaller) in one call.</div>
         <div class="q">
-            <span class="lit">/check-ranges?ranges=</span><input class="ranges" id="rng-in" value="2.57.121.0/24">
+            <span class="lit">https://api.knock-knock.net/check-ranges?ranges=</span><input class="ranges" id="rng-in" value="2.57.121.0/24">
             <span class="lit">&amp;list=</span><select id="rng-list"><option>year</option><option>month</option></select>
             <button class="run" onclick="runRanges(this)">Run ▶</button>
         </div>
@@ -175,7 +174,7 @@
         <div class="what"><span class="verb">GET&nbsp;/ip/&lt;address&gt;</span> — full detail for a single IP. Returns
         <code>{"listed": false}</code> if it has never hit us.</div>
         <div class="q">
-            <span class="lit">/ip/</span><input class="ip" id="ip-in" value="104.238.197.106">
+            <span class="lit">https://api.knock-knock.net/ip/</span><input class="ip" id="ip-in" value="104.238.197.106">
             <button class="run" onclick="runIp(this)">Run ▶</button>
         </div>
         <pre class="resp" id="ip-out"><code>{

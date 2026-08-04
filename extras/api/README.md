@@ -107,6 +107,39 @@ Rejected requests get HTTP 429 with a `Retry-After` header and
 - API requests are logged to `visitors.db` (same table the dashboard uses) when
   `LOG_VISITORS=true`.
 
+## Maintaining the docs page (`api.html`) examples
+
+The interactive docs page (served at `knock-knock.net/api` and the API root) shows a sample
+JSON response under each endpoint. **Those samples are real API responses, kept identical to
+what "Run" returns** — so pressing Run refreshes values in place instead of reshaping the
+block. That creates one maintenance point:
+
+`ip_intel` is a rolling **365-day window**, so an example IP/ASN can age *off* the list after
+365 days with no new hits. When that happens, Run returns `{"listed": false}` / empty and
+contradicts the static sample.
+
+- The **check-asn** and **/ip** examples use Build-A-Bear (`104.238.197.106`, AS21811) — a
+  currently-active but institutional one-off, so it's the example most likely to expire.
+- The **check-ranges** example (`2.57.121.0/24`) is a persistent heavy attacker, far more
+  durable.
+
+**~Yearly, or whenever an example goes stale, swap it** (a two-minute job):
+
+1. Pick a fresh, striking target — the appeal is an organization you'd never expect to be
+   attacking. Bench, all from the `sip-compromised-pbx-canary` campaign: Guardia Civil (Spanish
+   police), Royal Thai Army, State of Idaho / Nebraska, LA County Office of Education, Lockheed
+   Martin, Citigroup, Etat du Valais. Find one currently listed:
+   ```bash
+   sqlite3 data/knock_knock.db "SELECT ip, isp, asn, hits, last_seen FROM ip_intel
+     WHERE last_seen > datetime('now','-60 days')
+     AND (isp LIKE '%Univ%' OR isp LIKE '%Gov%' OR isp LIKE '%Army%' OR isp LIKE '%Police%'
+          OR isp LIKE '%County%' OR isp LIKE '%State of%' OR isp LIKE '%Bank%')
+     ORDER BY last_seen DESC LIMIT 20;"
+   ```
+2. Update the `<input value="…">` for that example in `api.html`.
+3. `curl` the endpoint once and paste its JSON into the sample `<pre>` (it's read fresh per
+   request — no service restart needed for `api.html` edits).
+
 ## Configuration
 
 | Env var | Default | Purpose |

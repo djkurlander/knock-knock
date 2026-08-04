@@ -39,12 +39,27 @@
         pre { background: #060606; border: 1px solid #2a2a2a; border-left: 3px solid var(--data-blue);
             border-radius: 6px; padding: 14px 16px; overflow-x: auto; font-size: 0.86em; line-height: 1.5;
             color: #d6ffe0; -webkit-user-select: text; user-select: text; box-shadow: 0 0 10px rgba(0,251,255,0.08); }
-        pre code { color: inherit; }
+        pre code { color: inherit; font-size: inherit; }
         .endpoint { background: #0f0f0f; border: 1px solid #3d3d3d; border-radius: 8px; padding: 16px 18px; margin: 16px 0; }
         .endpoint .verb { color: var(--warning-yellow); font-weight: 700; letter-spacing: 1px;
             font-family: ui-monospace, monospace; }
-        .endpoint .path { color: var(--neon-green); font-family: ui-monospace, monospace; word-break: break-all; }
         .endpoint .what { color: var(--ui-grey-dim); font-size: 0.9em; margin: 6px 0 10px; }
+        /* interactive query line */
+        .q { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-family: ui-monospace, monospace;
+            font-size: 0.9em; margin-bottom: 4px; }
+        .q .lit { color: var(--neon-green); }
+        .q input, .q select {
+            background: #060606; border: 1px solid #2a2a2a; border-radius: 4px; color: var(--warning-yellow);
+            font-family: ui-monospace, monospace; font-size: 0.92em; padding: 5px 8px; }
+        .q input:focus, .q select:focus { outline: none; border-color: var(--data-blue);
+            box-shadow: 0 0 6px rgba(0,251,255,0.25); }
+        .q input.asn { width: 8ch; } .q input.ip { width: 18ch; } .q input.ranges { flex: 1 1 26ch; min-width: 22ch; }
+        .run { background: var(--data-blue); color: #04121a; border: 0; border-radius: 5px; font-weight: 700;
+            letter-spacing: 1px; padding: 3px 16px; line-height: 1.2; cursor: pointer; font-family: 'Inter', sans-serif; }
+        .run:hover { background: #6cf9ff; } .run:disabled { opacity: 0.5; cursor: default; }
+        .resp { margin-top: 10px; transition: opacity 0.12s ease; }
+        .resp.loading { opacity: 0.35; }
+        .resp.err { border-left-color: var(--hazard-red); box-shadow: 0 0 10px rgba(255,26,26,0.12); color: #ffd9d9; }
         table { border-collapse: collapse; width: 100%; margin: 14px 0; font-size: 0.9em; }
         th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid #2a2a2a; }
         th { color: var(--warning-yellow); letter-spacing: 1px; font-size: 0.85em; text-transform: uppercase; }
@@ -66,51 +81,104 @@
     place you want an attacker-controlled machine. Each hit includes a <strong>per-protocol breakdown</strong> (which
     honeypots it hit, how many times, and when), so you learn not just <em>that</em> a device is misbehaving but
     <em>what kind</em> of activity it's generating.</p>
-    <p>Free, no API key, JSON over HTTPS. Base URL: <code>https://api.knock-knock.net</code></p>
+    <p>Free, no API key, JSON over HTTPS. Base URL: <code>https://api.knock-knock.net</code> — edit any example below
+    and press <strong>Run</strong> to query it live.</p>
 
     <h2>Endpoints</h2>
 
+    <!-- Sample responses below are LIVE (kept matching what "Run" returns). An example IP/ASN can
+         age off ip_intel's 365-day window; swap steps + candidate targets in extras/api/README.md. -->
     <div class="endpoint">
-        <div><span class="verb">GET</span> <span class="path">/check-asn?asn=&lt;number&gt;</span></div>
-        <div class="what">Every listed IP announced by an ASN — the easiest check if you know your ASN but not your
-        full CIDR inventory.</div>
-        <pre><code>curl 'https://api.knock-knock.net/check-asn?asn=21811'</code></pre>
-        <pre><code>{
+        <div class="what"><span class="verb">GET&nbsp;/check-asn</span> — every listed IP announced by an ASN. The
+        easiest check if you know your ASN but not your full CIDR inventory.</div>
+        <div class="q">
+            <span class="lit">/check-asn?asn=</span><input class="asn" id="asn-in" value="21811">
+            <span class="lit">&amp;list=</span><select id="asn-list"><option>year</option><option>month</option></select>
+            <button class="run" onclick="runAsn(this)">Run ▶</button>
+        </div>
+        <pre class="resp" id="asn-out"><code>{
+  "list": "year",
+  "generated_at": "2026-08-03T22:22:11Z",
   "asn": 21811,
   "isp": "Build-A-Bear Workshop, Inc.",
   "hits": [
-    { "ip": "104.238.197.106", "hits": 11,
-      "first_seen": "2026-08-01 21:44:56", "last_seen": "2026-08-03 06:01:49",
-      "protocols": [ { "proto": "SIP", "hits": 11, "last_seen": "2026-08-03 06:01:49" } ] }
-  ],
-  "hit_count": 1, "total_matched": 1, "truncated": false
-}</code></pre>
-    </div>
-
-    <div class="endpoint">
-        <div><span class="verb">GET</span> <span class="path">/check-ranges?ranges=&lt;cidr&gt;[,&lt;cidr&gt;...]</span></div>
-        <div class="what">Check up to 10 CIDR ranges (each /16 or smaller) in one call.</div>
-        <pre><code>curl 'https://api.knock-knock.net/check-ranges?ranges=198.51.100.0/24,203.0.113.0/22'</code></pre>
-        <pre><code>{
-  "ranges_checked": [ "198.51.100.0/24", "203.0.113.0/22" ],
-  "total_ips_checked": 1280,
-  "hits": [
-    { "ip": "198.51.100.45", "hits": 312,
-      "first_seen": "2026-01-14 03:22:10", "last_seen": "2026-08-01 07:12:44",
+    {
+      "ip": "104.238.197.106",
+      "hits": 11,
+      "first_seen": "2026-08-01 21:44:56",
+      "last_seen": "2026-08-03 06:01:49",
       "protocols": [
-        { "proto": "SSH", "hits": 280, "last_seen": "2026-08-01 07:12:44" },
-        { "proto": "SIP", "hits": 32,  "last_seen": "2026-07-30 22:01:13" }
-      ] }
+        {
+          "proto": "SIP",
+          "hits": 11,
+          "last_seen": "2026-08-03 06:01:49"
+        }
+      ]
+    }
   ],
-  "hit_count": 1, "total_matched": 1, "truncated": false
+  "hit_count": 1,
+  "total_matched": 1,
+  "truncated": false
 }</code></pre>
     </div>
 
     <div class="endpoint">
-        <div><span class="verb">GET</span> <span class="path">/ip/&lt;address&gt;</span></div>
-        <div class="what">Full detail for a single IP. Returns <code>{"listed": false}</code> if it has never hit us.</div>
-        <pre><code>curl 'https://api.knock-knock.net/ip/104.238.197.106'</code></pre>
-        <pre><code>{
+        <div class="what"><span class="verb">GET&nbsp;/check-ranges</span> — check up to 10 CIDR ranges (each /16 or
+        smaller) in one call.</div>
+        <div class="q">
+            <span class="lit">/check-ranges?ranges=</span><input class="ranges" id="rng-in" value="2.57.121.0/24">
+            <span class="lit">&amp;list=</span><select id="rng-list"><option>year</option><option>month</option></select>
+            <button class="run" onclick="runRanges(this)">Run ▶</button>
+        </div>
+        <pre class="resp" id="rng-out"><code>{
+  "list": "year",
+  "generated_at": "2026-08-03T22:22:11Z",
+  "ranges_checked": [
+    "2.57.121.0/24"
+  ],
+  "total_ips_checked": 256,
+  "hits": [
+    {
+      "ip": "2.57.121.25",
+      "hits": 20000,
+      "first_seen": "2026-04-18 17:33:04",
+      "last_seen": "2026-07-05 14:11:29",
+      "protocols": [
+        {
+          "proto": "SSH",
+          "hits": 20000,
+          "last_seen": "2026-07-05 14:11:29"
+        }
+      ]
+    },
+    {
+      "ip": "2.57.121.112",
+      "hits": 24400,
+      "first_seen": "2026-04-18 17:32:50",
+      "last_seen": "2026-08-03 22:20:48",
+      "protocols": [
+        {
+          "proto": "SSH",
+          "hits": 24400,
+          "last_seen": "2026-08-03 22:20:48"
+        }
+      ]
+    }
+  ],
+  "hit_count": 2,
+  "total_matched": 2,
+  "truncated": false
+}</code></pre>
+    </div>
+
+    <div class="endpoint">
+        <div class="what"><span class="verb">GET&nbsp;/ip/&lt;address&gt;</span> — full detail for a single IP. Returns
+        <code>{"listed": false}</code> if it has never hit us.</div>
+        <div class="q">
+            <span class="lit">/ip/</span><input class="ip" id="ip-in" value="104.238.197.106">
+            <button class="run" onclick="runIp(this)">Run ▶</button>
+        </div>
+        <pre class="resp" id="ip-out"><code>{
   "ip": "104.238.197.106",
   "listed": true,
   "hits": 11,
@@ -122,13 +190,17 @@
   "banned": false,
   "ban_until": null,
   "protocols": [
-    { "proto": "SIP", "hits": 11, "last_seen": "2026-08-03 06:01:49" }
+    {
+      "proto": "SIP",
+      "hits": 11,
+      "last_seen": "2026-08-03 06:01:49"
+    }
   ]
 }</code></pre>
     </div>
 
-    <p>Add <code>&amp;list=month</code> to any check to narrow from the default 365-day window to the last 30 days.
-    Every response carries <code>generated_at</code> (the snapshot age) and an exact <code>total_matched</code> count.</p>
+    <p>Every response carries <code>generated_at</code> (the snapshot age) and an exact <code>total_matched</code>
+    count. Live queries here count against the same rate limits as the API itself.</p>
 
     <h2>Rate limits</h2>
     <p>Generous, per source IP — no key needed. A rejected request returns <code>429</code> with a
@@ -164,6 +236,61 @@
             el.href = 'mai' + 'lto:' + u + '@' + d + '.' + t;
         });
     })();
+
+    var API = 'https://api.knock-knock.net';
+
+    async function query(url, outId, btn) {
+        var box = document.getElementById(outId);
+        // Keep the previous content in place (just dimmed) so the box never
+        // collapses to a single line — no height jump, no flash.
+        box.classList.add('loading');
+        if (btn) { btn.disabled = true; btn.dataset.label = btn.textContent; btn.textContent = 'Running…'; }
+        try {
+            var r = await fetch(url, { headers: { 'Accept': 'application/json' } });
+            var text = await r.text();
+            var pretty;
+            try { pretty = JSON.stringify(JSON.parse(text), null, 2); } catch (e) { pretty = text; }
+            box.classList.remove('err');
+            if (r.status === 429) {
+                var ra = r.headers.get('Retry-After');
+                box.classList.add('err');
+                box.textContent = 'Rate limited (HTTP 429)' +
+                    (ra ? ' — try again in about ' + ra + ' s.\n\n' : '.\n\n') + pretty;
+            } else if (!r.ok) {
+                box.classList.add('err');
+                box.textContent = 'HTTP ' + r.status + '\n\n' + pretty;   // textContent = safe, no HTML injection
+            } else {
+                box.textContent = pretty;
+            }
+        } catch (e) {
+            box.classList.add('err');
+            box.textContent = 'Request failed: ' + e;
+        } finally {
+            box.classList.remove('loading');
+            if (btn) { btn.disabled = false; btn.textContent = btn.dataset.label || 'Run ▶'; }
+        }
+    }
+
+    function runAsn(btn) {
+        var asn = document.getElementById('asn-in').value.trim();
+        var list = document.getElementById('asn-list').value;
+        query(API + '/check-asn?asn=' + encodeURIComponent(asn) + '&list=' + list, 'asn-out', btn);
+    }
+    function runRanges(btn) {
+        var ranges = document.getElementById('rng-in').value.trim();
+        var list = document.getElementById('rng-list').value;
+        query(API + '/check-ranges?ranges=' + encodeURIComponent(ranges) + '&list=' + list, 'rng-out', btn);
+    }
+    function runIp(btn) {
+        var ip = document.getElementById('ip-in').value.trim();
+        query(API + '/ip/' + encodeURIComponent(ip), 'ip-out', btn);
+    }
+    // Enter key in any input triggers its Run button
+    document.querySelectorAll('.q input').forEach(function (el) {
+        el.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter') { e.preventDefault(); el.closest('.q').querySelector('.run').click(); }
+        });
+    });
 </script>
 </body>
 </html>

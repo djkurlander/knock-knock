@@ -31,6 +31,7 @@ import geoip2.errors
 import redis.asyncio as aioredis
 import uvicorn
 from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 ROOT = Path(__file__).resolve().parent.parent.parent
@@ -61,6 +62,14 @@ GLOBAL_MIN_CAP = 300     # global /ip lookups/minute (token bucket)
 WAIT_MAX = 25            # seconds a /ip request will wait for a global token
 
 app = FastAPI(title='knock-api', docs_url=None, redoc_url=None)
+# Let the docs page's "Run" widget call the API from the main site (cross-origin).
+# Public read-only data, simple GETs — no credentials, no preflight needed.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=['https://knock-knock.net', 'https://api.knock-knock.net'],
+    allow_methods=['GET'],
+    allow_headers=['*'],
+)
 R: aioredis.Redis = None
 city_reader = asn_reader = None
 

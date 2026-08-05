@@ -39,7 +39,7 @@ echo "Stopping services..."
 if [ "$MODE" = "docker" ]; then
     $DC down
 else
-    systemctl stop knock-monitor knock-web 2>/dev/null
+    systemctl stop knock-monitor knock-web knock-api 2>/dev/null
 fi
 
 # --- Reset (optional) ---
@@ -93,6 +93,12 @@ else
 
     systemctl start knock-web
     echo "  [+] Web server online (WebSockets active)"
+
+    # Optional public query API — only if its unit is installed (many deployments don't run it)
+    if systemctl cat knock-api.service &>/dev/null; then
+        systemctl start knock-api
+        echo "  [+] Query API online"
+    fi
 fi
 
 echo "System restored."

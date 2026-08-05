@@ -229,6 +229,7 @@ _RE_RCE_BODY = re.compile(
     r'|(base64_decode\s*\()'
     r'|(system\s*\(|passthru\s*\(|shell_exec\s*\(|popen\s*\()'
     r'|(\|\s*(?:sh|bash|cmd\.exe))'            # pipe to shell
+    r'|([;&|]\s*(?:curl|wget)\s)'              # shell command-injection download (;curl / |wget)
     r'|(`[^`]{1,120}`)',                        # backtick command sub
     re.IGNORECASE,
 )
@@ -353,7 +354,8 @@ _RE_MALWARE_COMM = re.compile(
 
 _RE_CRYPTO_MINING = re.compile(
     r'("method"\s*:\s*"login")'
-    r'|("params"\s*:\s*\{.*"login"\s*:\s*")',
+    r'|("params"\s*:\s*\{.*"login"\s*:\s*")'
+    r'|("method"\s*:\s*"(?:getwork|eth_getWork|eth_submitWork|submitwork|mining\.(?:subscribe|authorize|submit)))',
     re.IGNORECASE,
 )
 

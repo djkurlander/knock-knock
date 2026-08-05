@@ -85,6 +85,11 @@ def is_bot_ua(user_agent):
     ua_lower = user_agent.lower()
     return any(p in ua_lower for p in _exclude_ua_patterns)
 
+# knock-api query endpoints — machine-callable network checks, reported in their own
+# section (get_api_usage) and kept OUT of the dashboard-visitor count below, exactly like
+# the blocklist feed downloads. Doc pages (/api, /docs, /redoc) stay counted as normal views.
+API_QUERY_PAGES = ('/check-asn', '/check-ranges', '/ip')
+
 def get_visitors(days):
     """Get visitors from the last N days, excluding specified IPs."""
     conn = sqlite3.connect(VISITORS_DB)
@@ -93,15 +98,17 @@ def get_visitors(days):
 
     since = (datetime.now() - timedelta(days=days)).strftime('%Y-%m-%d')
 
-    cur.execute("""
+    api_ph = ','.join('?' * len(API_QUERY_PAGES))
+    cur.execute(f"""
         SELECT ip, city, region, country, iso_code, isp,
                MAX(referrer) as referrer, MAX(user_agent) as user_agent,
                SUM(visit_count) as visit_count
         FROM visitors
         WHERE date >= ? AND page NOT LIKE '/static/ip-blocklist-%'
+              AND page NOT IN ({api_ph})
         GROUP BY ip
         ORDER BY MAX(last_seen) DESC
-    """, (since,))
+    """, (since, *API_QUERY_PAGES))
 
     visitors = [dict(row) for row in cur.fetchall()
                 if not is_excluded(row['ip']) and not is_bot_ua(row['user_agent'])]
@@ -189,6 +196,37 @@ def get_feed_consumers(days, limit=40):
     return rows
 
 
+def get_api_usage(days, limit=40):
+    """knock-api query usage — another separate population from the dashboard viewers: these
+    are orgs/scripts checking whether their own networks appear in the attacker data. Kept out
+    of the dashboard visit count (get_visitors excludes API_QUERY_PAGES) and reported here."""
+    since = (datetime.now() - timedelta(days=days)).strftime('%Y-%m-%d')
+    api_ph = ','.join('?' * len(API_QUERY_PAGES))
+    conn = sqlite3.connect(VISITORS_DB)
+    conn.row_factory = sqlite3.Row
+    cur = conn.cursor()
+    # Per-endpoint totals (calls + distinct callers)
+    cur.execute(f"""
+        SELECT page, SUM(visit_count) calls, COUNT(DISTINCT ip) ips
+        FROM visitors
+        WHERE date >= ? AND page IN ({api_ph})
+        GROUP BY page ORDER BY calls DESC
+    """, (since, *API_QUERY_PAGES))
+    by_endpoint = [dict(r) for r in cur.fetchall()]
+    # Top callers — who is checking their network
+    cur.execute(f"""
+        SELECT ip, MAX(country) country, MAX(isp) isp,
+               GROUP_CONCAT(DISTINCT REPLACE(page, '/', '')) endpoints,
+               SUM(visit_count) calls, MAX(last_seen) last_seen
+        FROM visitors
+        WHERE date >= ? AND page IN ({api_ph})
+        GROUP BY ip ORDER BY calls DESC LIMIT ?
+    """, (since, *API_QUERY_PAGES, limit))
+    callers = [dict(r) for r in cur.fetchall() if not is_excluded(r['ip'])]
+    conn.close()
+    return {'by_endpoint': by_endpoint, 'callers': callers}
+
+
 def format_report(period_name, days):
     """Format the visitor report."""
     visitors = get_visitors(days)
@@ -227,6 +265,21 @@ def format_report(period_name, days):
             loc = f['country'] or 'Unknown'
             report.append(f"  {f['ip']} — {f['isp'] or 'Unknown'} ({loc}): "
                           f"{f['grabs']} grab{'s' if f['grabs'] != 1 else ''} [{f['files']}]")
+        report.append("")
+
+    api = get_api_usage(days)
+    if api['by_endpoint']:
+        report.append("API QUERY USAGE (knock-api network checks, not dashboard views):")
+        for e in api['by_endpoint']:
+            report.append(f"  {e['page']}: {e['calls']} call{'s' if e['calls'] != 1 else ''} "
+                          f"from {e['ips']} IP{'s' if e['ips'] != 1 else ''}")
+        report.append("")
+        if api['callers']:
+            report.append("  Top API callers:")
+            for c in api['callers']:
+                loc = c['country'] or 'Unknown'
+                report.append(f"    {c['ip']} — {c['isp'] or 'Unknown'} ({loc}): "
+                              f"{c['calls']} call{'s' if c['calls'] != 1 else ''} [{c['endpoints']}]")
         report.append("")
 
     report.append("=" * 50)

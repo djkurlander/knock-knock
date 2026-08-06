@@ -298,9 +298,16 @@ def get_snapshot(window):
 
 @app.get('/', include_in_schema=False)
 @app.head('/', include_in_schema=False)
-async def index():
+async def index(request: Request):
     """Human-facing docs at the API root — the same page served at
-    knock-knock.net/api, so browsing the bare API domain isn't a dead end."""
+    knock-knock.net/api, so browsing the bare API domain isn't a dead end.
+    Logged as '/api' (not '/') so landing hits register distinctly from the
+    main dashboard homepage and roll up with knock-knock.net/api."""
+    if LOG_VISITORS:
+        # Fire-and-forget, off the response path (matches record()/_record()).
+        asyncio.get_running_loop().create_task(asyncio.to_thread(
+            log_visitor, client_ip(request), request.headers.get('user-agent'),
+            '/api', request.url.query or None, request.headers.get('referer')))
     from fastapi.responses import HTMLResponse
     try:
         return HTMLResponse((ROOT / 'api.html').read_text())

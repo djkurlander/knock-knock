@@ -52,6 +52,11 @@ CAPTURE_HEADERS = os.environ.get('SIP_CAPTURE_HEADERS', '0').lower() not in ('0'
 CAPTURE_FILE = os.environ.get('SIP_CAPTURE_FILE',
                               os.path.join(os.environ.get('DB_DIR', 'data'), 'sip_headers.log'))
 _capture_lock = threading.Lock()
+# Raw-byte hex dump of packets that FAIL clean SIP parse (or parse with a non-standard method) —
+# for decoding H.323 / binary / TCP-framing junk the SIP parser mangles. Separate opt-in (noisier).
+CAPTURE_RAW = os.environ.get('SIP_CAPTURE_RAW', '0').lower() not in ('0', 'false', 'no')
+_SIP_METHODS = {'INVITE', 'ACK', 'BYE', 'CANCEL', 'OPTIONS', 'REGISTER', 'PRACK',
+                'SUBSCRIBE', 'NOTIFY', 'PUBLISH', 'INFO', 'REFER', 'MESSAGE', 'UPDATE'}
 SIP_AUTH_CHALLENGE_MODE = os.environ.get('SIP_AUTH_CHALLENGE_MODE', 'mixed').strip().lower()
 SIP_OK_DIALPLAN = os.environ.get('SIP_OK_DIALPLAN', '+,bare,00,011,9').strip().lower()
 SIP_DEDUP_WINDOW_SEC = int(os.environ.get('SIP_DEDUP_WINDOW_SEC', '60'))
@@ -235,6 +240,30 @@ def capture_headers_line(text):
         with _capture_lock:
             with open(CAPTURE_FILE, 'a') as f:
                 f.write(f"{ts} {text}\n")
+    except Exception:
+        pass
+
+
+def _rawdump_reason(req):
+    """Return a reason if this parse looks non-SIP/garbled (worth a raw hex dump), else None."""
+    if req is None:
+        return 'parse_fail'
+    if (req.get('method') or '') not in _SIP_METHODS:
+        return 'garbled_method'
+    return None
+
+
+def capture_raw_bytes(client_ip, raw, reason):
+    """Hex-dump a packet that failed clean SIP parse — for decoding H.323 / binary / TCP-framing
+    junk. Gated by SIP_CAPTURE_RAW; honors SIP_TRACE_IP; SIPTRACE-prefixed (monitor forwards it);
+    truncated to 1 KB; best-effort. Hex keeps binary out of the log (grep-safe)."""
+    if not CAPTURE_RAW or (TRACE_IP and client_ip != TRACE_IP):
+        return
+    try:
+        line = (f"SIPTRACE ip={client_ip} stage=rawdump reason={reason} "
+                f"bytes={len(raw)} hex={raw[:1024].hex()}")
+        print(line, flush=True)
+        capture_headers_line(line)
     except Exception:
         pass
 
@@ -1104,6 +1133,9 @@ def udp_loop(sock):
                 continue
             trace(session_id, client_ip, 'udp_recv', bytes=len(data))
             req = parse_sip_message(data)
+            _rd = _rawdump_reason(req)
+            if _rd:
+                capture_raw_bytes(client_ip, data, _rd)
             if not req:
                 trace(session_id, client_ip, 'udp_parse_invalid')
                 continue
@@ -1196,6 +1228,9 @@ def handle_tcp_client(client_sock, client_ip):
             message_count += 1
             trace(session_id, client_ip, 'tcp_recv_message', index=message_count, bytes=recv_bytes)
             req = parse_sip_message(raw)
+            _rd = _rawdump_reason(req)
+            if _rd:
+                capture_raw_bytes(client_ip, raw, _rd)
             if not req:
                 stop_reason = 'parse_invalid'
                 trace(session_id, client_ip, 'tcp_parse_invalid', index=message_count)

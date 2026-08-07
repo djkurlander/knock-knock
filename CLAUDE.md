@@ -333,6 +333,7 @@ Port 80 is open to all — it's a honeypot port. Port 443 can also be mapped to 
 | `SIP_TRACE_IP` | unset | Trace only sessions from this specific IP |
 | `SIP_CAPTURE_HEADERS` | unset | Set to `true` to log the request-URI, Via, Contact, User-Agent, and SDP `c=`/`m=` media lines once per knock (low-noise, all IPs) without the full `SIP_TRACE` firehose. Emits `SIPTRACE … stage=headers …`; also honors `SIP_TRACE_IP`. Triage step for deciding whether to persist SIP header fields — see `sip_todo.md`. |
 | `SIP_CAPTURE_FILE` | `<DB_DIR>/sip_headers.log` | Durable file the header captures are appended to when `SIP_CAPTURE_HEADERS=true` (timestamped, survives journal rotation, one file per feeder). Set empty to disable the file and keep journal-only. |
+| `SIP_CAPTURE_RAW` | unset | Set to `true` to hex-dump the raw bytes of packets that **fail clean SIP parse** (or parse with a non-standard method) to `SIP_CAPTURE_FILE` — for decoding H.323 / binary / TCP-framing traffic the SIP parser mangles. Emits `SIPTRACE … stage=rawdump …` (hex, so grep-safe). Noisier than header capture (5060 attracts junk); separate opt-in, off by default. Honors `SIP_TRACE_IP`. |
 
 ### HTTP Honeypot
 

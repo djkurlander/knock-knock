@@ -958,10 +958,14 @@ def process_sip_request(req, client_ip, allow_b2bua=False):
     # SIP_TRACE_IP. SIPTRACE-prefixed so the monitor forwards it (a bare print is dropped as
     # non-JSON, non-*TRACE). See sip_todo.md "In progress: SIP Via/Contact".
     if (CAPTURE_HEADERS or TRACE_ENABLED) and (not TRACE_IP or client_ip == TRACE_IP):
+        _body = req.get('body') or ''
+        _sdp_c = next((ln for ln in _body.splitlines() if ln.startswith('c=')), '')  # RTP media IP
+        _sdp_m = next((ln for ln in _body.splitlines() if ln.startswith('m=')), '')  # RTP media port
         _hdr_line = (f"SIPTRACE sid={_header_first(headers, 'call-id')} ip={client_ip} "
-                     f"stage=headers method={method} via={headers.get('via')!r} "
-                     f"contact={headers.get('contact')!r} "
-                     f"user_agent={_header_first(headers, 'user-agent')!r}")
+                     f"stage=headers method={method} uri={uri[:200]!r} "
+                     f"via={headers.get('via')!r} contact={headers.get('contact')!r} "
+                     f"user_agent={_header_first(headers, 'user-agent')!r} "
+                     f"sdp_c={_sdp_c!r} sdp_m={_sdp_m!r}")
         print(_hdr_line, flush=True)          # live view: monitor forwards SIPTRACE → journal
         if CAPTURE_HEADERS:
             capture_headers_line(_hdr_line)   # durable per-feeder file (survives journal rotation)

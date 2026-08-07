@@ -46,6 +46,12 @@ SIP_MAX_MESSAGES_PER_CONN = max(1, int(os.environ.get('SIP_MAX_MESSAGES_PER_CONN
 SIP_CONN_TIMEOUT = max(2.0, float(os.environ.get('SIP_CONN_TIMEOUT', '20')))
 TRACE_ENABLED = os.environ.get('SIP_TRACE', '0').lower() not in ('0', 'false', 'no')
 TRACE_IP = os.environ.get('SIP_TRACE_IP', '').strip()
+# Low-noise header capture (Via/Contact/User-Agent only), independent of the chatty SIP_TRACE.
+CAPTURE_HEADERS = os.environ.get('SIP_CAPTURE_HEADERS', '0').lower() not in ('0', 'false', 'no')
+# Durable, per-feeder header log (survives journal rotation); written only when CAPTURE_HEADERS is on.
+CAPTURE_FILE = os.environ.get('SIP_CAPTURE_FILE',
+                              os.path.join(os.environ.get('DB_DIR', 'data'), 'sip_headers.log'))
+_capture_lock = threading.Lock()
 SIP_AUTH_CHALLENGE_MODE = os.environ.get('SIP_AUTH_CHALLENGE_MODE', 'mixed').strip().lower()
 SIP_OK_DIALPLAN = os.environ.get('SIP_OK_DIALPLAN', '+,bare,00,011,9').strip().lower()
 SIP_DEDUP_WINDOW_SEC = int(os.environ.get('SIP_DEDUP_WINDOW_SEC', '60'))
@@ -217,6 +223,20 @@ def trace(session_id, client_ip, stage, **fields):
     suffix = ' '.join(f'{k}={v!r}' for k, v in fields.items())
     base = f"SIPTRACE sid={session_id} ip={client_ip} stage={stage}"
     print(f"{base} {suffix}".rstrip(), flush=True)
+
+
+def capture_headers_line(text):
+    """Append a header-capture line to the durable SIP_CAPTURE_FILE (triage step) — survives
+    journal rotation, one file per feeder. Best-effort; never let logging break a knock."""
+    if not CAPTURE_FILE:
+        return
+    ts = time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
+    try:
+        with _capture_lock:
+            with open(CAPTURE_FILE, 'a') as f:
+                f.write(f"{ts} {text}\n")
+    except Exception:
+        pass
 
 
 def should_emit_knock(client_ip):
@@ -932,6 +952,19 @@ def process_sip_request(req, client_ip, allow_b2bua=False):
         common['sip_from_user'] = from_user
     if ack_age_ms is not None:
         common['sip_ack_age_ms'] = ack_age_ms
+    # Header-capture triage: emit the full Via stack, Contact, and User-Agent for internal-IP
+    # traceback + tooling fingerprint (branch pattern / UA). Gated on its own low-noise
+    # SIP_CAPTURE_HEADERS flag (breadth, one line per knock) OR the verbose SIP_TRACE; honors
+    # SIP_TRACE_IP. SIPTRACE-prefixed so the monitor forwards it (a bare print is dropped as
+    # non-JSON, non-*TRACE). See sip_todo.md "In progress: SIP Via/Contact".
+    if (CAPTURE_HEADERS or TRACE_ENABLED) and (not TRACE_IP or client_ip == TRACE_IP):
+        _hdr_line = (f"SIPTRACE sid={_header_first(headers, 'call-id')} ip={client_ip} "
+                     f"stage=headers method={method} via={headers.get('via')!r} "
+                     f"contact={headers.get('contact')!r} "
+                     f"user_agent={_header_first(headers, 'user-agent')!r}")
+        print(_hdr_line, flush=True)          # live view: monitor forwards SIPTRACE → journal
+        if CAPTURE_HEADERS:
+            capture_headers_line(_hdr_line)   # durable per-feeder file (survives journal rotation)
     if method == 'INVITE':
         dial_iso, dial_name, dial_e164, dial_lat, dial_lng = parse_dial_country(uri)
         if not dial_iso:

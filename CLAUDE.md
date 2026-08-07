@@ -331,6 +331,8 @@ Port 80 is open to all — it's a honeypot port. Port 443 can also be mapped to 
 | `SIP_THROTTLE_PER_SEC` | `10` | Per-IP knock emission throttle, currently token-bucket average per second |
 | `SIP_TRACE` | unset | Set to `true` to trace SIP sessions to stdout |
 | `SIP_TRACE_IP` | unset | Trace only sessions from this specific IP |
+| `SIP_CAPTURE_HEADERS` | unset | Set to `true` to log Via/Contact/User-Agent once per knock (low-noise, all IPs) without the full `SIP_TRACE` firehose. Emits `SIPTRACE … stage=headers …`; also honors `SIP_TRACE_IP`. Triage step for deciding whether to persist SIP header fields — see `sip_todo.md`. |
+| `SIP_CAPTURE_FILE` | `<DB_DIR>/sip_headers.log` | Durable file the header captures are appended to when `SIP_CAPTURE_HEADERS=true` (timestamped, survives journal rotation, one file per feeder). Set empty to disable the file and keep journal-only. |
 
 ### HTTP Honeypot
 

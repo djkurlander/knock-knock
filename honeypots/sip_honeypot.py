@@ -990,14 +990,26 @@ def process_sip_request(req, client_ip, allow_b2bua=False):
         _body = req.get('body') or ''
         _sdp_c = next((ln for ln in _body.splitlines() if ln.startswith('c=')), '')  # RTP media IP
         _sdp_m = next((ln for ln in _body.splitlines() if ln.startswith('m=')), '')  # RTP media port
+        # Session-ID (RFC 7989): a populated remote= is Cisco's SIP<->H.323 call-correlation marker,
+        # i.e. this SIP leg was stitched from another protocol (H.323 interworking). Surfaced live.
+        _sess = _header_first(headers, 'session-id')
         _hdr_line = (f"SIPTRACE sid={_header_first(headers, 'call-id')} ip={client_ip} "
                      f"stage=headers method={method} uri={uri[:200]!r} "
                      f"via={headers.get('via')!r} contact={headers.get('contact')!r} "
                      f"user_agent={_header_first(headers, 'user-agent')!r} "
+                     f"session_id={_sess!r} "
                      f"sdp_c={_sdp_c!r} sdp_m={_sdp_m!r}")
         print(_hdr_line, flush=True)          # live view: monitor forwards SIPTRACE → journal
         if CAPTURE_HEADERS:
             capture_headers_line(_hdr_line)   # durable per-feeder file (survives journal rotation)
+            # Full header set + body (durable file only, not forwarded live) — surfaces every header
+            # (Session-ID, Supported, Allow, Min-SE, x-cisco-*, Remote-Party-ID, P-Asserted-Identity,
+            # Reason, etc.) + SDP for H.323->SIP interworking detection and general forensics. repr()
+            # keeps it one grep-safe line; bounded so a pathological body can't bloat the file.
+            _full = (f"SIPTRACE sid={_header_first(headers, 'call-id')} ip={client_ip} "
+                     f"stage=fullmsg method={method} uri={uri[:200]!r} "
+                     f"headers={repr(headers)[:3000]} body={_body[:1200]!r}")
+            capture_headers_line(_full)
     if method == 'INVITE':
         dial_iso, dial_name, dial_e164, dial_lat, dial_lng = parse_dial_country(uri)
         if not dial_iso:

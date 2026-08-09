@@ -198,6 +198,30 @@ def client_ip(request: Request):
     return request.client.host if request.client else '?'
 
 
+# --- Access log (real client IP, not the Cloudflare edge) -------------------
+# uvicorn's built-in access log prints request.client.host, which behind Cloudflare
+# is the CF *edge* IP — useless for per-client attribution. We disable it
+# (access_log=False in uvicorn.run) and log here with the same CF-Connecting-IP-aware
+# client_ip() the visitor logging uses, so the journal and visitors.db agree on the
+# real client. Includes the query string (which the built-in log also drops from view).
+ACCESS_LOG = os.environ.get('API_ACCESS_LOG', 'true').lower() not in ('0', 'false', 'no')
+
+
+@app.middleware('http')
+async def access_log_middleware(request: Request, call_next):
+    response = await call_next(request)
+    if ACCESS_LOG:
+        try:
+            q = request.url.query
+            path = request.url.path + (f'?{q}' if q else '')
+            print(f'{client_ip(request)} - "{request.method} {path} '
+                  f'HTTP/{request.scope.get("http_version", "1.1")}" {response.status_code}',
+                  flush=True)
+        except Exception as e:  # never let logging break a request
+            print(f'access-log failed: {e}', file=sys.stderr)
+    return response
+
+
 def init_visitors_db():
     """Same DDL as main.py — a no-op when the dashboard has already created it."""
     with sqlite3.connect(VISITORS_DB) as conn:
@@ -470,4 +494,7 @@ if __name__ == '__main__':
     if os.environ.get('ENABLE_SSL', '').lower() == 'true':
         ssl_args = {'ssl_keyfile': os.environ.get('KNOCK_KEYFILE', 'certs/key.pem'),
                     'ssl_certfile': os.environ.get('KNOCK_CERTFILE', 'certs/cert.pem')}
-    uvicorn.run(app, host=API_LISTEN, port=API_PORT, proxy_headers=False, **ssl_args)
+    # access_log=False: our access_log_middleware logs the real CF-Connecting-IP client
+    # (uvicorn's built-in would log the Cloudflare edge IP). proxy_headers stays off since
+    # client_ip() handles CF-Connecting-IP/XFF itself.
+    uvicorn.run(app, host=API_LISTEN, port=API_PORT, proxy_headers=False, access_log=False, **ssl_args)

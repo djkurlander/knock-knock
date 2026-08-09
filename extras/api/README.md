@@ -150,6 +150,7 @@ contradicts the static sample.
 | `DB_DIR` | `data` | Location of `knock_knock.db` / `visitors.db` |
 | `LOG_VISITORS` | unset | `true` = log API requests to `visitors.db` |
 | `TRUST_PROXY_HEADERS` | `true` | Honor `CF-Connecting-IP` / `X-Forwarded-For` |
+| `API_ACCESS_LOG` | `true` | `true` = log one access line per request with the **real** client IP (via `client_ip()`) + query string; uvicorn's built-in access log is disabled so the journal doesn't show the Cloudflare edge IP |
 
 ## Deploy
 

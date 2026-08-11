@@ -90,24 +90,31 @@ def is_bot_ua(user_agent):
 # the blocklist feed downloads. Doc pages (/api, /docs, /redoc) stay counted as normal views.
 API_QUERY_PAGES = ('/check-asn', '/check-ranges', '/ip')
 
+
+def _since_epoch(days):
+    """Unix-epoch cutoff for the 'last N days' window. visitor_events.timestamp is a
+    Unix epoch int (int(time.time())), so a rolling-window cutoff is the natural fit."""
+    return int((datetime.now() - timedelta(days=days)).timestamp())
+
+
 def get_visitors(days):
     """Get visitors from the last N days, excluding specified IPs."""
     conn = sqlite3.connect(VISITORS_DB)
     conn.row_factory = sqlite3.Row
     cur = conn.cursor()
 
-    since = (datetime.now() - timedelta(days=days)).strftime('%Y-%m-%d')
+    since = _since_epoch(days)
 
     api_ph = ','.join('?' * len(API_QUERY_PAGES))
     cur.execute(f"""
         SELECT ip, city, region, country, iso_code, isp,
                MAX(referrer) as referrer, MAX(user_agent) as user_agent,
-               SUM(visit_count) as visit_count
-        FROM visitors
-        WHERE date >= ? AND page NOT LIKE '/static/ip-blocklist-%'
+               COUNT(*) as visit_count
+        FROM visitor_events
+        WHERE timestamp >= ? AND page NOT LIKE '/static/ip-blocklist-%'
               AND page NOT IN ({api_ph})
         GROUP BY ip
-        ORDER BY MAX(last_seen) DESC
+        ORDER BY MAX(timestamp) DESC
     """, (since, *API_QUERY_PAGES))
 
     visitors = [dict(row) for row in cur.fetchall()
@@ -120,10 +127,10 @@ def get_referrers_for_ip(days, ip):
     """Get unique referrers for a specific IP."""
     conn = sqlite3.connect(VISITORS_DB)
     cur = conn.cursor()
-    since = (datetime.now() - timedelta(days=days)).strftime('%Y-%m-%d')
+    since = _since_epoch(days)
     cur.execute("""
-        SELECT DISTINCT referrer FROM visitors
-        WHERE date >= ? AND ip = ? AND referrer IS NOT NULL AND referrer != ''
+        SELECT DISTINCT referrer FROM visitor_events
+        WHERE timestamp >= ? AND ip = ? AND referrer IS NOT NULL AND referrer != ''
     """, (since, ip))
     referrers = [row[0] for row in cur.fetchall()]
     conn.close()
@@ -162,15 +169,15 @@ def get_visitor_summary(days):
 
 def get_top_referrers(days, limit=40):
     """Get top referrers by total visit count for the last N days."""
-    cutoff = (date.today() - timedelta(days=days)).isoformat()
+    since = _since_epoch(days)
     conn = sqlite3.connect(VISITORS_DB)
     cur = conn.cursor()
     cur.execute("""
-        SELECT referrer, SUM(visit_count) as total
-        FROM visitors
-        WHERE date >= ? AND referrer IS NOT NULL AND referrer != ''
+        SELECT referrer, COUNT(*) as total
+        FROM visitor_events
+        WHERE timestamp >= ? AND referrer IS NOT NULL AND referrer != ''
         GROUP BY referrer ORDER BY total DESC LIMIT ?
-    """, [cutoff, limit])
+    """, [since, limit])
     rows = cur.fetchall()
     conn.close()
     return rows
@@ -179,16 +186,16 @@ def get_top_referrers(days, limit=40):
 def get_feed_consumers(days, limit=40):
     """Who downloaded the ip-blocklist data feeds — a separate population from the dashboard
     viewers above (these are scripts/SOCs pulling the threat list, not eyeballs on the globe)."""
-    since = (datetime.now() - timedelta(days=days)).strftime('%Y-%m-%d')
+    since = _since_epoch(days)
     conn = sqlite3.connect(VISITORS_DB)
     conn.row_factory = sqlite3.Row
     cur = conn.cursor()
     cur.execute("""
         SELECT ip, MAX(country) country, MAX(isp) isp,
                GROUP_CONCAT(DISTINCT REPLACE(REPLACE(page, '/static/ip-blocklist-', ''), '.txt', '')) files,
-               SUM(visit_count) grabs, MAX(last_seen) last_seen
-        FROM visitors
-        WHERE date >= ? AND page LIKE '/static/ip-blocklist-%'
+               COUNT(*) grabs, MAX(timestamp) last_seen
+        FROM visitor_events
+        WHERE timestamp >= ? AND page LIKE '/static/ip-blocklist-%'
         GROUP BY ip ORDER BY grabs DESC LIMIT ?
     """, (since, limit))
     rows = [dict(r) for r in cur.fetchall() if not is_excluded(r['ip'])]
@@ -200,16 +207,16 @@ def get_api_usage(days, limit=40):
     """knock-api query usage — another separate population from the dashboard viewers: these
     are orgs/scripts checking whether their own networks appear in the attacker data. Kept out
     of the dashboard visit count (get_visitors excludes API_QUERY_PAGES) and reported here."""
-    since = (datetime.now() - timedelta(days=days)).strftime('%Y-%m-%d')
+    since = _since_epoch(days)
     api_ph = ','.join('?' * len(API_QUERY_PAGES))
     conn = sqlite3.connect(VISITORS_DB)
     conn.row_factory = sqlite3.Row
     cur = conn.cursor()
     # Per-endpoint totals (calls + distinct callers)
     cur.execute(f"""
-        SELECT page, SUM(visit_count) calls, COUNT(DISTINCT ip) ips
-        FROM visitors
-        WHERE date >= ? AND page IN ({api_ph})
+        SELECT page, COUNT(*) calls, COUNT(DISTINCT ip) ips
+        FROM visitor_events
+        WHERE timestamp >= ? AND page IN ({api_ph})
         GROUP BY page ORDER BY calls DESC
     """, (since, *API_QUERY_PAGES))
     by_endpoint = [dict(r) for r in cur.fetchall()]
@@ -217,9 +224,9 @@ def get_api_usage(days, limit=40):
     cur.execute(f"""
         SELECT ip, MAX(country) country, MAX(isp) isp,
                GROUP_CONCAT(DISTINCT REPLACE(page, '/', '')) endpoints,
-               SUM(visit_count) calls, MAX(last_seen) last_seen
-        FROM visitors
-        WHERE date >= ? AND page IN ({api_ph})
+               COUNT(*) calls, MAX(timestamp) last_seen
+        FROM visitor_events
+        WHERE timestamp >= ? AND page IN ({api_ph})
         GROUP BY ip ORDER BY calls DESC LIMIT ?
     """, (since, *API_QUERY_PAGES, limit))
     callers = [dict(r) for r in cur.fetchall() if not is_excluded(r['ip'])]

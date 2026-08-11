@@ -223,21 +223,24 @@ async def access_log_middleware(request: Request, call_next):
 
 
 def init_visitors_db():
-    """Same DDL as main.py — a no-op when the dashboard has already created it."""
+    """Same append-only visitor_events DDL as main.py — a no-op when the dashboard
+    has already created it. The legacy daily-rollup `visitors` table is left untouched."""
     with sqlite3.connect(VISITORS_DB) as conn:
-        conn.execute("""CREATE TABLE IF NOT EXISTS visitors (
-            ip TEXT NOT NULL, date TEXT NOT NULL, page TEXT NOT NULL DEFAULT '/',
+        conn.execute("""CREATE TABLE IF NOT EXISTS visitor_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            timestamp INTEGER NOT NULL,
+            ip TEXT NOT NULL, page TEXT NOT NULL DEFAULT '/', query_string TEXT,
+            method TEXT, status_code INTEGER,
             city TEXT, region TEXT, country TEXT, iso_code TEXT, isp TEXT, asn INTEGER,
-            referrer TEXT, query_string TEXT, user_agent TEXT,
-            visit_count INTEGER NOT NULL DEFAULT 1,
-            first_seen DATETIME DEFAULT CURRENT_TIMESTAMP,
-            last_seen DATETIME DEFAULT CURRENT_TIMESTAMP,
-            PRIMARY KEY (ip, date, page))""")
+            referrer TEXT, user_agent TEXT)""")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_ve_ip_ts ON visitor_events(ip, timestamp)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_ve_page_ts ON visitor_events(page, timestamp)")
         conn.execute('PRAGMA journal_mode=WAL')
 
 
-def log_visitor(ip, user_agent, page, query_string, referrer=None):
-    """Same visitors table main.py writes — one row per IP per day per page."""
+def log_visitor(ip, user_agent, page, query_string, referrer=None,
+                method=None, status_code=None):
+    """Append one raw request event to visitor_events (same table main.py writes; no dedup)."""
     geo = {'city': None, 'region': None, 'country': None, 'iso': None,
            'isp': None, 'asn': None}
     try:
@@ -253,22 +256,17 @@ def log_visitor(ip, user_agent, page, query_string, referrer=None):
     try:
         with sqlite3.connect(VISITORS_DB) as conn:
             conn.execute("""
-                INSERT INTO visitors (ip, date, page, city, region, country, iso_code,
-                                      isp, asn, referrer, query_string, user_agent)
-                VALUES (?, date('now'), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT(ip, date, page) DO UPDATE SET
-                    visit_count = visit_count + 1,
-                    last_seen = CURRENT_TIMESTAMP,
-                    referrer = COALESCE(NULLIF(visitors.referrer, ''), excluded.referrer),
-                    query_string = COALESCE(NULLIF(visitors.query_string, ''), excluded.query_string),
-                    user_agent = COALESCE(NULLIF(visitors.user_agent, ''), excluded.user_agent)
-            """, (ip, page, geo['city'], geo['region'], geo['country'], geo['iso'],
-                  geo['isp'], geo['asn'], referrer, query_string, user_agent))
+                INSERT INTO visitor_events (timestamp, ip, page, query_string, method, status_code,
+                                            city, region, country, iso_code, isp, asn, referrer, user_agent)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (int(time.time()), ip, page, query_string, method, status_code,
+                  geo['city'], geo['region'], geo['country'], geo['iso'],
+                  geo['isp'], geo['asn'], referrer, user_agent))
     except sqlite3.Error as e:
         print(f'visitor log failed: {e}', file=sys.stderr)
 
 
-async def _record(user_agent, ip, endpoint, query, ms, referer=None):
+async def _record(user_agent, ip, endpoint, query, ms, referer=None, method=None):
     try:
         async with R.pipeline(transaction=False) as pipe:
             pipe.incr(f'knock:api:{endpoint}:count')
@@ -278,7 +276,8 @@ async def _record(user_agent, ip, endpoint, query, ms, referer=None):
         if prev is None or ms > float(prev):
             await R.set(f'knock:api:{endpoint}:ms_max', f'{ms:.1f}')
         if LOG_VISITORS:
-            await asyncio.to_thread(log_visitor, ip, user_agent, f'/{endpoint}', query, referer)
+            # record() only runs after a successful endpoint (errors raise first) → status 200.
+            await asyncio.to_thread(log_visitor, ip, user_agent, f'/{endpoint}', query, referer, method, 200)
     except Exception as e:
         print(f'record failed: {e}', file=sys.stderr)
 
@@ -289,7 +288,7 @@ def record(request, ip, endpoint, started, query=None):
     asyncio.get_running_loop().create_task(
         _record(request.headers.get('user-agent'), ip, endpoint,
                 query or request.url.query or None, ms,
-                request.headers.get('referer')))
+                request.headers.get('referer'), request.method))
 
 
 # --- Hit metadata (the only per-request DB work) ----------------------------
@@ -328,10 +327,11 @@ async def index(request: Request):
     Logged as '/api' (not '/') so landing hits register distinctly from the
     main dashboard homepage and roll up with knock-knock.net/api."""
     if LOG_VISITORS:
-        # Fire-and-forget, off the response path (matches record()/_record()).
+        # Fire-and-forget, off the response path (matches record()/_record()). Always a 200 here.
         asyncio.get_running_loop().create_task(asyncio.to_thread(
             log_visitor, client_ip(request), request.headers.get('user-agent'),
-            '/api', request.url.query or None, request.headers.get('referer')))
+            '/api', request.url.query or None, request.headers.get('referer'),
+            request.method, 200))
     from fastapi.responses import HTMLResponse
     try:
         return HTMLResponse((ROOT / 'api.html').read_text())

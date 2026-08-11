@@ -69,6 +69,8 @@ async def http_middleware(request: Request, call_next):
                 referrer,
                 request.url.path,
                 request.url.query or None,
+                request.method,
+                response.status_code,
             )
     return response
 
@@ -84,14 +86,20 @@ if LOG_VISITORS:
     visitor_asn_reader = geoip2.database.Reader(GEOIP_ASN_PATH) if os.path.exists(GEOIP_ASN_PATH) else None
 
     def init_visitors_db():
+        # Append-only raw request events. The legacy daily-rollup `visitors` table
+        # (deduped by ip/date/page) is left in place untouched — we just stop writing to it.
         conn = sqlite3.connect(VISITORS_DB_PATH, timeout=10)
         cur = conn.cursor()
         cur.execute("PRAGMA journal_mode=WAL")
         cur.fetchone()
-        cur.execute("""CREATE TABLE IF NOT EXISTS visitors (
+        cur.execute("""CREATE TABLE IF NOT EXISTS visitor_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            timestamp INTEGER NOT NULL,
             ip TEXT NOT NULL,
-            date TEXT NOT NULL,
             page TEXT NOT NULL DEFAULT '/',
+            query_string TEXT,
+            method TEXT,
+            status_code INTEGER,
             city TEXT,
             region TEXT,
             country TEXT,
@@ -99,13 +107,10 @@ if LOG_VISITORS:
             isp TEXT,
             asn INTEGER,
             referrer TEXT,
-            query_string TEXT,
-            user_agent TEXT,
-            visit_count INTEGER NOT NULL DEFAULT 1,
-            first_seen DATETIME DEFAULT CURRENT_TIMESTAMP,
-            last_seen DATETIME DEFAULT CURRENT_TIMESTAMP,
-            PRIMARY KEY (ip, date, page)
+            user_agent TEXT
         )""")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_ve_ip_ts ON visitor_events(ip, timestamp)")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_ve_page_ts ON visitor_events(page, timestamp)")
         conn.commit()
         conn.close()
 
@@ -127,22 +132,19 @@ if LOG_VISITORS:
             pass
         return geo
 
-    def log_visitor(ip, user_agent=None, referrer=None, page='/', query_string=None):
-        """Log a visitor — one row per IP per day per page."""
+    def log_visitor(ip, user_agent=None, referrer=None, page='/', query_string=None,
+                    method=None, status_code=None):
+        """Append one raw request event to visitor_events (no dedup)."""
         try:
             geo = get_visitor_geo(ip)
-            today = datetime.now().strftime('%Y-%m-%d')
             conn = sqlite3.connect(VISITORS_DB_PATH, timeout=10)
             conn.execute("""
-                INSERT INTO visitors (ip, date, page, city, region, country, iso_code, isp, asn, referrer, query_string, user_agent)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT(ip, date, page) DO UPDATE SET
-                    visit_count = visit_count + 1,
-                    last_seen = CURRENT_TIMESTAMP,
-                    referrer = COALESCE(NULLIF(visitors.referrer, ''), excluded.referrer),
-                    query_string = COALESCE(NULLIF(visitors.query_string, ''), excluded.query_string),
-                    user_agent = COALESCE(NULLIF(visitors.user_agent, ''), excluded.user_agent)
-            """, (ip, today, page, geo['city'], geo['region'], geo['country'], geo['iso'], geo['isp'], geo['asn'], referrer, query_string, user_agent))
+                INSERT INTO visitor_events (timestamp, ip, page, query_string, method, status_code,
+                                            city, region, country, iso_code, isp, asn, referrer, user_agent)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (int(time.time()), ip, page, query_string, method, status_code,
+                  geo['city'], geo['region'], geo['country'], geo['iso'], geo['isp'], geo['asn'],
+                  referrer, user_agent))
             conn.commit()
             conn.close()
         except Exception as e:

@@ -322,13 +322,15 @@ Port 80 is open to all — it's a honeypot port. Port 443 can also be mapped to 
 | Variable | Default | Purpose |
 |----------|---------|---------|
 | `SIP_PORT` | `5060` | Listening port (UDP + TCP) |
+| `SIP_OK_DIALPLAN` | `+,bare,00,011,9` | Which dialed forms the fake PBX answers (200) vs rejects (404). `all` (any resolvable E.164), `none`, or a comma list of dial-out prefixes prepended to the bare E.164 digits: `bare` (no prefix), `+`, or digit prefixes like `00`/`011`/`9`. A dial is accepted iff its canonicalized digits equal `prefix + computed-E.164`; numbers that resolve to no E.164 are always rejected. Knocks are recorded regardless. |
 | `SIP_REALM` | `asterisk` | SIP realm in authentication challenge |
 | `SIP_AUTH_CHALLENGE_MODE` | `mixed` | `always`, `never`, or `mixed` |
-| `SIP_OK_DIALPLAN` | `+,bare,00,011,9` | Which dialed forms the fake PBX answers (200) vs rejects (404). `all` (any resolvable E.164), `none`, or a comma list of dial-out prefixes prepended to the bare E.164 digits: `bare` (no prefix), `+`, or digit prefixes like `00`/`011`/`9`. A dial is accepted iff its canonicalized digits equal `prefix + computed-E.164`; numbers that resolve to no E.164 are always rejected. Knocks are recorded regardless. |
 | `SIP_MAX_MESSAGES_PER_CONN` | `6` | Max SIP messages per connection |
 | `SIP_CONN_TIMEOUT` | `20` | Connection timeout in seconds |
 | `SIP_DEDUP_WINDOW_SEC` | `60` | Seconds to suppress duplicate knocks from the same IP |
 | `SIP_THROTTLE_PER_SEC` | `10` | Per-IP knock emission throttle, currently token-bucket average per second |
+| `SIP_SERVER_HEADER` | `Asterisk PBX 18.0.0` | Optional identity string advertised in generated SIP `Server:` response headers; set empty to omit `Server:` |
+| `SIP_SDP_SESSION_NAME` | `Asterisk` | Optional SDP `s=` session name used in fake answered INVITE responses |
 | `SIP_TRACE` | unset | Set to `true` to trace SIP sessions to stdout |
 | `SIP_TRACE_IP` | unset | Trace only sessions from this specific IP |
 | `SIP_CAPTURE_HEADERS` | unset | Set to `true` to log the request-URI, Via, Contact, User-Agent, `Session-ID`, and SDP `c=`/`m=` lines once per knock (low-noise, all IPs) without the full `SIP_TRACE` firehose. Emits `SIPTRACE … stage=headers …` live; **also writes a `stage=fullmsg` line to `SIP_CAPTURE_FILE`** with the complete header set (`repr(headers)`) + bounded SDP body — for H.323→SIP interworking detection (a populated `Session-ID` `remote=` per RFC 7989 marks a leg stitched from H.323) and general forensics. Also honors `SIP_TRACE_IP`. See `sip_todo.md`. |

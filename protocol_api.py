@@ -94,6 +94,7 @@ class ProtocolOverride:
     display_formats: dict[str, list[list[dict]]] | None = None
     display_format_field: str | None = None
     default_display_format: str | None = None
+    honeypot_script: str | None = None
 
 
 def _fail(proto: str, msg: str) -> None:
@@ -105,6 +106,20 @@ def _check_ident(proto: str, value: str | None, label: str, *, optional: bool = 
         return
     if not isinstance(value, str) or not _IDENT_RE.fullmatch(value):
         _fail(proto, f"unsafe {label}: {value!r}")
+
+
+def _check_honeypot_script_override(proto: str, value: str | None) -> None:
+    if value is None:
+        return
+    if not isinstance(value, str) or not value.strip():
+        _fail(proto, f"unsafe honeypot_script override: {value!r}")
+    if not os.path.isabs(value) and ".." in value.split(os.sep):
+        _fail(proto, f"unsafe honeypot_script override: {value!r}")
+    path = value if os.path.isabs(value) else os.path.join(_REPO_DIR, value)
+    if not os.path.isfile(path):
+        _fail(proto, f"honeypot_script override is not a regular file: {value!r}")
+    if os.stat(path).st_mode & 0o002:
+        _fail(proto, f"honeypot_script override is world-writable: {value!r}")
 
 
 def _check_display_rows(proto: str, rows, label: str) -> None:
@@ -232,6 +247,7 @@ def validate_protocol_override(override: ProtocolOverride, existing: ProtocolDef
     proto = str(getattr(override, 'name', '')).upper()
     if not _PROTO_RE.fullmatch(proto):
         _fail(proto or '<missing>', f"override name must be uppercase alnum/underscore, got {override.name!r}")
+    _check_honeypot_script_override(proto, override.honeypot_script)
     if override.badge is not None:
         if not isinstance(override.badge, str) or not (1 <= len(override.badge) <= 8):
             _fail(proto, f"badge must be 1-8 characters, got {override.badge!r}")
@@ -268,6 +284,8 @@ def validate_protocol_override(override: ProtocolOverride, existing: ProtocolDef
 
 def apply_protocol_override(definition: ProtocolDefinition, override: ProtocolOverride) -> ProtocolDefinition:
     patches = {}
+    if override.honeypot_script is not None:
+        patches['honeypot_script'] = override.honeypot_script
     if override.badge is not None:
         patches['badge'] = override.badge
     if override.badge_color is not None:

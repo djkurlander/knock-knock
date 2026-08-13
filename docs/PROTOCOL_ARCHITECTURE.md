@@ -342,8 +342,8 @@ Do not open a separate SQLite connection inside a DB hook.
 ## Local Overrides
 
 `extensions.py` can also define `OVERRIDES`, a list of `ProtocolOverride`
-objects that patch display presentation for existing protocols without editing
-tracked files.
+objects that patch selected local behavior or display presentation for existing
+protocols without editing tracked files.
 
 ```python
 from protocol_api import ProtocolOverride
@@ -365,6 +365,7 @@ OVERRIDES = [
 
 Patchable fields:
 
+- `honeypot_script`
 - `badge`
 - `badge_color`
 - `ui_order`
@@ -373,8 +374,24 @@ Patchable fields:
 - `display_format_field`
 - `default_display_format`
 
-Structural fields such as `proto_id`, `honeypot_script`, `columns`,
-`knock_table`, option mappings, and hooks cannot be overridden.
+`honeypot_script` lets a local/private checkout replace a listener while
+retaining the same protocol ID, database schema, hooks, and UI metadata:
+
+```python
+from protocol_api import ProtocolOverride
+
+EXTENSIONS = []
+
+OVERRIDES = [
+    ProtocolOverride(
+        name="SIP",
+        honeypot_script="/opt/knock-knock-local/honeypots/sip_honeypot.py",
+    ),
+]
+```
+
+Other structural fields such as `proto_id`, `columns`, `knock_table`, option
+mappings, and hooks cannot be overridden.
 
 ## Safety Rules
 
@@ -431,4 +448,3 @@ Built-ins are declared in `protocols/registry.py`. At the time of writing:
 - `MODB`
 - `S7`
 - `SNMP`
-

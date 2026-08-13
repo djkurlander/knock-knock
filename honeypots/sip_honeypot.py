@@ -42,6 +42,8 @@ from common import (
 
 SIP_PORT = int(os.environ.get('SIP_PORT', '5060'))
 SIP_REALM = os.environ.get('SIP_REALM', 'asterisk')
+SIP_SERVER_HEADER = os.environ.get('SIP_SERVER_HEADER', 'Asterisk PBX 18.0.0')
+SIP_SDP_SESSION_NAME = os.environ.get('SIP_SDP_SESSION_NAME', 'Asterisk')
 SIP_MAX_MESSAGES_PER_CONN = max(1, int(os.environ.get('SIP_MAX_MESSAGES_PER_CONN', '6')))
 SIP_CONN_TIMEOUT = max(2.0, float(os.environ.get('SIP_CONN_TIMEOUT', '20')))
 TRACE_ENABLED = os.environ.get('SIP_TRACE', '0').lower() not in ('0', 'false', 'no')
@@ -903,7 +905,7 @@ def build_fake_sdp():
     return (
         f'v=0\r\n'
         f'o=- {session_id} {session_id} IN IP4 {ip}\r\n'
-        f's=Asterisk\r\n'
+        f's={SIP_SDP_SESSION_NAME}\r\n'
         f'c=IN IP4 {ip}\r\n'
         f't=0 0\r\n'
         f'm=audio 0 RTP/AVP 0 8\r\n'
@@ -930,8 +932,9 @@ def build_response(req, code, reason, extra_headers=None, body=None):
         f'To: {to_h}',
         f'Call-ID: {call_id}',
         f'CSeq: {cseq}',
-        'Server: Asterisk PBX 18.0.0',
     ]
+    if SIP_SERVER_HEADER:
+        lines.append(f'Server: {SIP_SERVER_HEADER}')
     if body:
         lines.append('Content-Type: application/sdp')
     lines.append(f'Content-Length: {len(body_bytes)}')

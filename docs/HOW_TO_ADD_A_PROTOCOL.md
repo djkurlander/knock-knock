@@ -293,8 +293,8 @@ Fix validation errors before starting monitor/web in production mode.
 
 ## Customizing an Existing Protocol
 
-To change the display presentation of an existing registered protocol without
-editing tracked files, use `OVERRIDES` in `extensions.py`. Because
+To customize an existing registered protocol without editing tracked files, use
+`OVERRIDES` in `extensions.py`. Because
 `extensions.py` is gitignored, customizations survive `git pull` without
 conflicts.
 
@@ -319,15 +319,36 @@ OVERRIDES = [
 `display_formats` is merged — only the format names you list are added or
 replaced; all other existing formats are kept. The patchable fields are:
 
+- `honeypot_script` — run a local/private replacement script for an existing
+  protocol while keeping the same protocol ID, database schema, and UI wiring
 - `badge` and `badge_color` — rename or recolor the protocol badge
 - `ui_order` — reposition the protocol in the UI
 - `display_fields` — replace the full display field list
 - `display_formats` — merge additional or replacement named formats
 - `display_format_field` and `default_display_format` — change format selection
 
-Structural fields (`proto_id`, `honeypot_script`, `columns`, `knock_table`,
-etc.) cannot be overridden. Overrides only work on protocols in the registry
-(`protocols/registry.py` or your own `EXTENSIONS`).
+Other structural fields (`proto_id`, `columns`, `knock_table`, hooks, option
+mappings, etc.) cannot be overridden. Overrides only work on protocols in the
+registry (`protocols/registry.py` or your own `EXTENSIONS`).
+
+For example, a private checkout can replace the SIP listener without creating a
+new protocol:
+
+```python
+from protocol_api import ProtocolOverride
+
+EXTENSIONS = []
+
+OVERRIDES = [
+    ProtocolOverride(
+        name="SIP",
+        honeypot_script="/opt/knock-knock-local/honeypots/sip_honeypot.py",
+    ),
+]
+```
+
+The replacement script must emit normal knock JSON for the same protocol, e.g.
+`{"type": "KNOCK", "proto": "SIP", ...}`.
 
 Restart both monitor and web after changing `extensions.py`.
 

@@ -33,12 +33,17 @@ DEFINITION = ProtocolDefinition(
     badge_color="#ff7a00",
     ui_order=60,
     honeypot_script="honeypots/sip_honeypot.py",
+    option_args={
+        "TLS": ["--ssl"],
+    },
     description="SIP allows humans and bots to make phone calls.",
     default_enabled_entries=["SIP"],
     supports_user_panel=False,
     supports_pass_panel=False,
     knock_table="knocks_sip",
     columns=[
+        Column("sip_port",              "INTEGER"),
+        Column("sip_transport",         "TEXT"),
         Column("sip_method",            "TEXT"),
         Column("sip_dial_string",       "TEXT"),
         Column("sip_dial_number",       "TEXT"),

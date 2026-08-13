@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import argparse
 import base64
 import json
 import os
@@ -6,6 +7,7 @@ import random
 import re
 import socket
 import sqlite3
+import ssl
 import string
 import sys
 import threading
@@ -36,11 +38,14 @@ from common import (
     PerIpTokenBucket,
     create_dualstack_tcp_listener,
     create_dualstack_udp_listener,
+    ensure_self_signed_server_cert,
     is_blocked,
     normalize_ip,
 )
 
 SIP_PORT = int(os.environ.get('SIP_PORT', '5060'))
+SIP_TLS_CERT_PATH = os.environ.get('SIP_TLS_CERT_PATH', 'data/sip_tls.crt')
+SIP_TLS_KEY_PATH = os.environ.get('SIP_TLS_KEY_PATH', 'data/sip_tls.key')
 SIP_REALM = os.environ.get('SIP_REALM', 'asterisk')
 SIP_SERVER_HEADER = os.environ.get('SIP_SERVER_HEADER', 'Asterisk PBX 18.0.0')
 SIP_SDP_SESSION_NAME = os.environ.get('SIP_SDP_SESSION_NAME', 'Asterisk')
@@ -960,7 +965,7 @@ def emit_knock(client_ip, extra=None, dedup_key=None):
     print(json.dumps(knock), flush=True)
 
 
-def process_sip_request(req, client_ip, allow_b2bua=False):
+def process_sip_request(req, client_ip, client_port=None, transport=None, allow_b2bua=False):
     headers = req.get('headers', {})
     method = req.get('method', 'UNKNOWN')
     uri = req.get('uri', '')
@@ -974,6 +979,8 @@ def process_sip_request(req, client_ip, allow_b2bua=False):
     dial_string = re.sub(r'^sips?:', '', uri).split('@')[0] if uri else ''
     common = {
         'sip_method': method,
+        'sip_port': SIP_PORT,
+        'sip_transport': transport or '',
         'sip_dial_string': dial_string,
         'sip_call_id': _header_first(headers, 'call-id') or '',
         'sip_cseq': _header_first(headers, 'cseq') or '',
@@ -1159,7 +1166,7 @@ def udp_loop(sock):
             if HAVE_B2BUA and sip_b2bua.handle_in_dialog(req, client_ip, udp_send):
                 trace(session_id, client_ip, 'udp_b2bua_in_dialog', method=req.get('method'))
                 continue
-            result = process_sip_request(req, client_ip, allow_b2bua=True)
+            result = process_sip_request(req, client_ip, client_port=addr[1], transport='udp', allow_b2bua=True)
             if result[0] == 'INVITE_B2BUA':
                 threading.Thread(
                     target=_start_b2bua_or_fake,
@@ -1221,7 +1228,7 @@ def recv_one_sip_message(sock, timeout):
     return None, 'incomplete_timeout', len(buf)
 
 
-def handle_tcp_client(client_sock, client_ip):
+def handle_tcp_client(client_sock, client_ip, transport='tcp'):
     session_id = uuid.uuid4().hex[:8]
     started_at = time.time()
     message_count = 0
@@ -1251,7 +1258,7 @@ def handle_tcp_client(client_sock, client_ip):
                 trace(session_id, client_ip, 'tcp_parse_invalid', index=message_count)
                 break
             trace(session_id, client_ip, 'tcp_parsed', index=message_count, method=req.get('method'), uri=req.get('uri'))
-            result = process_sip_request(req, client_ip)
+            result = process_sip_request(req, client_ip, client_port=client_sock.getpeername()[1], transport=transport)
             if result[0] == 'INVITE_FAKE':
                 try:
                     _send_invite_sequence(result[1], client_sock.sendall)
@@ -1293,7 +1300,7 @@ def handle_tcp_client(client_sock, client_ip):
         )
 
 
-def tcp_loop(sock):
+def tcp_loop(sock, ssl_context=None):
     while True:
         client, addr = sock.accept()
         client_ip = normalize_ip(addr[0])
@@ -1304,22 +1311,62 @@ def tcp_loop(sock):
             except Exception:
                 pass
             continue
-        threading.Thread(target=handle_tcp_client, args=(client, client_ip), daemon=True).start()
+        if ssl_context:
+            try:
+                client = ssl_context.wrap_socket(client, server_side=True)
+            except (ssl.SSLError, OSError):
+                trace(f"t{uuid.uuid4().hex[:8]}", client_ip, 'tls_handshake_failed')
+                try:
+                    client.close()
+                except Exception:
+                    pass
+                continue
+        transport = 'tls' if ssl_context else 'tcp'
+        threading.Thread(target=handle_tcp_client, args=(client, client_ip, transport), daemon=True).start()
 
 
-def start_honeypot():
+def start_honeypot(use_ssl=False, cert_path=None, key_path=None):
     _seed_dial_cache_from_db()
     if HAVE_B2BUA and sip_b2bua.capturing():
         sip_dial_profile.ensure_table()
-    udp_sock = create_dualstack_udp_listener(SIP_PORT)
-
     tcp_sock = create_dualstack_tcp_listener(SIP_PORT, backlog=200)
 
-    print(f'🚀 SIP Honeypot Active on Port {SIP_PORT} (UDP+TCP IPv4+IPv6). Collecting knocks...', flush=True)
+    ssl_context = None
+    if use_ssl:
+        cert_path = cert_path or SIP_TLS_CERT_PATH
+        key_path = key_path or SIP_TLS_KEY_PATH
+        ensure_self_signed_server_cert(
+            cert_path=cert_path,
+            key_path=key_path,
+            subject='/CN=localhost/O=Asterisk/C=US',
+            days=825,
+        )
+        ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        ssl_context.load_cert_chain(certfile=cert_path, keyfile=key_path)
 
-    threading.Thread(target=udp_loop, args=(udp_sock,), daemon=True).start()
-    tcp_loop(tcp_sock)
+    if use_ssl:
+        print(f'🚀 SIP/TLS Honeypot Active on Port {SIP_PORT} (TCP/TLS IPv4+IPv6). Collecting knocks...', flush=True)
+    else:
+        udp_sock = create_dualstack_udp_listener(SIP_PORT)
+        print(f'🚀 SIP Honeypot Active on Port {SIP_PORT} (UDP+TCP IPv4+IPv6). Collecting knocks...', flush=True)
+        threading.Thread(target=udp_loop, args=(udp_sock,), daemon=True).start()
+    tcp_loop(tcp_sock, ssl_context=ssl_context)
+
+
+def main():
+    global SIP_PORT
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--port', type=int, default=SIP_PORT)
+    parser.add_argument('--ssl', dest='ssl', action='store_true', default=None)
+    parser.add_argument('--no-ssl', dest='ssl', action='store_false')
+    parser.add_argument('--ssl-cert', default=SIP_TLS_CERT_PATH)
+    parser.add_argument('--ssl-key', default=SIP_TLS_KEY_PATH)
+    args = parser.parse_args()
+    SIP_PORT = args.port
+
+    use_ssl = args.ssl if args.ssl is not None else (SIP_PORT == 5061)
+    start_honeypot(use_ssl=use_ssl, cert_path=args.ssl_cert, key_path=args.ssl_key)
 
 
 if __name__ == '__main__':
-    start_honeypot()
+    main()

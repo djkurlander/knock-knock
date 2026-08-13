@@ -230,7 +230,7 @@ Port 80 is open to all — it's a honeypot port. Port 443 can also be mapped to 
 | `REDIS_HOST` | `localhost` | Redis server hostname (set to `redis` in Docker) |
 | `REDIS_DB` | `0` | Redis database index |
 | `DB_DIR` | `data` | Directory for SQLite databases and caches |
-| `ENABLED_PROTOCOLS` | all protocols | Comma-separated list of active protocols with optional port overrides, e.g. `SSH,SMTP:25,SMTP:587,HTTP:80,HTTP:443`. Empty string = ingest-only mode (no local honeypots). |
+| `ENABLED_PROTOCOLS` | all protocols | Comma-separated list of active protocols with optional port overrides and declared protocol options, e.g. `SSH,SMTP:25,SMTP:587,HTTP:80,HTTP:443,SIP:5061:TLS`. Empty string = ingest-only mode (no local honeypots). |
 | `DEFAULT_HOSTNAME` | unset | Canonical hostname all protocols advertise by default (an FQDN, e.g. `mail.corp.example`); each renders its own form (SMTP uses it as-is, SMB derives the short NetBIOS name). Per-protocol vars (`SMTP_HOSTNAME`, `SMB_SERVER_NAME`) override it; `PROTOCOL_VAR=auto` forces that protocol's built-in default instead. Also added to the self-redaction identity so it's scrubbed from captured fields. **Unset = each protocol's prior default** (SMTP reverse-DNS, SMB `WIN-SRV####`). **Docker (bridge networking only):** set this — bridge in-container discovery can't recover the advertised hostname — and also set `REDACT_SELF_IPS` (it can't see the public IP either). Under **host networking** (`docker-compose.host.yml`, the default in `.env.example`) the container sees the host's real IP/PTR, so discovery works like a bare-metal install and both are optional. |
 
 ### Web Server (`main.py`)
@@ -321,7 +321,9 @@ Port 80 is open to all — it's a honeypot port. Port 443 can also be mapped to 
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `SIP_PORT` | `5060` | Listening port (UDP + TCP) |
+| `SIP_PORT` | `5060` | Listening port (UDP + TCP for cleartext SIP; TCP/TLS only when SSL mode is enabled). `ENABLED_PROTOCOLS=SIP:5061` auto-enables TLS by convention; `SIP:5061:TLS` is also accepted. |
+| `SIP_TLS_CERT_PATH` | `data/sip_tls.crt` | TLS certificate path for SIP/TLS; auto-generated if missing. |
+| `SIP_TLS_KEY_PATH` | `data/sip_tls.key` | TLS key path for SIP/TLS; auto-generated if missing. |
 | `SIP_OK_DIALPLAN` | `+,bare,00,011,9` | Which dialed forms the fake PBX answers (200) vs rejects (404). `all` (any resolvable E.164), `none`, or a comma list of dial-out prefixes prepended to the bare E.164 digits: `bare` (no prefix), `+`, or digit prefixes like `00`/`011`/`9`. A dial is accepted iff its canonicalized digits equal `prefix + computed-E.164`; numbers that resolve to no E.164 are always rejected. Knocks are recorded regardless. |
 | `SIP_REALM` | `asterisk` | SIP realm in authentication challenge |
 | `SIP_AUTH_CHALLENGE_MODE` | `mixed` | `always`, `never`, or `mixed` |
@@ -410,7 +412,8 @@ knocks_tnet(... username, password)
 knocks_ftp(... username, password)
 knocks_smtp(... username, password, smtp_stage, smtp_mail_from, smtp_rcpt_to, subject, body_id)  -- body_id → smtp_body_intel.id (full body stored deduped there, not inline)
 knocks_sip(... sip_method, sip_dial_string, sip_dial_number, sip_call_id, sip_cseq,
-           sip_extension, sip_dial_country, sip_dial_country_name, sip_dial_lat, sip_dial_lng)
+           sip_port, sip_transport, sip_extension, sip_dial_country, sip_dial_country_name,
+           sip_dial_lat, sip_dial_lng)
 knocks_smb(... username, smb_action, smb_share, smb_file, smb_version, smb_domain, smb_host)
 knocks_rdp(... username, rdp_source, domain)
 knocks_http(... http_method, http_path, http_user_agent, http_body)

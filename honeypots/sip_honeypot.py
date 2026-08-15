@@ -917,6 +917,23 @@ def build_fake_sdp():
     )
 
 
+def _dialog_contact(req, code):
+    """Contact header for dialog-establishing INVITE responses, else [].
+
+    RFC 3261 §13.3.1.4 defers a 2xx to §12.1.1: "The UAS MUST add a Contact header
+    field to the response" — it is the address the peer sends the ACK and BYE to, so
+    a 200 without it leaves the dialog unusable. On the fake-answer path we *are* the
+    UAS (we generate the 2xx rather than forwarding one), so this applies to us. The
+    180/183 carry a To-tag and thus open an early dialog, so they get one too.
+    Non-2xx finals (e.g. the 404 reject path) need none.
+    """
+    if code not in (180, 183, 200) or (req.get('method') or '').upper() != 'INVITE':
+        return []
+    # §12.1.1: a SIPS Request-URI requires a SIPS Contact.
+    scheme = 'sips' if (req.get('uri') or '').lower().startswith('sips:') else 'sip'
+    return [f'Contact: <{scheme}:{advertised_ip()}:{SIP_PORT}>']
+
+
 def build_response(req, code, reason, extra_headers=None, body=None):
     headers = req.get('headers', {})
     via = _header_first(headers, 'via') or f'SIP/2.0/UDP 0.0.0.0:5060;branch=z9hG4bK{_sip_tag(12)}'
@@ -938,6 +955,7 @@ def build_response(req, code, reason, extra_headers=None, body=None):
     ]
     if SIP_SERVER_HEADER:
         lines.append(f'Server: {SIP_SERVER_HEADER}')
+    lines.extend(_dialog_contact(req, code))
     if body:
         lines.append('Content-Type: application/sdp')
     lines.append(f'Content-Length: {len(body_bytes)}')

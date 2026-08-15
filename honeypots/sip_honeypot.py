@@ -36,6 +36,7 @@ except ImportError:
 
 from common import (
     PerIpTokenBucket,
+    advertised_ip,
     create_dualstack_tcp_listener,
     create_dualstack_udp_listener,
     ensure_self_signed_server_cert,
@@ -902,10 +903,7 @@ def choose_challenge():
 
 def build_fake_sdp():
     """Minimal SDP body for faking a ringing/answered call."""
-    try:
-        ip = socket.gethostbyname(socket.gethostname())
-    except Exception:
-        ip = '0.0.0.0'
+    ip = advertised_ip()
     session_id = random.randint(1000000000, 9999999999)
     return (
         f'v=0\r\n'

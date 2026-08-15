@@ -124,6 +124,31 @@ def advertised_host(protocol_env):
     return v or os.environ.get('DEFAULT_HOSTNAME', '').strip()
 
 
+def advertised_ip(env_var='SIP_PUBLIC_IP'):
+    """The IP this host should advertise to a peer (SDP ``c=``, SIP ``Contact``, etc).
+
+    Precedence: the configured env var -> the egress-interface address -> '0.0.0.0'.
+    Never derive this from the request: a peer-supplied host is attacker-controlled,
+    and ``gethostbyname(gethostname())`` yields loopback (127.0.1.1) on a typical
+    Debian host, which advertises an unusable media/signalling address.
+
+    The UDP ``connect()`` sends no packet — it just asks the routing table which local
+    address would be used to reach the internet, which is correct on multi-homed hosts.
+    """
+    configured = os.environ.get(env_var, '').strip()
+    if configured:
+        return configured
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        try:
+            s.connect(('8.8.8.8', 80))
+            return s.getsockname()[0]
+        finally:
+            s.close()
+    except Exception:
+        return '0.0.0.0'
+
+
 def netbios_name(name):
     """NetBIOS short name from an FQDN: first DNS label, <=15 chars, upper-cased."""
     return name.split('.')[0][:15].upper()

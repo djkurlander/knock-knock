@@ -1139,15 +1139,40 @@ def process_sip_request(req, client_ip, client_port=None, transport=None, allow_
     return 200, 'OK', None
 
 
+# Response flow and inter-event delays, both measured from the `dial_profile` corpus
+# (246 real far-end targets our live-profiling calls actually dialed):
+#   * a 180 appears in 239/246 (97%) of real calls, so omitting it is the anomaly;
+#   * when both are present, 180 precedes 183 in 90/90 cases — the reverse never occurs;
+#   * the 180 carries SDP in 0/239 — early media rides the 183, and the 200 answers it.
+# Delays are p10..p90 of the measured gap between consecutive responses, except the 200,
+# whose real tail runs to ~23 s (p90) on slow-ringing destinations; we cut it at 6 s so a
+# fake answer does not stall the caller for half a minute.
+_FAKE_FLOW = (
+    (100, 'Trying',           None,  (0.050, 0.090)),
+    (180, 'Ringing',          None,  (0.500, 0.900)),
+    (183, 'Session Progress', 'sdp', (0.600, 3.100)),
+    (200, 'OK',               'sdp', (0.700, 6.000)),
+)
+
+
 def _send_invite_sequence(req, send_fn, send_trying=True):
-    """Send 100 Trying → 183 Session Progress → 200 OK with realistic delays."""
+    """Send 100 → 180 → 183 → 200 with measured delays (see _FAKE_FLOW)."""
     sdp = build_fake_sdp()
-    if send_trying:
-        send_fn(build_response(req, 100, 'Trying'))
-    time.sleep(random.uniform(0.05, 0.2))
-    send_fn(build_response(req, 183, 'Session Progress', body=sdp))
-    time.sleep(random.uniform(2.0, 5.0))
-    send_fn(build_response(req, 200, 'OK', body=sdp))
+    # Pin the To-tag once: every response in one INVITE transaction must carry the same
+    # tag. Re-deriving it per response (build_response appends a fresh random tag when the
+    # request has none) yields a different dialog identifier on each response — invalid,
+    # and an obvious tell.
+    flow_req = dict(req)
+    headers = {k: list(v) for k, v in (req.get('headers') or {}).items()}
+    to_h = _header_first(headers, 'to') or '<sip:unknown@unknown>'
+    if not re.search(r'(^|;)\s*tag=', to_h, flags=re.IGNORECASE):
+        headers['to'] = [f'{to_h};tag={_sip_tag(10)}']
+    flow_req['headers'] = headers
+    for code, reason, body_kind, (lo, hi) in _FAKE_FLOW:
+        if code == 100 and not send_trying:
+            continue
+        time.sleep(random.uniform(lo, hi))
+        send_fn(build_response(flow_req, code, reason, body=sdp if body_kind else None))
 
 
 def _start_b2bua_or_fake(req, client_ip, addr, sock, bridge_plan):

@@ -42,3 +42,9 @@ fleet*.txt
 
 # Local protocol customizations (never tracked upstream)
 extensions.py
+
+# Per-deployment SEO artifacts — domain-specific, not shipped upstream.
+# The /sitemap.xml and /robots.txt routes serve these if present (graceful 404 if not),
+# so each deployment brings its own or serves neither. knock-knock.net keeps its local copies.
+sitemap.xml
+robots.txt

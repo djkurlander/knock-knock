@@ -238,6 +238,8 @@ Port 80 is open to all — it's a honeypot port. Port 443 can also be mapped to 
 | Variable | Default | Purpose |
 |----------|---------|---------|
 | `ENABLE_SSL` | unset | Set to `true` to enable HTTPS |
+| `ENABLE_API` | unset (off) | Set to `true` to serve the `/api` docs page and show its About-panel link. Enable only where the `knock-api` service (`extras/api/`, its own systemd unit, not in Docker) is actually running — otherwise the route 404s and the link is hidden so nothing advertises an unconfigured feature. |
+| `ENABLE_BLOCKLIST` | unset (off) | Set to `true` to serve the `/blocklist` feed page and show its About-panel link. Enable only where the hourly blocklist-feed cron (`extras/ip-blocklist/`) is generating the files under `static/`; otherwise the route 404s and the link is hidden. |
 | `WEB_PORT` | `8080` | Port the web UI listens on |
 | `WEB_LISTEN` | `0.0.0.0` | Interface the web UI binds to |
 | `LOG_VISITORS` | unset | Set to `true` to log dashboard visitors to `visitors.db` |

@@ -11,6 +11,10 @@ from fastapi.staticfiles import StaticFiles
 from constants import (PROTO, PROTO_NAME, PROTOCOL_META, DEFAULT_ENABLED_PROTOCOLS,
                        sort_protocols_for_ui, require_schema_version)
 
+def _flag(name):
+    """True iff env var `name` is set to one of 1/true/yes/on (case-insensitive)."""
+    return os.environ.get(name, '').strip().lower() in ('1', 'true', 'yes', 'on')
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     print("🚀 Knock-Knock Web Active...", flush=True)
@@ -21,7 +25,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 logger = logging.getLogger("uvicorn.error")
-LOG_UNHANDLED_HTTP = os.environ.get('LOG_UNHANDLED_HTTP', '').lower() == 'true'
+LOG_UNHANDLED_HTTP = _flag('LOG_UNHANDLED_HTTP')
 EXCLUDE_PANELS = set(p.strip().upper() for p in os.environ.get('EXCLUDE_PANELS', '').split(',') if p.strip())
 TRUST_PROXY_HEADERS = os.environ.get('TRUST_PROXY_HEADERS', 'true').lower() not in ('0', 'false', 'no')
 WS_MAX_CONNECTIONS  = int(os.environ.get('WS_MAX_CONNECTIONS', '0'))  # 0 = unlimited
@@ -75,7 +79,7 @@ async def http_middleware(request: Request, call_next):
     return response
 
 # --- Visitor Logging (opt-in via LOG_VISITORS=true) ---
-LOG_VISITORS = os.environ.get('LOG_VISITORS', '').lower() == 'true'
+LOG_VISITORS = _flag('LOG_VISITORS')
 
 if LOG_VISITORS:
     VISITORS_DB_PATH = os.environ.get('DB_DIR', 'data') + '/visitors.db'
@@ -522,10 +526,23 @@ def _read_file(path: str) -> str:
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail="Not found")
 
+# Optional public features, default OFF. Set the flag only where the feature's external
+# setup exists (the knock-api service; the blocklist-feed cron). Off => the route 404s and
+# the dashboard's About link is hidden, so we never advertise a feature we can't serve.
+ENABLE_API = _flag('ENABLE_API')
+ENABLE_BLOCKLIST = _flag('ENABLE_BLOCKLIST')
+# Hide the About links for disabled features. Blocks are tagged class="feat-<name>".
+_HIDE_CSS = ''.join(f'.feat-{f}{{display:none}}'
+                    for f, on in (('api', ENABLE_API), ('blocklist', ENABLE_BLOCKLIST)) if not on)
+
+def _read_page(path: str) -> str:
+    html = _read_file(path)
+    return html.replace('</head>', f'<style>{_HIDE_CSS}</style></head>', 1) if _HIDE_CSS else html
+
 @app.head("/")
 @app.get("/")
 async def get():
-    return HTMLResponse(content=_read_file("index.html"), headers={"Cache-Control": "no-cache"})
+    return HTMLResponse(content=_read_page("index.html"), headers={"Cache-Control": "no-cache"})
 
 @app.head("/internet-background-radiation")
 @app.get("/internet-background-radiation")
@@ -533,25 +550,27 @@ async def get_ibr():
     return HTMLResponse(content=_read_file("internet-background-radiation.html"), headers={"Cache-Control": "no-cache"})
 
 
-@app.head("/blocklist")
-@app.get("/blocklist")
-async def get_blocklist_page():
-    return HTMLResponse(content=_read_file("blocklist.html"), headers={"Cache-Control": "no-cache"})
+if ENABLE_BLOCKLIST:
+    @app.head("/blocklist")
+    @app.get("/blocklist")
+    async def get_blocklist_page():
+        return HTMLResponse(content=_read_file("blocklist.html"), headers={"Cache-Control": "no-cache"})
 
-@app.head("/api")
-@app.get("/api")
-async def get_api_page():
-    return HTMLResponse(content=_read_file("api.html"), headers={"Cache-Control": "no-cache"})
+if ENABLE_API:
+    @app.head("/api")
+    @app.get("/api")
+    async def get_api_page():
+        return HTMLResponse(content=_read_file("api.html"), headers={"Cache-Control": "no-cache"})
 
 @app.head("/summary")
 @app.get("/summary")
 async def get_summary():
-    return HTMLResponse(content=_read_file("summary.html"), headers={"Cache-Control": "no-cache"})
+    return HTMLResponse(content=_read_page("summary.html"), headers={"Cache-Control": "no-cache"})
 
 @app.head("/summary.html")
 @app.get("/summary.html")
 async def get_summary_html():
-    return HTMLResponse(content=_read_file("summary.html"), headers={"Cache-Control": "no-cache"})
+    return HTMLResponse(content=_read_page("summary.html"), headers={"Cache-Control": "no-cache"})
 
 @app.head("/sitemap.xml")
 @app.get("/sitemap.xml")
@@ -565,7 +584,7 @@ async def get_robots():
 
 if __name__ == "__main__":
     ssl_args = {}
-    if os.environ.get('ENABLE_SSL', '').lower() == 'true':
+    if _flag('ENABLE_SSL'):
         ssl_args = {
             'ssl_keyfile': os.environ.get('KNOCK_KEYFILE', 'certs/key.pem'),
             'ssl_certfile': os.environ.get('KNOCK_CERTFILE', 'certs/cert.pem'),

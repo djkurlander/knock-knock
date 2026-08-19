@@ -6,10 +6,20 @@ import threading
 import time
 
 import redis
+from redis.retry import Retry
+from redis.backoff import NoBackoff
 
 
 def get_redis_client():
-    return redis.Redis(host=os.environ.get('REDIS_HOST', 'localhost'), port=6379, db=int(os.environ.get('REDIS_DB', '0')), decode_responses=True)
+    return redis.Redis(
+        host=os.environ.get('REDIS_HOST', 'localhost'),
+        port=6379,
+        db=int(os.environ.get('REDIS_DB', '0')),
+        decode_responses=True,
+        # Fail fast when Redis is unreachable.
+        socket_connect_timeout=1.0,
+        retry=Retry(NoBackoff(), 1),
+    )
 
 
 _redis = get_redis_client()

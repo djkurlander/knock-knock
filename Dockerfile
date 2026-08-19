@@ -8,7 +8,7 @@ WORKDIR /app
 # sync when adding root modules. ip_ban/dbtool/stats are management CLIs (run via `docker compose
 # exec`), not imported at runtime, but shipped for operational parity with systemd installs.
 COPY monitor.py main.py constants.py protocol_api.py self_redaction.py ip_ban.py dbtool.py stats.py \
-     index.html summary.html internet-background-radiation.html blocklist.html sitemap.xml robots.txt ./
+     index.html summary.html api.html internet-background-radiation.html blocklist.html sitemap.xml robots.txt ./
 COPY honeypots/ honeypots/
 COPY protocols/ protocols/
 COPY extras/ extras/

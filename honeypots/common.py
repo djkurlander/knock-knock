@@ -6,10 +6,27 @@ import threading
 import time
 
 import redis
+from redis.backoff import NoBackoff
+from redis.retry import Retry
 
 
 def get_redis_client():
-    return redis.Redis(host=os.environ.get('REDIS_HOST', 'localhost'), port=6379, db=int(os.environ.get('REDIS_DB', '0')), decode_responses=True)
+    # Redis here is a best-effort cache (ban lookups via is_blocked(); the RDP force-classic
+    # counters) — every caller already fails open on error. So bound every call hard and never
+    # retry: a down or hung Redis must not stall a honeypot's accept path. redis-py's defaults
+    # (5s connect, 5s read, up to 10 retries with backoff) can serialize each lookup for many
+    # seconds when Redis is unreachable. These clients only ever issue short single-key commands,
+    # so a 1s cap has ~1000x headroom and can only fire when Redis is genuinely unhealthy — keep
+    # them for short cache ops only (a blocking command like BLPOP would hit socket_timeout).
+    return redis.Redis(
+        host=os.environ.get('REDIS_HOST', 'localhost'),
+        port=6379,
+        db=int(os.environ.get('REDIS_DB', '0')),
+        decode_responses=True,
+        socket_connect_timeout=1.0,
+        socket_timeout=1.0,
+        retry=Retry(NoBackoff(), 0),
+    )
 
 
 _redis = get_redis_client()

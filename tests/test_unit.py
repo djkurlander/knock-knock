@@ -16,7 +16,7 @@ _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, _ROOT)
 sys.path.insert(0, os.path.join(_ROOT, 'honeypots'))
 
-from common import normalize_ip, extract_addr, smtp_tls_cert_subject
+from common import normalize_ip, extract_addr, smtp_tls_cert_subject, get_redis_client
 from ip_ban import fmt_ban_until
 from ssh_honeypot_asyncssh import _clamp_delay_bounds
 import sip_honeypot
@@ -460,5 +460,43 @@ def test_sip_dial_junk_probes_rejected():
         sip_honeypot._dial_cache[:] = []
     for dial in ('01144199199', '1144199199', '0015505267671', '915505267671'):
         assert sip_honeypot.parse_dial_country(dial) == (None, None, None, None, None), dial
+
+
+# ---------------------------------------------------------------------------
+# common.get_redis_client — fail-fast config
+#
+# Redis here is a best-effort cache (ban lookups + RDP counters) whose callers
+# already fail open. The client must be bounded and non-retrying so a down/hung
+# Redis can't stall a honeypot's accept path. Constructing a client does not
+# connect (redis-py is lazy), so these run offline.
+# ---------------------------------------------------------------------------
+def test_redis_client_is_bounded_and_non_retrying():
+    """1s connect + 1s read, single attempt (retries=0). redis-py's Retry(_, N)
+    means N retries ON TOP of the first try, so 'one attempt' is retries=0;
+    retries=1 (as PR #54 proposed) is two attempts — this guards that off-by-one."""
+    from redis.retry import Retry
+    kw = get_redis_client().connection_pool.connection_kwargs
+    assert kw.get('socket_connect_timeout') == 1.0
+    assert kw.get('socket_timeout') == 1.0
+    retry = kw.get('retry')
+    assert isinstance(retry, Retry)
+    assert getattr(retry, '_retries', None) == 0
+
+
+def test_redis_retry_makes_exactly_one_attempt():
+    """Behavioral guard: with retries=0 a real redis ConnectionError is raised
+    after a single call (no retry, no backoff), so a down Redis fails in ~one
+    socket_connect_timeout rather than a multiple of it."""
+    from redis.exceptions import ConnectionError as RedisConnError
+    retry = get_redis_client().connection_pool.connection_kwargs['retry']
+    calls = {'n': 0}
+
+    def do():
+        calls['n'] += 1
+        raise RedisConnError('boom')
+
+    with pytest.raises(RedisConnError):
+        retry.call_with_retry(do, lambda e: None)
+    assert calls['n'] == 1
 
 

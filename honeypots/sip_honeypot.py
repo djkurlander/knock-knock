@@ -1019,8 +1019,13 @@ def process_sip_request(req, client_ip, client_port=None, transport=None, allow_
         # Session-ID (RFC 7989): a populated remote= is Cisco's SIP<->H.323 call-correlation marker,
         # i.e. this SIP leg was stitched from another protocol (H.323 interworking). Surfaced live.
         _sess = _header_first(headers, 'session-id')
+        # Keep a normal method bare (INVITE/OPTIONS/…) so downstream parsers still match
+        # `method=OPTIONS` / `method=(\w+)`; only backslash-escape a binary/non-ASCII token (e.g.
+        # an H.225 PDU our parser read as `method=J\x00…`) so raw NUL/control bytes never enter the
+        # log line and trip grep into binary mode. The rawdump (garbled_method) still has the full hex.
+        _m = method if (method.isascii() and method.isprintable()) else method.encode('unicode_escape').decode('ascii')
         _hdr_line = (f"SIPTRACE sid={_header_first(headers, 'call-id')} ip={client_ip} "
-                     f"stage=headers method={method} uri={uri[:200]!r} "
+                     f"stage=headers method={_m} uri={uri[:200]!r} "
                      f"via={headers.get('via')!r} contact={headers.get('contact')!r} "
                      f"user_agent={_header_first(headers, 'user-agent')!r} "
                      f"session_id={_sess!r} "
@@ -1033,7 +1038,7 @@ def process_sip_request(req, client_ip, client_port=None, transport=None, allow_
             # Reason, etc.) + SDP for H.323->SIP interworking detection and general forensics. repr()
             # keeps it one grep-safe line; bounded so a pathological body can't bloat the file.
             _full = (f"SIPTRACE sid={_header_first(headers, 'call-id')} ip={client_ip} "
-                     f"stage=fullmsg method={method} uri={uri[:200]!r} "
+                     f"stage=fullmsg method={_m} uri={uri[:200]!r} "
                      f"headers={repr(headers)[:3000]} body={_body[:1200]!r}")
             capture_headers_line(_full)
     if method == 'INVITE':

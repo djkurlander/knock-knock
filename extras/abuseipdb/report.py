@@ -56,14 +56,27 @@ def is_excluded(ip, exact_ips, prefix_ips):
 
 # AbuseIPDB category sets per protocol integer
 # 5=FTP Brute-Force, 11=Email Spam, 18=Brute-Force, 22=SSH
+# AbuseIPDB category ids: 5=FTP Brute-Force, 15=Hacking, 18=Brute-Force, 21=Web App
+# Attack, 22=SSH, 23=IoT Targeted.
+#
+# MUST cover every protocol in constants.PROTO. An unmapped protocol silently falls
+# through to the generic default below and is reported as a meaningless "proto<N>"
+# under category 18 — HTTP (8) did exactly that, unnoticed, while running at ~12k
+# knocks/day. _warn_unmapped() now makes any future gap noisy instead of silent.
 PROTO_CATEGORIES = {
-    0: ({18, 22}, 'SSH'),
-    1: ({18},     'Telnet'),
-    2: ({18},     'SMTP'),
-    3: ({18},     'RDP'),
-    5: ({5, 18},  'FTP'),
-    6: ({18, 15}, 'SIP'),    # 15=Hacking
-    7: ({18},     'SMB'),
+    0:  ({18, 22}, 'SSH'),
+    1:  ({18},     'Telnet'),
+    2:  ({18},     'SMTP'),
+    3:  ({18},     'RDP'),
+    5:  ({5, 18},  'FTP'),
+    6:  ({18, 15}, 'SIP'),        # 15=Hacking
+    7:  ({18},     'SMB'),
+    8:  ({21},     'HTTP'),       # web scanning/exploit attempts, not credential guessing
+    9:  ({18, 23}, 'MQTT'),       # broker credential probing on an IoT protocol
+    10: ({21, 23}, 'Node-RED'),   # HTTP-based admin/flow exploitation
+    11: ({15, 23}, 'Modbus'),     # ICS probing; AbuseIPDB has no ICS/SCADA category
+    12: ({15, 23}, 'S7'),         # ditto, Siemens S7comm
+    13: ({18, 23}, 'SNMP'),       # community-string guessing
 }
 
 API_URL = 'https://api.abuseipdb.com/api/v2/bulk-report'
@@ -120,6 +133,7 @@ def fetch_ips(hours, proto_filter=None, db_path=None):
     conn.close()
 
     result = []
+    unmapped = set()
     for ip, protos_str, total_hits, last_seen in rows:
         if protos_str is not None:
             proto_ints = [int(p) for p in protos_str.split(',')]
@@ -128,13 +142,32 @@ def fetch_ips(hours, proto_filter=None, db_path=None):
         categories = set()
         names = []
         for p in proto_ints:
+            if p not in PROTO_CATEGORIES:
+                unmapped.add(p)
             cats, name = PROTO_CATEGORIES.get(p, ({18}, f'proto{p}'))
             categories |= cats
             names.append(name)
         categories_str = ','.join(str(c) for c in sorted(categories))
         result.append((ip, total_hits, last_seen, names, categories_str))
 
+    _warn_unmapped(unmapped)
     return result
+
+
+def _warn_unmapped(protos):
+    """Shout when a protocol has no category mapping.
+
+    Without this the fallback is silent: reports go out naming a protocol
+    "proto8" and categorised as generic Brute-Force, which is how HTTP shipped
+    mislabelled for months. PROTO_CATEGORIES has to be updated whenever
+    constants.PROTO gains a protocol, and nothing else enforces that.
+    """
+    if not protos:
+        return
+    ids = ', '.join(str(p) for p in sorted(protos))
+    print(f'WARNING: no AbuseIPDB category mapping for protocol id(s) {ids} — reported '
+          f'as "proto<N>" under generic Brute-Force only. Add them to PROTO_CATEGORIES '
+          f'(names are in constants.py PROTO).', file=sys.stderr)
 
 
 def build_csv(rows):

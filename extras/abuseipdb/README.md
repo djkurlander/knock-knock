@@ -59,6 +59,8 @@ Add this line:
 ## Notes
 
 - **Rate limits:** Free tier allows 5 bulk reports per day, each up to 10,000 IPs
-- **Categories:** Each IP is reported under categories 18 (Brute-Force) and 22 (SSH)
+- **Categories:** Chosen per protocol — see `PROTO_CATEGORIES` in `report.py`, which is the
+  single source of truth. Do not restate the mapping here; this line said "18 and 22" long
+  after FTP, SIP and the rest had their own categories
 - **Deduplication:** AbuseIPDB deduplicates reports from the same source, so overlapping lookback windows are safe
 - **No extra dependencies:** Uses only the Python standard library

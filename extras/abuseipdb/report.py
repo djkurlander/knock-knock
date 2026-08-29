@@ -56,8 +56,8 @@ def is_excluded(ip, exact_ips, prefix_ips):
 
 # AbuseIPDB category sets per protocol integer
 # 5=FTP Brute-Force, 11=Email Spam, 18=Brute-Force, 22=SSH
-# AbuseIPDB category ids: 5=FTP Brute-Force, 15=Hacking, 18=Brute-Force, 21=Web App
-# Attack, 22=SSH, 23=IoT Targeted.
+# AbuseIPDB category ids: 5=FTP Brute-Force, 8=Fraud VoIP, 15=Hacking, 18=Brute-Force,
+# 21=Web App Attack, 22=SSH, 23=IoT Targeted.
 #
 # MUST cover every protocol in constants.PROTO. An unmapped protocol silently falls
 # through to the generic default below and is reported as a meaningless "proto<N>"
@@ -69,7 +69,7 @@ PROTO_CATEGORIES = {
     2:  ({18},     'SMTP'),
     3:  ({18},     'RDP'),
     5:  ({5, 18},  'FTP'),
-    6:  ({18, 15}, 'SIP'),        # 15=Hacking
+    6:  ({18, 8},  'SIP'),        # 8=Fraud VoIP; toll-fraud dialling, not generic hacking
     7:  ({18},     'SMB'),
     8:  ({21},     'HTTP'),       # web scanning/exploit attempts, not credential guessing
     9:  ({18, 23}, 'MQTT'),       # broker credential probing on an IoT protocol

@@ -245,6 +245,44 @@ Port 80 is open to all — it's a honeypot port. Port 443 can also be mapped to 
 | `LOG_VISITORS` | unset | Set to `true` to log dashboard visitors to `visitors.db` |
 | `LOG_UNHANDLED_HTTP` | unset | Set to `true` to log 404s in the web server |
 
+### Public Query API (`extras/api/knock_api.py`, `knock-api` service)
+
+Own systemd unit, not in Docker. Serve the dashboard's `/api` docs page with `ENABLE_API=true`
+(above); these govern the API service itself.
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `KNOCK_API_PORT` | `8081` | Listening port |
+| `KNOCK_API_LISTEN` | `0.0.0.0` | Bind interface |
+| `TRUST_PROXY_HEADERS` | `true` | Honour `CF-Connecting-IP` / `X-Forwarded-For` for the real client IP |
+| `API_ACCESS_LOG` | `true` | Per-request access log to stdout (CF-aware client IP) |
+| `API_CALLS_PER_MIN` | `60` | Per-IP calls/minute — burst smoother |
+| `API_CALLS_PER_HOUR` | `1000` | Per-IP calls/hour |
+| `API_CALLS_PER_DAY` | `5000` | Per-IP calls/day |
+| `API_IPS_PER_HOUR` | `20000` | Per-IP **IPs returned**/hour |
+| `API_IPS_PER_DAY` | `100000` | Per-IP **IPs returned**/day |
+| `API_GLOBAL_IPS_PER_MIN` | `50000` | Global IPs/minute, all clients; queues rather than rejecting |
+| `API_GLOBAL_WAIT_MAX` | `25` | Seconds a request waits for a global slot before `429` |
+
+**Two currencies, one atomic check.** Every request weighs 1 call plus the number of IPs it
+returns. That split exists because a flat per-request limit cannot fit this workload: measured
+cost is ~1.4 ms fixed + ~0.065 ms per IP returned, so the heaviest call (the largest ASN, ~8,500
+IPs) is ~200x the median (2 IPs). The old per-endpoint caps priced for the worst case and so
+throttled a legitimate ISP audit — one returning **zero** hits — to 20/hour for a week.
+
+All five per-IP windows are checked and committed in **one Lua `EVALSHA`**, atomically. Taking
+them sequentially would (a) consume earlier windows when a later one rejects — the old `guard()`
+did exactly this, burning daily allowance on rejected requests and contradicting the promise
+published on `api.html` — and (b) cost ~2.8 ms of round trips to protect a ~1.4 ms request.
+Weight is exact and known *before* any DB work, since both range and ASN endpoints compute their
+hit count from the in-memory snapshot, so a rejected request does no database work at all.
+
+A single request returning more IPs than a whole window allows gets **`413 request_too_large`**,
+not `429` — retrying could never help, and a `Retry-After` would invite an infinite loop.
+
+**Do not put inline `#` comments after values in `.env`** — systemd's `EnvironmentFile` takes the
+rest of the line literally and `int()` crash-loops the service. Full-line comments only.
+
 ### Monitor (`monitor.py`)
 
 | Variable | Default | Purpose |

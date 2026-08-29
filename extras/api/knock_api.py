@@ -55,11 +55,25 @@ MAX_RANGES = 10          # CIDRs per check-ranges request
 MIN_PREFIXLEN = 16       # largest range accepted (a /16)
 MAX_HITS = 25000         # detail rows returned before truncation (safety ceiling only;
                          # far above any real ASN/range — total_matched is always exact)
-DAY_CAP = 500            # per-IP requests/day, all endpoints (backstop against abuse)
-CHECK_CAP = 20           # per-IP check-ranges / check-asn requests/hour
-IP_MIN_CAP = 30          # per-IP /ip lookups/minute
-GLOBAL_MIN_CAP = 300     # global /ip lookups/minute (token bucket)
-WAIT_MAX = 25            # seconds a /ip request will wait for a global token
+# --- Rate limits -----------------------------------------------------------
+# TWO currencies, checked together in one Redis round trip (see guard()):
+#   calls  — every request weighs 1, covering the fixed per-request work
+#   ips    — a request weighs the number of IPs it returns, which is what
+#            actually drives database work (measured: ~1.4 ms fixed + ~0.065 ms
+#            per IP returned; the median ASN returns 2 IPs, the largest 8,478).
+# A flat per-request limit cannot work here: the heaviest call is ~200x the
+# median, so any single number either strangles ordinary use or licenses an
+# absurd worst case. The old per-endpoint caps did the former — a legitimate
+# ISP audit returning ZERO hits was capped at 20/hour and took a week.
+API_CALLS_PER_MIN = int(os.environ.get('API_CALLS_PER_MIN', '60'))
+API_CALLS_PER_HOUR = int(os.environ.get('API_CALLS_PER_HOUR', '1000'))
+API_CALLS_PER_DAY = int(os.environ.get('API_CALLS_PER_DAY', '5000'))
+API_IPS_PER_HOUR = int(os.environ.get('API_IPS_PER_HOUR', '20000'))
+API_IPS_PER_DAY = int(os.environ.get('API_IPS_PER_DAY', '100000'))
+# Global ceiling across ALL clients, in the same IP currency. Queues rather than
+# rejecting: aggregate contention is transient, so waiting usually succeeds.
+API_GLOBAL_IPS_PER_MIN = int(os.environ.get('API_GLOBAL_IPS_PER_MIN', '50000'))
+API_GLOBAL_WAIT_MAX = int(os.environ.get('API_GLOBAL_WAIT_MAX', '25'))
 
 app = FastAPI(title='knock-api', docs_url=None, redoc_url=None)
 # Let the docs page's "Run" widget call the API from the main site (cross-origin).
@@ -140,48 +154,118 @@ async def refresher():
 
 
 # --- Rate limiting (Redis fixed windows; count only admitted requests) ------
+# All windows are checked and committed in ONE Lua call, atomically. Two reasons:
+#   1. Correctness. Taking them sequentially means a request refused by the LAST
+#      window has already consumed the earlier ones — which is what the old
+#      guard() did, silently burning daily allowance on requests it rejected and
+#      contradicting the published "a rejected request never counts" promise.
+#   2. Speed. Five windows sequentially is ~2.8 ms of round trips to protect a
+#      ~1.4 ms request; one EVALSHA is ~0.6 ms.
+# Weight is exact and known BEFORE any database work: both check-ranges and
+# check-asn compute their hit count from the in-memory snapshot first, so a
+# rejected request costs nothing at all.
+_LIMITER_LUA = """
+-- KEYS = window keys;  ARGV = flattened triples of (cap, ttl, weight)
+local n = #KEYS
+for i = 1, n do
+  local cap    = tonumber(ARGV[(i-1)*3 + 1])
+  local weight = tonumber(ARGV[(i-1)*3 + 3])
+  if weight > cap then
+    return {i, -1}                      -- can never succeed; do not tell them to retry
+  end
+  local cur = tonumber(redis.call('GET', KEYS[i])) or 0
+  if cur + weight > cap then
+    local ttl = redis.call('TTL', KEYS[i])
+    return {i, ttl < 0 and tonumber(ARGV[(i-1)*3 + 2]) or ttl}
+  end
+end
+for i = 1, n do                         -- every window passed: commit
+  local ttl    = tonumber(ARGV[(i-1)*3 + 2])
+  local weight = tonumber(ARGV[(i-1)*3 + 3])
+  if redis.call('INCRBY', KEYS[i], weight) == weight then
+    redis.call('EXPIRE', KEYS[i], ttl)
+  end
+end
+return {0, 0}
+"""
+_limiter_sha = None
 
-def _429(retry_after):
-    return HTTPException(429, detail={'error': 'rate_limited',
-                                      'retry_after_seconds': max(int(retry_after), 1)},
+# (name, ttl, cap, currency) — order fixes the index the Lua script reports back.
+def _windows(ip):
+    return (('calls_per_min',  f'knock:api:rl:cmin:{ip}',   60, API_CALLS_PER_MIN,  'calls'),
+            ('calls_per_hour', f'knock:api:rl:chour:{ip}', 3600, API_CALLS_PER_HOUR, 'calls'),
+            ('calls_per_day',  f'knock:api:rl:cday:{ip}', 86400, API_CALLS_PER_DAY,  'calls'),
+            ('ips_per_hour',   f'knock:api:rl:ihour:{ip}', 3600, API_IPS_PER_HOUR,   'ips'),
+            ('ips_per_day',    f'knock:api:rl:iday:{ip}', 86400, API_IPS_PER_DAY,    'ips'))
+
+
+async def _eval_limiter(keys, argv):
+    """EVALSHA with a NOSCRIPT fallback (Redis restarts drop the script cache)."""
+    global _limiter_sha
+    try:
+        if _limiter_sha is None:
+            _limiter_sha = await R.script_load(_LIMITER_LUA)
+        return await R.evalsha(_limiter_sha, len(keys), *keys, *argv)
+    except aioredis.ResponseError as e:
+        if 'NOSCRIPT' not in str(e).upper():
+            raise
+        _limiter_sha = await R.script_load(_LIMITER_LUA)
+        return await R.evalsha(_limiter_sha, len(keys), *keys, *argv)
+
+
+def _429(limit_name, retry_after, endpoint=None):
+    detail = {'error': 'rate_limited', 'limit': limit_name,
+              'retry_after_seconds': max(int(retry_after), 1)}
+    if endpoint == 'check-ranges':
+        detail['hint'] = 'batch up to %d CIDRs per check-ranges request' % MAX_RANGES
+    return HTTPException(429, detail=detail,
                          headers={'Retry-After': str(max(int(retry_after), 1))})
 
 
-async def _take(key, ttl, cap):
-    """Consume one slot; return None if admitted, else seconds until reset."""
-    n = await R.incr(key)
-    if n == 1:
-        await R.expire(key, ttl)
-    if n > cap:
-        await R.decr(key)
-        return await R.ttl(key)
-    return None
+def _413(limit_name, weight, cap, endpoint):
+    """A single request bigger than the whole window. Retrying can never help, so
+    say so instead of handing back a Retry-After that invites an infinite loop."""
+    detail = {'error': 'request_too_large', 'limit': limit_name,
+              'ips_requested': weight, 'limit_value': cap,
+              'message': 'this single request returns more IPs than the %s limit allows; '
+                         'split it into smaller queries' % limit_name}
+    if endpoint == 'check-ranges':
+        detail['hint'] = 'use fewer or smaller CIDRs per request'
+    return HTTPException(413, detail=detail)
 
 
-async def guard(ip, endpoint):
-    """Daily cap + per-endpoint per-IP limit. Raises 429 when over."""
-    checks = [(f'knock:api:rl:day:{ip}', 86400, DAY_CAP)]
-    if endpoint == 'ip':
-        checks.append((f'knock:api:rl:ip:{ip}', 60, IP_MIN_CAP))
-    else:
-        checks.append((f'knock:api:rl:{endpoint}:{ip}', 3600, CHECK_CAP))
-    for key, ttl, cap in checks:
-        retry = await _take(key, ttl, cap)
-        if retry is not None:
-            await R.incr('knock:api:rate_limited:count')
-            raise _429(retry)
+async def guard(ip, endpoint, ips=0):
+    """Admit or reject in one atomic Redis call. `ips` is the number of IPs the
+    response will return — known from the in-memory snapshot before any DB work."""
+    wins = _windows(ip)
+    keys, argv = [], []
+    for _name, key, ttl, cap, currency in wins:
+        keys.append(key)
+        argv += [cap, ttl, 1 if currency == 'calls' else ips]
+    idx, retry = await _eval_limiter(keys, argv)
+    if idx:
+        name, _key, _ttl, cap, currency = wins[int(idx) - 1]
+        await R.incr('knock:api:rate_limited:count')
+        if int(retry) < 0:
+            raise _413(name, ips, cap, endpoint)
+        raise _429(name, retry, endpoint)
 
 
-async def take_global_token():
-    """Global /ip budget; waits (rather than rejecting) up to WAIT_MAX seconds."""
-    deadline = time.monotonic() + WAIT_MAX
+async def take_global_token(ips):
+    """Global budget across all clients; waits (rather than rejecting) up to
+    API_GLOBAL_WAIT_MAX seconds. Aggregate contention is transient — unlike a
+    client's own exhausted window, which no amount of waiting will clear."""
+    if ips <= 0:
+        return
+    deadline = time.monotonic() + API_GLOBAL_WAIT_MAX
     while True:
-        retry = await _take('knock:api:rl:global_min', 60, GLOBAL_MIN_CAP)
-        if retry is None:
+        idx, retry = await _eval_limiter(
+            ['knock:api:rl:global_min'], [API_GLOBAL_IPS_PER_MIN, 60, ips])
+        if not idx:
             return
-        if time.monotonic() + 1 >= deadline:
+        if int(retry) < 0 or time.monotonic() + 1 >= deadline:
             await R.incr('knock:api:rate_limited:count')
-            raise _429(retry)
+            raise _429('global_ips_per_min', max(int(retry), 1))
         await asyncio.sleep(1)
 
 
@@ -344,23 +428,27 @@ async def index(request: Request):
 async def check_ranges(request: Request, ranges: str,
                        window: str = Query('year', alias='list')):
     ip, started = client_ip(request), time.monotonic()
-    await guard(ip, 'check-ranges')
-    snap = get_snapshot(window)
-
-    nets = []
-    for part in ranges.split(','):
-        try:
-            net = ipaddress.ip_network(part.strip(), strict=False)
-        except ValueError:
-            raise HTTPException(400, detail={'error': f'invalid CIDR: {part.strip()!r}'})
-        if net.version != 4:
-            raise HTTPException(400, detail={'error': 'IPv4 ranges only'})
-        if net.prefixlen < MIN_PREFIXLEN:
-            raise HTTPException(400, detail={'error':
-                f'{net} too large — /{MIN_PREFIXLEN} maximum ({2**(32-MIN_PREFIXLEN):,} IPs)'})
-        nets.append(net)
-    if not 1 <= len(nets) <= MAX_RANGES:
-        raise HTTPException(400, detail={'error': f'1-{MAX_RANGES} ranges per request'})
+    # Validation runs before the limiter so the weight can be exact, but a malformed
+    # request must still weigh one call — otherwise garbage is the one unmetered path.
+    try:
+        snap = get_snapshot(window)
+        nets = []
+        for part in ranges.split(','):
+            try:
+                net = ipaddress.ip_network(part.strip(), strict=False)
+            except ValueError:
+                raise HTTPException(400, detail={'error': f'invalid CIDR: {part.strip()!r}'})
+            if net.version != 4:
+                raise HTTPException(400, detail={'error': 'IPv4 ranges only'})
+            if net.prefixlen < MIN_PREFIXLEN:
+                raise HTTPException(400, detail={'error':
+                    f'{net} too large — /{MIN_PREFIXLEN} maximum ({2**(32-MIN_PREFIXLEN):,} IPs)'})
+            nets.append(net)
+        if not 1 <= len(nets) <= MAX_RANGES:
+            raise HTTPException(400, detail={'error': f'1-{MAX_RANGES} ranges per request'})
+    except HTTPException:
+        await guard(ip, 'check-ranges', 0)
+        raise
 
     # Walk the full match set for an exact count (cheap — bounded by blocklist size),
     # but only materialize the first MAX_HITS for the metadata fetch / response body.
@@ -375,6 +463,9 @@ async def check_ranges(request: Request, ranges: str,
             i += 1
     hit_ips = [snap.ip_strs[n] for n in hit_ints]
 
+    # Weight is exact here and no DB work has happened yet, so a rejection is free.
+    await guard(ip, 'check-ranges', len(hit_ips))
+    await take_global_token(len(hit_ips))
     hits = await asyncio.to_thread(fetch_meta, hit_ips) if hit_ips else []
     record(request, ip, 'check-ranges', started)
     return {'list': window, 'generated_at': snap.generated_at,
@@ -389,12 +480,17 @@ async def check_ranges(request: Request, ranges: str,
 async def check_asn(request: Request, asn: int,
                     window: str = Query('year', alias='list')):
     ip, started = client_ip(request), time.monotonic()
-    await guard(ip, 'check-asn')
-    snap = get_snapshot(window)
+    try:
+        snap = get_snapshot(window)
+    except HTTPException:
+        await guard(ip, 'check-asn', 0)
+        raise
 
     members = snap.asn_map.get(asn, [])
     total_matched = len(members)          # exact and free from the in-memory index
     hit_ips = [snap.ip_strs[n] for n in members[:MAX_HITS]]
+    await guard(ip, 'check-asn', len(hit_ips))
+    await take_global_token(len(hit_ips))
     org = None
     if hit_ips and asn_reader:
         try:
@@ -413,12 +509,13 @@ async def check_asn(request: Request, asn: int,
 @app.get('/ip/{target}')
 async def ip_detail(request: Request, target: str):
     ip, started = client_ip(request), time.monotonic()
-    await guard(ip, 'ip')
     try:
         target = str(ipaddress.IPv4Address(target.strip()))
     except (ipaddress.AddressValueError, ValueError):
+        await guard(ip, 'ip', 0)
         raise HTTPException(400, detail={'error': f'invalid IPv4 address: {target!r}'})
-    await take_global_token()
+    await guard(ip, 'ip', 1)              # one address in, one record out
+    await take_global_token(1)
 
     def lookup():
         with ro_conn(KNOCK_DB) as conn:

@@ -202,14 +202,15 @@
     count. Live queries here count against the same rate limits as the API itself.</p>
 
     <h2>Rate limits</h2>
-    <p>Generous, per source IP — no key needed. A rejected request returns <code>429</code> with a
-    <code>Retry-After</code> header and never counts against your quota.</p>
-    <table>
-        <tr><th>Scope</th><th>Limit</th></tr>
-        <tr><td>All endpoints combined</td><td>500 / day</td></tr>
-        <tr><td><code>check-ranges</code> / <code>check-asn</code></td><td>20 / hour each</td></tr>
-        <tr><td><code>/ip/&lt;address&gt;</code></td><td>30 / minute</td></tr>
-    </table>
+    <p>Rate limited per source IP — no key needed, and the ceilings are set high enough that ordinary
+    use won't reach them. Two things are counted: how many calls you make, and how many IPs those
+    calls return — so a query against a large network counts more heavily than a small one, and
+    ranges that come back clean barely register.</p>
+    <p><strong>Batch to go faster:</strong> <code>check-ranges</code> takes up to 10 comma-separated
+    CIDRs per call, so auditing 2,000 ranges is 200 calls, not 2,000.</p>
+    <p>If you do hit a limit, the <code>429</code> response names which limit you reached and how long
+    until it resets, and carries a <code>Retry-After</code> header. A rejected request never counts
+    toward any limit.</p>
 
     <h2>What "listed" means for you</h2>
     <p>A hit is <strong>observed attack traffic</strong> — the strongest kind of signal: a device on your network

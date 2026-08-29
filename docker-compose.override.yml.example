@@ -24,6 +24,7 @@ services:
       - "445:445"   # SMB
       - "5060:5060" # SIP (TCP)
       - "5060:5060/udp" # SIP (UDP)
+      - "5061:5061" # SIP over TLS (TCP)
 
   ## Override the web UI port (default: 8080). Also set WEB_PORT=9090 in .env.
   ## The port must match in both places — the env var controls uvicorn,

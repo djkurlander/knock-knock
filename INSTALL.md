@@ -82,6 +82,7 @@ ufw allow 445/tcp    # SMB
 ufw allow 587/tcp    # SMTP (submission)
 ufw allow 3389/tcp   # RDP
 ufw allow 5060       # SIP (TCP + UDP)
+ufw allow 5061/tcp   # SIP over TLS
 
 # Optional protocols (not enabled by default — add to ENABLED_PROTOCOLS in .env to activate):
 ufw allow 1880/tcp   # Node-RED (NRED)
@@ -424,6 +425,10 @@ ENABLED_PROTOCOLS=SSH,TNET,FTP,SMB,SIP,HTTP,SMTP
 ENABLED_PROTOCOLS=SSH,TNET,FTP,RDP,SMB,SIP,HTTP,SMTP,MQTT,NRED,MODB
 ```
 
+Some protocols expand to multiple default listeners when named without a port. For example, `HTTP`
+starts `HTTP:80` and `HTTP:443`; `SIP` starts cleartext `SIP:5060` and SIP/TLS `SIP:5061`.
+To run only one listener, pin the port explicitly, e.g. `HTTP:80` or `SIP:5060`.
+
 **Docker:** also remove the corresponding port from `docker-compose.override.yml` — Docker binds ports regardless of which honeypots are running.
 
 ### Enabling HTTPS
@@ -602,4 +607,3 @@ python -m pytest tests/ -v
 - Keep your real SSH on a non-standard port
 - Consider IP blocklisting repeat offenders via `data/blocklist.txt`
 - The honeypot always rejects authentication - no shell access is ever granted
-

@@ -37,7 +37,7 @@ DEFINITION = ProtocolDefinition(
         "TLS": ["--ssl"],
     },
     description="SIP allows humans and bots to make phone calls.",
-    default_enabled_entries=["SIP"],
+    default_enabled_entries=["SIP:5060", "SIP:5061"],
     supports_user_panel=False,
     supports_pass_panel=False,
     knock_table="knocks_sip",

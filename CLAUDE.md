@@ -43,7 +43,7 @@ python honeypots/telnet_honeypot.py          # Telnet (port 23)
 python honeypots/ftp_honeypot.py             # FTP (port 21)
 python honeypots/rdp_honeypot.py             # RDP (port 3389)
 python honeypots/smb_honeypot.py             # SMB (port 445)
-python honeypots/sip_honeypot.py             # SIP (port 5060)
+python honeypots/sip_honeypot.py             # SIP (port 5060 cleartext; use --port 5061 for TLS)
 python honeypots/http_honeypot.py            # HTTP (ports 80 and 443)
 python honeypots/smtp_honeypot.py            # SMTP (ports 25 and 587)
 
@@ -101,7 +101,7 @@ Telnet Attacker → honeypots/telnet_honeypot.py         (port 23)   ─┤
 FTP Attacker    → honeypots/ftp_honeypot.py            (port 21)   ─┤
 RDP Attacker    → honeypots/rdp_honeypot.py            (port 3389) ─┤→ stdout → monitor.py
 SMB Attacker    → honeypots/smb_honeypot.py            (port 445)  ─┤      (GeoIP, DB, Redis)
-SIP Attacker    → honeypots/sip_honeypot.py            (port 5060) ─┤              ↓
+SIP Attacker    → honeypots/sip_honeypot.py            (5060,5061) ─┤              ↓
 HTTP Attacker   → honeypots/http_honeypot.py           (ports 80,443)─┤  SQLite DB (data/) + Redis pub/sub
 SMTP Attacker   → honeypots/smtp_honeypot.py           (ports 25,587)┘              ↓
                                                                        main.py (FastAPI, port 8080/8443)
@@ -139,7 +139,7 @@ SMTP Attacker   → honeypots/smtp_honeypot.py           (ports 25,587)┘      
 | `honeypots/ftp_honeypot.py` | FTP honeypot (port 21) |
 | `honeypots/rdp_honeypot.py` | RDP honeypot (port 3389), NLA/CredSSP handshake |
 | `honeypots/smb_honeypot.py` | SMB honeypot (port 445), SMB1/2/3 with decoy file shares |
-| `honeypots/sip_honeypot.py` | SIP honeypot (port 5060 UDP+TCP), captures toll fraud dial attempts |
+| `honeypots/sip_honeypot.py` | SIP honeypot (port 5060 UDP+TCP cleartext; port 5061 TCP/TLS when enabled), captures toll fraud dial attempts |
 | `honeypots/http_honeypot.py` | HTTP honeypot (ports 80 and 443), captures web scanning and exploit attempts |
 | `honeypots/smtp_honeypot.py` | SMTP honeypot (ports 25 and 587), AUTH LOGIN + AUTH PLAIN |
 | `honeypots/stub_honeypot.py` | Minimal stub for adding new protocol honeypots |
@@ -199,7 +199,7 @@ python ip_ban.py --clear-all
 The web UI runs on port 8080 by default (`WEB_PORT=8080`). Most deployments just open port 8080 to the world — there's nothing sensitive in the dashboard. See `extras/cloudflare-ufw/README.md` for optional IP restriction via Cloudflare.
 
 ### Default (no Cloudflare)
-- Honeypot ports (21, 22, 23, 25, 80, 445, 587, 3389, 5060): open to all — intentional
+- Honeypot ports (21, 22, 23, 25, 80, 445, 587, 3389, 5060, 5061): open to all — intentional
 - Port 8080 (web UI): open to all, accessible at `http://your-server-ip:8080`
 
 ### Cloudflare-protected deployment
@@ -323,7 +323,7 @@ Port 80 is open to all — it's a honeypot port. Port 443 can also be mapped to 
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `SIP_PORT` | `5060` | Listening port (UDP + TCP for cleartext SIP; TCP/TLS only when SSL mode is enabled). `ENABLED_PROTOCOLS=SIP:5061` auto-enables TLS by convention; `SIP:5061:TLS` is also accepted. |
+| `SIP_PORT` | `5060` | Listening port for a single SIP honeypot process. Defaults expand to `SIP:5060` cleartext and `SIP:5061` TCP/TLS; `SIP:5061` auto-enables TLS by convention, and `SIP:5061:TLS` is also accepted. |
 | `SIP_TLS_CERT_PATH` | `data/sip_tls.crt` | TLS certificate path for SIP/TLS; auto-generated if missing. |
 | `SIP_TLS_KEY_PATH` | `data/sip_tls.key` | TLS key path for SIP/TLS; auto-generated if missing. |
 | `SIP_OK_DIALPLAN` | `+,bare,00,011,9` | Which dialed forms the fake PBX answers (200) vs rejects (404). `all` (any resolvable E.164), `none`, or a comma list of dial-out prefixes prepended to the bare E.164 digits: `bare` (no prefix), `+`, or digit prefixes like `00`/`011`/`9`. A dial is accepted iff its canonicalized digits equal `prefix + computed-E.164`; numbers that resolve to no E.164 are always rejected. Knocks are recorded regardless. |

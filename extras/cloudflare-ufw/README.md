@@ -75,6 +75,7 @@ ufw allow 445/tcp   # SMB
 ufw allow 587/tcp   # SMTP submission
 ufw allow 3389/tcp  # RDP
 ufw allow 5060      # SIP
+ufw allow 5061/tcp  # SIP over TLS
 
 # Your real SSH port
 ufw allow 2222/tcp  # replace with your actual port

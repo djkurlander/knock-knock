@@ -70,6 +70,41 @@ def _load_exploits():
 
 _EXPLOITS = _load_exploits()
 
+# Purposes that describe RECONNAISSANCE rather than an exploit attempt. A named entry with
+# one of these purposes may be overridden by an RCE PAYLOAD (see _classify_purpose step 1);
+# every other purpose is authoritative once matched.
+_RECON_PURPOSES = frozenset({
+    'app_discovery', 'config_exposure', 'resource_discovery', 'api_probe',
+})
+
+# The STRICT subset of _RE_RCE_PATH used to override a recon-class named entry: only
+# signals that are an execution PAYLOAD, never ones that merely describe a location.
+# _RE_RCE_PATH additionally carries `/shell\b` and `/cgi-bin/(admin|login|...)`, which are
+# path-shape signals -- fine as a general heuristic, wrong as an override, because a
+# legitimately-named recon path can contain them (`/sitecore/shell/sitecore.version.xml`
+# is config_exposure, not RCE). Keep this list payload-only.
+_RE_RCE_PAYLOAD_PATH = re.compile(
+    r'((?:[?&;]|^/)(?:cmd|exec|command|shell|run|system|passthru|popen|eval)\s*=)'
+    r'|(\$\{jndi:)'
+    r'|(\$\{\$\{|%24%7[bB]%24%7[bB])'
+    r'|(%24%7[bB]jndi)',
+    re.IGNORECASE,
+)
+
+# Cloud instance-metadata endpoints. Like _RE_RCE_PAYLOAD_PATH this is a STRICT subset of a
+# broader heuristic: _RE_SSRF also matches `localhost`, `127.0.0.1`, `0.0.0.0` and `::1`,
+# which are far too weak to override a named entry. A link-local metadata host, by contrast,
+# has no innocent reading -- nothing legitimate asks this honeypot to fetch 169.254.169.254.
+# Reaching it through a proxy/fetch parameter is an attempt on instance credentials, so it
+# outranks a reconnaissance-class name (`/api/proxy?url=...169.254.169.254/latest/meta-data/
+# iam/security-credentials` was being logged as app_discovery/'API Discovery').
+_RE_SSRF_METADATA = re.compile(
+    r'(?:169\.254\.169\.254'                   # AWS / Azure / GCP link-local IMDS
+    r'|metadata\.google\.internal'
+    r'|100\.100\.100\.200)',                   # Alibaba Cloud
+    re.IGNORECASE,
+)
+
 
 def _match_exploit(method: str, path: str, ua: str, body: str):
     """
@@ -412,6 +447,24 @@ def _classify_purpose(method: str, path: str, ua: str, body: str):
     #    named correctly when they appear in the exploit list.
     exp_name, exp_cve, exp_purpose = _match_exploit(method, path, ua, body)
     if exp_name:
+        # A named entry normally wins outright. The exception is a RECONNAISSANCE-class
+        # entry (a broad product/surface path) matching a request that also carries an
+        # explicit command-execution payload: the named layer is consulted before every
+        # heuristic, so without this the broad path masks the RCE signal and an active
+        # exploit attempt is logged as mere discovery. Seen in production with
+        # `/pbxapi/graph.php?cmd=cat /etc/amportal.conf` (path-borne) and
+        # `POST /pbxapi/free.php` + `ev=system('ls -la')` (body-borne): 232 knocks
+        # downgraded to app_discovery/config_exposure. Keep the name and CVE (the product
+        # attribution is still right); raise only the purpose, to the severity the payload
+        # actually shows. Exploit-class purposes are never overridden.
+        if exp_purpose in _RECON_PURPOSES:
+            # Ordered by severity: an execution payload outranks a credential-exfil target.
+            if (_RE_RCE_PAYLOAD_PATH.search(path)
+                    or _RE_RCE_BODY.search(body)
+                    or _RE_RCE_UA.search(ua)):
+                return 'rce', exp_name, exp_cve
+            if _RE_SSRF_METADATA.search(path) or _RE_SSRF_METADATA.search(body):
+                return 'credential_theft', exp_name, exp_cve
         return exp_purpose or 'unknown', exp_name, exp_cve
 
     # 1b. Non-HTTP protocol keywords with no specific exploit entry → protocol_probe

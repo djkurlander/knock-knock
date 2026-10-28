@@ -2,7 +2,7 @@ asyncssh==2.24.1
 impacket==0.13.1
 geoip2==5.3.0
 redis==8.1.0
-fastapi==0.143.3
+fastapi==0.162.0
 uvicorn[standard]==0.54.0
 phonenumbers==9.0.31
 python-dotenv==1.2.4

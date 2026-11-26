@@ -48,3 +48,6 @@ extensions.py
 # so each deployment brings its own or serves neither. knock-knock.net keeps its local copies.
 sitemap.xml
 robots.txt
+
+# Runtime visitor-tracking DB (local, per-deployment)
+visitors.db
